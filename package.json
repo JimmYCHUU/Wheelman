@@ -1,0 +1,20 @@
+{
+  "name": "wheelman",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Carbarn's reply assistant: reads dashboard leads and Facebook Marketplace chats read-only, drafts replies in the dealership's own voice with free AI models, checks every figure against the records. Never sends anything.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/app.js",
+    "import-history": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/import-history.js",
+    "build-voice": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/build-voice.js",
+    "fetch-website": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/fetch-website.js",
+    "check-login": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/check-login.js",
+    "check-model": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/check-model.js",
+    "replay": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/replay.js",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/*.test.js\""
+  }
+}
