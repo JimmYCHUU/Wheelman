@@ -1,0 +1,26 @@
+{
+  "_about": "Whose writing sets the voice. Copy this file to people.json and put the real names in; people.json is never committed. The names here are invented.",
+
+  "voices": [
+    {
+      "id": "alex",
+      "display": "Alex",
+      "logins": ["Alex STONE"],
+      "names": ["alex", "lex"],
+      "surnames": ["stone"]
+    },
+    {
+      "id": "sam",
+      "display": "Sam",
+      "logins": ["samrivers"],
+      "sharedLogin": true,
+      "names": ["sam", "sammy"]
+    }
+  ],
+
+  "otherStaff": ["Jordan", "Casey", "Team Carbarn"],
+
+  "cannedPatterns": [
+    "Best regards,?\\s*\\n?\\s*Lex from Carbarn"
+  ]
+}

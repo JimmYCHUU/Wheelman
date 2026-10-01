@@ -1,0 +1,23 @@
+# Secrets
+.env
+
+# Real customer data — must stay on this computer
+data/
+.playwright-mcp/
+voice/examples.json
+eval/out/
+.impeccable/review/
+
+node_modules/
+
+# Names of real staff: stays local. voice/people.example.json shows the shape.
+voice/people.json
+
+# Internal notes: planning, and the evidence behind the business facts
+PLAN.md
+knowledge/business-facts-evidence.md
+
+# Downloaded website pages: rebuilt with "npm run fetch-website -- --all"
+knowledge/website/
+
+*.log

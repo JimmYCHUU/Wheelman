@@ -1,0 +1,22 @@
+{
+  "_about": "Conversations and wording kept OUT of the example bank. Found during the style analysis of 29 Sep 2026. Staff names and signatures are in people.json.",
+
+  "conversations": {
+    "aiPolished": [1080, 1170, 1172, 422, 515, 919, 1010, 1114],
+    "formalComplaintLetters": [253, 636, 117],
+    "notCustomers": [227, 627, 640, 125],
+    "misdirected": [603],
+    "curtAfterHoursExchange": [569],
+    "writtenBySomeoneElse": [412]
+  },
+
+  "cannedPatterns": [
+    "To help you quickly, please reply",
+    "Reply STOP to opt out",
+    "from Carbarn here\\.?\\s*\\n?\\s*Thanks for your enquiry about Stock",
+    "The car includes a 6-month registration",
+    "We are open 7 days a week from 8:00 ?am to 5:00 ?pm for inspections",
+    "Nothing is ever bid blind",
+    "If you opt out of the 5-year"
+  ]
+}

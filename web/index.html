@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light dark">
+  <title>Wheelman</title>
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app" id="app" data-view="list">
+
+    <aside class="side" aria-label="Conversations">
+      <header class="side-head">
+        <div class="brand">
+          <span class="brand-mark" id="brand-mark"></span>
+          <span class="brand-words">
+            <h1>Wheelman</h1>
+            <span class="brand-by">by Carbarn</span>
+          </span>
+        </div>
+        <button id="sync" class="icon-btn" type="button" aria-label="Check for new messages now" title="Check for new messages now"></button>
+      </header>
+
+      <div class="sections" id="sections" role="group" aria-label="Which inbox to show" hidden>
+        <button class="section is-on" aria-pressed="true" data-section="dashboard" type="button">Dashboard <span class="badge" id="section-dashboard" hidden></span></button>
+        <button class="section" aria-pressed="false" data-section="marketplace" type="button">Marketplace <span class="badge" id="section-marketplace" hidden></span></button>
+      </div>
+
+      <p id="status" class="sync-line" role="status" aria-live="polite">Starting</p>
+
+      <div id="notices" class="notices"></div>
+
+      <label class="search">
+        <span class="search-icon" id="search-icon"></span>
+        <span class="visually-hidden">Search conversations</span>
+        <input id="q" type="search" placeholder="Search name, number or message" autocomplete="off" spellcheck="false">
+      </label>
+
+      <div class="filters" role="group" aria-label="Which conversations to show">
+        <button class="filter is-on" aria-pressed="true" data-tab="waiting" type="button">Waiting <span class="n" id="count-waiting"></span></button>
+        <button class="filter" aria-pressed="false" data-tab="quiet" type="button">No reply needed <span class="n" id="count-quiet"></span></button>
+        <button class="filter" aria-pressed="false" data-tab="other" type="button">Not customers <span class="n" id="count-other"></span></button>
+      </div>
+
+      <nav id="chats" class="chats" aria-label="Conversation list"></nav>
+
+      <footer class="side-foot">
+        <p id="learned" class="learned" hidden></p>
+        <label>
+          <span>Showing the</span>
+          <select id="hours">
+            <option value="24">last 24 hours</option>
+            <option value="72" selected>last 3 days</option>
+            <option value="168">last 7 days</option>
+            <option value="336">last 14 days</option>
+          </select>
+        </label>
+      </footer>
+    </aside>
+
+    <main class="chat" id="chat" aria-live="off"></main>
+
+    <aside class="info" id="info" aria-label="Customer and car details" hidden></aside>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js" type="module"></script>
+</body>
+</html>

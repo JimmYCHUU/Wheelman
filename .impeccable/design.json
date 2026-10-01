@@ -1,0 +1,1526 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-01T07:08:59.009Z",
+  "title": "Design System: Wheelman",
+  "extensions": {
+    "colorMeta": {
+      "brand": {
+        "role": "primary",
+        "displayName": "Carbarn Blue",
+        "canonical": "#0073ea",
+        "oklch": "oklch(57.2% 0.200 256.6)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.200 256.6)",
+          "oklch(26.4% 0.200 256.6)",
+          "oklch(37.9% 0.200 256.6)",
+          "oklch(49.3% 0.200 256.6)",
+          "oklch(60.7% 0.200 256.6)",
+          "oklch(72.1% 0.200 256.6)",
+          "oklch(83.6% 0.200 256.6)",
+          "oklch(95.0% 0.200 256.6)"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Panel Mist",
+        "canonical": "#f2f6fb",
+        "oklch": "oklch(97.2% 0.008 253.9)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.008 253.9)",
+          "oklch(26.4% 0.008 253.9)",
+          "oklch(37.9% 0.008 253.9)",
+          "oklch(49.3% 0.008 253.9)",
+          "oklch(60.7% 0.008 253.9)",
+          "oklch(72.1% 0.008 253.9)",
+          "oklch(83.6% 0.008 253.9)",
+          "oklch(95.0% 0.008 253.9)"
+        ]
+      },
+      "side": {
+        "role": "neutral",
+        "displayName": "List White",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 0.0)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 0.0)",
+          "oklch(26.4% 0.000 0.0)",
+          "oklch(37.9% 0.000 0.0)",
+          "oklch(49.3% 0.000 0.0)",
+          "oklch(60.7% 0.000 0.0)",
+          "oklch(72.1% 0.000 0.0)",
+          "oklch(83.6% 0.000 0.0)",
+          "oklch(95.0% 0.000 0.0)"
+        ]
+      },
+      "side-hover": {
+        "role": "neutral",
+        "displayName": "Row Hover",
+        "canonical": "#f3f8fe",
+        "oklch": "oklch(97.7% 0.010 252.8)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.010 252.8)",
+          "oklch(26.4% 0.010 252.8)",
+          "oklch(37.9% 0.010 252.8)",
+          "oklch(49.3% 0.010 252.8)",
+          "oklch(60.7% 0.010 252.8)",
+          "oklch(72.1% 0.010 252.8)",
+          "oklch(83.6% 0.010 252.8)",
+          "oklch(95.0% 0.010 252.8)"
+        ]
+      },
+      "side-on": {
+        "role": "neutral",
+        "displayName": "Open Row",
+        "canonical": "#e6f1fe",
+        "oklch": "oklch(95.4% 0.021 252.5)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.021 252.5)",
+          "oklch(26.4% 0.021 252.5)",
+          "oklch(37.9% 0.021 252.5)",
+          "oklch(49.3% 0.021 252.5)",
+          "oklch(60.7% 0.021 252.5)",
+          "oklch(72.1% 0.021 252.5)",
+          "oklch(83.6% 0.021 252.5)",
+          "oklch(95.0% 0.021 252.5)"
+        ]
+      },
+      "thread": {
+        "role": "neutral",
+        "displayName": "Thread Blue",
+        "canonical": "#edf3fa",
+        "oklch": "oklch(96.2% 0.011 252.1)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.011 252.1)",
+          "oklch(26.4% 0.011 252.1)",
+          "oklch(37.9% 0.011 252.1)",
+          "oklch(49.3% 0.011 252.1)",
+          "oklch(60.7% 0.011 252.1)",
+          "oklch(72.1% 0.011 252.1)",
+          "oklch(83.6% 0.011 252.1)",
+          "oklch(95.0% 0.011 252.1)"
+        ]
+      },
+      "bubble-in": {
+        "role": "neutral",
+        "displayName": "Incoming Bubble",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 0.0)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 0.0)",
+          "oklch(26.4% 0.000 0.0)",
+          "oklch(37.9% 0.000 0.0)",
+          "oklch(49.3% 0.000 0.0)",
+          "oklch(60.7% 0.000 0.0)",
+          "oklch(72.1% 0.000 0.0)",
+          "oklch(83.6% 0.000 0.0)",
+          "oklch(95.0% 0.000 0.0)"
+        ]
+      },
+      "bubble-out": {
+        "role": "neutral",
+        "displayName": "Outgoing Bubble",
+        "canonical": "#d7eaff",
+        "oklch": "oklch(92.9% 0.035 250.9)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.035 250.9)",
+          "oklch(26.4% 0.035 250.9)",
+          "oklch(37.9% 0.035 250.9)",
+          "oklch(49.3% 0.035 250.9)",
+          "oklch(60.7% 0.035 250.9)",
+          "oklch(72.1% 0.035 250.9)",
+          "oklch(83.6% 0.035 250.9)",
+          "oklch(95.0% 0.035 250.9)"
+        ]
+      },
+      "bubble-sys": {
+        "role": "neutral",
+        "displayName": "Event Cream",
+        "canonical": "#fff3cf",
+        "oklch": "oklch(96.4% 0.049 91.8)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.049 91.8)",
+          "oklch(26.4% 0.049 91.8)",
+          "oklch(37.9% 0.049 91.8)",
+          "oklch(49.3% 0.049 91.8)",
+          "oklch(60.7% 0.049 91.8)",
+          "oklch(72.1% 0.049 91.8)",
+          "oklch(83.6% 0.049 91.8)",
+          "oklch(95.0% 0.049 91.8)"
+        ]
+      },
+      "pill": {
+        "role": "neutral",
+        "displayName": "Pill",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 0.0)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 0.0)",
+          "oklch(26.4% 0.000 0.0)",
+          "oklch(37.9% 0.000 0.0)",
+          "oklch(49.3% 0.000 0.0)",
+          "oklch(60.7% 0.000 0.0)",
+          "oklch(72.1% 0.000 0.0)",
+          "oklch(83.6% 0.000 0.0)",
+          "oklch(95.0% 0.000 0.0)"
+        ]
+      },
+      "sheet": {
+        "role": "neutral",
+        "displayName": "Sheet",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 0.0)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 0.0)",
+          "oklch(26.4% 0.000 0.0)",
+          "oklch(37.9% 0.000 0.0)",
+          "oklch(49.3% 0.000 0.0)",
+          "oklch(60.7% 0.000 0.0)",
+          "oklch(72.1% 0.000 0.0)",
+          "oklch(83.6% 0.000 0.0)",
+          "oklch(95.0% 0.000 0.0)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Line",
+        "canonical": "#e1e8f0",
+        "oklch": "oklch(92.8% 0.013 251.6)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.013 251.6)",
+          "oklch(26.4% 0.013 251.6)",
+          "oklch(37.9% 0.013 251.6)",
+          "oklch(49.3% 0.013 251.6)",
+          "oklch(60.7% 0.013 251.6)",
+          "oklch(72.1% 0.013 251.6)",
+          "oklch(83.6% 0.013 251.6)",
+          "oklch(95.0% 0.013 251.6)"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Strong Line",
+        "canonical": "#c5d1de",
+        "oklch": "oklch(85.5% 0.022 250.2)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.022 250.2)",
+          "oklch(26.4% 0.022 250.2)",
+          "oklch(37.9% 0.022 250.2)",
+          "oklch(49.3% 0.022 250.2)",
+          "oklch(60.7% 0.022 250.2)",
+          "oklch(72.1% 0.022 250.2)",
+          "oklch(83.6% 0.022 250.2)",
+          "oklch(95.0% 0.022 250.2)"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Navy Ink",
+        "canonical": "#061d33",
+        "oklch": "oklch(22.6% 0.052 250.0)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.052 250.0)",
+          "oklch(26.4% 0.052 250.0)",
+          "oklch(37.9% 0.052 250.0)",
+          "oklch(49.3% 0.052 250.0)",
+          "oklch(60.7% 0.052 250.0)",
+          "oklch(72.1% 0.052 250.0)",
+          "oklch(83.6% 0.052 250.0)",
+          "oklch(95.0% 0.052 250.0)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "canonical": "#3b5068",
+        "oklch": "oklch(42.4% 0.048 252.2)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.048 252.2)",
+          "oklch(26.4% 0.048 252.2)",
+          "oklch(37.9% 0.048 252.2)",
+          "oklch(49.3% 0.048 252.2)",
+          "oklch(60.7% 0.048 252.2)",
+          "oklch(72.1% 0.048 252.2)",
+          "oklch(83.6% 0.048 252.2)",
+          "oklch(95.0% 0.048 252.2)"
+        ]
+      },
+      "faint": {
+        "role": "neutral",
+        "displayName": "Faint",
+        "canonical": "#54687d",
+        "oklch": "oklch(50.9% 0.041 249.9)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.041 249.9)",
+          "oklch(26.4% 0.041 249.9)",
+          "oklch(37.9% 0.041 249.9)",
+          "oklch(49.3% 0.041 249.9)",
+          "oklch(60.7% 0.041 249.9)",
+          "oklch(72.1% 0.041 249.9)",
+          "oklch(83.6% 0.041 249.9)",
+          "oklch(95.0% 0.041 249.9)"
+        ]
+      },
+      "on-out": {
+        "role": "neutral",
+        "displayName": "Outgoing Text",
+        "canonical": "#061d33",
+        "oklch": "oklch(22.6% 0.052 250.0)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.052 250.0)",
+          "oklch(26.4% 0.052 250.0)",
+          "oklch(37.9% 0.052 250.0)",
+          "oklch(49.3% 0.052 250.0)",
+          "oklch(60.7% 0.052 250.0)",
+          "oklch(72.1% 0.052 250.0)",
+          "oklch(83.6% 0.052 250.0)",
+          "oklch(95.0% 0.052 250.0)"
+        ]
+      },
+      "on-sys": {
+        "role": "neutral",
+        "displayName": "Event Text",
+        "canonical": "#55431a",
+        "oklch": "oklch(39.3% 0.063 85.3)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.063 85.3)",
+          "oklch(26.4% 0.063 85.3)",
+          "oklch(37.9% 0.063 85.3)",
+          "oklch(49.3% 0.063 85.3)",
+          "oklch(60.7% 0.063 85.3)",
+          "oklch(72.1% 0.063 85.3)",
+          "oklch(83.6% 0.063 85.3)",
+          "oklch(95.0% 0.063 85.3)"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Action Blue",
+        "canonical": "#0473ea",
+        "oklch": "oklch(57.3% 0.199 256.8)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.199 256.8)",
+          "oklch(26.4% 0.199 256.8)",
+          "oklch(37.9% 0.199 256.8)",
+          "oklch(49.3% 0.199 256.8)",
+          "oklch(60.7% 0.199 256.8)",
+          "oklch(72.1% 0.199 256.8)",
+          "oklch(83.6% 0.199 256.8)",
+          "oklch(95.0% 0.199 256.8)"
+        ]
+      },
+      "accent-press": {
+        "role": "primary",
+        "displayName": "Action Blue Pressed",
+        "canonical": "#035fc4",
+        "oklch": "oklch(50.1% 0.175 256.8)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.175 256.8)",
+          "oklch(26.4% 0.175 256.8)",
+          "oklch(37.9% 0.175 256.8)",
+          "oklch(49.3% 0.175 256.8)",
+          "oklch(60.7% 0.175 256.8)",
+          "oklch(72.1% 0.175 256.8)",
+          "oklch(83.6% 0.175 256.8)",
+          "oklch(95.0% 0.175 256.8)"
+        ]
+      },
+      "accent-ink": {
+        "role": "primary",
+        "displayName": "Ink on Blue",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 0.0)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 0.0)",
+          "oklch(26.4% 0.000 0.0)",
+          "oklch(37.9% 0.000 0.0)",
+          "oklch(49.3% 0.000 0.0)",
+          "oklch(60.7% 0.000 0.0)",
+          "oklch(72.1% 0.000 0.0)",
+          "oklch(83.6% 0.000 0.0)",
+          "oklch(95.0% 0.000 0.0)"
+        ]
+      },
+      "accent-soft": {
+        "role": "primary",
+        "displayName": "Blue Tint",
+        "canonical": "#deeeff",
+        "oklch": "oklch(94.2% 0.029 249.8)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.029 249.8)",
+          "oklch(26.4% 0.029 249.8)",
+          "oklch(37.9% 0.029 249.8)",
+          "oklch(49.3% 0.029 249.8)",
+          "oklch(60.7% 0.029 249.8)",
+          "oklch(72.1% 0.029 249.8)",
+          "oklch(83.6% 0.029 249.8)",
+          "oklch(95.0% 0.029 249.8)"
+        ]
+      },
+      "accent-text": {
+        "role": "primary",
+        "displayName": "Blue Text",
+        "canonical": "#0459b8",
+        "oklch": "oklch(47.9% 0.166 256.9)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.166 256.9)",
+          "oklch(26.4% 0.166 256.9)",
+          "oklch(37.9% 0.166 256.9)",
+          "oklch(49.3% 0.166 256.9)",
+          "oklch(60.7% 0.166 256.9)",
+          "oklch(72.1% 0.166 256.9)",
+          "oklch(83.6% 0.166 256.9)",
+          "oklch(95.0% 0.166 256.9)"
+        ]
+      },
+      "red": {
+        "role": "secondary",
+        "displayName": "Check Red",
+        "canonical": "#a8261d",
+        "oklch": "oklch(48.1% 0.168 29.0)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.168 29.0)",
+          "oklch(26.4% 0.168 29.0)",
+          "oklch(37.9% 0.168 29.0)",
+          "oklch(49.3% 0.168 29.0)",
+          "oklch(60.7% 0.168 29.0)",
+          "oklch(72.1% 0.168 29.0)",
+          "oklch(83.6% 0.168 29.0)",
+          "oklch(95.0% 0.168 29.0)"
+        ]
+      },
+      "red-soft": {
+        "role": "secondary",
+        "displayName": "Check Red Soft",
+        "canonical": "#fde9e6",
+        "oklch": "oklch(94.9% 0.022 27.8)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.022 27.8)",
+          "oklch(26.4% 0.022 27.8)",
+          "oklch(37.9% 0.022 27.8)",
+          "oklch(49.3% 0.022 27.8)",
+          "oklch(60.7% 0.022 27.8)",
+          "oklch(72.1% 0.022 27.8)",
+          "oklch(83.6% 0.022 27.8)",
+          "oklch(95.0% 0.022 27.8)"
+        ]
+      },
+      "amber": {
+        "role": "secondary",
+        "displayName": "Blank Amber",
+        "canonical": "#6d4a00",
+        "oklch": "oklch(43.7% 0.091 77.7)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.091 77.7)",
+          "oklch(26.4% 0.091 77.7)",
+          "oklch(37.9% 0.091 77.7)",
+          "oklch(49.3% 0.091 77.7)",
+          "oklch(60.7% 0.091 77.7)",
+          "oklch(72.1% 0.091 77.7)",
+          "oklch(83.6% 0.091 77.7)",
+          "oklch(95.0% 0.091 77.7)"
+        ]
+      },
+      "amber-soft": {
+        "role": "secondary",
+        "displayName": "Blank Amber Soft",
+        "canonical": "#ffeaa6",
+        "oklch": "oklch(93.8% 0.089 93.0)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.089 93.0)",
+          "oklch(26.4% 0.089 93.0)",
+          "oklch(37.9% 0.089 93.0)",
+          "oklch(49.3% 0.089 93.0)",
+          "oklch(60.7% 0.089 93.0)",
+          "oklch(72.1% 0.089 93.0)",
+          "oklch(83.6% 0.089 93.0)",
+          "oklch(95.0% 0.089 93.0)"
+        ]
+      },
+      "blue": {
+        "role": "secondary",
+        "displayName": "Note Navy",
+        "canonical": "#0c3a66",
+        "oklch": "oklch(34.4% 0.091 251.7)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.091 251.7)",
+          "oklch(26.4% 0.091 251.7)",
+          "oklch(37.9% 0.091 251.7)",
+          "oklch(49.3% 0.091 251.7)",
+          "oklch(60.7% 0.091 251.7)",
+          "oklch(72.1% 0.091 251.7)",
+          "oklch(83.6% 0.091 251.7)",
+          "oklch(95.0% 0.091 251.7)"
+        ]
+      },
+      "blue-soft": {
+        "role": "secondary",
+        "displayName": "Note Navy Soft",
+        "canonical": "#e3effc",
+        "oklch": "oklch(94.7% 0.022 250.2)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.022 250.2)",
+          "oklch(26.4% 0.022 250.2)",
+          "oklch(37.9% 0.022 250.2)",
+          "oklch(49.3% 0.022 250.2)",
+          "oklch(60.7% 0.022 250.2)",
+          "oklch(72.1% 0.022 250.2)",
+          "oklch(83.6% 0.022 250.2)",
+          "oklch(95.0% 0.022 250.2)"
+        ]
+      },
+      "brand-dark": {
+        "role": "primary",
+        "displayName": "Carbarn Blue (dark)",
+        "canonical": "#3d9bff",
+        "oklch": "oklch(68.2% 0.172 252.9)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.172 252.9)",
+          "oklch(26.4% 0.172 252.9)",
+          "oklch(37.9% 0.172 252.9)",
+          "oklch(49.3% 0.172 252.9)",
+          "oklch(60.7% 0.172 252.9)",
+          "oklch(72.1% 0.172 252.9)",
+          "oklch(83.6% 0.172 252.9)",
+          "oklch(95.0% 0.172 252.9)"
+        ]
+      },
+      "panel-dark": {
+        "role": "neutral",
+        "displayName": "Panel Mist (dark)",
+        "canonical": "#0b2640",
+        "oklch": "oklch(26.3% 0.059 250.4)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.059 250.4)",
+          "oklch(26.4% 0.059 250.4)",
+          "oklch(37.9% 0.059 250.4)",
+          "oklch(49.3% 0.059 250.4)",
+          "oklch(60.7% 0.059 250.4)",
+          "oklch(72.1% 0.059 250.4)",
+          "oklch(83.6% 0.059 250.4)",
+          "oklch(95.0% 0.059 250.4)"
+        ]
+      },
+      "side-dark": {
+        "role": "neutral",
+        "displayName": "List White (dark)",
+        "canonical": "#061d33",
+        "oklch": "oklch(22.6% 0.052 250.0)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.052 250.0)",
+          "oklch(26.4% 0.052 250.0)",
+          "oklch(37.9% 0.052 250.0)",
+          "oklch(49.3% 0.052 250.0)",
+          "oklch(60.7% 0.052 250.0)",
+          "oklch(72.1% 0.052 250.0)",
+          "oklch(83.6% 0.052 250.0)",
+          "oklch(95.0% 0.052 250.0)"
+        ]
+      },
+      "side-hover-dark": {
+        "role": "neutral",
+        "displayName": "Row Hover (dark)",
+        "canonical": "#0b2640",
+        "oklch": "oklch(26.3% 0.059 250.4)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.059 250.4)",
+          "oklch(26.4% 0.059 250.4)",
+          "oklch(37.9% 0.059 250.4)",
+          "oklch(49.3% 0.059 250.4)",
+          "oklch(60.7% 0.059 250.4)",
+          "oklch(72.1% 0.059 250.4)",
+          "oklch(83.6% 0.059 250.4)",
+          "oklch(95.0% 0.059 250.4)"
+        ]
+      },
+      "side-on-dark": {
+        "role": "neutral",
+        "displayName": "Open Row (dark)",
+        "canonical": "#103252",
+        "oklch": "oklch(31.0% 0.070 250.0)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.070 250.0)",
+          "oklch(26.4% 0.070 250.0)",
+          "oklch(37.9% 0.070 250.0)",
+          "oklch(49.3% 0.070 250.0)",
+          "oklch(60.7% 0.070 250.0)",
+          "oklch(72.1% 0.070 250.0)",
+          "oklch(83.6% 0.070 250.0)",
+          "oklch(95.0% 0.070 250.0)"
+        ]
+      },
+      "thread-dark": {
+        "role": "neutral",
+        "displayName": "Thread Blue (dark)",
+        "canonical": "#041627",
+        "oklch": "oklch(19.5% 0.043 248.2)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.043 248.2)",
+          "oklch(26.4% 0.043 248.2)",
+          "oklch(37.9% 0.043 248.2)",
+          "oklch(49.3% 0.043 248.2)",
+          "oklch(60.7% 0.043 248.2)",
+          "oklch(72.1% 0.043 248.2)",
+          "oklch(83.6% 0.043 248.2)",
+          "oklch(95.0% 0.043 248.2)"
+        ]
+      },
+      "bubble-in-dark": {
+        "role": "neutral",
+        "displayName": "Incoming Bubble (dark)",
+        "canonical": "#12304d",
+        "oklch": "oklch(30.2% 0.064 250.1)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.064 250.1)",
+          "oklch(26.4% 0.064 250.1)",
+          "oklch(37.9% 0.064 250.1)",
+          "oklch(49.3% 0.064 250.1)",
+          "oklch(60.7% 0.064 250.1)",
+          "oklch(72.1% 0.064 250.1)",
+          "oklch(83.6% 0.064 250.1)",
+          "oklch(95.0% 0.064 250.1)"
+        ]
+      },
+      "bubble-out-dark": {
+        "role": "neutral",
+        "displayName": "Outgoing Bubble (dark)",
+        "canonical": "#0c4a86",
+        "oklch": "oklch(40.7% 0.116 252.8)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.116 252.8)",
+          "oklch(26.4% 0.116 252.8)",
+          "oklch(37.9% 0.116 252.8)",
+          "oklch(49.3% 0.116 252.8)",
+          "oklch(60.7% 0.116 252.8)",
+          "oklch(72.1% 0.116 252.8)",
+          "oklch(83.6% 0.116 252.8)",
+          "oklch(95.0% 0.116 252.8)"
+        ]
+      },
+      "bubble-sys-dark": {
+        "role": "neutral",
+        "displayName": "Event Cream (dark)",
+        "canonical": "#2c2a1c",
+        "oklch": "oklch(28.3% 0.024 100.9)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.024 100.9)",
+          "oklch(26.4% 0.024 100.9)",
+          "oklch(37.9% 0.024 100.9)",
+          "oklch(49.3% 0.024 100.9)",
+          "oklch(60.7% 0.024 100.9)",
+          "oklch(72.1% 0.024 100.9)",
+          "oklch(83.6% 0.024 100.9)",
+          "oklch(95.0% 0.024 100.9)"
+        ]
+      },
+      "pill-dark": {
+        "role": "neutral",
+        "displayName": "Pill (dark)",
+        "canonical": "#0f2b47",
+        "oklch": "oklch(28.3% 0.062 250.9)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.062 250.9)",
+          "oklch(26.4% 0.062 250.9)",
+          "oklch(37.9% 0.062 250.9)",
+          "oklch(49.3% 0.062 250.9)",
+          "oklch(60.7% 0.062 250.9)",
+          "oklch(72.1% 0.062 250.9)",
+          "oklch(83.6% 0.062 250.9)",
+          "oklch(95.0% 0.062 250.9)"
+        ]
+      },
+      "sheet-dark": {
+        "role": "neutral",
+        "displayName": "Sheet (dark)",
+        "canonical": "#12304d",
+        "oklch": "oklch(30.2% 0.064 250.1)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.064 250.1)",
+          "oklch(26.4% 0.064 250.1)",
+          "oklch(37.9% 0.064 250.1)",
+          "oklch(49.3% 0.064 250.1)",
+          "oklch(60.7% 0.064 250.1)",
+          "oklch(72.1% 0.064 250.1)",
+          "oklch(83.6% 0.064 250.1)",
+          "oklch(95.0% 0.064 250.1)"
+        ]
+      },
+      "line-dark": {
+        "role": "neutral",
+        "displayName": "Line (dark)",
+        "canonical": "#153655",
+        "oklch": "oklch(32.5% 0.067 249.4)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.067 249.4)",
+          "oklch(26.4% 0.067 249.4)",
+          "oklch(37.9% 0.067 249.4)",
+          "oklch(49.3% 0.067 249.4)",
+          "oklch(60.7% 0.067 249.4)",
+          "oklch(72.1% 0.067 249.4)",
+          "oklch(83.6% 0.067 249.4)",
+          "oklch(95.0% 0.067 249.4)"
+        ]
+      },
+      "line-strong-dark": {
+        "role": "neutral",
+        "displayName": "Strong Line (dark)",
+        "canonical": "#2a4d70",
+        "oklch": "oklch(41.1% 0.072 250.0)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.072 250.0)",
+          "oklch(26.4% 0.072 250.0)",
+          "oklch(37.9% 0.072 250.0)",
+          "oklch(49.3% 0.072 250.0)",
+          "oklch(60.7% 0.072 250.0)",
+          "oklch(72.1% 0.072 250.0)",
+          "oklch(83.6% 0.072 250.0)",
+          "oklch(95.0% 0.072 250.0)"
+        ]
+      },
+      "text-dark": {
+        "role": "neutral",
+        "displayName": "Navy Ink (dark)",
+        "canonical": "#e8f0f8",
+        "oklch": "oklch(95.1% 0.014 248.0)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.014 248.0)",
+          "oklch(26.4% 0.014 248.0)",
+          "oklch(37.9% 0.014 248.0)",
+          "oklch(49.3% 0.014 248.0)",
+          "oklch(60.7% 0.014 248.0)",
+          "oklch(72.1% 0.014 248.0)",
+          "oklch(83.6% 0.014 248.0)",
+          "oklch(95.0% 0.014 248.0)"
+        ]
+      },
+      "muted-dark": {
+        "role": "neutral",
+        "displayName": "Muted (dark)",
+        "canonical": "#b1c3d6",
+        "oklch": "oklch(81.0% 0.033 249.7)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.033 249.7)",
+          "oklch(26.4% 0.033 249.7)",
+          "oklch(37.9% 0.033 249.7)",
+          "oklch(49.3% 0.033 249.7)",
+          "oklch(60.7% 0.033 249.7)",
+          "oklch(72.1% 0.033 249.7)",
+          "oklch(83.6% 0.033 249.7)",
+          "oklch(95.0% 0.033 249.7)"
+        ]
+      },
+      "faint-dark": {
+        "role": "neutral",
+        "displayName": "Faint (dark)",
+        "canonical": "#94a9bf",
+        "oklch": "oklch(72.6% 0.040 249.6)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.040 249.6)",
+          "oklch(26.4% 0.040 249.6)",
+          "oklch(37.9% 0.040 249.6)",
+          "oklch(49.3% 0.040 249.6)",
+          "oklch(60.7% 0.040 249.6)",
+          "oklch(72.1% 0.040 249.6)",
+          "oklch(83.6% 0.040 249.6)",
+          "oklch(95.0% 0.040 249.6)"
+        ]
+      },
+      "on-out-dark": {
+        "role": "neutral",
+        "displayName": "Outgoing Text (dark)",
+        "canonical": "#eef6ff",
+        "oklch": "oklch(97.0% 0.015 251.2)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.015 251.2)",
+          "oklch(26.4% 0.015 251.2)",
+          "oklch(37.9% 0.015 251.2)",
+          "oklch(49.3% 0.015 251.2)",
+          "oklch(60.7% 0.015 251.2)",
+          "oklch(72.1% 0.015 251.2)",
+          "oklch(83.6% 0.015 251.2)",
+          "oklch(95.0% 0.015 251.2)"
+        ]
+      },
+      "on-sys-dark": {
+        "role": "neutral",
+        "displayName": "Event Text (dark)",
+        "canonical": "#e6d9a4",
+        "oklch": "oklch(88.3% 0.070 96.0)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.070 96.0)",
+          "oklch(26.4% 0.070 96.0)",
+          "oklch(37.9% 0.070 96.0)",
+          "oklch(49.3% 0.070 96.0)",
+          "oklch(60.7% 0.070 96.0)",
+          "oklch(72.1% 0.070 96.0)",
+          "oklch(83.6% 0.070 96.0)",
+          "oklch(95.0% 0.070 96.0)"
+        ]
+      },
+      "accent-dark": {
+        "role": "primary",
+        "displayName": "Action Blue (dark)",
+        "canonical": "#3d9bff",
+        "oklch": "oklch(68.2% 0.172 252.9)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.172 252.9)",
+          "oklch(26.4% 0.172 252.9)",
+          "oklch(37.9% 0.172 252.9)",
+          "oklch(49.3% 0.172 252.9)",
+          "oklch(60.7% 0.172 252.9)",
+          "oklch(72.1% 0.172 252.9)",
+          "oklch(83.6% 0.172 252.9)",
+          "oklch(95.0% 0.172 252.9)"
+        ]
+      },
+      "accent-press-dark": {
+        "role": "primary",
+        "displayName": "Action Blue Pressed (dark)",
+        "canonical": "#2f86e3",
+        "oklch": "oklch(61.6% 0.163 253.3)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.163 253.3)",
+          "oklch(26.4% 0.163 253.3)",
+          "oklch(37.9% 0.163 253.3)",
+          "oklch(49.3% 0.163 253.3)",
+          "oklch(60.7% 0.163 253.3)",
+          "oklch(72.1% 0.163 253.3)",
+          "oklch(83.6% 0.163 253.3)",
+          "oklch(95.0% 0.163 253.3)"
+        ]
+      },
+      "accent-ink-dark": {
+        "role": "primary",
+        "displayName": "Ink on Blue (dark)",
+        "canonical": "#04162a",
+        "oklch": "oklch(19.7% 0.048 251.9)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.048 251.9)",
+          "oklch(26.4% 0.048 251.9)",
+          "oklch(37.9% 0.048 251.9)",
+          "oklch(49.3% 0.048 251.9)",
+          "oklch(60.7% 0.048 251.9)",
+          "oklch(72.1% 0.048 251.9)",
+          "oklch(83.6% 0.048 251.9)",
+          "oklch(95.0% 0.048 251.9)"
+        ]
+      },
+      "accent-soft-dark": {
+        "role": "primary",
+        "displayName": "Blue Tint (dark)",
+        "canonical": "#0f3559",
+        "oklch": "oklch(32.3% 0.077 250.6)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.077 250.6)",
+          "oklch(26.4% 0.077 250.6)",
+          "oklch(37.9% 0.077 250.6)",
+          "oklch(49.3% 0.077 250.6)",
+          "oklch(60.7% 0.077 250.6)",
+          "oklch(72.1% 0.077 250.6)",
+          "oklch(83.6% 0.077 250.6)",
+          "oklch(95.0% 0.077 250.6)"
+        ]
+      },
+      "accent-text-dark": {
+        "role": "primary",
+        "displayName": "Blue Text (dark)",
+        "canonical": "#8cc4ff",
+        "oklch": "oklch(80.4% 0.102 250.5)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.102 250.5)",
+          "oklch(26.4% 0.102 250.5)",
+          "oklch(37.9% 0.102 250.5)",
+          "oklch(49.3% 0.102 250.5)",
+          "oklch(60.7% 0.102 250.5)",
+          "oklch(72.1% 0.102 250.5)",
+          "oklch(83.6% 0.102 250.5)",
+          "oklch(95.0% 0.102 250.5)"
+        ]
+      },
+      "red-dark": {
+        "role": "secondary",
+        "displayName": "Check Red (dark)",
+        "canonical": "#ff9f95",
+        "oklch": "oklch(79.7% 0.116 26.4)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.116 26.4)",
+          "oklch(26.4% 0.116 26.4)",
+          "oklch(37.9% 0.116 26.4)",
+          "oklch(49.3% 0.116 26.4)",
+          "oklch(60.7% 0.116 26.4)",
+          "oklch(72.1% 0.116 26.4)",
+          "oklch(83.6% 0.116 26.4)",
+          "oklch(95.0% 0.116 26.4)"
+        ]
+      },
+      "red-soft-dark": {
+        "role": "secondary",
+        "displayName": "Check Red Soft (dark)",
+        "canonical": "#43211d",
+        "oklch": "oklch(29.3% 0.053 27.8)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.053 27.8)",
+          "oklch(26.4% 0.053 27.8)",
+          "oklch(37.9% 0.053 27.8)",
+          "oklch(49.3% 0.053 27.8)",
+          "oklch(60.7% 0.053 27.8)",
+          "oklch(72.1% 0.053 27.8)",
+          "oklch(83.6% 0.053 27.8)",
+          "oklch(95.0% 0.053 27.8)"
+        ]
+      },
+      "amber-dark": {
+        "role": "secondary",
+        "displayName": "Blank Amber (dark)",
+        "canonical": "#ffd977",
+        "oklch": "oklch(89.8% 0.125 88.6)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.125 88.6)",
+          "oklch(26.4% 0.125 88.6)",
+          "oklch(37.9% 0.125 88.6)",
+          "oklch(49.3% 0.125 88.6)",
+          "oklch(60.7% 0.125 88.6)",
+          "oklch(72.1% 0.125 88.6)",
+          "oklch(83.6% 0.125 88.6)",
+          "oklch(95.0% 0.125 88.6)"
+        ]
+      },
+      "amber-soft-dark": {
+        "role": "secondary",
+        "displayName": "Blank Amber Soft (dark)",
+        "canonical": "#4a3a0c",
+        "oklch": "oklch(35.7% 0.065 88.7)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.065 88.7)",
+          "oklch(26.4% 0.065 88.7)",
+          "oklch(37.9% 0.065 88.7)",
+          "oklch(49.3% 0.065 88.7)",
+          "oklch(60.7% 0.065 88.7)",
+          "oklch(72.1% 0.065 88.7)",
+          "oklch(83.6% 0.065 88.7)",
+          "oklch(95.0% 0.065 88.7)"
+        ]
+      },
+      "blue-dark": {
+        "role": "secondary",
+        "displayName": "Note Navy (dark)",
+        "canonical": "#a9d0ff",
+        "oklch": "oklch(84.6% 0.078 253.4)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.078 253.4)",
+          "oklch(26.4% 0.078 253.4)",
+          "oklch(37.9% 0.078 253.4)",
+          "oklch(49.3% 0.078 253.4)",
+          "oklch(60.7% 0.078 253.4)",
+          "oklch(72.1% 0.078 253.4)",
+          "oklch(83.6% 0.078 253.4)",
+          "oklch(95.0% 0.078 253.4)"
+        ]
+      },
+      "blue-soft-dark": {
+        "role": "secondary",
+        "displayName": "Note Navy Soft (dark)",
+        "canonical": "#123457",
+        "oklch": "oklch(31.9% 0.072 251.2)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.072 251.2)",
+          "oklch(26.4% 0.072 251.2)",
+          "oklch(37.9% 0.072 251.2)",
+          "oklch(49.3% 0.072 251.2)",
+          "oklch(60.7% 0.072 251.2)",
+          "oklch(72.1% 0.072 251.2)",
+          "oklch(83.6% 0.072 251.2)",
+          "oklch(95.0% 0.072 251.2)"
+        ]
+      },
+      "avatar-default": {
+        "role": "tertiary",
+        "displayName": "Avatar Default",
+        "canonical": "#5a6f85",
+        "oklch": "oklch(53.3% 0.043 249.8)",
+        "theme": "both",
+        "tonalRamp": [
+          "oklch(15.0% 0.043 249.8)",
+          "oklch(26.4% 0.043 249.8)",
+          "oklch(37.9% 0.043 249.8)",
+          "oklch(49.3% 0.043 249.8)",
+          "oklch(60.7% 0.043 249.8)",
+          "oklch(72.1% 0.043 249.8)",
+          "oklch(83.6% 0.043 249.8)",
+          "oklch(95.0% 0.043 249.8)"
+        ]
+      },
+      "avatar-h0": {
+        "role": "tertiary",
+        "displayName": "Avatar Hue 0",
+        "canonical": "#0c3a66",
+        "oklch": "oklch(34.4% 0.091 251.7)",
+        "theme": "both",
+        "tonalRamp": [
+          "oklch(15.0% 0.091 251.7)",
+          "oklch(26.4% 0.091 251.7)",
+          "oklch(37.9% 0.091 251.7)",
+          "oklch(49.3% 0.091 251.7)",
+          "oklch(60.7% 0.091 251.7)",
+          "oklch(72.1% 0.091 251.7)",
+          "oklch(83.6% 0.091 251.7)",
+          "oklch(95.0% 0.091 251.7)"
+        ]
+      },
+      "avatar-h1": {
+        "role": "tertiary",
+        "displayName": "Avatar Hue 1",
+        "canonical": "#2a6f97",
+        "oklch": "oklch(51.7% 0.093 238.0)",
+        "theme": "both",
+        "tonalRamp": [
+          "oklch(15.0% 0.093 238.0)",
+          "oklch(26.4% 0.093 238.0)",
+          "oklch(37.9% 0.093 238.0)",
+          "oklch(49.3% 0.093 238.0)",
+          "oklch(60.7% 0.093 238.0)",
+          "oklch(72.1% 0.093 238.0)",
+          "oklch(83.6% 0.093 238.0)",
+          "oklch(95.0% 0.093 238.0)"
+        ]
+      },
+      "avatar-h2": {
+        "role": "tertiary",
+        "displayName": "Avatar Hue 2",
+        "canonical": "#5b4b8a",
+        "oklch": "oklch(45.8% 0.101 293.7)",
+        "theme": "both",
+        "tonalRamp": [
+          "oklch(15.0% 0.101 293.7)",
+          "oklch(26.4% 0.101 293.7)",
+          "oklch(37.9% 0.101 293.7)",
+          "oklch(49.3% 0.101 293.7)",
+          "oklch(60.7% 0.101 293.7)",
+          "oklch(72.1% 0.101 293.7)",
+          "oklch(83.6% 0.101 293.7)",
+          "oklch(95.0% 0.101 293.7)"
+        ]
+      },
+      "avatar-h3": {
+        "role": "tertiary",
+        "displayName": "Avatar Hue 3",
+        "canonical": "#1f7a6d",
+        "oklch": "oklch(52.4% 0.085 181.1)",
+        "theme": "both",
+        "tonalRamp": [
+          "oklch(15.0% 0.085 181.1)",
+          "oklch(26.4% 0.085 181.1)",
+          "oklch(37.9% 0.085 181.1)",
+          "oklch(49.3% 0.085 181.1)",
+          "oklch(60.7% 0.085 181.1)",
+          "oklch(72.1% 0.085 181.1)",
+          "oklch(83.6% 0.085 181.1)",
+          "oklch(95.0% 0.085 181.1)"
+        ]
+      },
+      "avatar-h4": {
+        "role": "tertiary",
+        "displayName": "Avatar Hue 4",
+        "canonical": "#9b4a3c",
+        "oklch": "oklch(50.8% 0.111 31.4)",
+        "theme": "both",
+        "tonalRamp": [
+          "oklch(15.0% 0.111 31.4)",
+          "oklch(26.4% 0.111 31.4)",
+          "oklch(37.9% 0.111 31.4)",
+          "oklch(49.3% 0.111 31.4)",
+          "oklch(60.7% 0.111 31.4)",
+          "oklch(72.1% 0.111 31.4)",
+          "oklch(83.6% 0.111 31.4)",
+          "oklch(95.0% 0.111 31.4)"
+        ]
+      },
+      "avatar-h5": {
+        "role": "tertiary",
+        "displayName": "Avatar Hue 5",
+        "canonical": "#3f5a73",
+        "oklch": "oklch(45.7% 0.052 247.1)",
+        "theme": "both",
+        "tonalRamp": [
+          "oklch(15.0% 0.052 247.1)",
+          "oklch(26.4% 0.052 247.1)",
+          "oklch(37.9% 0.052 247.1)",
+          "oklch(49.3% 0.052 247.1)",
+          "oklch(60.7% 0.052 247.1)",
+          "oklch(72.1% 0.052 247.1)",
+          "oklch(83.6% 0.052 247.1)",
+          "oklch(95.0% 0.052 247.1)"
+        ]
+      },
+      "avatar-h6": {
+        "role": "tertiary",
+        "displayName": "Avatar Hue 6",
+        "canonical": "#8a4f7d",
+        "oklch": "oklch(51.2% 0.101 335.6)",
+        "theme": "both",
+        "tonalRamp": [
+          "oklch(15.0% 0.101 335.6)",
+          "oklch(26.4% 0.101 335.6)",
+          "oklch(37.9% 0.101 335.6)",
+          "oklch(49.3% 0.101 335.6)",
+          "oklch(60.7% 0.101 335.6)",
+          "oklch(72.1% 0.101 335.6)",
+          "oklch(83.6% 0.101 335.6)",
+          "oklch(95.0% 0.101 335.6)"
+        ]
+      },
+      "avatar-h7": {
+        "role": "tertiary",
+        "displayName": "Avatar Hue 7",
+        "canonical": "#8f5a14",
+        "oklch": "oklch(51.5% 0.105 67.4)",
+        "theme": "both",
+        "tonalRamp": [
+          "oklch(15.0% 0.105 67.4)",
+          "oklch(26.4% 0.105 67.4)",
+          "oklch(37.9% 0.105 67.4)",
+          "oklch(49.3% 0.105 67.4)",
+          "oklch(60.7% 0.105 67.4)",
+          "oklch(72.1% 0.105 67.4)",
+          "oklch(83.6% 0.105 67.4)",
+          "oklch(95.0% 0.105 67.4)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "wordmark": {
+        "displayName": "Wordmark",
+        "purpose": "The name WHEELMAN in the list header: Montserrat 800, uppercase, Carbarn Blue. Used nowhere else."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The one sentence in the empty chat that says how many customers are waiting."
+      },
+      "title-lg": {
+        "displayName": "Title large",
+        "purpose": "The customer name at the top of the details panel."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Open conversation name, details panel heading, empty-list heading. List names use this size at 500, rising to 650 when unanswered."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default text. Bubbles use line-height 1.4; the draft in the message box uses 1.5."
+      },
+      "body-sm": {
+        "displayName": "Body small",
+        "purpose": "List previews, filter chips, details rows, the toast."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Button labels."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Status line, notices, header sub-line, car strip, the \"Suggested reply · not sent\" label, details section headings, the \"Learned from\" line in the list footer, fine print."
+      },
+      "thread-meta": {
+        "displayName": "Thread meta",
+        "purpose": "Date and event pills, and the sender name at the top of a bubble (650)."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "List times, badge numerals (700), word count, written-at time."
+      },
+      "timestamp": {
+        "displayName": "Timestamp",
+        "purpose": "The time inside a bubble. The smallest text on the page, shared only with the \"by Carbarn\" line (600)."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "File names inside notices only."
+      }
+    },
+    "typographyNotes": {
+      "fontVariantNumeric": "tabular-nums on the whole page",
+      "weights": {
+        "regular": 400,
+        "resting": 500,
+        "emphasis": 650,
+        "strong": 700,
+        "wordmark": 800
+      },
+      "fontFiles": [
+        {
+          "family": "Manrope",
+          "file": "web/fonts/manrope-latin.woff2",
+          "declaredWeights": "400 800",
+          "display": "swap",
+          "use": "All interface text."
+        },
+        {
+          "family": "Montserrat",
+          "file": "web/fonts/montserrat-latin.woff2",
+          "declaredWeights": "800",
+          "display": "swap",
+          "use": "The wordmark only."
+        }
+      ]
+    },
+    "shadows": [
+      {
+        "name": "shadow-1",
+        "value": "0 1px 1px rgba(6, 29, 51, .10)",
+        "purpose": "Resting lift: bubbles, date and event pills, the message box, the \"nothing to do\" panel."
+      },
+      {
+        "name": "shadow-2",
+        "value": "0 2px 6px rgba(6, 29, 51, .10), 0 8px 24px rgba(6, 29, 51, .10)",
+        "purpose": "Floating: the jump-to-newest button, the toast, the details panel when it is a drawer."
+      },
+      {
+        "name": "shadow-1-dark",
+        "value": "0 1px 1px rgba(0, 0, 0, .35)",
+        "purpose": "Resting lift in the dark theme (same custom property, redefined)."
+      },
+      {
+        "name": "shadow-2-dark",
+        "value": "0 2px 6px rgba(0, 0, 0, .35), 0 10px 28px rgba(0, 0, 0, .4)",
+        "purpose": "Floating in the dark theme (same custom property, redefined)."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(.23, 1, .32, 1)",
+        "purpose": "Press feedback, the toast, the jump button and the arriving draft."
+      },
+      {
+        "name": "ease-drawer",
+        "value": "cubic-bezier(.32, .72, 0, 1)",
+        "purpose": "The details panel sliding in as a drawer at 1180px and under."
+      },
+      {
+        "name": "press",
+        "value": "160ms",
+        "purpose": "Scale to 0.94-0.97 on :active for every pressable control, with ease-out."
+      },
+      {
+        "name": "state-colour",
+        "value": "160ms ease",
+        "purpose": "Background, text and border colour changes on hover, selection and focus."
+      },
+      {
+        "name": "appear",
+        "value": "180ms",
+        "purpose": "Toast (opacity and a 0.75rem drop) and the jump-to-newest button (opacity and scale from 0.92)."
+      },
+      {
+        "name": "draft-arrive",
+        "value": "220ms",
+        "purpose": "A new suggestion fading in from opacity 0 and a 2px blur."
+      },
+      {
+        "name": "drawer",
+        "value": "240ms translate, 200ms opacity",
+        "purpose": "Details drawer entering from the right."
+      },
+      {
+        "name": "busy-dot",
+        "value": "1.4s ease-in-out infinite",
+        "purpose": "Status dot pulsing to 35% opacity while checking or writing."
+      },
+      {
+        "name": "spin",
+        "value": "0.7s linear infinite",
+        "purpose": "The \"check now\" icon while a check runs."
+      },
+      {
+        "name": "shimmer",
+        "value": "1.2s linear infinite",
+        "purpose": "Loading bars in the message box while a suggestion is written."
+      },
+      {
+        "name": "toast-dwell",
+        "value": "2600ms",
+        "purpose": "How long a toast stays before it fades."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "1ms",
+        "purpose": "Under prefers-reduced-motion every animation and transition is cut to 1ms and loops run once; the busy dot holds at 70% opacity."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "drawer",
+        "value": "1180px",
+        "purpose": "max-width: the details panel leaves the grid and becomes a fixed drawer on the right."
+      },
+      {
+        "name": "narrow",
+        "value": "860px",
+        "purpose": "max-width: one column, list or chat; a back button appears in the chat header."
+      }
+    ],
+    "layout": {
+      "frame": "height 100dvh; body does not scroll",
+      "columns": {
+        "list": "minmax(20rem, 25rem)",
+        "chat": "minmax(0, 1fr)",
+        "details": "22.5rem (only while open)"
+      },
+      "zIndex": {
+        "jump-to-newest": 2,
+        "details-drawer": 30,
+        "toast": 40
+      }
+    },
+    "icons": {
+      "grid": "24px viewBox",
+      "stroke": 1.75,
+      "caps": "round",
+      "joins": "round",
+      "fill": "none",
+      "colour": "currentColor",
+      "defaultSize": "1.25rem",
+      "brandMark": "Separate from the icon set: one drawing on a 48-unit grid, a filled #0073ea disc with a white steering wheel in 4.5-unit strokes with round ends. The same blue in both themes. Used at 2.125rem in the list header, 4.5rem in the empty chat, and as web/icon.svg for the browser tab."
+    },
+    "theming": "Light by default; the navy-based dark values are applied by @media (prefers-color-scheme: dark) on the same custom properties. No manual switch. Frontmatter lists dark values under the same key with a -dark suffix."
+  },
+  "components": [
+    {
+      "name": "Brand Block",
+      "kind": "custom",
+      "refersTo": "brand-mark",
+      "description": "The product name at the top of the list column: the white steering wheel on a Carbarn Blue disc, the uppercase Montserrat wordmark, and the line \"by Carbarn\". Not a control; it has no states.",
+      "html": "<div class=\"ds-brand\"><span class=\"ds-brand-mark\"><svg viewBox=\"0 0 48 48\" aria-hidden=\"true\"><circle cx=\"24\" cy=\"24\" r=\"24\" fill=\"#0073ea\"/><circle cx=\"24\" cy=\"24\" r=\"13.5\" fill=\"none\" stroke=\"#fff\" stroke-width=\"4.5\"/><path d=\"M11.2 21.2h25.6M24 27.5V37\" fill=\"none\" stroke=\"#fff\" stroke-width=\"4.5\" stroke-linecap=\"round\"/><circle cx=\"24\" cy=\"24.6\" r=\"4.6\" fill=\"#fff\"/></svg></span><span class=\"ds-brand-words\"><span class=\"ds-brand-name\">Wheelman</span><span class=\"ds-brand-by\">by Carbarn</span></span></div>",
+      "css": ".ds-brand { display: flex; align-items: center; gap: 0.625rem; } .ds-brand-mark { width: 2.125rem; height: 2.125rem; flex: none; display: block; } .ds-brand-mark svg { width: 100%; height: 100%; display: block; } .ds-brand-words { display: grid; line-height: 1; } .ds-brand-name { font-family: var(--wordmark, \"Montserrat\", \"Manrope\", \"Segoe UI\", system-ui, sans-serif); font-size: 1.3125rem; font-weight: 800; letter-spacing: 0.01em; text-transform: uppercase; color: var(--brand, #0073ea); line-height: 1; } .ds-brand-by { margin-top: 0.25rem; font: 600 0.6875rem/1 var(--sans, \"Manrope\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, \"Helvetica Neue\", Roboto, sans-serif); color: var(--faint, #54687d); letter-spacing: 0.01em; }"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one filled button in a view. Copies the draft; also starts or retries a suggestion when there is no draft.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"9\" y=\"9\" width=\"12\" height=\"12\" rx=\"2\"/><path d=\"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\"/></svg><span>Copy reply</span></button>",
+      "css": ".ds-btn-primary { height: 2.25rem; padding: 0 1.125rem; border: 1px solid transparent; border-radius: 1.125rem; display: inline-flex; align-items: center; gap: 0.4375rem; background: var(--accent, #0473ea); color: var(--accent-ink, #ffffff); font: 650 0.875rem/1.45 var(--sans, \"Manrope\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, \"Helvetica Neue\", Roboto, sans-serif); white-space: nowrap; cursor: pointer; transition: transform 160ms var(--ease-out, cubic-bezier(.23, 1, .32, 1)), background-color 160ms ease; } .ds-btn-primary svg { width: 1rem; height: 1rem; flex: none; } @media (hover: hover) and (pointer: fine) { .ds-btn-primary:hover { background: var(--accent-press, #035fc4); } } .ds-btn-primary:active { transform: scale(.97); } .ds-btn-primary:focus-visible { outline: 2px solid var(--accent, #0473ea); outline-offset: 2px; }"
+    },
+    {
+      "name": "Primary Button, Blanks Remaining",
+      "kind": "button",
+      "refersTo": "button-primary-wait",
+      "description": "The same button while the draft still contains a blank: neutral, outlined, relabelled. It still copies.",
+      "html": "<button class=\"ds-btn-wait\" type=\"button\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"9\" y=\"9\" width=\"12\" height=\"12\" rx=\"2\"/><path d=\"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\"/></svg><span>Copy with blanks</span></button>",
+      "css": ".ds-btn-wait { height: 2.25rem; padding: 0 1.125rem; border: 1px solid var(--line-strong, #c5d1de); border-radius: 1.125rem; display: inline-flex; align-items: center; gap: 0.4375rem; background: var(--sheet, #ffffff); color: var(--text, #061d33); font: 650 0.875rem/1.45 var(--sans, \"Manrope\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, \"Helvetica Neue\", Roboto, sans-serif); white-space: nowrap; cursor: pointer; transition: transform 160ms var(--ease-out, cubic-bezier(.23, 1, .32, 1)), background-color 160ms ease; } .ds-btn-wait svg { width: 1rem; height: 1rem; flex: none; } @media (hover: hover) and (pointer: fine) { .ds-btn-wait:hover { background: var(--side-hover, #f3f8fe); } } .ds-btn-wait:active { transform: scale(.97); } .ds-btn-wait:focus-visible { outline: 2px solid var(--accent, #0473ea); outline-offset: 2px; }"
+    },
+    {
+      "name": "Quiet and Outline Buttons",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Secondary actions. Quiet has no fill or outline; toggled on it takes the blue tint. Outline is for the second action in a row.",
+      "html": "<div class=\"ds-btn-row\"><button class=\"ds-btn\" type=\"button\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 20h9\"/><path d=\"M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z\"/></svg>Rewrite</button><button class=\"ds-btn ds-btn-on\" type=\"button\" aria-expanded=\"true\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 20h9\"/><path d=\"M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z\"/></svg>Rewrite</button><button class=\"ds-btn\" type=\"button\">Dismiss</button><button class=\"ds-btn ds-btn-outline\" type=\"button\">Write it again</button></div>",
+      "css": ".ds-btn-row { display: flex; align-items: center; gap: 0.25rem; flex-wrap: wrap; } .ds-btn { height: 2.25rem; padding: 0 0.875rem; border: 1px solid transparent; border-radius: 1.125rem; display: inline-flex; align-items: center; gap: 0.4375rem; background: transparent; color: var(--muted, #3b5068); font: 650 0.875rem/1.45 var(--sans, \"Manrope\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, \"Helvetica Neue\", Roboto, sans-serif); white-space: nowrap; cursor: pointer; transition: transform 160ms var(--ease-out, cubic-bezier(.23, 1, .32, 1)), background-color 160ms ease, color 160ms ease, border-color 160ms ease; } .ds-btn svg { width: 1rem; height: 1rem; flex: none; } .ds-btn.ds-btn-outline { border-color: var(--line-strong, #c5d1de); color: var(--text, #061d33); } .ds-btn.ds-btn-on { background: var(--accent-soft, #deeeff); color: var(--accent-text, #0459b8); } @media (hover: hover) and (pointer: fine) { .ds-btn:hover { background: color-mix(in srgb, var(--text, #061d33) 7%, transparent); color: var(--text, #061d33); } } .ds-btn:active { transform: scale(.97); } .ds-btn:focus-visible { outline: 2px solid var(--accent, #0473ea); outline-offset: 2px; }"
+    },
+    {
+      "name": "Section Switch",
+      "kind": "custom",
+      "refersTo": "section-switch",
+      "description": "Two segments under the brand block that choose which inbox the list shows: Dashboard or Marketplace. Exactly one is selected; a badge counts who is waiting in each.",
+      "html": "<div class=\"ds-sections\" role=\"group\" aria-label=\"Which inbox to show\"><button class=\"ds-section ds-section-on\" aria-pressed=\"true\" type=\"button\">Dashboard <span class=\"ds-section-badge\">3</span></button><button class=\"ds-section\" aria-pressed=\"false\" type=\"button\">Marketplace <span class=\"ds-section-badge\">1</span></button></div>",
+      "css": ".ds-sections { display: grid; grid-template-columns: 1fr 1fr; gap: 0.1875rem; padding: 0.1875rem; border-radius: 0.75rem; background: var(--panel, #f2f6fb); } .ds-section { height: 2.125rem; border: 0; border-radius: 0.5625rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem; background: transparent; color: var(--muted, #3b5068); font: 500 0.875rem/1.45 var(--sans, \"Manrope\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, \"Helvetica Neue\", Roboto, sans-serif); white-space: nowrap; cursor: pointer; transition: transform 160ms var(--ease-out, cubic-bezier(.23, 1, .32, 1)), background-color 160ms ease, color 160ms ease; } .ds-section.ds-section-on { background: var(--side, #ffffff); color: var(--text, #061d33); font-weight: 650; box-shadow: var(--shadow-1, 0 1px 1px rgba(6, 29, 51, .10)); } .ds-section-badge { min-width: 1.25rem; height: 1.25rem; padding: 0 0.375rem; border-radius: 0.625rem; display: inline-grid; place-items: center; background: var(--accent, #0473ea); color: var(--accent-ink, #ffffff); font-size: 0.75rem; font-weight: 700; } @media (hover: hover) and (pointer: fine) { .ds-section:hover:not(.ds-section-on) { color: var(--text, #061d33); } } .ds-section:active { transform: scale(.97); } .ds-section:focus-visible { outline: 2px solid var(--accent, #0473ea); outline-offset: 2px; }"
+    },
+    {
+      "name": "Filter Chips",
+      "kind": "chip",
+      "refersTo": "filter-chip",
+      "description": "The three groups above the conversation list. Exactly one is selected; a count follows the label when it is not zero.",
+      "html": "<div class=\"ds-filters\" role=\"group\" aria-label=\"Which conversations to show\"><button class=\"ds-filter ds-filter-on\" aria-pressed=\"true\" type=\"button\">Waiting <span class=\"ds-filter-n\">4</span></button><button class=\"ds-filter\" aria-pressed=\"false\" type=\"button\">No reply needed <span class=\"ds-filter-n\">12</span></button><button class=\"ds-filter\" aria-pressed=\"false\" type=\"button\">Not customers</button></div>",
+      "css": ".ds-filters { display: flex; gap: 0.25rem; flex-wrap: wrap; } .ds-filter { height: 2rem; padding: 0 0.625rem; border: 0; border-radius: 1rem; background: var(--panel, #f2f6fb); color: var(--muted, #3b5068); font: 500 0.875rem/1.45 var(--sans, \"Manrope\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, \"Helvetica Neue\", Roboto, sans-serif); white-space: nowrap; cursor: pointer; transition: transform 160ms var(--ease-out, cubic-bezier(.23, 1, .32, 1)), background-color 160ms ease, color 160ms ease; } .ds-filter.ds-filter-on { background: var(--accent-soft, #deeeff); color: var(--accent-text, #0459b8); font-weight: 650; } .ds-filter-n { margin-left: 0.25rem; font-weight: 650; } @media (hover: hover) and (pointer: fine) { .ds-filter:hover:not(.ds-filter-on) { background: var(--side-on, #e6f1fe); color: var(--text, #061d33); } } .ds-filter:active { transform: scale(.97); } .ds-filter:focus-visible { outline: 2px solid var(--accent, #0473ea); outline-offset: 2px; }"
+    },
+    {
+      "name": "Search Field",
+      "kind": "input",
+      "refersTo": "search-field",
+      "description": "Pill field at the top of the list. Focus swaps the pale fill for white and shows a blue border instead of an outline ring.",
+      "html": "<label class=\"ds-search\"><span class=\"ds-search-icon\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"11\" cy=\"11\" r=\"7\"/><path d=\"m21 21-4.3-4.3\"/></svg></span><input type=\"search\" placeholder=\"Search name, number or message\" aria-label=\"Search conversations\" autocomplete=\"off\"></label>",
+      "css": ".ds-search { position: relative; display: block; max-width: 23.5rem; } .ds-search-icon { position: absolute; left: 0.75rem; top: 50%; translate: 0 -50%; color: var(--faint, #54687d); pointer-events: none; } .ds-search-icon svg { width: 1rem; height: 1rem; display: block; } .ds-search input { width: 100%; height: 2.25rem; border: 1px solid transparent; border-radius: 1.125rem; padding: 0 0.875rem 0 2.25rem; background: var(--panel, #f2f6fb); color: var(--text, #061d33); caret-color: var(--accent, #0473ea); font: 400 0.9375rem/1.45 var(--sans, \"Manrope\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, \"Helvetica Neue\", Roboto, sans-serif); transition: border-color 160ms ease, background-color 160ms ease; } .ds-search input::placeholder { color: var(--faint, #54687d); opacity: 1; } .ds-search input:focus-visible { outline: none; border-color: var(--accent, #0473ea); background: var(--side, #ffffff); }"
+    },
+    {
+      "name": "Conversation Row",
+      "kind": "nav",
+      "refersTo": "conversation-row",
+      "description": "One conversation in the list: avatar, name and time, one-line preview, and a blue badge when messages are unanswered. The second row shows the open state.",
+      "html": "<div class=\"ds-rows\"><button class=\"ds-row ds-row-unanswered\" type=\"button\"><span class=\"ds-avatar ds-avatar-h0\" aria-hidden=\"true\">SC</span><span class=\"ds-row-main\"><span class=\"ds-row-top\"><span class=\"ds-row-name\">Sample Customer</span><span class=\"ds-row-time\">9:41 am</span></span><span class=\"ds-row-bottom\"><span class=\"ds-row-preview\">Is this one still available?</span><span class=\"ds-badge\">2</span></span></span></button><button class=\"ds-row\" type=\"button\" aria-current=\"true\"><span class=\"ds-avatar ds-avatar-h3\" aria-hidden=\"true\">EP</span><span class=\"ds-row-main\"><span class=\"ds-row-top\"><span class=\"ds-row-name\">Example Person</span><span class=\"ds-row-time\">Yesterday</span></span><span class=\"ds-row-bottom\"><span class=\"ds-row-preview\"><span class=\"ds-row-you\">You: </span>Yes, it is here at the yard.</span></span></span></button></div>",
+      "css": ".ds-rows { max-width: 25rem; background: var(--side, #ffffff); border-top: 1px solid var(--line, #e1e8f0); font: 400 0.9375rem/1.45 var(--sans, \"Manrope\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, \"Helvetica Neue\", Roboto, sans-serif); font-variant-numeric: tabular-nums; } .ds-row { position: relative; width: 100%; border: 0; background: transparent; color: var(--text, #061d33); text-align: left; font: inherit; display: grid; grid-template-columns: 3rem minmax(0, 1fr); gap: 0.75rem; align-items: center; padding: 0.625rem 1rem 0.625rem 0.75rem; cursor: pointer; } .ds-row::after { content: \"\"; position: absolute; left: 4.5rem; right: 0; bottom: 0; border-bottom: 1px solid var(--line, #e1e8f0); } .ds-row[aria-current=\"true\"] { background: var(--side-on, #e6f1fe); } @media (hover: hover) and (pointer: fine) { .ds-row:hover { background: var(--side-hover, #f3f8fe); } .ds-row[aria-current=\"true\"]:hover { background: var(--side-on, #e6f1fe); } } .ds-row:focus-visible { outline: 2px solid var(--accent, #0473ea); outline-offset: -2px; } .ds-avatar { width: 3rem; height: 3rem; border-radius: 50%; display: grid; place-items: center; font-weight: 650; font-size: 1rem; letter-spacing: 0.01em; color: #fff; background: #5a6f85; } .ds-avatar-h0 { background: #0c3a66; } .ds-avatar-h3 { background: #1f7a6d; } .ds-row-main { min-width: 0; display: grid; gap: 0.125rem; } .ds-row-top, .ds-row-bottom { display: flex; align-items: baseline; gap: 0.5rem; min-width: 0; } .ds-row-bottom { align-items: center; } .ds-row-name { flex: 1; min-width: 0; font-size: 1rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-row-time { flex: none; font-size: 0.75rem; color: var(--faint, #54687d); } .ds-row-unanswered .ds-row-name { font-weight: 650; } .ds-row-unanswered .ds-row-time { color: var(--accent-text, #0459b8); font-weight: 650; } .ds-row-preview { flex: 1; min-width: 0; color: var(--faint, #54687d); font-size: 0.875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-row-you { color: var(--muted, #3b5068); } .ds-badge { flex: none; min-width: 1.25rem; height: 1.25rem; padding: 0 0.375rem; border-radius: 0.625rem; display: inline-grid; place-items: center; background: var(--accent, #0473ea); color: var(--accent-ink, #ffffff); font-size: 0.75rem; font-weight: 700; line-height: 1; }"
+    },
+    {
+      "name": "Message Bubbles",
+      "kind": "custom",
+      "refersTo": "bubble-in",
+      "description": "Customer on the left in white, staff on the right in pale blue. The first bubble in a run carries the sender line and a tail.",
+      "html": "<div class=\"ds-thread\"><div class=\"ds-msg ds-msg-in ds-msg-first\"><span class=\"ds-msg-from\">via the website</span>Hi, is this one still available?<span class=\"ds-msg-time\">9:38 am</span></div><div class=\"ds-msg ds-msg-in\">Could I come and see it on Saturday?<span class=\"ds-msg-time\">9:38 am</span></div><div class=\"ds-msg ds-msg-out ds-msg-first\"><span class=\"ds-msg-from\">Staff name</span>Yes, it is here at the yard. Saturday is fine.<span class=\"ds-msg-time\">9:41 am</span></div></div>",
+      "css": ".ds-thread { display: flex; flex-direction: column; gap: 0.125rem; padding: 0.75rem 1.5rem 1rem; background: var(--thread, #edf3fa); color: var(--text, #061d33); font: 400 0.9375rem/1.4 var(--sans, \"Manrope\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, \"Helvetica Neue\", Roboto, sans-serif); font-variant-numeric: tabular-nums; } .ds-msg { position: relative; max-width: min(36rem, 72%); padding: 0.375rem 0.5625rem 0.4375rem; border-radius: 0.5rem; box-shadow: var(--shadow-1, 0 1px 1px rgba(6, 29, 51, .10)); white-space: pre-wrap; overflow-wrap: anywhere; } .ds-msg-in { align-self: flex-start; background: var(--bubble-in, #ffffff); } .ds-msg-out { align-self: flex-end; background: var(--bubble-out, #d7eaff); color: var(--on-out, #061d33); } .ds-msg-first { margin-top: 0.5rem; } .ds-msg-in.ds-msg-first { border-top-left-radius: 0; } .ds-msg-out.ds-msg-first { border-top-right-radius: 0; } .ds-msg-first::before { content: \"\"; position: absolute; top: 0; width: 0; height: 0; border-style: solid; border-width: 0 0.5rem 0.625rem 0; } .ds-msg-in.ds-msg-first::before { left: -0.5rem; border-color: transparent var(--bubble-in, #ffffff) transparent transparent; } .ds-msg-out.ds-msg-first::before { right: -0.5rem; border-width: 0.625rem 0.5rem 0 0; border-color: var(--bubble-out, #d7eaff) transparent transparent transparent; } .ds-msg-from { display: block; font-size: 0.78125rem; font-weight: 650; line-height: 1.3; margin-bottom: 0.125rem; } .ds-msg-in .ds-msg-from { color: var(--muted, #3b5068); } .ds-msg-out .ds-msg-from { color: var(--accent-text, #0459b8); } @media (prefers-color-scheme: dark) { .ds-msg-out .ds-msg-from { color: #b9dcff; } } .ds-msg-time { float: right; margin: 0.4375rem 0 -0.1875rem 0.75rem; font-size: 0.6875rem; line-height: 1; color: var(--faint, #54687d); white-space: nowrap; } .ds-msg-out .ds-msg-time { color: inherit; opacity: .7; }"
+    },
+    {
+      "name": "Thread Pills",
+      "kind": "custom",
+      "refersTo": "pill-date",
+      "description": "Centred markers in the thread: a date, a system event, the start of the unanswered messages, and a plain note.",
+      "html": "<div class=\"ds-pills\"><div class=\"ds-pill\">Today</div><div class=\"ds-pill ds-pill-event\">Enquiry received from a car portal<span class=\"ds-pill-when\">9:30 am</span></div><div class=\"ds-pill ds-pill-unanswered\">2 unanswered messages</div><div class=\"ds-pill ds-pill-note\">12 earlier messages not shown</div></div>",
+      "css": ".ds-pills { display: flex; flex-direction: column; padding: 0.5rem 1.5rem 1rem; background: var(--thread, #edf3fa); font: 400 0.78125rem/1.4 var(--sans, \"Manrope\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, \"Helvetica Neue\", Roboto, sans-serif); font-variant-numeric: tabular-nums; } .ds-pill { align-self: center; max-width: min(34rem, 85%); margin: 0.625rem 0 0.375rem; padding: 0.3125rem 0.75rem; border-radius: 0.5rem; background: var(--pill, #ffffff); color: var(--muted, #3b5068); box-shadow: var(--shadow-1, 0 1px 1px rgba(6, 29, 51, .10)); text-align: center; } .ds-pill.ds-pill-event { background: var(--bubble-sys, #fff3cf); color: var(--on-sys, #55431a); } .ds-pill.ds-pill-note { background: transparent; box-shadow: none; margin: 0.25rem 0; } .ds-pill.ds-pill-unanswered { background: var(--accent-soft, #deeeff); color: var(--accent-text, #0459b8); font-weight: 650; box-shadow: none; } .ds-pill-when { opacity: .85; margin-left: 0.375rem; white-space: nowrap; }"
+    },
+    {
+      "name": "Message Box",
+      "kind": "custom",
+      "refersTo": "message-box",
+      "description": "The signature component: the suggested reply as an unsent, editable draft. Blanks are highlighted amber inside the text and named on buttons above it; the copy button stays neutral until they are filled.",
+      "html": "<div class=\"ds-composer\"><div class=\"ds-draft-head\"><span class=\"ds-draft-tag\">Suggested reply <span>· not sent</span></span><span class=\"ds-draft-meta\">Written 9:42 am</span></div><div class=\"ds-tip\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 20h9\"/><path d=\"M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z\"/></svg><span>Replace the 2 highlighted parts before sending:</span><button class=\"ds-blank-btn\" type=\"button\">the price</button><button class=\"ds-blank-btn\" type=\"button\">the date</button></div><div class=\"ds-sheet\"><div class=\"ds-field\"><div class=\"ds-backdrop\" aria-hidden=\"true\">Hi, thanks for your message. The price is <mark>[PRICE?]</mark> and we can hold the car until <mark>[DATE?]</mark>.\n\nRegards,\nCarbarn</div><textarea class=\"ds-draft\" rows=\"4\" spellcheck=\"true\" aria-label=\"Suggested reply, not sent. Edit it here, then copy it.\">Hi, thanks for your message. The price is [PRICE?] and we can hold the car until [DATE?].\n\nRegards,\nCarbarn</textarea></div><div class=\"ds-sheet-foot\"><button class=\"ds-cbtn\" type=\"button\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 20h9\"/><path d=\"M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z\"/></svg>Rewrite</button><button class=\"ds-cbtn\" type=\"button\">Dismiss</button><span class=\"ds-grow\"></span><span class=\"ds-count\">20 words</span><button class=\"ds-cbtn ds-cbtn-wait\" type=\"button\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"9\" y=\"9\" width=\"12\" height=\"12\" rx=\"2\"/><path d=\"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\"/></svg><span>Copy with blanks</span></button></div></div></div>",
+      "css": ".ds-composer { display: grid; gap: 0.5rem; padding: 0.625rem 1rem 0.75rem; background: var(--panel, #f2f6fb); border-top: 1px solid var(--line, #e1e8f0); color: var(--text, #061d33); font: 400 0.9375rem/1.45 var(--sans, \"Manrope\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, \"Helvetica Neue\", Roboto, sans-serif); font-variant-numeric: tabular-nums; } .ds-draft-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: 0 0.125rem; } .ds-draft-tag { font-size: 0.8125rem; font-weight: 650; } .ds-draft-tag span { font-weight: 500; color: var(--faint, #54687d); } .ds-draft-meta { font-size: 0.75rem; color: var(--faint, #54687d); white-space: nowrap; } .ds-tip { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding: 0.4375rem 0.625rem; border-radius: 0.5rem; background: var(--amber-soft, #ffeaa6); color: var(--amber, #6d4a00); font-size: 0.84375rem; font-weight: 550; line-height: 1.4; } .ds-tip svg { width: 1rem; height: 1rem; flex: none; } .ds-blank-btn { border: 1px solid color-mix(in srgb, currentColor 40%, transparent); border-radius: 0.375rem; background: var(--sheet, #ffffff); color: inherit; padding: 0.125rem 0.5rem; font: 650 0.8125rem/1.45 var(--sans, \"Manrope\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, \"Helvetica Neue\", Roboto, sans-serif); cursor: pointer; transition: transform 160ms var(--ease-out, cubic-bezier(.23, 1, .32, 1)); } .ds-blank-btn:active { transform: scale(.96); } .ds-blank-btn:focus-visible { outline: 2px solid var(--accent, #0473ea); outline-offset: 2px; } @media (hover: hover) and (pointer: fine) { .ds-blank-btn:hover { background: var(--side-hover, #f3f8fe); } } .ds-sheet { background: var(--sheet, #ffffff); border-radius: 0.75rem; box-shadow: var(--shadow-1, 0 1px 1px rgba(6, 29, 51, .10)); border: 1px solid transparent; transition: border-color 160ms ease; } .ds-sheet:focus-within { border-color: var(--accent, #0473ea); } .ds-field { position: relative; } .ds-backdrop, .ds-draft { display: block; width: 100%; box-sizing: border-box; margin: 0; border: 0; padding: 0.75rem 0.875rem 0.5rem; font: inherit; font-size: 0.9375rem; line-height: 1.5; letter-spacing: normal; white-space: pre-wrap; overflow-wrap: break-word; overflow: hidden; } .ds-backdrop { position: absolute; inset: 0; color: transparent; pointer-events: none; user-select: none; } .ds-backdrop mark { color: transparent; border-radius: 0.1875rem; background: var(--amber-soft, #ffeaa6); box-shadow: 0 0 0 1px color-mix(in srgb, var(--amber, #6d4a00) 35%, transparent); } .ds-draft { position: relative; height: 7.75rem; resize: none; background: transparent; color: var(--text, #061d33); caret-color: var(--accent, #0473ea); } .ds-draft:focus-visible { outline: none; } .ds-sheet-foot { display: flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.375rem 0.375rem 0.5rem; } .ds-grow { flex: 1; } .ds-count { margin-right: 0.5rem; font-size: 0.75rem; color: var(--faint, #54687d); white-space: nowrap; } .ds-cbtn { height: 2.25rem; padding: 0 0.875rem; border: 1px solid transparent; border-radius: 1.125rem; display: inline-flex; align-items: center; gap: 0.4375rem; background: transparent; color: var(--muted, #3b5068); font: 650 0.875rem/1.45 var(--sans, \"Manrope\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, \"Helvetica Neue\", Roboto, sans-serif); white-space: nowrap; cursor: pointer; transition: transform 160ms var(--ease-out, cubic-bezier(.23, 1, .32, 1)), background-color 160ms ease, color 160ms ease; } .ds-cbtn svg { width: 1rem; height: 1rem; flex: none; } .ds-cbtn.ds-cbtn-wait { padding: 0 1.125rem; background: var(--sheet, #ffffff); color: var(--text, #061d33); border-color: var(--line-strong, #c5d1de); } @media (hover: hover) and (pointer: fine) { .ds-cbtn:hover { background: color-mix(in srgb, var(--text, #061d33) 7%, transparent); color: var(--text, #061d33); } .ds-cbtn.ds-cbtn-wait:hover { background: var(--side-hover, #f3f8fe); } } .ds-cbtn:active { transform: scale(.97); } .ds-cbtn:focus-visible { outline: 2px solid var(--accent, #0473ea); outline-offset: 2px; }"
+    },
+    {
+      "name": "Notices and Advice",
+      "kind": "custom",
+      "refersTo": "notice",
+      "description": "Status blocks: a soft ground, the matching strong colour as text, an icon and a plain sentence. Amber for waiting or a blank, red for a failure, blue for information.",
+      "html": "<div class=\"ds-notices\"><div class=\"ds-notice\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 16v-4\"/><path d=\"M12 8h.01\"/></svg><div><strong>Suggestions are paused</strong><p>Today's free AI allowance is used up. Suggestions resume by themselves.</p></div></div><div class=\"ds-notice ds-notice-bad\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/></svg><div><strong>The dashboard could not be reached</strong><p>Check the connection, then press the check button.</p></div></div><div class=\"ds-notice ds-notice-info\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 16v-4\"/><path d=\"M12 8h.01\"/></svg><div><strong>2 business facts need your answer.</strong><p>Until a topic is answered, suggestions leave a blank for it.</p></div></div></div>",
+      "css": ".ds-notices { display: grid; gap: 1px; max-width: 25rem; font: 400 0.8125rem/1.4 var(--sans, \"Manrope\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, \"Helvetica Neue\", Roboto, sans-serif); } .ds-notice { display: grid; grid-template-columns: 1.25rem 1fr; gap: 0.625rem; padding: 0.625rem 1rem; background: var(--amber-soft, #ffeaa6); color: var(--amber, #6d4a00); } .ds-notice svg { width: 1.25rem; height: 1.25rem; display: block; } .ds-notice.ds-notice-bad { background: var(--red-soft, #fde9e6); color: var(--red, #a8261d); } .ds-notice.ds-notice-info { background: var(--blue-soft, #e3effc); color: var(--blue, #0c3a66); } .ds-notice strong { display: block; font-weight: 650; } .ds-notice p { margin: 0; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Unsent Draft",
+    "overview": "Wheelman is Carbarn's reply assistant, and it looks and behaves like a desktop messaging app. Conversations are listed in a column on the left, one conversation is open on the right, and the message box at the bottom already holds a suggested reply. That reply is a draft: it is labelled \"not sent\", it can be edited in place, and the main button only copies it. Everything else on the page supports reading one conversation and checking one draft.\n\nThe look is quiet and familiar on purpose, in Carbarn's own colours. Surfaces are white and pale blue, separated by 1px lines and small shifts in tone. The thread sits on a pale blue ground one step deeper than the panels, so the white and blue bubbles read against it. Carbarn's blue marks what needs attention and what to press. Red, amber and navy appear only as status, always with a sentence beside them. Text is navy, set in Manrope, the typeface of carbarn.com.au, in sentence case throughout. The one exception is the name: WHEELMAN in Montserrat capitals beside a white steering wheel on a blue disc, with \"by Carbarn\" under it. Light and dark both ship and follow the computer's setting; the dark theme is built on navy and there is no theme switch.\n\nDensity is that of a working tool: 15px body text, 36px buttons, 2px between bubbles from the same sender. The layout this replaced, a page of cards with every customer open at once and coded labels, was rejected by the user as confusing. This system keeps one conversation in view and says things in words.",
+    "keyCharacteristics": [
+      "Three regions in one fixed-height frame: conversation list, open chat, optional details panel.",
+      "The suggested reply lives in the message box, never in the thread.",
+      "One blue accent, Carbarn's. Red, amber and navy are status colours that always come with words.",
+      "Manrope for all text, sentence case, tabular figures. The Montserrat wordmark is the only capitals.",
+      "Flat white and pale blue surfaces, 1px dividers, two shadow levels.",
+      "Pill-shaped controls, 8px corners on bubbles, circles for avatars, icon buttons and the mark.",
+      "Short motion: 160ms press feedback, 180 to 240ms for things that appear, none on keyboard moves.",
+      "Light and a navy-based dark from one set of custom properties."
+    ],
+    "rules": [
+      {
+        "name": "The One Blue Rule",
+        "body": "Carbarn's blue is the only accent. Solid blue is the primary button, the unanswered badge, the wordmark and the disc of the mark, the \"checked\" dot and the focus ring; the tint with blue text marks things that are on. A second accent hue would break the reading \"blue means look here or press here\".",
+        "section": "colors"
+      },
+      {
+        "name": "The Words With Colour Rule",
+        "body": "Red, amber and navy never carry meaning alone. Every tinted block holds a plain sentence, the list flags are words (\"Check the reply\", \"Blank to fill\"), and each status dot sits beside text that says the same thing.",
+        "section": "colors"
+      },
+      {
+        "name": "The Paired Tint Rule",
+        "body": "A status colour is a soft ground with its strong value as text on top, or the strong value as text on a neutral surface. The strong value fills nothing larger than an 8px dot or a 1px underline.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Family Rule",
+        "body": "Every word of interface text is Manrope. Montserrat appears once, at 800, for the wordmark. Both are files in `web/fonts`; the page loads nothing from outside, and falls back to the computer's own sans if a file is missing. Mono appears only for a file name the user has to find.",
+        "section": "typography"
+      },
+      {
+        "name": "The Weight Is State Rule",
+        "body": "400 is reading text, 500 is a resting name or chip, 650 is emphasis and anything selected or unanswered, 700 is kept for badge numerals, and 800 exists only in the wordmark. A name or chip going from 500 to 650 is a state change, always paired with a colour change.",
+        "section": "typography"
+      },
+      {
+        "name": "The Sentence Case Rule",
+        "body": "The wordmark is the only uppercase text on the page. There are no uppercase labels and no letter-spaced labels. Letter-spacing is only tightened on the two largest text sizes (-0.02em, -0.01em) and opened by 0.01em on the wordmark, the \"by Carbarn\" line and avatar initials. Italic is reserved for text the app supplies in place of content: \"Photo\" inside a bubble and \"writing a suggestion…\" in the header.",
+        "section": "typography"
+      },
+      {
+        "name": "The Docked Draft Rule",
+        "body": "The suggestion is always in the message box at the bottom of the chat column. The thread holds only what was really said, plus pills.",
+        "section": "layout"
+      },
+      {
+        "name": "The Bottom-Anchored Thread Rule",
+        "body": "The thread opens at its newest message and stays there as the message box grows or new messages arrive, until the user scrolls up more than about 60px. Then a round button appears at the bottom right to return, showing the unanswered count.",
+        "section": "layout"
+      },
+      {
+        "name": "The Two Shadows Rule",
+        "body": "Only these two shadows exist. Columns, headers, rows, chips and buttons have none. The details panel gets a shadow only when it overlays the chat; as a grid column it has a 1px line.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do take every colour from the custom properties at the top of the stylesheet, and give any new colour a light value and a dark value in the same two blocks.",
+      "Do keep solid blue for the primary button, the unanswered badge, the wordmark and mark, the \"checked\" dot and the focus ring, and use Blue Tint with Blue Text for anything that is switched on.",
+      "Do show the name as it is built: the white steering wheel on a Carbarn Blue disc, WHEELMAN in Montserrat 800 capitals, and \"by Carbarn\" under it.",
+      "Do put a plain sentence in every red, amber or navy block, and use the strong value as text on its own soft ground.",
+      "Do keep the suggested reply in the message box under the label \"Suggested reply · not sent\", with a copy action as the one filled button.",
+      "Do mark blanks in amber and failed figures in red inside the draft text itself, and name each blank on a button that selects it.",
+      "Do use the two shadows as they are used now: resting lift for bubbles, pills and the message box; floating for the jump button, the toast and the details drawer.",
+      "Do give pressable controls the 160ms press scale (0.94 to 0.97) and keep hover styles inside the fine-pointer media query.",
+      "Do build content from text nodes and draw new icons on the same 24px grid with a 1.75 stroke and round ends.",
+      "Do keep text at 4.5:1 or better against its ground in both themes. Every text pair checked from the stylesheet values meets this; the closest are the white label on the primary button in light (about 4.5:1) and, in dark, the primary button under the pointer and the outgoing timestamp (both about 4.9:1)."
+    ],
+    "donts": [
+      "Don't show the suggestion as a bubble in the thread. The thread is only what was really said.",
+      "Don't add anything that looks like sending: no send icon and no \"Send\" label. The button at the bottom right of the message box always says what it does, which is copy.",
+      "Don't add a second accent colour, and don't use solid red, amber or navy as a fill larger than a status dot.",
+      "Don't signal status with colour alone or with a code. Write the sentence.",
+      "Don't add uppercase or letter-spaced labels. The wordmark is the only capitals, and Montserrat and weight 800 belong to it alone.",
+      "Don't add a third typeface or load a font from outside; Manrope and Montserrat are served from `web/fonts`. Don't add a raster image or a library either. The page loads nothing from outside, and its content security policy forbids inline styles and scripts.",
+      "Don't add a third shadow, or put a shadow on a column, header, row, chip or button.",
+      "Don't animate the conversation list when it is moved through with the keyboard. Rows change instantly.",
+      "Don't insert customer text as HTML, and don't use real customer names, numbers or messages in examples of this system; use invented ones."
+    ]
+  }
+}
