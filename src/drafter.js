@@ -8,6 +8,7 @@ import { redact } from './redact.js';
 import { insertDraft } from './db.js';
 import { sydneyHour } from './time.js';
 import { standardBlock, repeatsBlock, tidyOpening } from './firstreply.js';
+import { LEFTOVER_LABEL } from './practice.js';
 
 /**
  * What a reply may legitimately quote, split by how far it can be trusted.
@@ -44,19 +45,27 @@ function listingPriceCheck(item) {
   return { level: 'warn', code: 'listing-price', message: `The Facebook listing shows ${fmt(listed)} but the dashboard price is ${fmt(ours)}. Check which is right before talking about price.`, tokens: [] };
 }
 
-/** When the customer asked to see the car, the reply should carry the right booking link. */
-function inspectionCheck(plan, body) {
-  if (!plan?.url || body.includes(plan.url)) return null;
+/**
+ * When the customer asked to see the car, the reply should carry the right booking link.
+ * A reply with no link at all is sent back once when the customer asked now, or our staff asked
+ * for the link. When the customer asked earlier in the conversation it is only pointed out.
+ */
+function inspectionCheck(plan, body, block = '') {
+  if (!plan?.url) return null;
   const givesInPerson = body.includes('#inspection=onsite');
   const givesOnline = body.includes('#inspection=online');
+  const missing = plan.must ? 'fail' : 'warn';
+  if (plan.kind === 'online' && givesInPerson) {
+    return { level: 'warn', code: 'inspection-link', tokens: [], message: 'The customer seems to be far away, but the reply gives the in-person booking link. The online video inspection link may suit better.' };
+  }
+  // The link counts wherever it is: in the AI's own lines, or in the standard block under them.
+  if (body.includes(plan.url) || block.includes(plan.url)) return null;
   if (plan.kind === 'online') {
-    return { level: 'warn', code: 'inspection-link', tokens: [], message: givesInPerson
-      ? 'The customer seems to be far away, but the reply gives the in-person booking link. The online video inspection link may suit better.'
-      : 'The customer asked to see the car and seems to be far away, but the reply has no online video inspection link.' };
+    return { level: missing, code: 'inspection-link', tokens: [], message: 'The customer wants to see the car and seems to be far away, but the reply has no online video inspection link. Add the link given in the INSPECTION section.' };
   }
   // In-person was expected. A confirmed time ("See you at ...") or the online link is also a fair answer.
   if (givesOnline || /see you/i.test(body)) return null;
-  return { level: 'warn', code: 'inspection-link', tokens: [], message: 'The customer asked to see the car, but the reply has no inspection booking link.' };
+  return { level: missing, code: 'inspection-link', tokens: [], message: 'The customer wants to see the car, but the reply has no inspection booking link. Add the link given in the INSPECTION section.' };
 }
 
 /** A reply to someone who has already bought must not treat them as a new enquiry. */
@@ -70,8 +79,9 @@ function buyerCheck(item, body) {
 }
 
 /** With the standard block below it, the AI's own lines must not give the address, hours, links or phone again. */
-function blockCheck(body, vehicleUrl) {
+function blockCheck(body, vehicleUrl, inspectionUrl = '') {
   let again = repeatsBlock(body);
+  if (!again && inspectionUrl && body.includes(inspectionUrl)) again = inspectionUrl;
   if (!again && vehicleUrl) {
     // The inspection booking link starts with the vehicle's page link, so only the bare page link counts.
     const at = body.indexOf(vehicleUrl);
@@ -118,9 +128,10 @@ export async function draftFor(item, { instruction = '', save = true, holdOutCon
     const assess = (json) => {
       // A brand-new enquiry gets the team's standard block in place of the sign-off. A holding
       // reply (a complaint, say) does not.
-      const block = prompt.standard.on && !json.hold ? standardBlock({ vehicleUrl: prompt.standard.vehicleUrl }) : '';
+      const { vehicleUrl, inspectionUrl } = prompt.standard;
+      const block = prompt.standard.on && !json.hold ? standardBlock({ vehicleUrl, inspectionUrl }) : '';
       let text = String(json.reply || '').replace(/\\n/g, '\n');
-      if (block) text = tidyOpening(text, prompt.standard.vehicleUrl);
+      if (block) text = tidyOpening(text, vehicleUrl, inspectionUrl);
       let body = fixGreeting(stripModelSignOff(text), sydneyHour(now));
       if (chat) body = chatStyle(body);
       else if (again) body = dropGreeting(body);
@@ -135,11 +146,14 @@ export async function draftFor(item, { instruction = '', save = true, holdOutCon
         examples: prompt.exampleReplies, inConversation: !item.isFirstReply,
         said, now,
       });
-      const repeat = block ? blockCheck(body, prompt.standard.vehicleUrl) : null;
+      const repeat = block ? blockCheck(body, vehicleUrl, inspectionUrl) : null;
       if (repeat) checks = [...checks.filter((c) => c.level !== 'ok'), repeat];
+      // A label such as "[inspection booking link]" stands for a link in another customer's reply.
+      const label = body.match(LEFTOVER_LABEL);
+      if (label) checks = [...checks.filter((c) => c.level !== 'ok'), { level: 'fail', code: 'label', tokens: [label[0]], message: `"${label[0]}" is a label from an example, not a real link or figure. Use the real one from this request, or leave it out.` }];
       const listing = chat ? listingPriceCheck(item) : null;
       if (listing) checks = [...checks.filter((c) => c.level !== 'ok'), listing];
-      const visit = inspectionCheck(prompt.inspection, body);
+      const visit = inspectionCheck(prompt.inspection, body, block);
       if (visit) checks = [...checks.filter((c) => c.level !== 'ok'), visit];
       const buyer = buyerCheck(item, body);
       if (buyer) checks = [...checks.filter((c) => c.level !== 'ok'), buyer];

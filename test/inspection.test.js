@@ -74,18 +74,18 @@ test('a customer who wants to see the car is given the in-person booking link', 
 
   const { d, asked } = await draft(101, `Hi {{NAME}},\nYou are welcome to inspect the Noah at our Lidcombe yard. You can book a time here:\n${ONSITE}\nPlease call or text before visiting.`);
   assert.match(asked, /=== INSPECTION ===/);
-  assert.ok(asked.includes(`in-person booking link so they can choose a day and time: ${ONSITE}`));
-  assert.ok(d.reply.includes(ONSITE));
+  // On a first reply the booking link is part of the standard block, so the AI is told not to type it.
+  assert.match(asked, /The link itself is added under your text automatically \("Book your inspection:"\), so do not write it/);
+  assert.ok(d.reply.includes(`Book your inspection:\n${ONSITE}`));
+  assert.equal((d.reply.match(/#inspection=onsite/g) || []).length, 1, 'the link the AI typed is dropped, the block gives it once');
   assert.equal(note(d), undefined);
   assert.ok(!d.checks.some((c) => c.level === 'fail'), JSON.stringify(d.checks));
 });
 
-test('a reply that forgets the booking link is pointed out', async () => {
+test('on a first reply the booking link is there even when the AI forgets it', async () => {
   const { d } = await draft(101, 'Hi {{NAME}},\nYes, you are welcome to come and see it any day.');
-  assert.match(note(d).message, /no inspection booking link/);
-  // A confirmed time is a fair answer without the link.
-  const confirmed = await draft(101, 'Hi {{NAME}},\nNo worries. See you on Saturday.');
-  assert.equal(note(confirmed.d), undefined);
+  assert.ok(d.reply.includes(`Book your inspection:\n${ONSITE}`));
+  assert.equal(note(d), undefined);
 });
 
 test('a customer who says they live far away is given the online video inspection link', async () => {
@@ -95,8 +95,10 @@ test('a customer who says they live far away is given the online video inspectio
   assert.equal(plan.url, ONLINE);
 
   const { d, asked } = await draft(102, `Hi {{NAME}},\nWe can do an online video inspection by WhatsApp or FaceTime. You can book a time here:\n${ONLINE}`);
-  assert.ok(asked.includes(`Give this booking link so they can choose a day and time: ${ONLINE}`));
+  assert.match(asked, /Offer an online video inspection: a live video call on WhatsApp or FaceTime/);
   assert.match(asked, /do not give the in-person booking link/);
+  assert.ok(d.reply.includes(`Book your inspection:\n${ONLINE}`));
+  assert.ok(!d.reply.includes(ONSITE));
   assert.equal(note(d), undefined);
   assert.ok(!d.checks.some((c) => c.level === 'fail'), JSON.stringify(d.checks));
 });

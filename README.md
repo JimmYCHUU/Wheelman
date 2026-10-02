@@ -1,7 +1,7 @@
 # Wheelman 🛞
 
 ![Node.js 24](https://img.shields.io/badge/node-24-339933)
-![Tests](https://img.shields.io/badge/tests-139%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-148%20passing-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-lightgrey)
 ![Free AI models](https://img.shields.io/badge/AI-free%20models%20only-blue)
 ![Never sends](https://img.shields.io/badge/sending-never%2C%20copy%20only-orange)
@@ -109,6 +109,7 @@ shape with invented names. The tone guide is `voice/house-voice.md`.
         │ 4. THE REQUEST      vehicle facts · business facts   │
         │                     how Carbarn works · website      │
         │                     our salespeople's real replies   │
+        │                     what the team sent lately        │
         │                     what you changed last time       │
         └──────────────────────────┬──────────────────────────┘
         ┌──────────────────────────▼──────────────────────────┐
@@ -158,17 +159,20 @@ reserved, with no booking link.
 
 ### The standard first reply
 
-A brand-new enquiry in the Dashboard section gets the reply the team always sends: one or two
-lines that answer the question, then the standard block with the address, the map link, the
-opening hours, the car's page and the phone number. The AI writes only the opening lines. The
-block is added by code from `voice/first-reply.md`, so its wording and symbols are always
-exact, and it takes the place of the sign-off on that message. Edit that file to change the
-block.
+A brand-new enquiry in the Dashboard section gets the reply we always send: one or two lines
+that answer the question, then the standard block with the car's page, the booking link when
+the customer asked to see the car, the address, the map link, the opening hours and the phone
+number. The AI writes only the opening lines. The block is added by code from
+`voice/first-reply.md`, so its wording and symbols are always exact, and it takes the place of
+the sign-off on that message. Edit that file to change the block.
 
-- No car matched, or the car is sold or reserved: the "Check More Details" lines are left out.
-- The customer asks to see the car: the opening carries the booking link, then the block.
-- If the AI types the address, hours, map link or phone number itself, the reply is sent back.
-- Buyers, later replies in a conversation, holding replies and Marketplace chats do not get it.
+- No car matched, or the car is sold or reserved: the "Vehicle details" lines are left out.
+- The customer asks to see the car: the block carries the booking link under "Book your
+  inspection:". Otherwise those lines are left out.
+- If the AI types the address, hours, map link, phone number or one of those links itself,
+  the line is dropped or the reply is sent back.
+- Buyers, later replies in a conversation, holding replies, Marketplace chats and anyone who
+  writes to a staff member by name do not get it.
 
 ### Promises, days and places
 
@@ -428,6 +432,18 @@ from a study of 664 conversations.
 Only from dashboard leads and conversations, the website and the dashboard's records. Never
 from Marketplace.
 
+Wheelman learns two different things from two different places. **What to say** comes from
+what the team really sends. **How to say it** comes from the two voices.
+
+- **What the team sends.** For each waiting message, Wheelman looks up the replies the team
+  sent in the last 45 days to customers who wrote something similar, whoever sent them, and
+  shows itself the closest three. From those it takes what to include and leave out (the
+  car's link, a booking link, the address, a question back), the order and the length, then
+  writes the reply in the house voice. Before they are used, the customer's details and the
+  sender's name are removed, and every link and dollar amount is replaced by a label such as
+  `[inspection booking link]`, so nothing from another customer's deal can be carried over.
+  A label that turns up in a suggestion is rejected. Complaints, automatic texts, texts with
+  bank details and texts sent exactly as Wheelman suggested are left out.
 - **Your edits.** When you change a suggestion before using it, Wheelman keeps both versions,
   with the customer's details removed, and shows itself the difference next time. When the
   reply later appears in the dashboard conversation, what was really sent replaces what was
@@ -463,12 +479,12 @@ often you asked for a rewrite. Counts only; no customer text.
 | Voice | One blended voice of the two lead salespeople, grammar tidied. See [The voice](#the-voice) |
 | Sign-off | "Regards, Team Carbarn" |
 | Greeting and sign-off | Once a day per customer. Later replies that day start with the answer |
-| First reply to a new enquiry | One or two lines that answer the question, then the team's standard block: address, map link, hours, the car's page, phone |
+| First reply to a new enquiry | One or two lines that answer the question, then the standard block: the car's page, the booking link if they asked to see it, address, map link, hours, phone |
 | Buyers | Answered about their own car. No "which car?", no booking link, no other cars, no amounts |
 | Promises and times | Only what our staff said. Otherwise "We will check and come back to you shortly", or a blank |
 | Price | Any discount, best price or offer is decided by a person: `[PRICE?]` |
 | Holding deposit | $1,000, refundable while inspecting or arranging finance |
-| Inspections | Only when the customer asks to see or drive a car. A car at the yard: the in-person booking link for that car. A customer who says they are far away or cannot come: the online video inspection link |
+| Inspections | Whenever the customer asks to see or drive a car ("can I inspect tomorrow?", "is it available to see this Saturday?"), the reply carries that car's booking link, or it is sent back. A car at the yard: the in-person link. A customer who says they are far away or cannot come: the online video inspection link. The link also follows a customer who asked earlier and has not been given it, and it is supplied when a Rewrite instruction asks for it |
 | A car not at the yard yet | No booking link. We let the customer know when it can be inspected |
 | Marketplace | A suggestion for every chat where the buyer wrote last; short chat style |
 | Sending | Never. Copy and paste, in both sections |
@@ -558,7 +574,7 @@ Git never sees any of it.
 npm.cmd test
 ```
 
-139 tests, all on invented data, against a stand-in AI service and a stand-in content engine
+148 tests, all on invented data, against a stand-in AI service and a stand-in content engine
 on this computer: who counts as waiting and who does not, stock numbers matched to the right
 car however a portal writes them (a year in front, a portal code, upper or lower case), that
 no customer detail and no cost figure reaches the AI request, an invented price
@@ -576,8 +592,10 @@ email, by lead status and from our own texts; no amount, buyer name or readable 
 stored or sent; a reply that asks a buyer "which car?" rejected; a reserved car; the standard
 first reply exact to the character and never learned; "this afternoon" at 8:44 pm, "tomorrow"
 against "this morning", an unbacked promise and a guessed place rejected; failed texts,
-thank-yous and automatic notices producing no suggestion; and a suggestion overtaken by a new
-customer message teaching nothing.
+thank-yous and automatic notices producing no suggestion; a suggestion overtaken by a new
+customer message teaching nothing; the booking link for every way of asking to see a car,
+for a customer who asked earlier, and when a Rewrite asks for it; and what the team sent for
+a similar message reaching the request with no name, link or amount of the other customer.
 
 ## Project layout
 
@@ -608,6 +626,7 @@ wheelman/
 │   ├── people.js                      who the two voices are, read from voice/people.json
 │   ├── voice.js · voicebank.js        genuine replies only; the example bank
 │   ├── examples.js · learn.js         which examples fit; what was copied, sent and changed
+│   ├── practice.js                    what the team really sent for similar messages
 │   ├── prompt.js                      the request: facts, rules for the channel, inspection plan
 │   ├── llm.js                         free models in order, resting busy ones, the daily cap
 │   ├── checks.js · drafter.js         figures and links traced, blanks, greeting once a day
