@@ -5,6 +5,7 @@ import { readInquiry, isSilentInquiry, isReaction, isAcknowledgement, isOptOut, 
 import { classify } from './situations.js';
 import { firstNameOf } from './redact.js';
 import { config } from './config.js';
+import { dealFor } from './deal.js';
 
 const MIN = 60 * 1000;
 
@@ -35,9 +36,24 @@ function dedupeMessages(messages) {
   return out;
 }
 
+const STUCK_AFTER_MS = 15 * MIN;
+
+/**
+ * A text of ours counts only if it reached the customer. One that failed, or has sat in the
+ * queue, did not: the customer is still waiting. Incoming texts always count.
+ */
+function reachedCustomer(m, now) {
+  if (m.direction !== 'OUT') return true;
+  const status = String(m.status || '').toUpperCase();
+  if (status === 'FAILED') return false;
+  if (status === 'QUEUED' && now - (m.at || m.imported_at || 0) > STUCK_AFTER_MS) return false;
+  return true;
+}
+
 /** Full timeline for one customer: portal enquiries plus texts, oldest first. */
-export function buildTimeline(lead, conversationId) {
-  const messages = conversationId ? dedupeMessages(getMessages(conversationId)) : [];
+export function buildTimeline(lead, conversationId, { now = Date.now() } = {}) {
+  // Failed texts are dropped before copies are, so a failed text never hides its successful retry.
+  const messages = conversationId ? dedupeMessages(getMessages(conversationId).filter((m) => reachedCustomer(m, now))) : [];
   const entries = [];
 
   for (const m of messages) {
@@ -58,13 +74,16 @@ export function buildTimeline(lead, conversationId) {
     });
   }
 
-  const inboundTexts = entries.filter((e) => e.who === 'customer').map((e) => e.text);
+  const inbound = entries.filter((e) => e.who === 'customer');
   for (const inq of lead?.inquiries || []) {
     if (isSilentInquiry(inq)) continue;
     const { text, event } = readInquiry(inq);
     if (!text && !event) continue;
-    // Texts relayed by the portals also arrive as an SMS; keep only one copy.
-    if (text && inboundTexts.some((t) => sameText(t, text) || (text.length > 25 && squash(t).includes(squash(text))))) continue;
+    // Texts relayed by the portals also arrive as an SMS; keep only one copy. The copy that is
+    // kept takes the enquiry's key, so the key is the same before and after the lead gains a
+    // conversation, and a suggestion already written for the enquiry still belongs to it.
+    const copy = text ? inbound.find((e) => sameText(e.text, text) || (text.length > 25 && squash(e.text).includes(squash(text)))) : null;
+    if (copy) { if (/^m:/.test(copy.key)) copy.key = `i:${inq.id}`; continue; }
     const at = inq.at || lead?.lead_at || 0;
     entries.push({
       who: 'customer',
@@ -87,17 +106,40 @@ export function buildTimeline(lead, conversationId) {
   return entries;
 }
 
+/**
+ * Texts written by a machine: login codes, voicemail and missed-call notices. They are never a
+ * customer message, even when the number belongs to someone with a lead record.
+ */
+export function isAutomatedNotice(pending) {
+  const text = pending.map((e) => e.text).join('\n');
+  // Only wording a person would not type, because a real customer must never be filed away by mistake.
+  return /(\b\d{4,8} is your\b|\byour (login|verification|security|access) code\b|code to log ?in|one[\s-]time (code|password|passcode)|\botp\b|missed call service|click\/tap to hear|call \d{3} to opt out|you have (a |\d+ )?(new )?(missed calls?|voice ?mails?|voice messages?))/i.test(text);
+}
+
 /** Texts from suppliers, couriers and marketers arrive on the same phone. They have no lead record. */
 function looksLikeNonCustomer(pending) {
   const text = pending.map((e) => e.text).join('\n');
   const foreignLink = findUrls(text).some((u) => !/carbarn\.com\.au|carsales\.com\.au|autotrader|photos\.app\.goo\.gl|maps\.app\.goo\.gl/i.test(u));
-  const marketing = /(unsubscribe|opt[\s-]?out|reply stop|quick review|leave (us )?a review|your (order|parcel|delivery|tyres|invoice) (is|has|should|will)|verification code|one[\s-]time (code|password)|\botp\b|do not reply|no[\s-]?reply)/i.test(text);
-  // Automated texts: login codes, voicemail and missed-call notices.
-  const automated = /(\b(your|the) (login |verification |security |access )?code\b|code to log ?in|\b\d{4,8} is your\b|left you a message|missed call service|voice ?mail|click\/tap to hear|call \d{3} to opt out)/i.test(text);
-  return marketing || automated || (foreignLink && /(review|track|order|code|offer|sale|deal)/i.test(text));
+  const marketing = /(unsubscribe|opt[\s-]?out|reply stop|quick review|leave (us )?a review|your (order|parcel|delivery|tyres|invoice) (is|has|should|will)|verification code|do not reply|no[\s-]?reply)/i.test(text);
+  // Looser signs of a machine, safe only for a number with no customer record.
+  const automated = /(\b(your|the) (login |verification |security |access )?code\b|left you a message|voice ?mail)/i.test(text);
+  return marketing || automated || isAutomatedNotice(pending) || (foreignLink && /(review|track|order|code|offer|sale|deal)/i.test(text));
 }
 
-function findVehicles(lead, timeline) {
+function findVehicles(lead, timeline, deal = null, pending = []) {
+  // A buyer is writing about their own car, whether or not a stock number is in the conversation.
+  // Another car counts only if they name it in the message that is waiting.
+  if (deal?.vehicle) {
+    const out = [deal.vehicle];
+    for (const e of pending) {
+      for (const ref of [...findUrls(e.text).map(stockFromUrl), e.url ? stockFromUrl(e.url) : null, e.stockNo || null].filter(Boolean)) {
+        const v = resolveStock(ref, getVehicleByStock);
+        if (v && !out.some((o) => o.id === v.id) && out.length < 2) out.push(v);
+      }
+    }
+    return out;
+  }
+
   const refs = [];
   const recent = timeline.slice(-10).reverse();
   for (const e of recent) {
@@ -122,13 +164,19 @@ function findVehicles(lead, timeline) {
  * and Marketplace chats.
  * base: { itemKey, channel, lead, hasLeadRecord, conversation, conversationId, phone }
  */
-export function finishItem(base, timeline) {
+export function finishItem(base, timeline, { now = Date.now() } = {}) {
   const { lead, hasLeadRecord } = base;
 
   let lastUs = -1;
   for (let i = timeline.length - 1; i >= 0; i--) if (timeline[i].who === 'us') { lastUs = i; break; }
   const pending = timeline.slice(lastUs + 1);
   const previousOut = lastUs >= 0 ? timeline[lastUs] : null;
+
+  // Is this person already a buyer, and of which car? Marketplace chats carry no phone number
+  // to match a sale with, so they are always treated as enquiries.
+  const { deal, pastBuyer } = base.channel === 'marketplace'
+    ? { deal: null, pastBuyer: null }
+    : dealFor({ lead, conversation: base.conversation, timeline, pending, now });
 
   let state = 'answered';
   let note = '';
@@ -140,8 +188,9 @@ export function finishItem(base, timeline) {
     if (pending.some((e) => isOptOut(e.text))) { state = 'optout'; note = 'Customer asked not to be contacted. Do not reply.'; }
     else if (menu?.notLooking) { state = 'closed'; note = 'Customer chose "no longer looking". No reply needed.'; }
     else if (!meaningful.length) { state = 'ack'; note = 'Customer only said thanks or OK. No reply needed.'; }
+    else if (isAutomatedNotice(pending)) { state = 'other'; note = 'An automatic notice (a login code, voicemail or missed call), not a message from a customer.'; }
     else if (!hasLeadRecord && looksLikeNonCustomer(pending)) { state = 'other'; note = 'Looks like a marketing or supplier message, not a customer.'; }
-    else if (!lead && timeline.length >= 40) { state = 'other'; note = 'A long-running conversation with no customer record. Probably a supplier, broker or colleague.'; }
+    else if (!lead && !deal && timeline.length >= 40) { state = 'other'; note = 'A long-running conversation with no customer record. Probably a supplier, broker or colleague.'; }
     else state = 'awaiting';
   }
 
@@ -149,7 +198,7 @@ export function finishItem(base, timeline) {
   const pendingText = pending.map((e) => e.text).filter(Boolean).join('\n');
   const events = pending.map((e) => e.event).filter(Boolean);
   if (menu && !menu.notLooking) events.push(`Customer replied to our numbered menu: ${menu.meanings.join(' and ')}.`);
-  const situation = classify(menu ? '' : pendingText, { events, leadStatus: lead?.status });
+  const situation = classify(menu ? '' : pendingText, { events, leadStatus: lead?.status, buyer: !!deal });
   if (menu && !menu.notLooking) {
     const map = { 1: 'photos_video', 2: 'finance', 3: 'location_hours' };
     situation.all = [...new Set([...menu.picks.map((p) => map[p]).filter(Boolean), ...situation.all.filter((s) => s !== 'general')])];
@@ -161,11 +210,15 @@ export function finishItem(base, timeline) {
   // Whether a suggestion should be written without being asked. Free AI requests are limited,
   // so they are kept for people we know to be customers and messages the agent can actually read.
   const mediaOnly = pending.length > 0 && pending.every((e) => !e.text && !e.event);
-  const known = hasLeadRecord || !!firstNameOf(lead || {});
+  const known = hasLeadRecord || !!firstNameOf(lead || {}) || !!deal;
   let autoDraft = state === 'awaiting';
   let autoReason = '';
   if (autoDraft && mediaOnly) { autoDraft = false; autoReason = 'The customer sent a photo or attachment with no words. The agent cannot see photos, so nothing was written automatically.'; }
   else if (autoDraft && !known) { autoDraft = false; autoReason = 'This number has no customer record, so nothing was written automatically. If it is a customer, choose Write it now.'; }
+  else if (autoDraft && now - (last.at || 0) > config.autoDraftMaxAgeHours * 60 * MIN) {
+    autoDraft = false;
+    autoReason = 'This message is more than a day old, so nothing was written automatically. If it still needs a reply, choose Write it now.';
+  }
 
   return {
     channel: base.channel || 'sms',
@@ -190,9 +243,13 @@ export function finishItem(base, timeline) {
     note,
     situation,
     isFirstReply,
+    // A brand-new enquiry: nobody has written back yet, and the person is not already a buyer.
+    isNewEnquiry: (base.channel || 'sms') === 'sms' && isFirstReply && !deal,
+    deal,
+    pastBuyer,
     lastInboundAt: pending.length ? last.at : null,
     lastActivityAt: timeline[timeline.length - 1].at,
-    vehicles: findVehicles(lead, timeline),
+    vehicles: findVehicles(lead, timeline, deal, pending),
   };
 }
 
@@ -204,11 +261,16 @@ export function buildItem({ conversationId = null, leadId = null }) {
   if (!lead && conversationId) lead = getLeadByConversation(conversationId);
   const convId = conversationId ?? lead?.conversation_id ?? null;
   if (!conversation && !lead) return null;
-  const hasLeadRecord = !!lead;
-  // The conversation can carry the customer's name even when the lead is not in the Australian list.
+  // A lead the dashboard knows but this app does not store (one on another platform) still counts
+  // as a customer record: the conversation carries its id, name, status and platform.
+  const hasLeadRecord = !!lead || !!conversation?.lead_id;
   if (!lead && conversation?.customer_name && !/^\+?[\d\s]+$/.test(conversation.customer_name)) {
     const [first, ...rest] = conversation.customer_name.trim().split(/\s+/);
-    lead = { id: null, first_name: first, last_name: rest.join(' '), phone: conversation.phone, status: '', source: '', state: '', stocks: [], inquiries: [], nameOnly: true };
+    lead = {
+      id: null, first_name: first, last_name: rest.join(' '), phone: conversation.phone, email: conversation.lead_email || '',
+      status: conversation.lead_status || '', platform: conversation.lead_platform || '', source: '', state: '',
+      stocks: [], inquiries: [], statusHistory: [], nameOnly: true,
+    };
   }
 
   const timeline = buildTimeline(lead, convId);

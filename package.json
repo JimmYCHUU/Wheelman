@@ -15,6 +15,8 @@
     "check-login": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/check-login.js",
     "check-model": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/check-model.js",
     "replay": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/replay.js",
+    "report": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/report.js",
+    "check-private": "node --disable-warning=ExperimentalWarning scripts/check-private.js",
     "test": "node --disable-warning=ExperimentalWarning --test \"test/*.test.js\""
   }
 }

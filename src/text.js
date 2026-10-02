@@ -26,18 +26,32 @@ const ACK_WORDS = new Set(('ok okay k kk thanks thank you thx ty cheers great pe
   + 'see ya then soon there tomorrow much so very heaps alot a lot again mate bro brother buddy sir team legend champ '
   + 'appreciate appreciated appreciate it for the info information update reply response help getting back to me us '
   + 'carbarn have had day night weekend one too and you\'re youre welcome bye talk later '
-  + 'understood done on our my way omw u ur ya this morning afternoon arvo evening tonight today shortly in bit at around about catch chat speak').split(' '));
+  + 'understood done on our my way omw u ur ya this morning afternoon arvo evening tonight today shortly in bit at around about catch chat speak '
+  + 'wow yay sweet alright righto brilliant wonderful beauty ta oh ah').split(' '));
 
 // "Thanks <staff name>" is still only a thank-you. Staff names come from voice/people.json.
 let ackWithNames = null;
 const ackWords = () => (ackWithNames ||= new Set([...ACK_WORDS, ...loadPeople().words]));
 
+// Happy noises that need no answer: "Can't wait", "I'm so excited", "Hahaha".
+const ACK_PHRASES = [
+  /\bcan'?t wait\b/g,
+  /\blooking forward( to (it|that|this|seeing you|meeting you))?\b/g,
+  /\b(i'?m|i am|we'?re|we are) (so |very |really |super |pretty )*(excited|stoked|happy|glad|keen|pumped)\b/g,
+  /\b(so |very |really |super )+(excited|stoked|happy|glad)\b/g,
+];
+const LAUGHTER = /\b(a?(ha){2,}h?|he(he)+|lo+l|lmao|rofl)\b/g;
+
 /** A short "thanks / ok / see you" that does not need a reply. */
 export function isAcknowledgement(body) {
   const raw = String(body || '');
   if (/\?/.test(raw)) return false;
-  const t = squash(stripEmoji(raw)).toLowerCase().replace(/[^a-z' ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  let t = squash(stripEmoji(raw)).toLowerCase().replace(/[’‘`]/g, "'").replace(/[^a-z' ]+/g, ' ').replace(/\s+/g, ' ').trim();
   if (!t) return hasEmoji(raw); // emoji only, e.g. a thumbs up
+  if (t.split(' ').length > 12) return false;
+  for (const re of ACK_PHRASES) t = t.replace(re, ' ');
+  t = t.replace(LAUGHTER, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return true; // nothing left but the happy noise
   const words = t.split(' ');
   if (words.length > 9) return false;
   const known = ackWords();
@@ -185,27 +199,42 @@ export function isSilentInquiry(inq) {
 // ---- stock numbers ---------------------------------------------------------
 
 /**
- * Portals rewrite stock numbers: Carsales prefixes the year ("20011149" = 2001 + stock 1149),
- * Autotrader prefixes letters ("DDR1149"). `find` looks a stock number up and returns the vehicle.
+ * The stock numbers a reference may stand for, most literal first, each with the year it must
+ * match (or null). Portals rewrite stock numbers: Carsales prefixes the year ("20011149" is the
+ * 2001 car with stock 1149, "2014T02" the 2014 car with stock T02), Autotrader prefixes letters
+ * ("DDR1149"), and some add a portal code ("CSCBT02" is stock T02).
  */
-export function resolveStock(raw, find) {
-  const s = String(raw || '').trim();
-  if (!s) return null;
-  const tryOne = (stock, year) => {
-    if (!stock) return null;
-    const v = find(stock) || find(stock.replace(/^0+/, ''));
-    if (!v) return null;
-    if (year && v.year && Number(v.year) !== Number(year)) return null;
-    return v;
-  };
-  let v = tryOne(s);
-  if (v) return v;
+export function stockCandidates(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s || /^(null|undefined|none|n\/a)$/i.test(s)) return [];
+  const out = [];
+  const add = (stock, year = null) => { if (stock && !out.some((c) => c.stock === stock && c.year === year)) out.push({ stock, year }); };
+  add(s);
   const noLetters = s.replace(/^[A-Za-z]+/, '');
-  if (noLetters !== s) { v = tryOne(noLetters); if (v) return v; }
-  const digits = noLetters;
-  if (/^\d{6,8}$/.test(digits)) {
-    const year = Number(digits.slice(0, 4));
-    if (year >= 1980 && year <= 2035) { v = tryOne(digits.slice(4), year); if (v) return v; }
+  if (noLetters !== s) add(noLetters);
+  const coded = s.match(/^[A-Za-z]{2}CB([A-Za-z]\d{1,4})$/i);
+  if (coded) add(coded[1].toUpperCase());
+  const dated = noLetters.match(/^(\d{4})(\d{2,4}|[A-Za-z]\d{1,4})$/);
+  if (dated) {
+    const year = Number(dated[1]);
+    if (year >= 1980 && year <= 2035) add(/^[A-Za-z]/.test(dated[2]) ? dated[2].toUpperCase() : dated[2], year);
+  }
+  return out;
+}
+
+/**
+ * Whether a car can be the one a dated reference means. A portal's year and ours can differ by
+ * one (build year against the year it was first registered), never by more.
+ */
+export const yearFits = (refYear, vehicleYear) => !refYear || !vehicleYear || Math.abs(Number(vehicleYear) - Number(refYear)) <= 1;
+
+/** The vehicle a stock reference stands for. `find` looks one stock number up and returns the vehicle. */
+export function resolveStock(raw, find) {
+  for (const { stock, year } of stockCandidates(raw)) {
+    const v = find(stock) || find(stock.replace(/^0+/, ''));
+    if (!v) continue;
+    if (!yearFits(year, v.year)) continue;
+    return v;
   }
   return null;
 }

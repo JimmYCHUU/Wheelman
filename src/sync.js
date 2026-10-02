@@ -1,8 +1,8 @@
 // Pulls new leads, conversations, messages and stock from the dashboard into the local database.
 
 import * as dash from './dashboard.js';
-import { normalizeLead, normalizeConversation, normalizeMessage, normalizeVehicle } from './normalize.js';
-import { upsertLead, upsertConversation, upsertMessage, upsertVehicle, getConversation, getMeta, setMeta, transaction, openDb, upsertMpConversation, replaceMpMessages, getMpConversation, countRows } from './db.js';
+import { normalizeLead, normalizeConversation, normalizeMessage, normalizeVehicle, normalizeSale } from './normalize.js';
+import { upsertLead, upsertConversation, upsertMessage, upsertVehicle, upsertSale, deleteSale, rekeyLeadItems, getConversation, getMeta, setMeta, transaction, openDb, upsertMpConversation, replaceMpMessages, getMpConversation, countRows } from './db.js';
 import * as mp from './marketplace.js';
 import { config } from './config.js';
 
@@ -14,8 +14,18 @@ export function storeLeads(rawLeads) {
   return rawLeads.length;
 }
 
+/**
+ * Stores each vehicle's customer-safe facts, and beside them a small digest of its sale when the
+ * dashboard records one. A vehicle whose sale has gone loses its digest.
+ */
 export function storeVehicles(rawVehicles) {
-  transaction(() => { for (const r of rawVehicles) upsertVehicle(normalizeVehicle(r)); });
+  transaction(() => {
+    for (const r of rawVehicles) {
+      upsertVehicle(normalizeVehicle(r));
+      const sale = normalizeSale(r);
+      if (sale) upsertSale(sale); else if (r?.id !== undefined && r?.id !== null) deleteSale(r.id);
+    }
+  });
   return rawVehicles.length;
 }
 
@@ -49,6 +59,8 @@ export async function syncLeads({ pages = 3, size = 50 } = {}) {
     n += storeLeads(list);
     if (page < pages) await pause(250);
   }
+  // A lead that has gained a conversation keeps its suggestions under the conversation's key.
+  rekeyLeadItems();
   return { leads: n };
 }
 

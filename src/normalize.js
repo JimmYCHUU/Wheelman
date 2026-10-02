@@ -1,16 +1,41 @@
 // Turns raw dashboard records into the trimmed shapes this app stores.
 // Vehicles are reduced to customer-safe fields here, so internal figures
-// (purchase cost, shipping, margin, buyer details) never reach the database.
+// (purchase cost, shipping, margin, buyer details) never reach the vehicle record.
+// A sale is reduced to a small digest (normalizeSale): stage, date and whether it is paid.
+// No amount and no buyer name is kept, and the buyer's contact details are used only for matching.
 
-import { parseDashboardTime } from './time.js';
+import { parseDashboardTime, parseDashboardDate } from './time.js';
 import { config } from './config.js';
 
 const clean = (s) => (s === null || s === undefined ? '' : String(s).trim());
+
+/**
+ * An Australian phone number reduced to its last nine digits, so "+61 400 111 222" and
+ * "0400 111 222" compare equal. Anything that is not one phone number gives ''.
+ */
+export function phoneKey(s) {
+  const d = String(s ?? '').replace(/\D/g, '');
+  if (d.length === 11 && d.startsWith('61')) return d.slice(2);
+  if (d.length === 10 && d.startsWith('0')) return d.slice(1);
+  if (d.length === 9) return d;
+  return '';
+}
+
+/** Every phone number in the given values (a field can hold two, split by "|", "," or "/"). */
+export function phoneKeys(...values) {
+  const out = new Set();
+  for (const v of values) for (const part of String(v ?? '').split(/[|,/]/)) { const k = phoneKey(part); if (k) out.add(k); }
+  return [...out];
+}
 
 export function normalizeLead(raw) {
   let state = '';
   try { state = raw.others ? JSON.parse(raw.others).stateShortName || '' : ''; } catch { /* not JSON */ }
   return {
+    // Every stage this lead has been through, oldest first. Who changed it is not kept.
+    statusHistory: (Array.isArray(raw.statusHistory) ? raw.statusHistory : [])
+      .map((h) => ({ status: clean(h?.status), at: parseDashboardTime(h?.time) }))
+      .filter((h) => h.status),
     id: raw.id,
     conversationId: raw.conversationId ?? null,
     firstName: clean(raw.customerFirstName),
@@ -23,7 +48,7 @@ export function normalizeLead(raw) {
     state,
     leadAt: parseDashboardTime(raw.leadDate),
     updatedAt: parseDashboardTime(raw.updatedAt) ?? parseDashboardTime(raw.createdAt),
-    stocks: (raw.stocks || []).map(String),
+    stocks: (raw.stocks || []).filter((s) => s !== null && s !== undefined).map((s) => String(s).trim()).filter((s) => s && !/^null$/i.test(s)),
     inquiries: (raw.inquiries || []).map((i) => ({
       id: i.id,
       type: clean(i.inquiryType),
@@ -51,6 +76,11 @@ export function normalizeConversation(raw) {
     status: clean(raw.status),
     leadId: raw.lead?.id ?? null,
     customerName: clean(raw.lead?.customerName),
+    // The dashboard attaches a short summary of the lead. It is the only record of leads this app
+    // does not store, such as ones on another platform.
+    leadPlatform: clean(raw.lead?.platform),
+    leadStatus: clean(raw.lead?.currentStatus),
+    leadEmail: clean(raw.lead?.customerEmail),
     latestDirection: clean(raw.latestMessageDirection),
     latestAt: parseDashboardTime(raw.latestMessageAt),
     latestBody: clean(raw.latestMessageBody),
@@ -106,7 +136,40 @@ export function normalizeVehicle(raw) {
   const es = raw.engineSpec || raw.engine || null;
   v.engine = es ? { engineSizeL: es.engineSizeL || null, induction: es.induction || null } : null;
   v.url = vehicleUrl(v);
+  // How far the car's preparation has got: dates only, and whether it has a plate yet.
+  v.progress = {
+    blueSlip: parseDashboardDate(raw.blueSlipDate),
+    regoDone: parseDashboardDate(raw.registrationCompletedDate),
+    inspectionIssued: parseDashboardDate(raw.rmsInspectionIssueDate),
+    lastSeenShipping: parseDashboardDate(raw.lastSeenAtShipping),
+    hasPlate: !!clean(raw.registrationNumber),
+  };
   return v;
+}
+
+/**
+ * The sale attached to a vehicle, reduced to what a reply needs: which car, the stage, when,
+ * and whether a deposit or the full amount is recorded. Returns null when there is no sale.
+ *
+ * Amounts are compared and then discarded. The buyer's name is never read. The buyer's phone
+ * and email are returned only so the caller can turn them into match keys; they are not stored.
+ * Supplier payment details on the vehicle are never touched.
+ */
+export function normalizeSale(raw) {
+  const s = raw?.salesInfo;
+  if (!s || s.salesId === null || s.salesId === undefined || s.salesId === '') return null;
+  const total = Number(s.totalPrice) || 0;
+  const paidAmount = Number(s.paidAmount) || 0;
+  return {
+    vehicleId: raw.id,
+    saleId: String(s.salesId),
+    stockNo: clean(raw.stockNo),
+    stage: clean(s.deliveryStatus).toUpperCase(),
+    soldAt: parseDashboardTime(s.salesDateTime),
+    paid: total > 0 && paidAmount >= total ? 'full' : paidAmount > 0 ? 'part' : 'none',
+    phones: phoneKeys(s.customerMobile),
+    email: clean(s.customerEmail).toLowerCase(),
+  };
 }
 
 /** Plain-language availability from the dashboard's three status fields. */

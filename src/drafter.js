@@ -7,6 +7,7 @@ import { config } from './config.js';
 import { redact } from './redact.js';
 import { insertDraft } from './db.js';
 import { sydneyHour } from './time.js';
+import { standardBlock, repeatsBlock, tidyOpening } from './firstreply.js';
 
 /**
  * What a reply may legitimately quote, split by how far it can be trusted.
@@ -22,8 +23,10 @@ function allowedMaterial(item, prompt) {
   const ours = item.timeline.filter((e) => e.who === 'us' && !e.auto).map(say).join('\n');
   const theirs = item.timeline.filter((e) => e.who !== 'us' || e.auto).map(say).join('\n');
   const alts = prompt.alternatives.map((a) => `${a.title} ${a.odometer} km $${a.price} ${a.url}`).join('\n');
+  // The inspection booking links count as ours only when the customer asked to see the car.
+  const booking = (prompt.inspection?.urls || []).join('\n');
   return {
-    trusted: [prompt.vehicleText, alts, ours, prompt.user.split('=== VEHICLE FACTS ===')[0]].join('\n'),
+    trusted: [prompt.vehicleText, alts, booking, ours, prompt.user.split('=== VEHICLE FACTS ===')[0]].join('\n'),
     policy: [prompt.businessFactsText, prompt.websiteText].join('\n'),
     customer: [theirs, prompt.unconfirmedText || ''].join('\n'),
   };
@@ -56,8 +59,47 @@ function inspectionCheck(plan, body) {
   return { level: 'warn', code: 'inspection-link', tokens: [], message: 'The customer asked to see the car, but the reply has no inspection booking link.' };
 }
 
+/** A reply to someone who has already bought must not treat them as a new enquiry. */
+function buyerCheck(item, body) {
+  if (!item.deal) return null;
+  const text = String(body || '');
+  const m = text.match(/\bwhich (vehicle|car|van|model|one)\b[^.?!\n]*\?/i)
+    || text.match(/\b(thank you|thanks) for (your |the )?(enquiry|inquiry|interest)\b/i);
+  if (!m) return null;
+  return { level: 'fail', code: 'buyer-ask', tokens: [m[0]], message: 'This customer has already bought, but the reply treats them as a new enquiry.' };
+}
+
+/** With the standard block below it, the AI's own lines must not give the address, hours, links or phone again. */
+function blockCheck(body, vehicleUrl) {
+  let again = repeatsBlock(body);
+  if (!again && vehicleUrl) {
+    // The inspection booking link starts with the vehicle's page link, so only the bare page link counts.
+    const at = body.indexOf(vehicleUrl);
+    if (at !== -1 && body[at + vehicleUrl.length] !== '#') again = vehicleUrl;
+  }
+  if (!again) return null;
+  return { level: 'fail', code: 'block-repeat', tokens: [again], message: `The reply repeats "${again}", which the standard block below it already gives. Leave the address, hours, links and phone number to the block.` };
+}
+
+/** The conversation in the plain form the promise, day and place checks read. */
+const saidIn = (item) => item.timeline
+  .filter((e) => e.text || e.event)
+  .map((e) => ({ who: e.who === 'us' && !e.auto ? 'us' : 'customer', text: [e.text, e.event].filter(Boolean).join(' '), at: e.at }));
+
 export async function draftFor(item, { instruction = '', save = true, holdOutConversation = true, now = Date.now() } = {}) {
-  const base = { itemKey: item.itemKey, anchorKey: item.anchorKey, situation: item.situation.primary, instruction };
+  // What the message was about when the suggestion was written. Once it is answered the item no
+  // longer says, so learning and the report read it from here.
+  const context = {
+    situations: item.situation.all,
+    firstReply: item.isFirstReply,
+    channel: item.channel,
+    anchorAgeHours: item.lastInboundAt ? Math.round((now - item.lastInboundAt) / 360000) / 10 : null,
+    newEnquiry: !!item.isNewEnquiry,
+    buyer: !!item.deal,
+    dealSource: item.deal?.source || null,
+    stage: item.deal?.stage || null,
+  };
+  const base = { itemKey: item.itemKey, anchorKey: item.anchorKey, situation: item.situation.primary, instruction, context };
 
   if (item.state === 'optout') {
     const d = { ...base, status: 'blocked', reply: '', checks: [{ level: 'fail', code: 'optout', message: 'Customer asked not to be contacted. No reply suggested.' }] };
@@ -71,13 +113,19 @@ export async function draftFor(item, { instruction = '', save = true, holdOutCon
     const again = !chat && writtenToday(item, now);
     const prompt = buildPrompt(item, { instruction, holdOutConversation, now });
     const allowed = allowedMaterial(item, prompt);
+    const said = saidIn(item);
 
     const assess = (json) => {
-      let body = fixGreeting(stripModelSignOff(String(json.reply || '').replace(/\\n/g, '\n')), sydneyHour(now));
+      // A brand-new enquiry gets the team's standard block in place of the sign-off. A holding
+      // reply (a complaint, say) does not.
+      const block = prompt.standard.on && !json.hold ? standardBlock({ vehicleUrl: prompt.standard.vehicleUrl }) : '';
+      let text = String(json.reply || '').replace(/\\n/g, '\n');
+      if (block) text = tidyOpening(text, prompt.standard.vehicleUrl);
+      let body = fixGreeting(stripModelSignOff(text), sydneyHour(now));
       if (chat) body = chatStyle(body);
       else if (again) body = dropGreeting(body);
       // Marketplace suggestions carry no sign-off: it is a chat, not a text message.
-      const reply = finishReply(json.reply, item.lead, { now, signOff: chat || again ? '' : config.signOff, chat, greeting: !again });
+      const reply = finishReply(text, item.lead, { now, signOff: chat || again ? '' : block || config.signOff, chat, greeting: !again });
       let checks = checkDraft({
         channel: item.channel,
         reply, body,
@@ -85,11 +133,16 @@ export async function draftFor(item, { instruction = '', save = true, holdOutCon
         allowedText: allowed.trusted, policyText: allowed.policy, customerText: allowed.customer,
         instruction, situation: item.situation, hold: !!json.hold,
         examples: prompt.exampleReplies, inConversation: !item.isFirstReply,
+        said, now,
       });
+      const repeat = block ? blockCheck(body, prompt.standard.vehicleUrl) : null;
+      if (repeat) checks = [...checks.filter((c) => c.level !== 'ok'), repeat];
       const listing = chat ? listingPriceCheck(item) : null;
       if (listing) checks = [...checks.filter((c) => c.level !== 'ok'), listing];
       const visit = inspectionCheck(prompt.inspection, body);
       if (visit) checks = [...checks.filter((c) => c.level !== 'ok'), visit];
+      const buyer = buyerCheck(item, body);
+      if (buyer) checks = [...checks.filter((c) => c.level !== 'ok'), buyer];
       return { body, reply, checks };
     };
     const failures = (checks) => checks.filter((c) => c.level === 'fail').length;

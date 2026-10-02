@@ -5,16 +5,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
-import { openDb, getLead, getLeadByConversation, getMeta, setMeta } from './db.js';
+import { openDb, getLead, getLeadByConversation, getMeta, setMeta, draftTextsFor } from './db.js';
 import { buildTimeline } from './items.js';
 import { attribute, cleanForExample, buildFrequencyIndex, maskGreetingNames, maskCustomerSignOff } from './voice.js';
 import { redact } from './redact.js';
 import { classify } from './situations.js';
-import { isAcknowledgement, wordCount, squash } from './text.js';
+import { isAcknowledgement, wordCount, squash, similarity } from './text.js';
+import { comparable } from './learn.js';
 
 const DAY = 24 * 3600 * 1000;
 
-export function buildVoiceBank() {
+/**
+ * @param write  false returns the examples without touching voice/examples.json (used by tests).
+ */
+export function buildVoiceBank({ write = true } = {}) {
   const db = openDb();
   const allOutgoing = db.prepare("SELECT conversation_id, body FROM messages WHERE direction = 'OUT'").all();
   const isFrequentTemplate = buildFrequencyIndex(allOutgoing);
@@ -27,6 +31,9 @@ export function buildVoiceBank() {
   for (const conv of conversations) {
     const lead = (conv.lead_id && getLead(conv.lead_id)) || getLeadByConversation(conv.id) || null;
     const timeline = buildTimeline(lead, conv.id).filter((e) => !e.internal);
+    // Suggestions Wheelman wrote for this conversation. A text that matches one was written by
+    // Wheelman and sent by a person: it must not come back as an example of how the team writes.
+    const own = draftTextsFor(`c:${conv.id}`).flatMap((d) => [d.reply, d.copied_text]).filter(Boolean).map(comparable).filter((t) => wordCount(t) >= 4);
 
     let i = 0;
     while (i < timeline.length) {
@@ -46,6 +53,7 @@ export function buildVoiceBank() {
       for (const e of run) {
         const author = attribute(e.by, e.text);
         if (!author) { skip('not by one of the voices'); continue; }
+        if (own.length && own.some((t) => similarity(comparable(e.text), t) >= 0.8)) { skip('written by Wheelman'); continue; }
         const cleaned = cleanForExample({ body: e.text, conversation_id: conv.id }, isFrequentTemplate);
         if (!cleaned.body) { skip(cleaned.reason); continue; }
         parts.push(cleaned.body);
@@ -84,6 +92,8 @@ export function buildVoiceBank() {
     seen.set(k, n + 1);
     return n < 2;
   });
+
+  if (!write) return { count: unique.length, examples: unique, skipped };
 
   fs.mkdirSync(config.voiceDir, { recursive: true });
   fs.writeFileSync(path.join(config.voiceDir, 'examples.json'), JSON.stringify({ builtAt: new Date().toISOString(), count: unique.length, examples: unique }, null, 1));

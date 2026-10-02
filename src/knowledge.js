@@ -158,16 +158,23 @@ const money = (n) => (n === null || n === undefined || n === '' ? '' : '$' + Num
 const kms = (n) => (n === null || n === undefined || n === '' ? '' : Number(n).toLocaleString('en-AU') + ' km');
 const has = (v) => v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && !v.length);
 
-export function vehicleFacts(v) {
+/**
+ * @param owner     the customer is buying, or has bought, this vehicle: it is theirs, not stock on offer
+ * @param reserved  another customer has a sale in progress on it, though it still shows as available
+ */
+export function vehicleFacts(v, { owner = false, reserved = false } = {}) {
   if (!v) return '';
   const a = availability(v);
   const L = [];
   const add = (label, value) => { if (has(value)) L.push(`${label}: ${value}`); };
+  const onOffer = !owner && !reserved && a.code !== 'sold';
 
   add('Vehicle', v.title || [v.year, v.make, v.model, v.variant].filter(Boolean).join(' '));
   add('Stock number', v.stockNo);
-  add('Availability', a.text);
-  if (a.code !== 'sold') add('Advertised price', has(v.price) ? `${money(v.price)} (excludes government charges)` : '');
+  if (owner) L.push('Availability: This is the customer\'s own vehicle: they are buying it, or have bought it, from us. Do not call it "sold" or "available".');
+  else if (reserved && a.code === 'available') L.push('Availability: Reserved. Another customer has paid a deposit on this vehicle, so it cannot be offered as available. If that sale does not go ahead we can let this customer know.');
+  else add('Availability', a.text);
+  if (onOffer) add('Advertised price', has(v.price) ? `${money(v.price)} (excludes government charges)` : '');
   add('Odometer', kms(v.odometer));
   add('Year', v.year);
   add('Built', v.builtMonthYear);
@@ -195,18 +202,17 @@ export function vehicleFacts(v) {
   add('Service record', (v.serviceRecord || []).join('; '));
   add('Features', (v.features || []).join(', '));
   add('Location', /lidcombe/i.test(v.inventoryAddress || '') && a.code === 'available' ? v.inventoryAddress : '');
-  if (v.url && a.code !== 'sold') {
+  if (v.url && onOffer) {
+    // The inspection booking links are deliberately not listed here. They are supplied only when
+    // the customer asks to see the car (inspectionPlan in prompt.js), so they are not offered unasked.
     L.push(`Vehicle page: ${v.url}`);
-    // Both booking links open the same form on the vehicle's page, with the inspection type already chosen.
-    // A vehicle that is not at the yard yet cannot be inspected either way.
-    if (a.code === 'available') {
-      L.push(`Book an in-person inspection at the Lidcombe yard: ${v.url}#inspection=onsite`);
-      L.push(`Book an online video inspection (a video call on WhatsApp or FaceTime): ${v.url}#inspection=online`);
-    }
     L.push(`Start a trade-in request: ${v.url}#trade-in`);
   }
   return L.join('\n');
 }
+
+/** The two inspection booking links for a vehicle. Both open the same form with the type chosen. */
+export const inspectionLinks = (v) => ({ onsite: `${v.url}#inspection=onsite`, online: `${v.url}#inspection=online` });
 
 /** Similar unsold cars to suggest when the one asked about is gone. */
 export function alternatives(v, all, max = 2) {

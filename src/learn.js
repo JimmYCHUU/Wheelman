@@ -9,9 +9,9 @@
 // "sent" replaces "copied" for the same suggestion once it is seen.
 
 import { config } from './config.js';
-import { getDraft, upsertLearned, deleteLearned, allLearned, recordCopied, recordCopiedTime } from './db.js';
+import { getDraft, upsertLearned, deleteLearned, deleteLearnedForAnchor, learnedTextExists, allLearned, recordCopied, recordCopiedTime } from './db.js';
 import { redact } from './redact.js';
-import { maskCustomerSignOff, maskGreetingNames } from './voice.js';
+import { maskCustomerSignOff, maskGreetingNames, stripLocationBlock, loadExclusions } from './voice.js';
 import { stripModelSignOff } from './checks.js';
 import { similarity, wordCount, squash } from './text.js';
 
@@ -20,20 +20,27 @@ const BLANK = /\[(PRICE|TRADE-IN VALUE|DELIVERY COST|DATE|CHECK)\?\]/;
 /** Only dashboard conversations and leads teach Wheelman. */
 export const canLearnFrom = (itemKey) => /^[cl]:\d+$/.test(String(itemKey || ''));
 
-function withoutSignOff(text) {
+export function withoutSignOff(text) {
   let t = String(text || '').replace(/\r/g, '').trim();
   if (config.signOff && t.endsWith(config.signOff)) t = t.slice(0, -config.signOff.length).trim();
   return stripModelSignOff(t);
 }
 
-/** Reasons a reply should not become an example. Returns '' when it is fine. */
-function unsuitable(finalText) {
-  const body = withoutSignOff(finalText);
+/**
+ * The part of a reply that a person actually wrote for this customer: without the sign-off and
+ * without the standard address block. Suggestions and sent replies are compared in this form.
+ */
+export const comparable = (text) => withoutSignOff(stripLocationBlock(withoutSignOff(text)));
+
+/** Reasons a reply should not become an example. Takes the comparable form. Returns '' when it is fine. */
+function unsuitable(body, rawText) {
   if (!body) return 'empty';
   if (BLANK.test(body)) return 'still has a blank';
   if (wordCount(body) < 2) return 'too short';
   if (body.length > 900) return 'too long';
   if (/\b\d{3}[\s-]?\d{3}\b[^\n]{0,30}\b\d{6,10}\b/.test(body) || /\bbsb\b/i.test(body)) return 'contains bank details';
+  // A standard reply the team sends to everyone teaches nothing about answering this customer.
+  if (loadExclusions().canned.some((re) => re.test(rawText) || re.test(body))) return 'standard wording';
   return '';
 }
 
@@ -48,14 +55,17 @@ export function learnFrom(item, draft, finalText, source, { at = Date.now() } = 
   if (!item || !draft || !canLearnFrom(item.itemKey)) return { learned: false, why: 'not a dashboard conversation' };
   if (draft.item_key !== undefined && !canLearnFrom(draft.item_key)) return { learned: false, why: 'not a dashboard conversation' };
   if (draft.rating === 'bad' && source === 'copied') return { learned: false, why: 'rated not usable' };
-  const why = unsuitable(finalText);
-  if (why) return { learned: false, why };
 
   const lead = item.lead;
-  const draftBody = withoutSignOff(draft.reply);
-  const finalBody = withoutSignOff(finalText);
+  const draftBody = comparable(draft.reply);
+  const finalBody = comparable(finalText);
+  const why = unsuitable(finalBody, String(finalText || ''));
+  if (why) return { learned: false, why };
   const sim = similarity(draftBody, finalBody);
   const changed = squash(draftBody).toLowerCase() !== squash(finalBody).toLowerCase();
+  // A suggestion used word for word is Wheelman's own text. Keeping it as an example of how
+  // the team writes would be learning from itself.
+  if (!changed) { deleteLearned(draft.id); return { learned: false, why: 'used unchanged', changed: false, similarity: sim }; }
 
   // The customer's words this reply answered: everything they said up to the suggestion's anchor.
   const idx = item.timeline.findIndex((e) => e.key === draft.anchor_key);
@@ -65,14 +75,24 @@ export function learnFrom(item, draft, finalText, source, { at = Date.now() } = 
   const customerText = pending.map((e) => [e.event ? `(${e.event})` : '', e.text].filter(Boolean).join(' ')).filter(Boolean).join('\n');
   if (!customerText) return { learned: false, why: 'no customer message' };
 
+  const final = maskGreetingNames(redact(finalBody, lead));
+  if (learnedTextExists(final, draft.id)) return { learned: false, why: 'already learned', changed, similarity: sim };
+
+  // What the message was about is taken from when the suggestion was written. Once a conversation
+  // is answered it reads as "general", which would file every lesson in the wrong place.
+  const ctx = draft.context || null;
+  const situations = ctx?.situations?.length ? ctx.situations : draft.situation ? [draft.situation] : item.situation?.all || [];
+
+  // One lesson per customer message, however many suggestions were written for it.
+  deleteLearnedForAnchor(draft.item_key || item.itemKey, draft.anchor_key, draft.id);
   upsertLearned({
     draftId: draft.id,
     itemKey: item.itemKey,
-    situations: item.situation?.all || (draft.situation ? [draft.situation] : []),
-    firstReply: !upto.some((e) => e.who === 'us' && !e.internal),
+    situations,
+    firstReply: ctx ? !!ctx.firstReply : !upto.some((e) => e.who === 'us' && !e.internal),
     customerText: maskCustomerSignOff(redact(customerText, lead)).slice(0, 900),
     draftText: maskGreetingNames(redact(draftBody, lead)),
-    finalText: maskGreetingNames(redact(finalBody, lead)),
+    finalText: final,
     source,
     changed,
     similarity: sim,
