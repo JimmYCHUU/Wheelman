@@ -60,8 +60,8 @@ const draft = async (conversationId) => {
 
 test('the first reply to a new enquiry gets the greeting and the standard block in place of the sign-off', async () => {
   const { d } = await draft(101);
-  assert.ok(d.reply.startsWith('Hi Priya,\n\nYes, Saturday at 10 am works.\n\n📍Location: '), d.reply);
-  assert.ok(d.reply.endsWith('Team Carbarn\n📞 0423 840 130'), d.reply);
+  assert.ok(d.reply.startsWith('Hi Priya,\n\nYes, Saturday at 10 am works.\n\nOur location:\n📍 Unit D3, '), d.reply);
+  assert.ok(d.reply.endsWith('Feel free to visit us or call\n📞 0423 840 130\nTeam Carbarn'), d.reply);
   assert.ok(!/Regards/.test(d.reply));
 });
 

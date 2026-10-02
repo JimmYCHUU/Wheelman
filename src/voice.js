@@ -6,6 +6,7 @@ import path from 'node:path';
 import { config } from './config.js';
 import { squash, wordCount } from './text.js';
 import { loadPeople, namePattern } from './people.js';
+import { blockHeadings } from './firstreply.js';
 
 let exclusions = null;
 export function loadExclusions() {
@@ -81,7 +82,27 @@ export function attribute(sentBy, body) {
 export function stripLocationBlock(body) {
   const b = String(body || '');
   if (!/📍/.test(b)) return b;
-  return b.split('📍')[0].trim();
+  // A heading typed above the address ("Our location:") belongs to the block, not to the personal lines.
+  const lines = b.split('📍')[0].replace(/\r/g, '').split('\n');
+  while (lines.length && (lines[lines.length - 1].trim() === '' || /^[^.!?]{0,40}:\s*$/.test(lines[lines.length - 1].trim()))) lines.pop();
+  // So do the block's own parts that come before the address: "Vehicle details:" and its link,
+  // "Book your inspection:" and its link. A link under any other line is the sender's own.
+  const headings = new Set([...blockHeadings(), 'check more details', 'vehicle details', 'book your inspection']);
+  let end = lines.length;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (line === '' || /^https?:\/\/\S+$/.test(line)) continue;
+    if (headings.has(line.replace(/:\s*$/, '').toLowerCase()) && /:\s*$/.test(line)) { end = i; continue; }
+    break;
+  }
+  return lines.slice(0, end).join('\n').trim();
+}
+
+/** True when the text names one of our staff (from the local people file). */
+export function namesStaff(text) {
+  const t = String(text || '');
+  if (patterns().anyName.test(t)) return true;
+  return loadExclusions().otherStaff.some((n) => new RegExp(`\\b${n.replace(/\s+/g, '\\s+')}\\b`, 'i').test(t));
 }
 
 /** Removes the sender's own name, sign-off and phone line from the end of a message. */

@@ -6,6 +6,7 @@ import { classify } from './situations.js';
 import { firstNameOf } from './redact.js';
 import { config } from './config.js';
 import { dealFor } from './deal.js';
+import { namesStaff } from './voice.js';
 
 const MIN = 60 * 1000;
 
@@ -244,7 +245,9 @@ export function finishItem(base, timeline, { now = Date.now() } = {}) {
     situation,
     isFirstReply,
     // A brand-new enquiry: nobody has written back yet, and the person is not already a buyer.
-    isNewEnquiry: (base.channel || 'sms') === 'sms' && isFirstReply && !deal,
+    // Someone who writes to one of our staff by name ("Hi Sam, can we move the appointment?") is
+    // already dealing with us by phone or in person, whatever the texts show.
+    isNewEnquiry: (base.channel || 'sms') === 'sms' && isFirstReply && !deal && !namesStaff(pendingText),
     deal,
     pastBuyer,
     lastInboundAt: pending.length ? last.at : null,

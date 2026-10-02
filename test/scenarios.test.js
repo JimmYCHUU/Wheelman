@@ -254,12 +254,13 @@ test('a long conversation keeps its first message and what we already told the c
 // ---- the standard first reply --------------------------------------------------------------
 
 const NOAH = 'https://www.carbarn.com.au/vehicles/toyota/noah/abc10/1300';
-const block = (url) => [
-  '📍Location: Unit D3, 128–130 Frances Street, Lidcombe NSW 2141.',
-  '📍Google Maps: https://maps.app.goo.gl/EQfdkTE7FYDF4DTT8',
-  '🕗Hours: 8 AM – 5 PM. Open 7 days. Please call or text before visiting.',
-  ...(url ? [`Check More Details:\n${url}`] : []),
-  'Team Carbarn\n📞 0423 840 130',
+const block = (url, booking = '') => [
+  ...(url ? [`Vehicle details:\n${url}`] : []),
+  ...(booking ? [`Book your inspection:\n${booking}`] : []),
+  'Our location:\n📍 Unit D3, 128-130 Frances Street, Lidcombe NSW 2141',
+  'Google Maps:\nhttps://maps.app.goo.gl/EQfdkTE7FYDF4DTT8',
+  '🕛 Open 7 days, 8 AM–5 PM.',
+  'Feel free to visit us or call\n📞 0423 840 130\nTeam Carbarn',
 ].join('\n\n');
 const fails = (d) => d.checks.filter((c) => c.level === 'fail').map((c) => c.code);
 
@@ -271,7 +272,7 @@ test('a new enquiry asking where we are gets a short answer and then the exact s
 
   const { d, asked, attempts } = await draft(220, 'Hi {{NAME}},\nYou are welcome to visit us. Our address and opening hours are below.');
   assert.match(asked, /=== STANDARD FIRST REPLY ===\nThis is a brand-new enquiry\. Our standard block is added below your text automatically/);
-  assert.match(asked, /a "Check More Details" line with this vehicle's page link/);
+  assert.match(asked, /this vehicle's page link, our address, the Google Maps link, the opening hours and our phone number\./);
   assert.equal(d.reply, `Hi Wren,\nYou are welcome to visit us. Our address and opening hours are below.\n\n${block(NOAH)}`, 'exact to the character, symbols included');
   assert.ok(!/Regards/.test(d.reply), 'the block takes the place of the sign-off');
   assert.equal(attempts, 1);
@@ -290,31 +291,38 @@ test('a new enquiry asking where we are gets a short answer and then the exact s
   assert.equal(linked.attempts, 1);
 });
 
-test('a new enquiry asking to inspect gets the booking link, then the block', async () => {
+test('a new enquiry asking to inspect gets the booking link inside the block, once', async () => {
   lead(8, 221, 'Xavi', '0421 000 002', { stocks: ['1300'] });
   conv(221, 8, 'Xavi Test', '+61421000002');
   msg(221, 'IN', 'Can I come and inspect the Noah this weekend?', 5 * MIN);
+  // The AI types the link anyway. The line is dropped, with its lead-in, because the block gives it.
   const { d, asked } = await draft(221, `Hi {{NAME}},\nYou are welcome to inspect the Noah. Please choose a time here:\n${NOAH}#inspection=onsite`);
   assert.match(asked, /Our address, map link and opening hours follow your text automatically/);
+  assert.match(asked, /this vehicle's page link, the inspection booking link, our address/);
   assert.ok(!/add the address, the Google Maps link/.test(asked));
-  assert.equal(d.reply, `Hi Xavi,\nYou are welcome to inspect the Noah. Please choose a time here:\n${NOAH}#inspection=onsite\n\n${block(NOAH)}`);
+  assert.equal(d.reply, `Hi Xavi,\nYou are welcome to inspect the Noah.\n\n${block(NOAH, `${NOAH}#inspection=onsite`)}`);
   assert.deepEqual(fails(d), [], JSON.stringify(d.checks));
+
+  // Typed inside a sentence it cannot be dropped cleanly, so the reply is sent back.
+  const inline = `Hi {{NAME}},\nYou can book at ${NOAH}#inspection=onsite any time.`;
+  const again = await draft(221, inline, inline);
+  assert.ok(fails(again.d).includes('block-repeat'));
 });
 
-test('the block leaves out "Check More Details" when there is no car on offer to point to', async () => {
+test('the block leaves out the car and booking parts when there is nothing to point to', async () => {
   lead(9, 222, 'Yara', '0421 000 003', { stocks: ['1500'] }); // the Prius, sold long ago
   conv(222, 9, 'Yara Test', '+61421000003');
   msg(222, 'IN', 'Is the Prius still available?', 5 * MIN);
   const sold = await draft(222, 'Hi {{NAME}},\nUnfortunately, that Prius has been sold.');
   assert.equal(sold.d.reply, `Hi Yara,\nUnfortunately, that Prius has been sold.\n\n${block('')}`);
-  assert.ok(!/Check More Details/.test(sold.d.reply));
+  assert.ok(!/Vehicle details|Book your inspection/.test(sold.d.reply));
 
   lead(10, 223, 'Zane', '0421 000 004');
   conv(223, 10, 'Zane Test', '+61421000004');
   msg(223, 'IN', 'Do you have any vans?', 5 * MIN);
   const none = await draft(223, 'Hi {{NAME}},\nYes, we have several vans in stock. Which size are you after?');
   assert.ok(none.d.reply.endsWith(block('')));
-  assert.ok(!/Check More Details/.test(none.d.reply));
+  assert.ok(!/Vehicle details|Book your inspection/.test(none.d.reply));
   assert.ok(!/this vehicle's page link/.test(none.asked));
 });
 
@@ -350,7 +358,7 @@ test('the standard block is never learned, only the lines a person changed above
   const unchanged = learn.onCopied(item(225), d.id, d.reply.replace(' [CHECK?]', ''));
   assert.equal(unchanged.learned, true, 'filling in the blank is a change worth learning');
   const row = db.allLearned().find((l) => l.draft_id === d.id);
-  assert.ok(!/📍|Frances|0423|maps\.app|Check More Details|Team Carbarn/.test(row.final_text), row.final_text);
+  assert.ok(!/📍|Frances|0423|maps\.app|Vehicle details|Our location|Team Carbarn|carbarn\.com\.au/.test(row.final_text), row.final_text);
   assert.ok(!/📍|Frances|0423/.test(row.draft_text));
 
   const same = learn.onCopied(item(225), d.id, d.reply);
@@ -482,4 +490,189 @@ test('a place the customer never mentioned is rejected, and one they did mention
   msg(229, 'IN', 'I am in Brisbane. Is there a way to see the Noah before buying?', 5 * MIN);
   const ok = await draft(229, `Hi {{NAME}},\nNo worries, Brisbane is no problem. You can book an online video inspection here:\n${NOAH}#inspection=online`);
   assert.deepEqual(fails(ok.d), [], JSON.stringify(ok.d.checks));
+});
+
+// ---- the booking link whenever a customer wants to see a car ---------------------------------
+
+test('every way of asking to see a car counts, and a goodbye does not', async () => {
+  const { classify } = await import('../src/situations.js');
+  const wants = (t) => classify(t).all.includes('inspection_booking');
+  for (const t of ['Hi, is this car available to see this Saturday? Could you please confirm the address', 'Can I inspect tomorrow?', 'Can I see it tomorrow arvo?', 'Is it available for a viewing?', 'Could I view this one on Sunday', 'When can I look at this van?'])
+    assert.equal(wants(t), true, t);
+  for (const t of ['See you this Saturday', 'Thank you, will message before visiting', 'I cannot see this working for us', 'Is it still available?', 'What time can I pick it up tomorrow?'])
+    assert.equal(wants(t), false, t);
+});
+
+test('a customer who asks to inspect tomorrow gets the booking link, or the reply is sent back', async () => {
+  // Inside a conversation there is no block under the reply, so the AI's own lines must carry the link.
+  lead(17, 230, 'Gus', '0421 000 011', { stocks: ['1300'] });
+  conv(230, 17, 'Gus Test', '+61421000011');
+  msg(230, 'IN', 'Is the Noah still available?', 3 * HOUR);
+  msg(230, 'OUT', 'Yes, it is available.', 170 * MIN);
+  msg(230, 'IN', 'Can I inspect it tomorrow?', 5 * MIN);
+  const without = 'Yes, you are welcome to come tomorrow.';
+  const bad = await draft(230, without, without);
+  assert.equal(bad.attempts, 2, 'a reply with no booking link is sent back once');
+  assert.ok(fails(bad.d).includes('inspection-link'), JSON.stringify(bad.d.checks));
+  assert.match(bad.asked, /If they named only a day, say that day is fine and still give the link/);
+
+  const good = await draft(230, without, `Yes, tomorrow is fine. Please choose a time here:\n${NOAH}#inspection=onsite`);
+  assert.equal(good.attempts, 2);
+  assert.deepEqual(fails(good.d), []);
+  assert.ok(good.d.reply.includes(`${NOAH}#inspection=onsite`));
+});
+
+test('the booking link follows a customer who asked to see the car earlier and has not been given it', async () => {
+  lead(18, 231, 'Hana', '0421 000 012', { stocks: ['1300'] });
+  conv(231, 18, 'Hana Test', '+61421000012');
+  msg(231, 'IN', 'Hi, is this car available to see this Saturday? Could you please confirm the address', 3 * HOUR);
+  msg(231, 'OUT', 'Hello Hana,\nYes, the Noah is available to see this Saturday. We are in Lidcombe, open 8am to 5pm.', 170 * MIN);
+  msg(231, 'IN', 'Thank you, will message before visiting', 5 * MIN);
+  const it = item(231);
+  assert.ok(!it.situation.all.includes('inspection_booking'), 'the message that is waiting does not ask to inspect');
+  const plan = promptModule.inspectionPlan(it);
+  assert.equal(plan.kind, 'onsite');
+  assert.equal(plan.must, false);
+
+  const withLink = await draft(231, `No worries. You can choose a time for Saturday here:\n${NOAH}#inspection=onsite`);
+  assert.match(withLink.asked, /=== INSPECTION ===\nEarlier in this conversation the customer asked to see this vehicle, and we have not sent them the booking link yet/);
+  assert.deepEqual(fails(withLink.d), [], JSON.stringify(withLink.d.checks));
+  // Leaving it out here is pointed out, not rejected.
+  const withoutLink = await draft(231, 'No worries. Talk soon.');
+  assert.equal(withoutLink.attempts, 1);
+  assert.ok(withoutLink.d.checks.some((c) => c.level === 'warn' && c.code === 'inspection-link'));
+
+  // Once the link has gone out, or a visit is confirmed, it is not pushed again.
+  msg(231, 'OUT', `No worries. Choose a time here: ${NOAH}#inspection=onsite`, 4 * MIN);
+  msg(231, 'IN', 'Great, and does it have a tow bar?', 2 * MIN);
+  assert.equal(promptModule.inspectionPlan(item(231)).kind, null);
+});
+
+test('asking for the inspection link in Rewrite supplies the real booking link', async () => {
+  lead(19, 232, 'Ilse', '0421 000 013', { stocks: ['1300'] });
+  conv(232, 19, 'Ilse Test', '+61421000013');
+  msg(232, 'IN', 'Is the Noah still available?', 3 * HOUR);
+  msg(232, 'OUT', 'Yes, it is available.', 170 * MIN);
+  msg(232, 'IN', 'Ok. Does it come with a spare key?', 5 * MIN);
+  assert.equal(promptModule.inspectionPlan(item(232)).kind, null, 'nothing about inspecting without the instruction');
+
+  const pageOnly = `We will check on the spare key [CHECK?]. You are welcome to book a time to see it here:\n${NOAH}`;
+  const booking = `We will check on the spare key [CHECK?]. You are welcome to book a time to see it here:\n${NOAH}#inspection=onsite`;
+  const { d, asked, attempts } = await draftAt(232, now, 'Suggest he books an inspection. Add the inspection link', pageOnly, booking);
+  assert.match(asked, /Our staff asked, in their instruction for this draft, for the inspection booking link/);
+  assert.ok(asked.includes(`${NOAH}#inspection=onsite`));
+  assert.equal(attempts, 2, "the car's page link is not the booking link");
+  assert.deepEqual(fails(d), [], JSON.stringify(d.checks));
+  assert.ok(d.reply.includes(`${NOAH}#inspection=onsite`));
+});
+
+// ---- learning what to say from what the team sends ---------------------------------------------
+
+test('what the team really sent for a similar message is shown, whoever sent it, with nothing of the other customer in it', async () => {
+  const practice = await import('../src/practice.js');
+  // Sent two days ago by someone who is not one of the two voices, signed with their own name.
+  lead(20, 233, 'Jude', '0421 000 014', { stocks: ['1300'], leadAt: now - 3 * DAY, updatedAt: now - 2 * DAY });
+  conv(233, 20, 'Jude Test', '+61421000014');
+  msg(233, 'IN', 'Do you take trade ins? I have a 2015 Corolla', 2 * DAY);
+  msg(233, 'OUT', `Hi Jude,\nYes, we take trade-ins. Please send the rego, the kilometres and a few photos of your car.\nWe could offer around $7,500 for it.\nMore on the Noah here:\n${NOAH}\n\nRegards,\nCasey from Carbarn`, 2 * DAY - 10 * MIN, { sentBy: 'someone.else' });
+
+  // A text sent exactly as Wheelman suggested is Wheelman's own wording: it is not learned.
+  lead(21, 234, 'Kai', '0421 000 015', { stocks: ['1300'], leadAt: now - 3 * DAY, updatedAt: now - 2 * DAY });
+  conv(234, 21, 'Kai Test', '+61421000015');
+  const q = mid;
+  msg(234, 'IN', 'Do you accept a trade in on the Noah?', 2 * DAY);
+  const own = 'Yes, we accept trade-ins. Please send us a few photos of your vehicle and its odometer reading.';
+  db.insertDraft({ itemKey: 'c:234', anchorKey: `m:${q}`, situation: 'trade_in', reply: `Hi Kai,\n${own}\n\nRegards,\nTeam Carbarn`, status: 'ready', checks: [] });
+  msg(234, 'OUT', `Hi Kai,\n${own}\n\nRegards,\nTeam Carbarn`, 2 * DAY - 10 * MIN);
+
+  lead(22, 235, 'Lou', '0421 000 016', { stocks: ['1300'] });
+  conv(235, 22, 'Lou Test', '+61421000016');
+  msg(235, 'IN', 'Hi do you do trade ins? I have a Mazda 3 to trade', 5 * MIN);
+
+  const rows = practice.recentPractice({ now });
+  assert.ok(rows.every((r) => /^c:\d+$/.test(r.itemKey)), 'dashboard conversations only');
+  assert.ok(rows.some((r) => r.itemKey === 'c:233'));
+  assert.ok(!rows.some((r) => r.itemKey === 'c:234'), 'Wheelman does not learn from its own unchanged text');
+
+  const asked = ask(235);
+  assert.match(asked, /=== WHAT OUR TEAM REALLY SENT FOR SIMILAR MESSAGES ===\nRecent replies our team sent to other customers/);
+  const section = asked.split('=== WHAT OUR TEAM REALLY SENT FOR SIMILAR MESSAGES ===')[1].split('\n===')[0];
+  assert.match(section, /We sent: Hi \{\{NAME\}\}, \/ Yes, we take trade-ins\. Please send the rego, the kilometres and a few photos of your car\./);
+  assert.match(section, /We could offer around \[amount\] for it/);
+  assert.match(section, /More on the Noah here: \/ \[vehicle page link\]/);
+  for (const other of ['Jude', 'Casey', '7,500', '7500', NOAH, 'Regards'])
+    assert.ok(!section.includes(other), `carried over from the other customer: ${other}`);
+
+  // A label copied into the reply is rejected.
+  const copied = 'Hi {{NAME}},\nYes, we take trade-ins. More on the Noah here: [vehicle page link]';
+  const bad = await draft(235, copied, copied);
+  assert.ok(fails(bad.d).includes('label'), JSON.stringify(bad.d.checks));
+});
+
+test('a reply that is only the standard block teaches nothing, and the block is shown as a label', async () => {
+  const practice = await import('../src/practice.js');
+  lead(23, 236, 'Mae', '0421 000 017', { stocks: ['1300'], leadAt: now - 2 * DAY, updatedAt: now - DAY });
+  conv(236, 23, 'Mae Test', '+61421000017');
+  msg(236, 'IN', 'What are your opening hours on Sunday?', DAY);
+  msg(236, 'OUT', `Hello,\n\n${block(NOAH)}`, DAY - 5 * MIN);
+  lead(24, 237, 'Ned', '0421 000 018', { stocks: ['1300'], leadAt: now - 2 * DAY, updatedAt: now - DAY });
+  conv(237, 24, 'Ned Test', '+61421000018');
+  msg(237, 'IN', 'Are you open on Sunday? Where do I find you?', DAY);
+  msg(237, 'OUT', `Hi Ned,\nYes, we are open on Sundays. You are welcome to drop in.\n\n${block(NOAH, `${NOAH}#inspection=onsite`)}`, DAY - 5 * MIN);
+
+  // A name the record does not have, tacked onto a chatty line, is masked; an address is left alone.
+  lead(25, 238, 'Pat', '0421 000 019', { stocks: ['1300'], leadAt: now - 2 * DAY, updatedAt: now - DAY });
+  conv(238, 25, 'Pat Test', '+61421000019');
+  msg(238, 'IN', 'Can I drop in around noon to drop off the paperwork?', DAY);
+  msg(238, 'OUT', 'No worries Zed\nWe are at Unit D3, 128 Frances Street', DAY - 5 * MIN);
+
+  const rows = practice.recentPractice({ now });
+  assert.ok(!rows.some((r) => r.itemKey === 'c:236'));
+  const ned = rows.find((r) => r.itemKey === 'c:237');
+  assert.equal(ned.reply, 'Hi {{NAME}},\nYes, we are open on Sundays. You are welcome to drop in.\n[then our standard address block]');
+  assert.equal(ned.hadBlock, true);
+  assert.equal(rows.find((r) => r.itemKey === 'c:238').reply, 'No worries {{NAME}}\nWe are at Unit D3, 128 Frances Street');
+});
+
+test('a customer who asked to inspect and then says he is far away gets the online link', async () => {
+  lead(26, 239, 'Quin', '0421 000 020', { stocks: ['1300'] });
+  conv(239, 26, 'Quin Test', '+61421000020');
+  msg(239, 'IN', 'When is a good day to inspect the Noah?', 30 * MIN);
+  msg(239, 'OUT', `You are welcome any day. Please book a time here: ${NOAH}#inspection=onsite`, 25 * MIN);
+  msg(239, 'IN', "Too far away, I'm in Brisbane", 5 * MIN);
+  const plan = promptModule.inspectionPlan(item(239));
+  assert.equal(plan.kind, 'online');
+  assert.equal(plan.must, true);
+
+  const without = 'We can arrange transport to Brisbane. Would you like an online video inspection?';
+  const bad = await draft(239, without, without);
+  assert.ok(fails(bad.d).includes('inspection-link'), JSON.stringify(bad.d.checks));
+  const good = await draft(239, `No worries. We can also do an online video inspection. You can choose a time here:\n${NOAH}#inspection=online`);
+  assert.deepEqual(fails(good.d), [], JSON.stringify(good.d.checks));
+});
+
+test('someone who writes to a staff member by name is not a brand-new enquiry, so gets no address block', async () => {
+  // voice/people.example.json names Alex and Sam as the two voices.
+  lead(27, 240, 'Rory', '0421 000 021');
+  conv(240, 27, 'Rory Test', '+61421000021');
+  msg(240, 'IN', 'Hi Sam, sorry can we change the appointment to 10:45 tomorrow instead?', 5 * MIN);
+  const it = item(240);
+  assert.equal(it.isFirstReply, true);
+  assert.equal(it.isNewEnquiry, false);
+  const { d, asked } = await draft(240, 'No worries, {{NAME}}. See you tomorrow at 10:45.');
+  assert.ok(!/=== STANDARD FIRST REPLY ===/.test(asked));
+  assert.equal(d.reply, 'No worries, Rory. See you tomorrow at 10:45.\n\nRegards,\nTeam Carbarn');
+});
+
+test('a short reply that matches an earlier one is only noted, and a car trim name is not taken for an address', async () => {
+  const { checkDraft } = await import('../src/checks.js');
+  const { redact } = await import('../src/redact.js');
+  const short = checkDraft({ reply: 'Hi Ann,\nYour inspection is confirmed. See you on Saturday at 10 am.', body: 'Hi {{NAME}},\nYour inspection is confirmed. See you on Saturday at 10 am.', examples: ['Hi {{NAME}},\nYour inspection is confirmed. See you on Saturday at 10 am.'], customerText: 'Saturday 10 am' });
+  assert.ok(short.some((c) => c.level === 'warn' && c.code === 'copied'));
+  assert.ok(!short.some((c) => c.level === 'fail'));
+  const long = 'Hi {{NAME}},\nUnfortunately that van has been sold. We have two similar vans in stock at the moment and you are welcome to come and see them any day this week.';
+  assert.ok(checkDraft({ reply: long, body: long, examples: [long] }).some((c) => c.level === 'fail' && c.code === 'copied'));
+
+  assert.equal(redact('Is the 2019 Nissan Serena Highway Star V still available?', {}), 'Is the 2019 Nissan Serena Highway Star V still available?');
+  assert.equal(redact('I live at 12 Great Western Highway', {}), 'I live at [ADDRESS]');
 });
