@@ -54,6 +54,29 @@ export function parseDashboardTime(s) {
   return guess;
 }
 
+/**
+ * A calendar date from the dashboard, as "YYYY-MM-DD", or null.
+ * The dashboard writes dates three ways: "2026-09-24", "24/09/2026" and a full timestamp.
+ */
+export function parseDashboardDate(s) {
+  if (s === null || s === undefined || s === '') return null;
+  const str = String(s).trim();
+  let m = str.match(/^(\d{4})-(\d\d)-(\d\d)$/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  const t = parseDashboardTime(str);
+  return t ? sydneyDay(t) : null;
+}
+
+/** "24 Sep 2026" from "2026-09-24". */
+export function formatDay(day) {
+  const m = String(day || '').match(/^(\d{4})-(\d\d)-(\d\d)$/);
+  if (!m) return '';
+  const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${Number(m[3])} ${names[Number(m[2]) - 1]} ${m[1]}`;
+}
+
 /** "Mon 29 Sep, 6:37 pm" in Sydney time. */
 export function formatSydney(epochMs) {
   if (!epochMs) return '';

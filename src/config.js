@@ -65,7 +65,11 @@ export const config = {
   port: num(env.PORT, 3210),
   syncMinutes: num(env.SYNC_MINUTES, 3),
   draftMaxAgeHours: num(env.DRAFT_MAX_AGE_HOURS, 72),
+  // A message older than this still shows under Waiting, but no suggestion is written until asked.
+  autoDraftMaxAgeHours: num(env.AUTO_DRAFT_MAX_AGE_HOURS, 24),
   signOff: (env.SIGN_OFF ?? 'Regards,\\nTeam Carbarn').replace(/\\n/g, '\n').trim(),
+  // The name on the last lines of the standard first reply (voice/first-reply.md).
+  firstReplySender: (env.FIRST_REPLY_SENDER || 'Team Carbarn').trim(),
 };
 
 export function missingSettings() {

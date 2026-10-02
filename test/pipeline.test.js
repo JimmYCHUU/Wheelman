@@ -112,7 +112,7 @@ test('the portal stock number is matched to the right car', async () => {
 test('customer details never reach the AI service, and cost figures are never sent', async () => {
   const { items, drafter } = await load();
   seen.length = 0;
-  script = [{ status: 200, reply: { reply: 'Hi {{NAME}},\nYes, the Noah is still available at $28,900.\nYou can book an inspection here:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159#inspection=onsite', needs_human: [], facts_used: ['Available now', 'Price $28,900'], next_step: 'book inspection', hold: false } }];
+  script = [{ status: 200, reply: { reply: 'Hi {{NAME}},\nYes, the Noah is still available at $28,900.\nYou can see more details here:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159', needs_human: [], facts_used: ['Available now', 'Price $28,900'], next_step: 'come and see it', hold: false } }];
   const d = await drafter.draftFor(items.buildItem({ conversationId: 201 }));
 
   const sent = JSON.stringify(seen[0].body);
@@ -123,8 +123,27 @@ test('customer details never reach the AI service, and cost figures are never se
   assert.equal(seen[0].auth, 'Bearer test-key');
 
   assert.equal(d.status, 'ready');
-  assert.equal(d.reply, 'Hi Priya,\nYes, the Noah is still available at $28,900.\nYou can book an inspection here:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159#inspection=onsite\n\nRegards,\nTeam Carbarn');
+  // A brand-new enquiry: the team's standard block follows the answer. The car's page link the AI
+  // typed is dropped, because the block gives it.
+  assert.equal(d.reply, 'Hi Priya,\nYes, the Noah is still available at $28,900.\n\n'
+    + '📍Location: Unit D3, 128–130 Frances Street, Lidcombe NSW 2141.\n\n'
+    + '📍Google Maps: https://maps.app.goo.gl/EQfdkTE7FYDF4DTT8\n\n'
+    + '🕗Hours: 8 AM – 5 PM. Open 7 days. Please call or text before visiting.\n\n'
+    + 'Check More Details:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159\n\n'
+    + 'Team Carbarn\n📞 0423 840 130');
   assert.ok(d.checks.every((c) => c.level === 'ok'), JSON.stringify(d.checks));
+  // She did not ask to see the car, so no booking link is supplied, and one in a reply is not accepted.
+  assert.ok(!sent.includes('#inspection='), 'booking links are only supplied when the customer asks to see the car');
+});
+
+test('a booking link nobody asked for is rejected', async () => {
+  const { items, drafter } = await load();
+  script = [
+    { status: 200, reply: { reply: 'Hi {{NAME}},\nYes, it is available. Book an inspection here:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159#inspection=onsite', needs_human: [], facts_used: [], hold: false } },
+    { status: 200, reply: { reply: 'Hi {{NAME}},\nYes, it is available. Book an inspection here:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159#inspection=onsite', needs_human: [], facts_used: [], hold: false } },
+  ];
+  const d = await drafter.draftFor(items.buildItem({ conversationId: 201 }), { save: false });
+  assert.ok(d.checks.some((c) => c.level === 'fail' && c.code === 'link'), JSON.stringify(d.checks));
 });
 
 test('an invented price is rejected and the agent tries once more', async () => {
@@ -327,27 +346,47 @@ test("marketplace conversations never teach Wheelman", async () => {
 });
 
 test("what was learned is offered as an example and as a correction for a similar message", async () => {
+  const { db } = await load();
   const learn = await import("../src/learn.js");
   const q = { situations: ["availability"], primary: "availability", text: "Is the Hiace still for sale?", firstReply: true, excludeItemKey: null };
-  const ex = learn.learnedExamples(q, 2);
+  const ex = learn.learnedExamples(q, 4);
   assert.ok(ex.length >= 1);
   assert.equal(ex[0].learned, true);
-  const fixes = learn.corrections(q, 2);
-  assert.ok(fixes.length >= 1);
-  assert.match(fixes[0].drafted, /wonderful vans/);
-  assert.match(fixes[0].used, /similar one/);
+  const fixes = learn.corrections(q, 4);
+  assert.ok(fixes.some((f) => /wonderful vans/.test(f.drafted) && /similar one/.test(f.used)), JSON.stringify(fixes));
   // The same conversation is held out, so a replay test cannot see its own answer.
-  assert.equal(learn.learnedExamples({ ...q, excludeItemKey: "c:205" }, 2).length, 0);
+  const from205 = new Set(db.allLearned().filter((r) => r.item_key === "c:205").map((r) => `learned-${r.draft_id}`));
+  assert.ok(from205.size >= 1);
+  assert.ok(learn.learnedExamples({ ...q, excludeItemKey: "c:205" }, 4).every((e) => !from205.has(e.id)));
 });
 
 test("marking a copied suggestion not usable makes Wheelman forget it", async () => {
   const { items, db } = await load();
   const learn = await import("../src/learn.js");
-  const item = items.buildItem({ conversationId: 205 });
-  const id = db.insertDraft({ itemKey: item.itemKey, anchorKey: item.anchorKey, situation: "availability", reply: "Hi Ken,\nIt has been sold.", status: "ready", checks: [] });
-  assert.equal(learn.onCopied(item, id, "Hi Ken,\nIt has been sold, sorry about that.").learned, true);
+  // A different customer from the one above: there is one lesson per customer message, so a
+  // second lesson for the same message would replace the first.
+  const item = items.buildItem({ conversationId: 206 });
+  const id = db.insertDraft({ itemKey: item.itemKey, anchorKey: item.anchorKey, situation: "price_negotiation", reply: "Hi Max,\nThe Noah is priced as advertised.", status: "ready", checks: [] });
+  assert.equal(learn.onCopied(item, id, "Hi Max,\nThe Noah is priced as advertised, sorry about that.").learned, true);
   learn.onRated(id, "bad");
   assert.equal(db.allLearned().some((r) => r.draft_id === id), false);
+});
+
+test("a suggestion used word for word is not kept as an example, and there is one lesson per customer message", async () => {
+  const { items, db } = await load();
+  const learn = await import("../src/learn.js");
+  const item = items.buildItem({ conversationId: 206 });
+  const a = db.insertDraft({ itemKey: item.itemKey, anchorKey: item.anchorKey, situation: "price_negotiation", reply: "Hi Max,\nThe price is as advertised.\n\nRegards,\nTeam Carbarn", status: "ready", checks: [] });
+  const unchanged = learn.onCopied(item, a, "Hi Max,\nThe price is as advertised.\n\nRegards,\nTeam Carbarn");
+  assert.equal(unchanged.learned, false);
+  assert.match(unchanged.why, /unchanged/);
+
+  assert.equal(learn.onCopied(item, a, "Hi Max,\nThe price is as advertised and includes six months of registration.").learned, true);
+  const b = db.insertDraft({ itemKey: item.itemKey, anchorKey: item.anchorKey, situation: "price_negotiation", reply: "Hi Max,\nSecond attempt.", status: "ready", checks: [] });
+  assert.equal(learn.onCopied(item, b, "Hi Max,\nThe advertised price already includes the roadworthy certificate.").learned, true);
+  const rows = db.allLearned().filter((r) => r.item_key === item.itemKey);
+  assert.deepEqual(rows.map((r) => r.draft_id), [b], "the newer lesson replaces the older one for the same message");
+  db.deleteLearned(b);
 });
 
 test("the learned replies and corrections reach the AI request", async () => {

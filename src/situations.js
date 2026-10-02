@@ -30,9 +30,11 @@ export const SITUATIONS = {
     label: 'Delivery or interstate buyer',
     re: /(deliver|interstate|transport|shipping|ship (it|to)|freight|sight unseen|site unseen|\b(qld|vic|tas|queensland|victoria|tasmania|western australia|south australia|northern territory|brisbane|melbourne|perth|adelaide|hobart|darwin|canberra|gold coast|sunshine coast|cairns|townsville|toowoomba|geelong)\b|\b(i'?m|we'?re|i am|we are|live) (in|from) (wa|sa|nt|act)\b)/i,
   },
+  // Only a clear wish to see or drive the car. Opening-hours questions belong to location_hours,
+  // and "what time can I pick it up" or "booking reference" are not inspection requests.
   inspection_booking: {
     label: 'Inspection or test drive',
-    re: /(inspect|test[\s-]?drive|come (in|and|to|down|by|over|see|look)|have a look|take a look|view(ing)?\b|see (it|the car|the van|the vehicle)|appointment|\bbook\b|booking|pop in|drop (by|in)|visit|good (day|time) to|what time|are you open|open (today|tomorrow|on|this|sat|sun))/i,
+    re: /(\binspect|test[\s-]?drive|\b(come|pop|drop|swing)\b.{0,14}\b(see|look|view|check)\b|\b(have|take) a look\b|\b(see|view|look at|check out) (it|the (car|van|vehicle|bus|ute|truck|one|motorhome|camper\w*))\b|\bin person\b|\bviewing\b|\bbook (an? |in an? )?(inspection|viewing|test|time to (see|view|look))|\b(can|could|may) (i|we) (come|visit|pop|drop)\b(?!.{0,25}\b(pick|collect|pay|grab)\b)|\b(like|love|want|wanting|hoping|keen|planning) to (come (in|down|by|over|past)?( and)? ?(see|look|view)?|visit|see it|view it)\b|\b(pop|drop|swing) (in|by|past)\b|\bgood (day|time) to (come|see|view|inspect|look|visit))/i,
   },
   history_kms: {
     label: 'Kilometres, history and condition',
@@ -60,7 +62,7 @@ export const SITUATIONS = {
   },
   location_hours: {
     label: 'Location and opening hours',
-    re: /(where (are|r) (you|u)|where ?abouts?|whereabouts|located|location|your address|what('s| is) (the|your) address|opening hours|what (hours|time) (are|do) you|which suburb)/i,
+    re: /(where (are|r) (you|u)|where ?abouts?|whereabouts|located|location|your address|what('s| is) (the|your) address|opening hours|what (hours|time) (are|do) you|which suburb|are you (guys )?open|open (today|tomorrow|on|this|sat|sun)|when (are|do) you (open|close))/i,
   },
   availability: {
     label: 'Is it still available',
@@ -72,11 +74,12 @@ const PRIORITY = ['complaint', 'after_sale', 'price_negotiation', 'trade_in', 'f
   'inspection_booking', 'history_kms', 'rego_roadworthy', 'warranty', 'photos_video', 'import_sourcing', 'vehicle_details',
   'location_hours', 'availability'];
 
-const SOLD_STATUSES = /^(CAR_SOLD|DEPOSIT_RECEIVED|SOLD|DELIVERED)$/i;
+/** Lead statuses that mean the customer has bought or paid a deposit. */
+export const BUYER_STATUSES = /^(CAR_SOLD|DEPOSIT_RECEIVED|CLOSED_WON)$/i;
 
 /**
  * @param {string} text   The customer's pending words (their own text only).
- * @param {object} extra  { events: string[], leadStatus: string }
+ * @param {object} extra  { events: string[], leadStatus: string, buyer: boolean }
  * @returns {{ primary: string, all: string[], label: string }}
  */
 export function classify(text, extra = {}) {
@@ -91,8 +94,14 @@ export function classify(text, extra = {}) {
   if (/online purchase steps/i.test(events)) found.add('deposit_hold');
   if (/call back/i.test(events)) found.add('general');
 
-  // "after the sale" only counts when the lead really has bought or paid a deposit.
-  if (found.has('after_sale') && !SOLD_STATUSES.test(String(extra.leadStatus || ''))) {
+  if (extra.buyer) {
+    // Someone who has already bought is not asking to inspect the car or whether it is available.
+    found.delete('inspection_booking');
+    found.delete('availability');
+    found.delete('general');
+    found.add('after_sale');
+  } else if (found.has('after_sale') && !BUYER_STATUSES.test(String(extra.leadStatus || ''))) {
+    // "after the sale" only counts when the lead really has bought or paid a deposit.
     if (found.size > 1) found.delete('after_sale');
   }
   if (!found.size) found.add('general');
@@ -114,13 +123,24 @@ const FAR_AWAY = new RegExp([
 ].join('|'), 'i');
 
 /**
- * True when the customer has said they live far from Sydney or cannot visit, or their lead
- * record is in another state. Used to choose between the two inspection booking links.
+ * Whether the customer is probably far from Sydney, and how we know.
+ * source 'said': they wrote it themselves, so a reply may act on it.
+ * source 'record': only their lead record says another state. That is a hint for which link to
+ * offer; a reply must never say or imply where the customer lives on that basis.
  */
-export function livesFarAway(customerText, leadState = '') {
+export function farAway(customerText, leadState = '') {
+  if (FAR_AWAY.test(String(customerText || ''))) return { far: true, source: 'said' };
   const state = String(leadState || '').trim();
-  if (state && !/^(nsw|new south wales)$/i.test(state)) return true;
-  return FAR_AWAY.test(String(customerText || ''));
+  if (state && !/^(nsw|new south wales)$/i.test(state)) return { far: true, source: 'record' };
+  return { far: false, source: null };
 }
+
+/** True when the customer has said they live far away or cannot visit, or their record is in another state. */
+export function livesFarAway(customerText, leadState = '') {
+  return farAway(customerText, leadState).far;
+}
+
+/** States and cities away from Sydney. A reply must not name one unless the customer did first. */
+export const PLACES = /\b(queensland|victoria|tasmania|western australia|south australia|northern territory|brisbane|melbourne|perth|adelaide|hobart|darwin|canberra|gold coast|sunshine coast|cairns|townsville|toowoomba|geelong|newcastle|coffs harbour|port macquarie|byron bay|lismore|tamworth|dubbo|wagga|albury|bathurst|armidale|broken hill)\b/i;
 
 export const labelFor = (key) => SITUATIONS[key]?.label || 'General enquiry';

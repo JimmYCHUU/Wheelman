@@ -26,18 +26,32 @@ const ACK_WORDS = new Set(('ok okay k kk thanks thank you thx ty cheers great pe
   + 'see ya then soon there tomorrow much so very heaps alot a lot again mate bro brother buddy sir team legend champ '
   + 'appreciate appreciated appreciate it for the info information update reply response help getting back to me us '
   + 'carbarn have had day night weekend one too and you\'re youre welcome bye talk later '
-  + 'understood done on our my way omw u ur ya this morning afternoon arvo evening tonight today shortly in bit at around about catch chat speak').split(' '));
+  + 'understood done on our my way omw u ur ya this morning afternoon arvo evening tonight today shortly in bit at around about catch chat speak '
+  + 'wow yay sweet alright righto brilliant wonderful beauty ta oh ah').split(' '));
 
 // "Thanks <staff name>" is still only a thank-you. Staff names come from voice/people.json.
 let ackWithNames = null;
 const ackWords = () => (ackWithNames ||= new Set([...ACK_WORDS, ...loadPeople().words]));
 
+// Happy noises that need no answer: "Can't wait", "I'm so excited", "Hahaha".
+const ACK_PHRASES = [
+  /\bcan'?t wait\b/g,
+  /\blooking forward( to (it|that|this|seeing you|meeting you))?\b/g,
+  /\b(i'?m|i am|we'?re|we are) (so |very |really |super |pretty )*(excited|stoked|happy|glad|keen|pumped)\b/g,
+  /\b(so |very |really |super )+(excited|stoked|happy|glad)\b/g,
+];
+const LAUGHTER = /\b(a?(ha){2,}h?|he(he)+|lo+l|lmao|rofl)\b/g;
+
 /** A short "thanks / ok / see you" that does not need a reply. */
 export function isAcknowledgement(body) {
   const raw = String(body || '');
   if (/\?/.test(raw)) return false;
-  const t = squash(stripEmoji(raw)).toLowerCase().replace(/[^a-z' ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  let t = squash(stripEmoji(raw)).toLowerCase().replace(/[’‘`]/g, "'").replace(/[^a-z' ]+/g, ' ').replace(/\s+/g, ' ').trim();
   if (!t) return hasEmoji(raw); // emoji only, e.g. a thumbs up
+  if (t.split(' ').length > 12) return false;
+  for (const re of ACK_PHRASES) t = t.replace(re, ' ');
+  t = t.replace(LAUGHTER, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return true; // nothing left but the happy noise
   const words = t.split(' ');
   if (words.length > 9) return false;
   const known = ackWords();

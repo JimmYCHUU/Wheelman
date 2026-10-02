@@ -5,6 +5,7 @@ import { config } from './config.js';
 import { restore, leftoverPlaceholders, NAME_TOKEN } from './redact.js';
 import { findUrls, hasEmoji, wordCount, stripEmoji, similarity } from './text.js';
 import { sydneyHour } from './time.js';
+import { promiseChecks } from './promises.js';
 
 export const MARKERS = ['[PRICE?]', '[TRADE-IN VALUE?]', '[DELIVERY COST?]', '[DATE?]', '[CHECK?]'];
 const MARKER_RE = /\[(PRICE|TRADE-IN VALUE|DELIVERY COST|DATE|CHECK)\?\]/g;
@@ -202,8 +203,10 @@ function figureProblems(replyBody, trustedText, customerText = '', policyText = 
  *   customerText what the customer wrote: times and dates may be quoted, dollar amounts may not
  *   instruction  staff instruction, whose figures are allowed
  *   channel      'sms' or 'marketplace' (a chat, where replies are much shorter)
+ *   said         the conversation as [{ who, text, at }]; when given, promises, days and places are checked
+ *   now          when the reply would be sent
  */
-export function checkDraft({ reply, body, needsHuman = [], allowedText = '', policyText = '', customerText = '', instruction = '', situation = null, hold = false, examples = [], inConversation = false, channel = 'sms' }) {
+export function checkDraft({ reply, body, needsHuman = [], allowedText = '', policyText = '', customerText = '', instruction = '', situation = null, hold = false, examples = [], inConversation = false, channel = 'sms', said = null, now = Date.now() }) {
   const results = [];
   const add = (level, code, message, tokens = []) => results.push({ level, code, message, tokens });
   const allowed = `${allowedText}\n${instruction}\n${config.site.phone}\n${config.signOff}`;
@@ -255,6 +258,8 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
     add('input', 'price', 'This talks about price. Confirm the figure before sending.');
   }
 
+  if (said) results.push(...promiseChecks({ body, now, said, instruction, knownText: `${allowedText}\n${policyText}` }));
+
   if (!results.length) add('ok', 'ok', 'Figures and links match your records.');
   return results;
 }
@@ -267,7 +272,10 @@ export function retryNote(checks) {
   if (!fails.length) return '';
   return 'Your previous draft was rejected for these reasons:\n'
     + fails.map((c) => `- ${c.message}`).join('\n')
-    + '\nWrite it again, in your own words for this customer. Use only figures and links that appear in the supplied material. A dollar amount that only the customer mentioned is their figure, not ours: do not state or accept it. Where a figure is not supplied, use the matching marker such as [PRICE?], [DELIVERY COST?], [DATE?] or [CHECK?].';
+    + '\nWrite it again, in your own words for this customer. Use only figures and links that appear in the supplied material. A dollar amount that only the customer mentioned is their figure, not ours: do not state or accept it. Where a figure is not supplied, use the matching marker such as [PRICE?], [DELIVERY COST?], [DATE?] or [CHECK?].'
+    + (fails.some((c) => TIME_CODES.has(c.code)) ? '\nDo not swap one day or time for another. Where the day or time of something we will do is not given by our staff, write "shortly" or use [DATE?]. Where nobody on our side agreed to do something, say we will check and come back to them.' : '');
 }
+
+const TIME_CODES = new Set(['time-passed', 'day-mismatch', 'promise']);
 
 export { NAME_TOKEN };
