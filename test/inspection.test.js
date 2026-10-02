@@ -101,10 +101,25 @@ test('a customer who says they live far away is given the online video inspectio
   assert.ok(!d.checks.some((c) => c.level === 'fail'), JSON.stringify(d.checks));
 });
 
-test('a customer whose record is in another state also gets the online link, and the wrong link is pointed out', async () => {
+test('a record in another state is only a hint: both links are offered and the reply never says where the customer lives', async () => {
   const { inspectionPlan } = await import('../src/prompt.js');
-  assert.equal(inspectionPlan(await item(103)).kind, 'online');
-  const { d } = await draft(103, `Hi {{NAME}},\nYou can book an inspection here:\n${ONSITE}`);
+  const plan = inspectionPlan(await item(103));
+  assert.equal(plan.kind, 'onsite');
+  assert.deepEqual(plan.urls, [ONSITE, ONLINE]);
+  const { d, asked } = await draft(103, `Hi {{NAME}},\nYou are welcome to inspect it. You can book a time here:\n${ONSITE}\nIf you cannot make it to Lidcombe, we can do a video call instead:\n${ONLINE}`);
+  assert.match(asked, /Do not say or imply where the customer lives/);
+  assert.ok(!/CUSTOMER LOCATION|QLD|Queensland/.test(asked), 'the state on the record is not given to the AI');
+  assert.equal(note(d), undefined);
+  assert.ok(!d.checks.some((c) => c.level === 'fail'), JSON.stringify(d.checks));
+});
+
+test('a customer who said they are far away, but is given the in-person link, is pointed out', async () => {
+  const { draftFor } = await import('../src/drafter.js');
+  const wrong = { reply: `Hi {{NAME}},\nYou can book an inspection here:\n${ONSITE}`, needs_human: [], facts_used: [], hold: false };
+  script = [wrong, wrong]; // the AI makes the same mistake on its second attempt
+  const d = await draftFor(await item(102), { save: false, now });
+  // The in-person link was not supplied for this customer, so it is not accepted at all.
+  assert.ok(d.checks.some((c) => c.code === 'link' && c.level === 'fail'), JSON.stringify(d.checks));
   assert.match(note(d).message, /far away.*in-person booking link/);
 });
 
@@ -123,8 +138,19 @@ test('nothing about inspections is added when the customer did not ask to see th
   assert.equal(inspectionPlan(it).lines.length, 0);
   const p = buildPrompt(it, { now }).user;
   assert.ok(!p.includes('=== INSPECTION ==='));
-  // Both links are still in the vehicle facts, for when the reply offers a next step.
-  assert.ok(p.includes(ONSITE) && p.includes(ONLINE));
+  // No booking link is supplied at all, so one cannot be offered unasked.
+  assert.ok(!p.includes('#inspection='));
+  assert.ok(p.includes(PAGE), 'the vehicle page link is still supplied');
+});
+
+test('pickup times, opening hours and booking references are not inspection requests', async () => {
+  const { classify } = await import('../src/situations.js');
+  const wants = (t) => classify(t).all.includes('inspection_booking');
+  for (const t of ['What time can I pick it up tomorrow?', 'My booking reference is 12345', 'Are you open on Sunday?', 'I had a look at the review online', 'I will come to pick it up at 3', 'Can I come and pay the balance on Friday?', 'I see the price has changed'])
+    assert.equal(wants(t), false, t);
+  for (const t of ['Can I inspect it?', 'Could I test drive it on Saturday', 'Can I come and have a look this weekend?', 'I would like to come and see it', 'Can we come down tomorrow?', 'Is it possible to see the car in person', 'When is a good time to come and view it?', 'Can I book an inspection'])
+    assert.equal(wants(t), true, t);
+  assert.ok(classify('Are you open on Sunday?').all.includes('location_hours'));
 });
 
 test('how "far away" is recognised', async () => {

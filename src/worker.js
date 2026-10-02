@@ -5,9 +5,9 @@ import { config, missingSettings } from './config.js';
 import { syncAll, syncMarketplace } from './sync.js';
 import { listItems, itemFromKey } from './items.js';
 import { draftFor } from './drafter.js';
-import { latestDraft, isDismissed, draftsAwaitingOutcome, recordOutcome, setMeta, getMeta, openDb, mpDraftsLastDay } from './db.js';
+import { latestDraft, isDismissed, draftsAwaitingOutcome, recordOutcome, markSuperseded, setMeta, getMeta, openDb, mpDraftsLastDay } from './db.js';
 import { providers, usage, modelStatus, lastModel } from './llm.js';
-import { learnFrom, canLearnFrom } from './learn.js';
+import { learnFrom, canLearnFrom, comparable } from './learn.js';
 import { refreshVoiceBankIfStale } from './voicebank.js';
 import { similarity } from './text.js';
 
@@ -74,20 +74,44 @@ export async function runMarketplaceSync() {
  */
 export function updateOutcomes() {
   let n = 0;
+  // Several suggestions may exist for one customer message (rewrites). Group them, newest first.
+  const groups = new Map();
   for (const d of draftsAwaitingOutcome()) {
     if (!canLearnFrom(d.item_key)) continue;
-    const item = itemFromKey(d.item_key);
+    const k = `${d.item_key}|${d.anchor_key}`;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(d);
+  }
+
+  for (const drafts of groups.values()) {
+    const item = itemFromKey(drafts[0].item_key);
     if (!item) continue;
-    const at = item.timeline.findIndex((e) => e.key === d.anchor_key);
+    const at = item.timeline.findIndex((e) => e.key === drafts[0].anchor_key);
     if (at === -1) continue;
-    const sent = item.timeline.slice(at + 1).find((e) => e.who === 'us' && !e.internal);
-    if (!sent) continue;
-    // Compare against everything we sent in that burst, since replies are often split over two texts.
-    const burst = item.timeline.slice(at + 1).filter((e) => e.who === 'us' && !e.internal && e.at - sent.at < 15 * 60 * 1000).map((e) => e.text).join('\n');
-    recordOutcome(d.id, { sentText: burst, sentBy: sent.by || 'phone', sentAt: sent.at, similarity: similarity(d.reply, burst) });
-    // The reply that was really sent is the best teacher. Dashboard conversations only.
-    try { learnFrom(item, d, burst, 'sent', { at: sent.at }); } catch { /* learning must never stop the sync */ }
-    n++;
+    const after = item.timeline.slice(at + 1).filter((e) => !e.internal);
+    if (!after.length) continue;
+
+    // The customer wrote again before anyone replied. Whatever we send next answers the newer
+    // message, so it says nothing about these suggestions.
+    if (after[0].who !== 'us') { for (const d of drafts) markSuperseded(d.id); continue; }
+
+    // Our reply: the texts we sent in a row, up to the customer's next message. Replies are
+    // often split over two or three texts sent within a few minutes.
+    const burst = [];
+    for (const e of after) {
+      if (e.who !== 'us' || e.at - after[0].at > 15 * 60 * 1000) break;
+      burst.push(e);
+    }
+    const sentText = burst.map((e) => e.text).join('\n');
+    const sent = burst[0];
+    for (const d of drafts) {
+      recordOutcome(d.id, { sentText, sentBy: sent.by || 'phone', sentAt: sent.at, similarity: similarity(comparable(d.reply), comparable(sentText)) });
+      n++;
+    }
+    // The reply that was really sent is the best teacher: one lesson per customer message, taken
+    // from the suggestion that was copied, or else the newest. Dashboard conversations only.
+    const teacher = drafts.find((d) => d.copied_at) || drafts[0];
+    try { learnFrom(item, teacher, sentText, 'sent', { at: sent.at }); } catch { /* learning must never stop the sync */ }
   }
   return n;
 }
