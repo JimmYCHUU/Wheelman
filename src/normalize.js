@@ -48,7 +48,7 @@ export function normalizeLead(raw) {
     state,
     leadAt: parseDashboardTime(raw.leadDate),
     updatedAt: parseDashboardTime(raw.updatedAt) ?? parseDashboardTime(raw.createdAt),
-    stocks: (raw.stocks || []).map(String),
+    stocks: (raw.stocks || []).filter((s) => s !== null && s !== undefined).map((s) => String(s).trim()).filter((s) => s && !/^null$/i.test(s)),
     inquiries: (raw.inquiries || []).map((i) => ({
       id: i.id,
       type: clean(i.inquiryType),

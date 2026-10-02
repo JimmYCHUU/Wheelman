@@ -1,7 +1,7 @@
 # Wheelman 🛞
 
 ![Node.js 24](https://img.shields.io/badge/node-24-339933)
-![Tests](https://img.shields.io/badge/tests-135%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-139%20passing-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-lightgrey)
 ![Free AI models](https://img.shields.io/badge/AI-free%20models%20only-blue)
 ![Never sends](https://img.shields.io/badge/sending-never%2C%20copy%20only-orange)
@@ -558,9 +558,10 @@ Git never sees any of it.
 npm.cmd test
 ```
 
-135 tests, all on invented data, against a stand-in AI service and a stand-in content engine
+139 tests, all on invented data, against a stand-in AI service and a stand-in content engine
 on this computer: who counts as waiting and who does not, stock numbers matched to the right
-car, that no customer detail and no cost figure reaches the AI request, an invented price
+car however a portal writes them (a year in front, a portal code, upper or lower case), that
+no customer detail and no cost figure reaches the AI request, an invented price
 rejected and retried, a customer's own price never accepted as ours, a staff figure in a
 rewrite accepted, nothing drafted for an opt-out, a sold car bringing a similar one into the
 request, a message that tries to give orders passed as data, busy models and the daily cap,
@@ -620,7 +621,7 @@ wheelman/
 │                                      build-voice · fetch-website · import-history
 │                                      check-private
 └── test/                              core · pipeline · greeting · inspection · marketplace
-                                       quality · scenarios
+                                       quality · scenarios · stock
 ```
 
 ## Status

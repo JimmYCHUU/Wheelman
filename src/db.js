@@ -388,8 +388,12 @@ export function getMessages(conversationId) {
 }
 
 export function getVehicleByStock(stockNo) {
-  const r = openDb().prepare('SELECT data_json FROM vehicles WHERE stock_no = ? ORDER BY updated_at DESC, id DESC LIMIT 1').get(String(stockNo));
-  return r ? JSON.parse(r.data_json) : null;
+  // Stock numbers with a letter are written both ways ("T07", "t07"), so each spelling is tried.
+  const s = String(stockNo);
+  const find = openDb().prepare('SELECT data_json FROM vehicles WHERE stock_no = ? ORDER BY updated_at DESC, id DESC LIMIT 1');
+  const spellings = /[A-Za-z]/.test(s) ? [...new Set([s, s.toUpperCase(), s.toLowerCase()])] : [s];
+  for (const x of spellings) { const r = find.get(x); if (r) return JSON.parse(r.data_json); }
+  return null;
 }
 
 export function allVehicles() {
