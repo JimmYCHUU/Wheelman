@@ -13,6 +13,7 @@ import { businessFactsForPrompt, loadBusinessFacts } from './knowledge.js';
 import * as worker from './worker.js';
 import { onCopied, onRated } from './learn.js';
 import { displayNameFor } from './people.js';
+import { reservedByAnother } from './deal.js';
 import { learnedStats } from './db.js';
 
 const TYPES = { '.woff2': 'font/woff2', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
@@ -114,6 +115,14 @@ function marketplaceOf(item) {
   };
 }
 
+/** How the car is described in the strip under the customer's name. */
+function shownAvailability(item, v) {
+  const a = availability(v);
+  if (item.deal?.vehicle?.id === v.id) return { code: 'own', text: `This customer's car: ${item.deal.stageText}` };
+  if (a.code === 'available' && reservedByAnother(v, item.deal)) return { code: 'reserved', text: 'Reserved: another customer has paid a deposit' };
+  return a;
+}
+
 /** Everything needed to show one open conversation. */
 function present(item) {
   const v = item.vehicles[0];
@@ -133,7 +142,7 @@ function present(item) {
     autoDraft: item.autoDraft,
     autoReason: item.autoReason,
     firstReply: item.isFirstReply,
-    vehicle: v ? { title: v.title, stockNo: v.stockNo, price: v.price, odometer: v.odometer, availability: availability(v), url: v.url, year: v.year, fuel: v.fuel, transmission: v.transmission, seats: v.seats, colour: v.color, included: v.outline || [] } : null,
+    vehicle: v ? { title: v.title, stockNo: v.stockNo, price: v.price, odometer: v.odometer, availability: shownAvailability(item, v), url: v.url, year: v.year, fuel: v.fuel, transmission: v.transmission, seats: v.seats, colour: v.color, included: v.outline || [] } : null,
     thread: shown.map((e) => ({
       key: e.key, who: e.who, internal: !!e.internal, text: e.text || '', event: e.event || '', media: e.media || null,
       by: displayNameFor(e.by) || '', auto: !!e.auto, via: e.via || '', at: e.at, unanswered: item.state === 'awaiting' && pendingKeys.has(e.key),

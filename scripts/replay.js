@@ -3,6 +3,8 @@
 //
 //   npm run replay              -> 20 cases
 //   npm run replay -- 60        -> 60 cases
+//   npm run replay -- --buyers  -> only messages from people who had already bought
+//   npm run replay -- --first   -> only first replies to brand-new enquiries (the standard reply)
 //
 // Uses AI requests (one or two per case). Output: eval/out/replay.html (contains real customer text; keep it local).
 
@@ -11,16 +13,18 @@ import { displayOfVoice } from '../src/people.js';
 import path from 'node:path';
 import { config } from '../src/config.js';
 import { openDb, closeDb } from '../src/db.js';
-import { buildItem } from '../src/items.js';
+import { buildItem, finishItem } from '../src/items.js';
 import { attribute, cleanForExample, buildFrequencyIndex, stripSignature, stripLocationBlock } from '../src/voice.js';
 import { draftFor } from '../src/drafter.js';
-import { classify } from '../src/situations.js';
+import { comparable } from '../src/learn.js';
 import { isAcknowledgement, similarity, wordCount } from '../src/text.js';
 import { providers } from '../src/llm.js';
 import { worst } from '../src/checks.js';
 import { formatSydney } from '../src/time.js';
 
-const wanted = Math.max(1, Math.min(200, Number(process.argv[2]) || 20));
+const args = process.argv.slice(2);
+const wanted = Math.max(1, Math.min(200, Number(args.find((a) => /^\d+$/.test(a))) || 20));
+const only = args.includes('--buyers') ? 'buyers' : args.includes('--first') ? 'first' : null;
 if (!providers().length) {
   console.log('No AI key is filled in yet, so the replay test cannot run. Fill in GEMINI_API_KEY in .env first.');
   process.exit(1);
@@ -28,6 +32,15 @@ if (!providers().length) {
 
 const db = openDb();
 const isFrequentTemplate = buildFrequencyIndex(db.prepare("SELECT conversation_id, body FROM messages WHERE direction = 'OUT'").all());
+
+/**
+ * The conversation as it stood just before our reply at position `cut`, judged as it would have
+ * been at that moment: who was waiting, whether they were already a buyer, which car.
+ */
+const itemAt = (full, cut, at) => finishItem({
+  itemKey: full.itemKey, channel: 'sms', lead: full.lead, hasLeadRecord: full.hasLeadRecord,
+  conversation: full.conversation, conversationId: full.conversationId, phone: full.phone,
+}, full.timeline.slice(0, cut), { now: at });
 
 // 1. Collect candidate cases: a customer message followed by a genuine reply from one of the voices.
 const cases = [];
@@ -40,16 +53,24 @@ for (const conv of db.prepare('SELECT id FROM conversations ORDER BY latest_at D
     if (e.who !== 'us' || e.internal) continue;
     if (t[i - 1].who !== 'customer') continue;
     const author = attribute(e.by, e.text);
-    if (!author) continue;
-    if (!cleanForExample({ body: e.text, conversation_id: conv.id }, isFrequentTemplate).body) continue;
+    // The standard first reply is often nothing but "Hello," and the block, so for --first the
+    // reply does not have to be a clean example of someone's own writing.
+    if (only !== 'first') {
+      if (!author) continue;
+      if (!cleanForExample({ body: e.text, conversation_id: conv.id }, isFrequentTemplate).body) continue;
+    }
     const pending = [];
     for (let k = i - 1; k >= 0 && t[k].who === 'customer'; k--) pending.unshift(t[k]);
     const text = pending.map((p) => p.text).filter(Boolean).join('\n');
     if (!text || pending.every((p) => !p.text || isAcknowledgement(p.text))) continue;
+    const item = itemAt(full, i, e.at);
+    if (item.state !== 'awaiting') continue;
+    if (only === 'buyers' && !item.deal) continue;
+    if (only === 'first' && !item.isNewEnquiry) break; // only the very first reply can qualify
     // Their whole answer may span two or three texts sent within minutes.
     const actual = [];
-    for (let k = i; k < t.length && t[k].who === 'us' && !t[k].internal && t[k].at - e.at < 15 * 60 * 1000; k++) actual.push(stripSignature(stripLocationBlock(t[k].text)));
-    cases.push({ conversationId: conv.id, cut: i, author, actual: actual.filter(Boolean).join('\n'), situation: classify(text, { leadStatus: full.lead?.status }).primary, at: e.at });
+    for (let k = i; k < t.length && t[k].who === 'us' && !t[k].internal && t[k].at - e.at < 15 * 60 * 1000; k++) actual.push(only === 'first' ? stripSignature(t[k].text) : stripSignature(stripLocationBlock(t[k].text)));
+    cases.push({ conversationId: conv.id, cut: i, author, actual: actual.filter(Boolean).join('\n'), situation: item.situation.primary, at: e.at });
     break; // one case per conversation keeps the sample varied
   }
 }
@@ -67,24 +88,13 @@ console.log(`Found ${cases.length} usable past exchanges. Testing ${sample.lengt
 const rows = [];
 for (const [n, c] of sample.entries()) {
   const full = buildItem({ conversationId: c.conversationId });
-  const timeline = full.timeline.slice(0, c.cut);
-  let lastUs = -1;
-  for (let i = timeline.length - 1; i >= 0; i--) if (timeline[i].who === 'us') { lastUs = i; break; }
-  const pending = timeline.slice(lastUs + 1);
-  const pendingText = pending.map((e) => e.text).filter(Boolean).join('\n');
-  const events = pending.map((e) => e.event).filter(Boolean);
-  const item = {
-    ...full, timeline, pending, pendingText, events, state: 'awaiting', menu: null,
-    situation: classify(pendingText, { events, leadStatus: full.lead?.status }),
-    isFirstReply: !timeline.some((e) => e.who === 'us' && !e.internal),
-    anchorKey: pending[pending.length - 1].key,
-  };
-  process.stdout.write(`${String(n + 1).padStart(3)}/${sample.length}  ${item.situation.primary.padEnd(22)} `);
+  const item = itemAt(full, c.cut, c.at);
+  process.stdout.write(`${String(n + 1).padStart(3)}/${sample.length}  ${item.situation.primary.padEnd(22)} ${(item.deal ? 'buyer' : item.isNewEnquiry ? 'new enquiry' : '').padEnd(12)} `);
   // Draft as if it were the moment they replied, so the time of day matches.
   const d = await draftFor(item, { save: false, holdOutConversation: true, now: c.at });
   const level = d.status === 'ready' ? worst(d.checks) : 'error';
   console.log(level);
-  rows.push({ c, item, d, level, match: d.reply ? similarity(d.reply.replace(config.signOff, ''), c.actual) : 0 });
+  rows.push({ c, item, d, level, match: d.reply ? similarity(comparable(d.reply), comparable(c.actual)) : 0 });
   if (d.daily) { console.log('\nDaily AI allowance reached. Stopping early.'); break; }
 }
 
@@ -96,8 +106,8 @@ const median = (a) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.leng
 const summary = {
   tested: rows.length, written: done.length,
   passedAllChecks: tally('ok'), styleWarnings: tally('warn'), needsYourInput: tally('input'), failedFactCheck: tally('fail'),
-  medianWordsOurs: median(done.map((r) => wordCount(r.d.reply.replace(config.signOff, '')))),
-  medianWordsTheirs: median(done.map((r) => wordCount(r.c.actual))),
+  medianWordsOurs: median(done.map((r) => wordCount(comparable(r.d.reply)))),
+  medianWordsTheirs: median(done.map((r) => wordCount(comparable(r.c.actual)))),
 };
 
 const html = `<!doctype html><html lang="en-AU"><head><meta charset="utf-8"><title>Replay test</title>
@@ -132,7 +142,7 @@ h1{font-size:22px;margin:0 0 4px} .lead{color:#5d655a;margin:0 0 18px}
 <div class="stat"><b>${summary.medianWordsOurs} vs ${summary.medianWordsTheirs}</b>median words: agent vs them</div>
 </div>
 ${rows.map((r, i) => `<section class="case">
-<div class="head"><span><b>Case ${i + 1}</b></span><span>${esc(r.item.situation.label)}</span><span>answered by ${esc(displayOfVoice(r.c.author))}</span><span>${esc(formatSydney(r.c.at))}</span><span>${r.item.vehicles[0] ? esc(r.item.vehicles[0].title) : 'no vehicle matched'}</span></div>
+<div class="head"><span><b>Case ${i + 1}</b></span><span>${esc(r.item.situation.label)}</span><span>${r.item.deal ? 'already a buyer' : r.item.isNewEnquiry ? 'new enquiry' : 'mid-conversation'}</span><span>answered by ${esc(r.c.author ? displayOfVoice(r.c.author) : 'the team')}</span><span>${esc(formatSydney(r.c.at))}</span><span>${r.item.vehicles[0] ? esc(r.item.vehicles[0].title) : 'no vehicle matched'}</span></div>
 <div class="q"><div class="k">Customer wrote</div>${esc(r.item.pending.map((e) => [e.event ? '(' + e.event + ')' : '', e.text].filter(Boolean).join(' ')).join('\n'))}</div>
 <div class="cols">
 <div><div class="k">What they actually sent</div>${esc(r.c.actual)}</div>

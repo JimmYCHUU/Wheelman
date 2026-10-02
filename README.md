@@ -1,7 +1,7 @@
 # Wheelman 🛞
 
 ![Node.js 24](https://img.shields.io/badge/node-24-339933)
-![Tests](https://img.shields.io/badge/tests-100%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-135%20passing-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-lightgrey)
 ![Free AI models](https://img.shields.io/badge/AI-free%20models%20only-blue)
 ![Never sends](https://img.shields.io/badge/sending-never%2C%20copy%20only-orange)
@@ -27,6 +27,7 @@ purpose.
 - [The idea](#the-idea)
 - [The voice](#the-voice)
 - [How a suggestion is written](#how-a-suggestion-is-written)
+- [Buyers, first replies and promises](#buyers-first-replies-and-promises)
 - [Non-negotiable rules](#non-negotiable-rules)
 - [Install & run](#install--run)
 - [The daily workflow](#the-daily-workflow)
@@ -98,6 +99,7 @@ shape with invented names. The tone guide is `voice/house-voice.md`.
         ┌──────────────────────────▼──────────────────────────┐
         │ 2. WHAT IT IS ABOUT keyword rules, no AI call        │
         │                     the car, from the stock number   │
+        │                     a new enquiry, or already a buyer│
         └──────────────────────────┬──────────────────────────┘
         ┌──────────────────────────▼──────────────────────────┐
         │ 3. PRIVACY          name · phone · email · rego ·    │
@@ -116,6 +118,7 @@ shape with invented names. The tone guide is `voice/house-voice.md`.
         │ 6. CHECKS           every figure and link traced to  │──► one retry, then a RED FLAG
         │                     our records · greeting and       │──► BLANK TO FILL ([PRICE?] ...)
         │                     sign-off once a day              │
+        │                     promises · days · places backed  │
         └──────────────────────────┬──────────────────────────┘
                        SUGGESTED REPLY · not sent
         ┌──────────────────────────▼──────────────────────────┐
@@ -126,6 +129,75 @@ shape with invented names. The tone guide is `voice/house-voice.md`.
 Every suggestion is stored in SQLite with the checks it passed or failed and the model that
 wrote it. When the reply later appears in the dashboard conversation, Wheelman compares what
 was really sent with what it suggested.
+
+## Buyers, first replies and promises
+
+Three things decide what kind of reply a customer gets.
+
+### Is this person already a buyer?
+
+Someone who has paid a deposit must not be answered like a new enquiry. Wheelman decides from
+what it already receives, in this order:
+
+1. **A sale record** on a car, matched to the conversation by phone number or email. `+61 4…`
+   and `04…` count as the same number.
+2. **The lead's status**: car sold, deposit received or closed won, unless the sale fell
+   through afterwards.
+3. **Our own earlier texts**, such as "we have received your deposit". This one is marked
+   "appears to be a buyer".
+
+For a buyer, the car in question is their own car, even when no stock number is in the
+conversation. The AI is told the stage of the sale and which dates are on file (registration,
+inspection report, blue slip). A date that is not on file is neither "done" nor "not done":
+the reply says we will check, with a `[CHECK?]` blank. A buyer is never asked which car they
+mean, never offered an inspection booking link or other cars, and never told an amount paid or
+owing. A reply that treats a buyer as a new enquiry is sent back for one rewrite.
+
+A car that still shows as available but has another customer's deposit on it is described as
+reserved, with no booking link.
+
+### The standard first reply
+
+A brand-new enquiry in the Dashboard section gets the reply the team always sends: one or two
+lines that answer the question, then the standard block with the address, the map link, the
+opening hours, the car's page and the phone number. The AI writes only the opening lines. The
+block is added by code from `voice/first-reply.md`, so its wording and symbols are always
+exact, and it takes the place of the sign-off on that message. Edit that file to change the
+block.
+
+- No car matched, or the car is sold or reserved: the "Check More Details" lines are left out.
+- The customer asks to see the car: the opening carries the booking link, then the block.
+- If the AI types the address, hours, map link or phone number itself, the reply is sent back.
+- Buyers, later replies in a conversation, holding replies and Marketplace chats do not get it.
+
+### Promises, days and places
+
+After the figures and links, each suggestion is checked for things that sound fine but that
+nobody agreed to. It is sent back for one rewrite when it:
+
+- names a part of today that has already passed ("this afternoon" at 8:44 pm);
+- arranges something on a day nobody in the conversation mentioned ("see you tomorrow" when
+  the customer said "this morning"). Each message is read from the time it was written, so
+  "tomorrow" in yesterday's message means today;
+- promises an action or a readiness with a time attached that nobody on our side gave. Only
+  the instruction for the draft or our own recent messages count; the customer asking for it
+  does not;
+- names a state or city the customer never mentioned.
+
+A promise with no time attached ("we will send it shortly") shows one quiet note. An
+instruction typed into **Rewrite** still decides what to say, but it no longer overrides these
+rules.
+
+### What gets no suggestion
+
+Thank-yous and laughter, login codes and missed-call notices, texts of ours that failed to
+send (the customer is still waiting), and messages more than a day old. Those older messages
+stay listed with **Write it now**.
+
+| Setting in `.env` | What it does | Default |
+|---|---|---|
+| `FIRST_REPLY_SENDER` | The name on the last lines of the standard block | `Team Carbarn` |
+| `AUTO_DRAFT_MAX_AGE_HOURS` | Older messages are listed, but written only when asked | `24` |
 
 ## Non-negotiable rules
 
@@ -143,11 +215,14 @@ Enforced in code, not by convention.
 - **RULE-3 Never guess.** A figure or link that cannot be traced to our records fails the
   check. A price that only the customer mentioned is theirs, not ours. What a person must
   decide becomes a blank: `[PRICE?]`, `[TRADE-IN VALUE?]`, `[DELIVERY COST?]`, `[DATE?]`,
-  `[CHECK?]`.
+  `[CHECK?]`. The same goes for a time that has passed, a day nobody mentioned, a dated
+  promise nobody on our side made, and a place the customer never said.
 - **RULE-4 Marketplace never teaches.** Learning accepts dashboard conversations only. It is
   refused in three places: the learning code, the copy route and the database helper.
-- **RULE-5 No costs.** Purchase cost, shipping cost and margin are never stored and never
-  sent anywhere.
+- **RULE-5 No costs, no sale amounts.** Purchase cost, shipping cost and margin are never
+  stored and never sent anywhere. From a sale record Wheelman keeps the stage and the date,
+  and whether a deposit or the full amount is recorded. It keeps no amount and no buyer name,
+  and the buyer's phone and email only as scrambled match keys.
 - **RULE-6 STOP means stop.** Nothing is ever drafted for a customer who opted out.
 - **RULE-7 Nothing on the page is final.** Dismiss can be undone, and a dismissed
   conversation stays findable.
@@ -268,6 +343,7 @@ The suggestion waits in the message box, marked **not sent**.
 |---|---|---|
 | A part highlighted amber, such as `[PRICE?]` | A gap only you can fill | Click its name above the box, then type over it |
 | A figure or link highlighted red | It is not in our records | Check it, correct it or remove it |
+| A red note about a day, a time, a promise or a place | The reply says something nobody agreed to | Correct it, or use Rewrite |
 | A blue note | The reply needs a person's decision | Read the note before sending |
 | A blue tick | Figures and links match our records | Read it and send |
 | "You have changed the text" | What you typed has not been checked | Check your own figures |
@@ -352,21 +428,33 @@ from a study of 664 conversations.
 Only from dashboard leads and conversations, the website and the dashboard's records. Never
 from Marketplace.
 
-- **Replies you use.** Pressing Copy keeps the text you copied, with the customer's details
-  removed. When the reply later appears in the dashboard conversation, what was really sent
-  replaces it. These become the newest examples for similar messages.
-- **Your edits.** When you change a suggestion before using it, Wheelman keeps both versions
-  and shows itself the difference next time.
+- **Your edits.** When you change a suggestion before using it, Wheelman keeps both versions,
+  with the customer's details removed, and shows itself the difference next time. When the
+  reply later appears in the dashboard conversation, what was really sent replaces what was
+  copied.
+- **Only what you changed.** A suggestion used word for word is Wheelman's own text, so it
+  is not kept as an example of how the team writes.
+- **Only the reply to that message.** A sent reply counts for a suggestion only if it directly
+  follows the message the suggestion answered. If the customer wrote again first, the
+  suggestion is marked as overtaken and nothing is learned. One lesson per customer message.
 - **Our salespeople's own replies.** Once a day it rereads the dashboard conversations and
-  refreshes its bank of the two voices' genuine replies.
+  refreshes its bank of the two voices' genuine replies. Texts that Wheelman itself wrote are
+  skipped.
 - **Ratings.** A copied suggestion marked "Not usable" is forgotten.
 
-A reply is not learned from if it still contains a blank or contains bank details. To change
-the tone directly, edit `voice/house-voice.md`; to change how it sells and what it hands to a
-person, edit `voice/sales-playbook.md`.
+A reply is not learned from if it still contains a blank, contains bank details, or is
+standard wording the team sends to everyone. The standard address block and the sign-off are
+never part of a lesson. To change the tone directly, edit `voice/house-voice.md`; to change
+how it sells and what it hands to a person, edit `voice/sales-playbook.md`.
 
 `npm run replay` takes real customer messages that one of the two answered, hides their
 answer, lets Wheelman write its own, and puts the two side by side in `eval/out/replay.html`.
+Add `-- --buyers` for messages from people who had already bought, or `-- --first` for first
+replies to new enquiries.
+
+`npm run report` prints how the suggestions are doing: how many were sent as written, edited
+or rewritten, split into buyers, new enquiries and the rest, which checks fire most, and how
+often you asked for a rewrite. Counts only; no customer text.
 
 ## Rules as Carbarn confirmed them
 
@@ -375,9 +463,12 @@ answer, lets Wheelman write its own, and puts the two side by side in `eval/out/
 | Voice | One blended voice of the two lead salespeople, grammar tidied. See [The voice](#the-voice) |
 | Sign-off | "Regards, Team Carbarn" |
 | Greeting and sign-off | Once a day per customer. Later replies that day start with the answer |
+| First reply to a new enquiry | One or two lines that answer the question, then the team's standard block: address, map link, hours, the car's page, phone |
+| Buyers | Answered about their own car. No "which car?", no booking link, no other cars, no amounts |
+| Promises and times | Only what our staff said. Otherwise "We will check and come back to you shortly", or a blank |
 | Price | Any discount, best price or offer is decided by a person: `[PRICE?]` |
 | Holding deposit | $1,000, refundable while inspecting or arranging finance |
-| Inspections | A car at the yard: the in-person booking link for that car. A customer who is far away or cannot come: the online video inspection link |
+| Inspections | Only when the customer asks to see or drive a car. A car at the yard: the in-person booking link for that car. A customer who says they are far away or cannot come: the online video inspection link |
 | A car not at the yard yet | No booking link. We let the customer know when it can be inspected |
 | Marketplace | A suggestion for every chat where the buyer wrote last; short chat style |
 | Sending | Never. Copy and paste, in both sections |
@@ -420,7 +511,9 @@ to 1,000.
 | `npm start` | The same, from a terminal |
 | `npm run check-login` | Tests the dashboard login |
 | `npm run check-model` | Tests the AI keys and shows which models answer |
-| `npm run replay` | Compares suggestions with real past replies. `-- 60` for 60 cases |
+| `npm run replay` | Compares suggestions with real past replies. `-- 60` for 60 cases, `-- --buyers` or `-- --first` for one kind |
+| `npm run report` | Counts how suggestions were used and which checks fired. `-- 30` for 30 days |
+| `npm run check-private` | Before a commit: makes sure no setting from `.env`, staff name or key is in a file git would publish |
 | `npm run build-voice` | Rebuilds the example bank from stored conversations |
 | `npm run fetch-website` | Saves the website's policy pages. `-- --all` for every guide, blog post and import page |
 | `npm run import-history` | Loads the saved history in `data/raw` into the database |
@@ -436,7 +529,7 @@ Git never sees any of it.
 | `.env` | Dashboard address and login, the Marketplace inbox address, and the AI keys |
 | `voice\people.json` | The real names and logins of the two voices, and other staff names |
 | `PLAN.md`, `knowledge\business-facts-evidence.md` | Internal planning notes, and the evidence behind each business fact |
-| `data\app.db` | Leads, conversations, messages, stock, Marketplace chats, every suggestion and its checks, what was learned, what was dismissed and read |
+| `data\app.db` | Leads, conversations, messages, stock, the stage of each sale, Marketplace chats, every suggestion and its checks, what was learned, what was dismissed and read |
 | `data\raw\` | The history first copied from the dashboard |
 | `data\analysis\` | The cleaned samples behind the voice and the business facts |
 | `voice\examples.json` | The bank of genuine replies, rebuilt daily |
@@ -465,7 +558,7 @@ Git never sees any of it.
 npm.cmd test
 ```
 
-100 tests, all on invented data, against a stand-in AI service and a stand-in content engine
+135 tests, all on invented data, against a stand-in AI service and a stand-in content engine
 on this computer: who counts as waiting and who does not, stock numbers matched to the right
 car, that no customer detail and no cost figure reaches the AI request, an invented price
 rejected and retried, a customer's own price never accepted as ours, a staff figure in a
@@ -477,7 +570,13 @@ and how "far away" is recognised, and the Marketplace section: only GET requests
 addresses, redirects refused, identifiers and contact details not stored, a failed reply not
 counting as a reply, the auto-reply's price not trusted, nothing learned from a copied
 Marketplace suggestion, its own allowance, the engine being down, dismiss with undo, and the
-unread counts.
+unread counts. Whole-conversation scenarios cover the rest: a buyer recognised by phone, by
+email, by lead status and from our own texts; no amount, buyer name or readable contact
+stored or sent; a reply that asks a buyer "which car?" rejected; a reserved car; the standard
+first reply exact to the character and never learned; "this afternoon" at 8:44 pm, "tomorrow"
+against "this morning", an unbacked promise and a guessed place rejected; failed texts,
+thank-yous and automatic notices producing no suggestion; and a suggestion overtaken by a new
+customer message teaching nothing.
 
 ## Project layout
 
@@ -493,6 +592,7 @@ wheelman/
 ├── voice/
 │   ├── house-voice.md                 the tone, from our salespeople's real replies
 │   ├── sales-playbook.md              how it sells, and what it hands to a person
+│   ├── first-reply.md                 the standard block under a first reply; edit freely
 │   ├── people.example.json            whose writing sets the voice (invented names; the real file is local)
 │   └── exclusions.json                templates and conversations kept out of the example bank
 ├── src/
@@ -501,6 +601,7 @@ wheelman/
 │   ├── sync.js · normalize.js         what is read, and what is kept of it
 │   ├── items.js                       who is waiting: one shape for a lead and a Marketplace chat
 │   ├── situations.js · text.js        what a message is about, by keyword rules
+│   ├── deal.js                        who is already a buyer, of which car, at what stage
 │   ├── redact.js                      customer details out, first name back in
 │   ├── knowledge.js                   business facts, the guide, website passages, vehicle facts
 │   ├── people.js                      who the two voices are, read from voice/people.json
@@ -509,14 +610,17 @@ wheelman/
 │   ├── prompt.js                      the request: facts, rules for the channel, inspection plan
 │   ├── llm.js                         free models in order, resting busy ones, the daily cap
 │   ├── checks.js · drafter.js         figures and links traced, blanks, greeting once a day
+│   ├── firstreply.js · promises.js    the standard first reply; promises, days and places
 │   ├── worker.js                      the loop: read, note what was sent, draft what is waiting
 │   ├── server.js                      the local page's data, on 127.0.0.1 only
 │   ├── db.js · time.js · config.js    SQLite, Sydney time, settings
 │   └── app.js                         start
 ├── web/                               the page: index.html · app.js · styles.css · fonts
-├── scripts/                           check-login · check-model · replay · build-voice
-│                                      fetch-website · import-history
+├── scripts/                           check-login · check-model · replay · report
+│                                      build-voice · fetch-website · import-history
+│                                      check-private
 └── test/                              core · pipeline · greeting · inspection · marketplace
+                                       quality · scenarios
 ```
 
 ## Status
@@ -528,14 +632,24 @@ business facts are confirmed. Each of the day's changes (greeting once a day, in
 links, dismiss with undo, unread counts) was checked on a throwaway copy with invented
 customers and on the automated tests, not yet over a full working day.
 
+2 October 2026: buyers, the standard first reply and the promise checks were added after an
+audit of every suggestion written so far. Sale records were tallied against stock status
+first and agreed in every case, so they are trusted for recognising buyers. The changes were
+checked on the automated tests, on invented customers with the real AI models, and by
+replaying real past messages from buyers and new enquiries on a private copy of the database.
+`npm run report` after a few days of use will show whether more suggestions are sent as
+written.
+
 ### Open questions for Carbarn
 
 - Blue slips are not stored in the dashboard, only a blue slip date, and only for some cars.
   A "Blue slip" document type on the dashboard would let Wheelman show and offer it like the
   export certificate.
 - A Documents section in the details panel (blue slip date, export certificate, auction
-  sheet, photos) and document links in suggestions are designed but not built.
-- A suggestion can promise an action or a time ("I will email it this afternoon"). Should
-  that become a blank for a person to confirm?
+  sheet, photos) and document links in suggestions are designed but set aside for now.
+- A buyer who texts from a number that is not on the sale, and has no email on file, is
+  recognised only from the lead's status or from our own earlier texts.
+- A customer who describes what they want without naming a car ("a 2016 or newer HiAce, high
+  roof") is asked which one. Wheelman does not search the stock list for them yet.
 - "Far away" is recognised from wording and from states and cities. A small town Wheelman
   does not know gets the in-person link.

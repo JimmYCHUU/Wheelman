@@ -280,8 +280,8 @@ function renderStatus() {
   const n = s.learned?.total || 0;
   learned.hidden = !n;
   if (n) {
-    learned.textContent = `Learned from ${plural(n, 'reply', 'replies')} you used${s.learned.changed ? `, ${s.learned.changed} of them edited` : ''}`;
-    learned.title = 'Each time you copy or send a reply, Wheelman keeps it as an example for similar messages. Only dashboard conversations are used.';
+    learned.textContent = `Learned from ${plural(n, 'reply', 'replies')} you changed`;
+    learned.title = 'When you change a suggestion before sending it, Wheelman keeps what you sent as an example for similar messages. A suggestion used word for word is not kept. Only dashboard conversations are used.';
   }
 }
 

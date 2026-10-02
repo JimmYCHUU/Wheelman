@@ -58,9 +58,11 @@ const draft = async (conversationId) => {
   return { d, asked: seen[0].messages[1].content };
 };
 
-test('the first reply to a customer gets the greeting and the sign-off', async () => {
+test('the first reply to a new enquiry gets the greeting and the standard block in place of the sign-off', async () => {
   const { d } = await draft(101);
-  assert.equal(d.reply, 'Hi Priya,\n\nYes, Saturday at 10 am works.\n\nRegards,\nTeam Carbarn');
+  assert.ok(d.reply.startsWith('Hi Priya,\n\nYes, Saturday at 10 am works.\n\n📍Location: '), d.reply);
+  assert.ok(d.reply.endsWith('Team Carbarn\n📞 0423 840 130'), d.reply);
+  assert.ok(!/Regards/.test(d.reply));
 });
 
 test('a second reply on the same day has no greeting and no sign-off', async () => {
