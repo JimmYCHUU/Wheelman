@@ -1,6 +1,7 @@
-// The standard block the team sends on a first reply: address, map link, hours, the car's page
-// and the phone number. The wording lives in voice/first-reply.md so it can be edited without
-// touching code. The AI never writes this block: code adds it, so every symbol and word is exact.
+// The standard block we send on a first reply: the car's page, the booking link when the customer
+// asked to see the car, the address, map link, hours and phone number. The wording lives in
+// voice/first-reply.md so it can be edited without touching code. The AI never writes this block:
+// code adds it, so every symbol and word is exact.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -23,10 +24,11 @@ function parts() {
 
 /**
  * The block for one reply. A part whose placeholder has nothing to fill it is left out, so a
- * reply about no particular car has no "Check More Details" lines.
+ * reply about no particular car has no "Vehicle details" lines, and one where nobody asked to
+ * see the car has no booking link.
  */
-export function standardBlock({ vehicleUrl = '' } = {}) {
-  const values = { vehicle_url: String(vehicleUrl || '').trim(), sender: config.firstReplySender };
+export function standardBlock({ vehicleUrl = '', inspectionUrl = '' } = {}) {
+  const values = { vehicle_url: String(vehicleUrl || '').trim(), inspection_url: String(inspectionUrl || '').trim(), sender: config.firstReplySender };
   const out = [];
   for (const part of parts()) {
     let missing = false;
@@ -36,6 +38,14 @@ export function standardBlock({ vehicleUrl = '' } = {}) {
   return out.join('\n\n');
 }
 
+/** True when the block has a place for this placeholder, e.g. 'inspection_url'. */
+export const blockCarries = (name) => parts().some((p) => p.includes(`{${name}}`));
+
+/** The headings the block uses ("Vehicle details:", "Our location:"), lower case, without the colon. */
+export function blockHeadings() {
+  return parts().map((p) => p.split('\n')[0].trim()).filter((l) => /:\s*$/.test(l) && l.length <= 60).map((l) => l.replace(/:\s*$/, '').toLowerCase());
+}
+
 /** True when the AI's own lines repeat what the block already says. */
 export function repeatsBlock(opening) {
   const m = String(opening || '').match(/(frances\s+st(reet)?|maps\.app\.goo\.gl\S*|\b8\s?(:00)?\s?am\b.{0,14}\b5\s?(:00)?\s?pm\b|open (7|seven) days|0423\s?840\s?130)/i);
@@ -43,18 +53,23 @@ export function repeatsBlock(opening) {
 }
 
 /**
- * Removes a line of the AI's opening that is only the car's page link (the block gives it),
- * together with a lead-in line such as "More details here:".
+ * Removes a line of the AI's opening that is only a link the block gives (the car's page, the
+ * booking link), together with a lead-in line such as "More details here:".
  */
-export function tidyOpening(opening, vehicleUrl) {
-  if (!vehicleUrl) return opening;
+export function tidyOpening(opening, ...urls) {
+  const given = urls.filter(Boolean).map((u) => u.replace(/\/$/, ''));
+  if (!given.length) return opening;
   const lines = String(opening || '').split('\n');
   const out = [];
   for (const line of lines) {
     const bare = line.trim().replace(/\/$/, '');
-    if (bare === vehicleUrl.replace(/\/$/, '')) {
+    if (given.includes(bare)) {
       while (out.length && out[out.length - 1].trim() === '') out.pop();
-      if (out.length && /:\s*$/.test(out[out.length - 1])) out.pop();
+      // The lead-in is the last sentence of the line above; anything said before it stays.
+      if (out.length && /:\s*$/.test(out[out.length - 1])) {
+        const kept = out.pop().split(/(?<=[.!?])\s+/).slice(0, -1).join(' ').trim();
+        if (kept) out.push(kept);
+      }
       continue;
     }
     out.push(line);

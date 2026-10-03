@@ -126,11 +126,11 @@ test('customer details never reach the AI service, and cost figures are never se
   // A brand-new enquiry: the team's standard block follows the answer. The car's page link the AI
   // typed is dropped, because the block gives it.
   assert.equal(d.reply, 'Hi Priya,\nYes, the Noah is still available at $28,900.\n\n'
-    + '📍Location: Unit D3, 128–130 Frances Street, Lidcombe NSW 2141.\n\n'
-    + '📍Google Maps: https://maps.app.goo.gl/EQfdkTE7FYDF4DTT8\n\n'
-    + '🕗Hours: 8 AM – 5 PM. Open 7 days. Please call or text before visiting.\n\n'
-    + 'Check More Details:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159\n\n'
-    + 'Team Carbarn\n📞 0423 840 130');
+    + 'Vehicle details:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159\n\n'
+    + 'Our location:\n📍 Unit D3, 128-130 Frances Street, Lidcombe NSW 2141\n\n'
+    + 'Google Maps:\nhttps://maps.app.goo.gl/EQfdkTE7FYDF4DTT8\n\n'
+    + '🕛 Open 7 days, 8 AM–5 PM.\n\n'
+    + 'Feel free to visit us or call\n📞 0423 840 130\nTeam Carbarn');
   assert.ok(d.checks.every((c) => c.level === 'ok'), JSON.stringify(d.checks));
   // She did not ask to see the car, so no booking link is supplied, and one in a reply is not accepted.
   assert.ok(!sent.includes('#inspection='), 'booking links are only supplied when the customer asks to see the car');

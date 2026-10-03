@@ -44,7 +44,7 @@ Answer: The $1,000 holding deposit is refundable. It holds the vehicle while the
 
 ## Price negotiation
 Status: CONFIRMED
-Answer: Do not tell customers that prices are fixed, and do not tell them prices are negotiable. State the advertised price and what it includes. When a customer asks for a best price, a discount, or makes an offer, a person decides: leave [PRICE?]. Never name a lower price.
+Answer: Do not tell customers that prices are fixed, and do not tell them prices are negotiable. When a customer asks what a car costs, state the advertised price and what it includes. When a customer asks for a best price, a discount, or makes an offer, do not repeat the advertised price (they have seen it), do not accept or refuse the offer, and never name a lower price. Invite them to come and inspect the vehicle first: the price is talked about once they have seen it. Do not say that we do not negotiate by message. If a figure has to be given, a person decides it: leave [PRICE?].
 
 ## Trade-ins
 Status: CONFIRMED

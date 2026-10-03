@@ -92,6 +92,21 @@ CREATE TABLE IF NOT EXISTS learned (
 );
 CREATE INDEX IF NOT EXISTS learned_at ON learned(at);
 
+-- What the owner said should be different about a suggestion ("Could be better"). Dashboard only.
+CREATE TABLE IF NOT EXISTS advice (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  draft_id INTEGER,
+  item_key TEXT NOT NULL,
+  situations_json TEXT,
+  first_reply INTEGER,
+  customer_text TEXT,
+  draft_text TEXT,
+  note TEXT NOT NULL,
+  lessons_json TEXT,
+  at INTEGER
+);
+CREATE INDEX IF NOT EXISTS advice_at ON advice(at);
+
 -- Facebook Marketplace chats, read from the content engine. Kept apart from the dashboard tables:
 -- nothing here is ever used for learning or for the example bank.
 CREATE TABLE IF NOT EXISTS mp_conversations (
@@ -146,6 +161,7 @@ export function openDb(file = config.dbPath) {
   ensureColumn(db, 'drafts', 'copied_text', 'TEXT');
   ensureColumn(db, 'drafts', 'copied_at', 'INTEGER');
   ensureColumn(db, 'drafts', 'context_json', 'TEXT');
+  ensureColumn(db, 'advice', 'lessons_json', 'TEXT');
   ensureColumn(db, 'leads', 'status_history_json', 'TEXT');
   ensureColumn(db, 'conversations', 'lead_platform', 'TEXT');
   ensureColumn(db, 'conversations', 'lead_status', 'TEXT');
@@ -525,8 +541,36 @@ export function allLearned(limit = 600) {
 }
 
 export function learnedStats() {
-  const r = openDb().prepare("SELECT COUNT(*) AS total, SUM(changed) AS changed, SUM(CASE WHEN source = 'sent' THEN 1 ELSE 0 END) AS sent, MAX(at) AS latest FROM learned").get();
-  return { total: r.total || 0, changed: r.changed || 0, sent: r.sent || 0, latest: r.latest || null };
+  const r = openDb().prepare("SELECT COUNT(*) AS total, SUM(changed) AS changed, SUM(CASE WHEN source = 'sent' THEN 1 ELSE 0 END) AS sent, SUM(CASE WHEN source = 'approved' THEN 1 ELSE 0 END) AS approved, MAX(at) AS latest FROM learned").get();
+  const notes = openDb().prepare('SELECT COUNT(*) AS n FROM advice').get().n;
+  return { total: r.total || 0, changed: r.changed || 0, sent: r.sent || 0, approved: r.approved || 0, notes, latest: r.latest || null };
+}
+
+export function getLearned(draftId) {
+  return openDb().prepare('SELECT * FROM learned WHERE draft_id = ?').get(draftId) || null;
+}
+
+/** A note from the owner on what a suggestion should have done differently. Dashboard conversations only. */
+export function insertAdvice(a) {
+  if (!/^[cl]:\d+$/.test(String(a.itemKey || ''))) throw new Error('Refused: only dashboard conversations can be learned from.');
+  // One note per suggestion: saying it again replaces what was said before.
+  if (a.draftId !== null && a.draftId !== undefined) openDb().prepare('DELETE FROM advice WHERE draft_id = ?').run(a.draftId);
+  return Number(openDb().prepare('INSERT INTO advice(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, note, lessons_json, at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(a.draftId ?? null, a.itemKey, JSON.stringify(a.situations || []), a.firstReply ? 1 : 0, a.customerText || '', a.draftText || '', a.note, a.lessons ? JSON.stringify(a.lessons) : null, a.at || Date.now()).lastInsertRowid);
+}
+
+/** The lessons taken from a note: what Wheelman actually keeps of it. */
+export function setAdviceLessons(id, lessons) {
+  openDb().prepare('UPDATE advice SET lessons_json = ? WHERE id = ?').run(JSON.stringify(lessons || []), id);
+}
+
+export function allAdvice(limit = 300) {
+  return openDb().prepare('SELECT * FROM advice ORDER BY at DESC, id DESC LIMIT ?').all(limit)
+    .map((r) => ({ ...r, situations: JSON.parse(r.situations_json || '[]'), lessons: r.lessons_json ? JSON.parse(r.lessons_json) : null }));
+}
+
+export function deleteAdvice(id) {
+  openDb().prepare('DELETE FROM advice WHERE id = ?').run(id);
 }
 
 // ---- AI usage counter ----------------------------------------------------
