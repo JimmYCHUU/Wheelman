@@ -226,7 +226,7 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   for (const n of needsHuman) {
     if (n?.marker && !markers.includes(n.marker) && n.reason) add('input', 'note', `${n.marker}: ${n.reason}`);
   }
-  if (hold) add('input', 'hold', 'This one needs a person. The draft is only a holding reply.');
+  if (hold) add('input', 'hold', 'This one needs a person to decide. Read it carefully before anything is sent.');
 
   const left = leftoverPlaceholders(reply);
   if (left.length) add('fail', 'placeholder', `A placeholder was left in the text: ${[...new Set(left)].join(', ')}`, [...new Set(left)]);
@@ -240,10 +240,12 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   else if (words > 110) add('warn', 'long', `Long for a text message (${words} words).`);
   else if (inConversation && words > 60) add('warn', 'long', `Longer than your team usually writes mid-conversation (${words} words).`);
 
-  // A reply lifted from an example answers somebody else's question.
+  // A reply lifted from an example answers somebody else's question. A short line ("Your
+  // inspection is confirmed. See you on Saturday.") is bound to match one, so it is only noted;
+  // its facts are checked like any other reply's.
   if (words >= 8) {
     const copied = examples.some((e) => wordCount(e) >= 8 && similarity(body, e) >= 0.75);
-    if (copied) add('fail', 'copied', 'Copies an earlier reply written for a different customer almost word for word.');
+    if (copied) add(words >= 16 ? 'fail' : 'warn', 'copied', words >= 16 ? 'Copies an earlier reply written for a different customer almost word for word.' : 'Almost the same words as an earlier reply to another customer. Check it fits this one.');
   }
   if (/(^|\n)\s*\[(PRICE|TRADE-IN VALUE|DELIVERY COST|DATE|CHECK)\?\]\s*[.]?\s*(\n|$)/.test(String(body))) {
     add('warn', 'bare-marker', 'A blank is standing alone. Say what it is for when you fill it in.');

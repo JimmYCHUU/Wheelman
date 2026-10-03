@@ -76,7 +76,7 @@ export function redact(text, lead) {
   });
 
   // Street addresses, except Carbarn's own
-  t = t.replace(/\b(?:unit\s+\w+,?\s*)?\d{1,4}[a-z]?(?:[\s–-]+\d{1,4})?\s+((?:[\p{L}'’]+\s){1,3})(?:street|st|road|rd|avenue|ave|drive|dr|crescent|cres|place|pl|parade|pde|highway|hwy|lane|ln|court|ct|way|close|cl|boulevard|blvd)\b\.?/giu,
+  t = t.replace(/\b(?:unit\s+\w+,?\s*)?\d{1,4}[a-z]?(?:[\s–-]+\d{1,4})?\s+((?:[\p{L}'’]+\s){1,3})(?:street|st|road|rd|avenue|ave|drive|dr|crescent|cres|place|pl|parade|pde|highway(?!\s+star\b)|hwy|lane|ln|court|ct|way|close|cl|boulevard|blvd)\b\.?/giu,
     (m, names) => {
       if (OWN_ADDRESS.test(m)) return m;
       const streetNamed = names.trim().split(/\s+/).every((w) => /^\p{Lu}/u.test(w));

@@ -60,6 +60,16 @@ test('every way a portal writes a stock number finds the same car', () => {
   assert.equal(find('NKE165-7211659'), null, 'a chassis number is not a stock number');
 });
 
+test('a car that has arrived and is listed on the website is at the yard; one not yet listed is still being prepared', () => {
+  const where = (stockIn, status) => normalize.availability({ stockIn, status, soldStatus: 'UnSold' });
+  assert.equal(where('Arrived', 'PUBLISHED').code, 'available');
+  assert.equal(where('Arrived', 'PUBLISHED').text, 'Available now at the Lidcombe yard');
+  assert.equal(where('Arrived', 'UNPUBLISHED').code, 'arrived');
+  assert.equal(where('Online', 'PUBLISHED').code, 'available');
+  assert.equal(where('Transit', 'PUBLISHED').code, 'transit', 'a car still on the water cannot be inspected, listed or not');
+  assert.equal(where('Japan', 'PUBLISHED').code, 'japan');
+});
+
 test('a stock list entry of "null" is dropped when a lead is stored', () => {
   assert.deepEqual(normalize.normalizeLead({ id: 1, stocks: [null, 'null', ' 1300 '], inquiries: [] }).stocks, ['1300']);
 });

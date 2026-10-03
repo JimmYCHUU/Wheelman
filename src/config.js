@@ -13,6 +13,8 @@ export const config = {
   dbPath: env.DB_PATH || path.join(root, 'data', 'app.db'),
   sessionPath: path.join(root, 'data', '.session.json'),
   knowledgeDir: path.join(root, 'knowledge'),
+  // The website's "import this model" pages, saved by fetch-website. One file per model.
+  importPagesDir: path.join(root, 'knowledge', 'website', 'importing'),
   voiceDir: path.join(root, 'voice'),
   webDir: path.join(root, 'web'),
 
