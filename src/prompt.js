@@ -8,11 +8,11 @@ import { redact } from './redact.js';
 import { maskCustomerSignOff, stripLocationBlock } from './voice.js';
 import { reservedByAnother } from './deal.js';
 import { labelFor, farAway, SITUATIONS } from './situations.js';
-import { businessFactsForPrompt, relevantWebsite, vehicleFacts, alternatives, operationsGuide, inspectionLinks } from './knowledge.js';
+import { businessFactsForPrompt, relevantWebsite, vehicleFacts, alternatives, operationsGuide, inspectionLinks, importPagesFor } from './knowledge.js';
 import { availability } from './normalize.js';
 import { pickExamples } from './examples.js';
-import { learnedExamples, corrections } from './learn.js';
-import { practiceFor } from './practice.js';
+import { learnedExamples, corrections, ownerGuidance } from './learn.js';
+import { practiceFor, labelled } from './practice.js';
 import { blockCarries } from './firstreply.js';
 import { allVehicles } from './db.js';
 
@@ -47,6 +47,7 @@ ${chat ? MARKETPLACE_RULES : ''}=== WHERE FACTS COME FROM ===
 - The examples show tone only. Every figure, date, car and promise inside an example belongs to a different deal and must not be reused.
 - Never copy a sentence from an example. Each example answered a different customer in a different situation. Write a new reply for this customer.
 - The section WHAT OUR TEAM REALLY SENT, when present, shows what to say: learn from it first, then word it in our voice. Its facts belong to other customers too.
+- The section HOW THE OWNER WANTS THIS HANDLED, when present, is the owner's own coaching. On how to handle a message it overrides SELLING, BUSINESS FACTS and every example.
 - If a fact you need is not supplied, do not guess. Use the matching marker from the hand-over table.
 - You cannot see photos or attachments. Where the conversation shows [sent a photo], do not describe it or judge what it shows. If the reply depends on it, thank them and say we will take a look, and use [CHECK?].
 - Every number, price, date and link in your reply must appear in the supplied material.
@@ -67,7 +68,7 @@ Return one JSON object and nothing else:
   "needs_human": [{"marker": "[PRICE?]", "reason": "why a person must decide this"}],
   "hold": false
 }
-Set "hold" to true only for complaints, disputes, refund requests, and finance rate or approval questions.
+Set "hold" to true only for complaints, disputes and refund requests: a person decides those before anything is sent.
 "needs_human" must list every marker that appears in "reply". Use an empty list when there are none.`;
 }
 
@@ -242,12 +243,15 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
   const asksNow = item.situation.all.includes('inspection_booking');
   const staffAsked = !asksNow && STAFF_WANTS_BOOKING.test(instruction);
   const earlier = !asksNow && !staffAsked && askedEarlier(item, now, saidFar);
-  if (!asksNow && !staffAsked && !earlier) return none;
+  // Asking where we are, or when we are open, usually means a visit is planned: offer the link too.
+  const visiting = !asksNow && !staffAsked && !earlier && item.situation.all.includes('location_hours');
+  if (!asksNow && !staffAsked && !earlier && !visiting) return none;
   // Having asked to see the car, the customer now says they are far away: the online link is the answer.
   const farNow = earlier && saidFar && farAway(item.pendingText).far;
   const must = asksNow || staffAsked || farNow;
   const why = asksNow ? 'The customer wants to see this vehicle.'
     : staffAsked ? 'Our staff asked, in their instruction for this draft, for the inspection booking link.'
+      : visiting ? 'The customer asked where we are or when we are open, which usually means they plan to visit. Answer their question first, then offer the inspection booking link as well, so they can choose a time.'
       : saidFar ? 'Earlier in this conversation the customer asked to see this vehicle.'
         : 'Earlier in this conversation the customer asked to see this vehicle, and we have not sent them the booking link yet. Add it to this reply, in one line, so they can choose a time.';
   // On a brand-new enquiry the standard block follows the reply, so the address is not typed again.
@@ -259,11 +263,11 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
   const a = availability(vehicle);
   if (a.code === 'sold') return none;
   if (a.code === 'available' && reservedByAnother(vehicle)) {
-    if (earlier) return none;
+    if (earlier || visiting) return none;
     return { ...none, lines: ['The customer wants to see this vehicle, but another customer has paid a deposit on it. Do not give a booking link. Say it is reserved, that we can let them know if it becomes available again, and offer a similar vehicle if one is listed.'] };
   }
   if (a.code !== 'available') {
-    if (earlier) return none;
+    if (earlier || visiting) return none;
     return { ...none, lines: ['The customer wants to see this vehicle, but it is not ready at the Lidcombe yard yet (see Availability). It cannot be inspected in person or by video yet. Do not give a booking link. Say we will let them know as soon as it can be inspected.'] };
   }
   const links = inspectionLinks(vehicle);
@@ -273,7 +277,7 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
     return { kind: 'online', url: links.online, urls: [links.online], must, lines: [
       `${why} They have said they are far from Sydney, or cannot come.`,
       inBlock
-        ? '- Offer an online video inspection: a live video call on WhatsApp or FaceTime where we walk around the vehicle with them. Say they can choose a day and time with the booking link below. The link itself is added under your text automatically, so do not write it.'
+        ? '- Offer an online video inspection: a live video call on WhatsApp or FaceTime where we walk around the vehicle with them. Say they can book a day and time that suits them. The link itself is added under your text automatically ("Book your inspection:"), so do not write it and do not point to it.'
         : `- Offer an online video inspection: a live video call on WhatsApp or FaceTime where we walk around the vehicle with them. Give this booking link so they can choose a day and time: ${links.online}`,
       '- Do not ask them to come to Lidcombe, and do not give the in-person booking link.',
       '- If it helps, add that we deliver Australia-wide. A delivery price is quoted by a person.',
@@ -282,7 +286,7 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
   return { kind: 'onsite', url: links.onsite, urls: [links.onsite, links.online], must, lines: [
     why,
     inBlock
-      ? '- Tell them they are welcome to inspect it at our Lidcombe yard, and that they can choose a day and time with the booking link below. The link itself is added under your text automatically ("Book your inspection:"), so do not write it.'
+      ? '- Tell them they are welcome to inspect it at our Lidcombe yard and can book a time that suits them. The link itself is added under your text automatically ("Book your inspection:"), so do not write it and do not point to it.'
       : `- Tell them they are welcome to inspect it at our Lidcombe yard, and give this in-person booking link so they can choose a day and time: ${links.onsite}`,
     inBlock
       ? '- If they have already named a day, say that day is fine. If they also named a time inside our opening hours, confirm it in a line ("See you ...").'
@@ -323,15 +327,29 @@ export function standardPlan(item, vehicle, { gone = false, owner = false, inspe
     'So write only:',
     '- the greeting line, then',
     '- one or two short sentences that answer what the customer asked. Under 30 words in all.',
-    `Do not write the address, the suburb, the opening hours, the Google Maps link${vehicleUrl ? ", the vehicle's page link" : ''}${inspectionUrl ? ', the booking link' : ''} or a phone number: the block gives them. Do not add a closing line after your answer.`,
-    'If they asked where we are or when we are open, a short pointer is the whole answer, such as "You are welcome to visit us. Our address and opening hours are below."',
+    `Do not write ${item.situation.all.includes('location_hours') ? '' : 'the address, the suburb, the opening hours, '}the Google Maps link${vehicleUrl ? ", the vehicle's page link" : ''}${inspectionUrl ? ', the booking link' : ''} or a phone number: the block gives them. Do not add a closing line after your answer.`,
+    'Never point at the block: no "below", "see below" or "details are below". Each sentence must stand on its own.',
+    item.situation.all.includes('location_hours')
+      ? 'They asked where we are or when we are open, so answer that in your own sentence: the suburb and street ("128 Frances Street, Lidcombe"), or the day and hours they asked about. This is the one case where your lines may give the address or the hours.'
+      : '',
   ];
   if (vehicle && !gone && !atYard) lines.push('This vehicle is not at the Lidcombe yard yet (see Availability). Say so in your answer, so the address below is not read as an invitation to come and see it now.');
   lines.push('If you set "hold" to true, the block is not added.');
-  return { on: true, vehicleUrl, inspectionUrl, lines };
+  return { on: true, vehicleUrl, inspectionUrl, lines: lines.filter(Boolean) };
 }
 
-export function buildPrompt(item, { instruction = '', now = Date.now(), holdOutConversation = true } = {}) {
+const slug = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+/** The website page that lists every car of this make and model, when other ones are available now. */
+function modelStock(vehicle, all) {
+  if (!vehicle?.make || !vehicle?.model) return null;
+  const same = all.filter((o) => o.id !== vehicle.id && slug(o.make) === slug(vehicle.make) && slug(o.model) === slug(vehicle.model) && availability(o).code === 'available' && !reservedByAnother(o));
+  if (!same.length) return null;
+  const make = String(vehicle.make)[0].toUpperCase() + String(vehicle.make).slice(1).toLowerCase();
+  return { name: `${make} ${vehicle.model}`, count: same.length, url: `${config.site.baseUrl}/used-cars/${slug(vehicle.make)}/${slug(vehicle.model)}` };
+}
+
+export function buildPrompt(item, { instruction = '', coaching = null, now = Date.now(), holdOutConversation = true } = {}) {
   const lead = item.lead;
   const chat = item.channel === 'marketplace';
   const mp = chat ? item.marketplace || {} : null;
@@ -385,6 +403,10 @@ export function buildPrompt(item, { instruction = '', now = Date.now(), holdOutC
     P.push(writtenToday(item, now)
       ? `CUSTOMER NAME: ${item.hasName ? 'known.' : 'not known. Do not use {{NAME}}.'} We have already written to this customer today, so do not greet them again: no "Hi" line and no opening with their name. Start with the answer.`
       : `CUSTOMER NAME: ${item.hasName ? 'known. Use {{NAME}} in the greeting.' : 'not known. Greet with "Hi," and do not use {{NAME}}.'}`);
+    // Whether the record is complete, never what it holds. Some of the owner's lessons depend on it.
+    const has = [item.hasName ? 'a name' : '', (lead?.phone || item.phone) ? 'a phone number' : '', lead?.email ? 'an email address' : ''].filter(Boolean);
+    const lacks = [item.hasName ? '' : 'a name', (lead?.phone || item.phone) ? '' : 'a phone number', lead?.email ? '' : 'an email address'].filter(Boolean);
+    P.push(`CUSTOMER RECORD: has ${has.join(', ') || 'nothing'}${lacks.length ? `; has no ${lacks.join(' or ')}` : ''}.`);
   }
   // The state on the lead record is deliberately not given: it is a guess about where the customer
   // lives, and a reply must not state it. It is used only to choose which inspection link to offer.
@@ -404,14 +426,16 @@ export function buildPrompt(item, { instruction = '', now = Date.now(), holdOutC
       ? 'The listing the buyer wrote about could not be matched to a vehicle in the current stock list, so it may have been sold. Do not state facts about it and do not say it is available: use [CHECK?].'
       : 'No vehicle could be matched to this enquiry. Do not state facts about any particular vehicle. If the question depends on which vehicle they mean, ask them which one.');
   }
+  const sameModel = primaryGone && !deal ? modelStock(primary, allVehicles()) : null;
   if (alts.length) {
     P.push('\n=== SIMILAR VEHICLES AVAILABLE NOW ===');
     for (const a of alts) P.push(`- ${a.title}, ${Number(a.odometer).toLocaleString('en-AU')} km, $${Number(a.price).toLocaleString('en-AU')}: ${a.url}`);
   }
+  if (sameModel) P.push(`\nAll our ${sameModel.name} vehicles in stock (${sameModel.count} available now): ${sameModel.url}`);
   P.push(`\nFull stock list: ${config.site.baseUrl}/used-cars`);
 
   // Which inspection booking link to offer: in person, or online video for a customer who is far away.
-  const inspection = inspectionPlan(item, primary, { instruction, now });
+  const inspection = inspectionPlan(item, primary, { instruction: [instruction, coaching?.note].filter(Boolean).join('\n'), now });
   if (inspection.lines.length) {
     P.push('\n=== INSPECTION ===');
     P.push(inspection.lines.join('\n'));
@@ -452,6 +476,15 @@ export function buildPrompt(item, { instruction = '', now = Date.now(), holdOutC
   if (guide) {
     P.push('\n=== HOW CARBARN WORKS ===');
     P.push(guide);
+  }
+
+  // A model the customer asks us to import: its page on our website, when there is one.
+  const importPages = !deal && item.situation.all.includes('import_sourcing') ? importPagesFor(item.pendingText) : [];
+  if (importPages.length) {
+    P.push('\n=== IMPORTING PAGES ON OUR WEBSITE ===');
+    P.push('The customer named a model we can import to order. Its page on our website:');
+    for (const p of importPages) P.push(`- ${p.title}: ${p.url}`);
+    P.push('When you say we can import it, give one of these links on its own line, with a short label on the line before it such as "More details:".');
   }
 
   if (website.length) {
@@ -510,13 +543,35 @@ export function buildPrompt(item, { instruction = '', now = Date.now(), holdOutC
     P.push(`This was written ${ago(waited)} ago (${formatSydney(item.lastInboundAt)}). Read "today", "tomorrow" or "this morning" in it from that time, not from now.`);
   }
 
+  // What the owner has taught: replies approved as written, and the lessons taken from coaching
+  // notes. A note is never shown word for word once its lesson is known. Dashboard only.
+  const owner = ownerGuidance(want, now);
+  if (owner.approved.length || owner.lessons.length || owner.raw.length) {
+    const flat = (t, n) => labelled(String(t || '')).replace(/\s*\n\s*/g, ' / ').slice(0, n);
+    P.push('\n=== HOW THE OWNER WANTS THIS HANDLED ===');
+    P.push('The owner of the business reads your suggestions and coaches you. What follows is that coaching. It is written to you, about how to handle a message. It is not wording for the customer: act on it, and never repeat its words in a reply. Follow it over everything above it in this request: the examples, what the team sent before, and the handling advice in SELLING and BUSINESS FACTS. Figures and links still come only from this request, and the rules on promises and times still apply.');
+    if (owner.lessons.length) {
+      P.push('Lessons, newest first. Where two disagree, the earlier one in this list wins. A lesson marked INTERNAL is for you only: act on it, and do not tell the customer what it says.');
+      owner.lessons.forEach((l) => P.push(`- ${l.internal ? 'INTERNAL. ' : ''}${l.when ? `When ${l.when.replace(/^when\s+/i, '').replace(/[.:]\s*$/, '')}: ` : ''}${l.do}`));
+    }
+    owner.raw.forEach((n) => P.push(`A coaching note on a similar message, in the owner's own words. Take the lesson from it; do not quote it.\n  You had written: ${flat(n.draft_text, 300)}\n  The note: ${flat(n.note, 500)}`));
+    owner.approved.forEach((x) => P.push(`Approved as written, for a similar message\n  Customer: ${flat(x.customer_text, 260)}\n  You wrote: ${flat(x.final_text, 420)}\n  Handle this one the same way: the same things said, about the same length. The words need not be the same.`));
+  }
+
+  if (coaching) {
+    P.push('\n=== THE OWNER\'S COACHING ON YOUR LAST DRAFT ===');
+    if (coaching.draft) P.push(`Your last draft for this message was:\n${redact(coaching.draft, lead).slice(0, 700)}`);
+    P.push(`The owner's note on it. It is written to you, about how to handle this message. It is not text for the customer:\n${redact(coaching.note, lead).slice(0, 600)}`);
+    P.push('Write the reply again so that it does what the note teaches. Say it to the customer in our voice, in your own words: do not repeat the note\'s wording. Where the note quotes a line and says not to use it, leave out that line and what it says. Do not tell the customer anything the note calls internal, and do not mention the note. Figures and links given in the note may be used.');
+  }
+
   if (instruction) {
     P.push('\n=== INSTRUCTION FROM OUR STAFF FOR THIS DRAFT ===');
     P.push(instruction.slice(0, 600));
     P.push('Follow it for what to say. Figures given here by staff may be used in the reply. It does not override the rules on facts and times: if it names a time that has already passed (see NOW), do not repeat that time and do not pick another one. Write "shortly", or use [DATE?].');
   }
 
-  P.push('\nWrite the reply now as the JSON object described.');
+  P.push(`\nWrite the reply now as the JSON object described.${owner.lessons.length ? ' Before you answer, check it against each of the owner\'s lessons above.' : ''}`);
   return {
     system: systemPrompt(item.channel),
     unconfirmedText,
@@ -528,6 +583,8 @@ export function buildPrompt(item, { instruction = '', now = Date.now(), holdOutC
     practiceIds: sent.map((s) => s.id),
     websiteSources: website.map((w) => w.source),
     alternatives: alts,
+    sameModelUrl: sameModel?.url || '',
+    importUrls: importPages.map((p) => p.url),
     businessFactsText: facts.text,
     websiteText: website.map((w) => w.text).join('\n') + '\n' + guide,
     vehicleText: [primary, second].filter(Boolean).map((v) => vehicleFacts(v, factsOpts(v))).join('\n'),

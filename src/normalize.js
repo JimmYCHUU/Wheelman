@@ -180,7 +180,11 @@ export function availability(v) {
   const where = clean(v.stockIn).toLowerCase();
   const listed = clean(v.status).toUpperCase() === 'PUBLISHED';
   if (where === 'online') return { code: 'available', text: 'Available now at the Lidcombe yard' };
-  if (where === 'arrived') return { code: 'arrived', text: 'Arrived in Australia and being prepared; not yet ready for inspection' };
+  // A car that has arrived and is listed on the website has been prepared: it is at the yard and
+  // can be inspected. (The owner's correction, 2 Oct 2026.) Until it is listed, it is still being prepared.
+  if (where === 'arrived') return listed
+    ? { code: 'available', text: 'Available now at the Lidcombe yard' }
+    : { code: 'arrived', text: 'Arrived in Australia and being prepared; not yet advertised' };
   if (where === 'transit') return { code: 'transit', text: 'In transit from Japan; not yet in Australia' };
   if (where === 'japan') return { code: 'japan', text: listed ? 'Still in Japan; available to order, not yet shipped' : 'Still in Japan; not yet advertised' };
   return { code: 'unknown', text: 'Unknown' };

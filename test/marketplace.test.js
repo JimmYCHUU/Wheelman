@@ -328,6 +328,14 @@ test('the page gets two separate sections, each with its own waiting count', asy
   assert.equal(db.allLearned().length, 0);
   assert.equal(db.getDraft(draft.id).copied_text, null);
 
+  // "Good reply" and "Could be better" on a Marketplace suggestion teach nothing either.
+  const tell = (path, body) => fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
+  assert.equal((await tell(`/api/drafts/${draft.id}/rating`, { rating: 'good' })).learned, false);
+  assert.equal((await tell(`/api/drafts/${draft.id}/advice`, { note: 'Too long, say the price first' })).learned, false);
+  assert.equal(db.allLearned().length, 0);
+  assert.equal(db.allAdvice().length, 0);
+  assert.throws(() => db.insertAdvice({ draftId: draft.id, itemKey: 'mp:501', note: 'x' }), /only dashboard conversations/);
+
   // Dismiss works on a Marketplace chat, and only on keys the page is allowed to use.
   const post = (path) => fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
   const closed = items.itemFromKey('mp:505');

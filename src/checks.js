@@ -226,7 +226,7 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   for (const n of needsHuman) {
     if (n?.marker && !markers.includes(n.marker) && n.reason) add('input', 'note', `${n.marker}: ${n.reason}`);
   }
-  if (hold) add('input', 'hold', 'This one needs a person. The draft is only a holding reply.');
+  if (hold) add('input', 'hold', 'This one needs a person to decide. Read it carefully before anything is sent.');
 
   const left = leftoverPlaceholders(reply);
   if (left.length) add('fail', 'placeholder', `A placeholder was left in the text: ${[...new Set(left)].join(', ')}`, [...new Set(left)]);

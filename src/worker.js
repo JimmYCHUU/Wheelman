@@ -7,7 +7,7 @@ import { listItems, itemFromKey } from './items.js';
 import { draftFor } from './drafter.js';
 import { latestDraft, isDismissed, draftsAwaitingOutcome, recordOutcome, markSuperseded, setMeta, getMeta, openDb, mpDraftsLastDay } from './db.js';
 import { providers, usage, modelStatus, lastModel } from './llm.js';
-import { learnFrom, canLearnFrom, comparable } from './learn.js';
+import { learnFrom, canLearnFrom, comparable, distilPending } from './learn.js';
 import { refreshVoiceBankIfStale } from './voicebank.js';
 import { similarity } from './text.js';
 
@@ -166,6 +166,8 @@ export async function cycle() {
   try { updateOutcomes(); } catch (e) { state.lastDraftError = { at: Date.now(), message: 'Comparing sent replies failed: ' + e.message }; }
   // Once a day, relearn our salespeople's genuine replies from the latest dashboard conversations.
   try { refreshVoiceBankIfStale(); } catch { /* keep the existing bank */ }
+  // A coaching note written while every AI model was busy still has its lesson to be worked out.
+  try { if (providers().length && Date.now() >= state.pausedUntil) await distilPending(2); } catch { /* next time */ }
   await draftWaiting();
 }
 

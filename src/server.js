@@ -11,7 +11,7 @@ import { availability } from './normalize.js';
 import { firstNameOf, isPlaceholderName } from './redact.js';
 import { businessFactsForPrompt, loadBusinessFacts } from './knowledge.js';
 import * as worker from './worker.js';
-import { onCopied, onRated } from './learn.js';
+import { onCopied, onRated, onApproved, onAdvice } from './learn.js';
 import { displayNameFor } from './people.js';
 import { reservedByAnother } from './deal.js';
 import { learnedStats } from './db.js';
@@ -251,10 +251,31 @@ async function api(req, res, url) {
   if (req.method === 'POST' && m) {
     const body = await readBody(req);
     const rating = ['good', 'edit', 'bad', ''].includes(body.rating) ? body.rating : '';
-    if (!getDraft(Number(m[1]))) return send(res, 404, { error: 'Suggestion not found.' });
-    setDraftRating(Number(m[1]), rating);
-    onRated(Number(m[1]), rating);
-    return send(res, 200, { ok: true });
+    const draft = getDraft(Number(m[1]));
+    if (!draft) return send(res, 404, { error: 'Suggestion not found.' });
+    setDraftRating(draft.id, rating);
+    onRated(draft.id, rating);
+    // "Good reply": the suggestion becomes a model for similar messages. Taking it back forgets it.
+    const item = itemFromKey(draft.item_key);
+    const result = item ? onApproved(item, draft.id, rating === 'good') : { learned: false, why: 'conversation not found' };
+    return send(res, 200, { ok: true, learned: !!result.learned, why: result.why || '' });
+  }
+
+  // "Could be better": what the owner says should be different is kept for similar messages.
+  m = p.match(/^\/api\/drafts\/(\d+)\/advice$/);
+  if (req.method === 'POST' && m) {
+    const body = await readBody(req);
+    const draft = getDraft(Number(m[1]));
+    if (!draft) return send(res, 404, { error: 'Suggestion not found.' });
+    const item = itemFromKey(draft.item_key);
+    const note = String(body.note || '').slice(0, 600);
+    const result = item ? await onAdvice(item, draft.id, note) : { learned: false, why: 'conversation not found' };
+    if (!result.learned) return send(res, 200, { ok: false, learned: false, why: result.why || '', lessons: [] });
+    setDraftRating(draft.id, 'edit');
+    onApproved(item, draft.id, false);
+    // The same note guides a new draft for this customer, as coaching, not as wording to send.
+    const next = await draftFor(item, { coaching: { note, draft: draft.reply } });
+    return send(res, 200, { item: present(itemFromKey(draft.item_key) || item), ok: next.status === 'ready', error: next.error || '', learned: true, lessons: result.lessons || [], pending: !!result.pending });
   }
 
   return send(res, 404, { error: 'Not found' });

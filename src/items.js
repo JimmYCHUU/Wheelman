@@ -206,6 +206,14 @@ export function finishItem(base, timeline, { now = Date.now() } = {}) {
     situation.primary = situation.all[0] || 'general';
   }
 
+  // "Can I see the Shuttle before buying?" names the car by its model, which the wording rules
+  // cannot know. With the car in hand it is recognised as wanting to inspect.
+  const vehicles = findVehicles(lead, timeline, deal, pending);
+  if (!deal && !menu && !situation.all.includes('inspection_booking') && asksToSeeCar(pendingText, vehicles)) {
+    situation.all = [...situation.all.filter((s) => s !== 'general'), 'inspection_booking'];
+    if (situation.primary === 'general') situation.primary = 'inspection_booking';
+  }
+
   const isFirstReply = !timeline.some((e) => e.who === 'us' && !e.internal);
 
   // Whether a suggestion should be written without being asked. Free AI requests are limited,
@@ -252,8 +260,28 @@ export function finishItem(base, timeline, { now = Date.now() } = {}) {
     pastBuyer,
     lastInboundAt: pending.length ? last.at : null,
     lastActivityAt: timeline[timeline.length - 1].at,
-    vehicles: findVehicles(lead, timeline, deal, pending),
+    vehicles,
   };
+}
+
+/**
+ * True when the customer asks to see, view or look at one of their cars by name:
+ * "see the Shuttle", "have a look at the Hiace". Asking to see its photos or price is not that.
+ */
+function asksToSeeCar(text, vehicles) {
+  const names = new Set();
+  for (const v of vehicles) for (const w of `${v.make || ''} ${v.model || ''}`.toLowerCase().split(/[^a-z0-9]+/)) if (w.length >= 3) names.add(w);
+  if (!names.size) return false;
+  for (const m of String(text || '').toLowerCase().matchAll(/\b(?:see|view|look at|check out)\s+(?:the|this|that|your)\s+((?:[a-z0-9-]+\s+){0,2}[a-z0-9-]+)/g)) {
+    const words = m[1].split(/[\s-]+/);
+    if (/^(photos?|pics?|pictures?|videos?|price|listing|ad|details|specs?|history|report|sheet|paperwork|invoice)$/.test(words[0])) continue;
+    const at = words.findIndex((w) => names.has(w));
+    if (at === -1) continue;
+    // "see the Hiace photos" is about the photos, not the van.
+    if (/^(photos?|pics?|pictures?|videos?|price|listing|details|specs?|history|report|sheet)$/.test(words[at + 1] || '')) continue;
+    return true;
+  }
+  return false;
 }
 
 /** Everything known about one customer, and whether they are waiting on us. */
