@@ -100,6 +100,7 @@ const state = {
   edits: new Map(),      // draft id -> what the user has typed
   busy: new Set(),       // conversation keys with a request in flight
   rewriteOpen: false,
+  betterOpen: false,
   infoOpen: false,
   copied: null,          // draft id that was just copied
   status: null,
@@ -136,7 +137,9 @@ function toast(message, action = null) {
   t.style.top = `${visible ? top : 16}px`;
   t.classList.add('is-on');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('is-on', 'has-action'), action ? 9000 : 2600);
+  // A longer message, such as a lesson Wheelman has just learned, stays long enough to be read.
+  const reading = Math.min(14000, Math.max(2600, String(message).length * 65));
+  toastTimer = setTimeout(() => t.classList.remove('is-on', 'has-action'), action ? 9000 : reading);
 }
 
 async function copyText(text) {
@@ -277,11 +280,12 @@ function renderStatus() {
 
   // What Wheelman has learned from replies that were really used.
   const learned = $('#learned');
-  const n = s.learned?.total || 0;
+  const n = (s.learned?.total || 0) + (s.learned?.notes || 0);
   learned.hidden = !n;
   if (n) {
-    learned.textContent = `Learned from ${plural(n, 'reply', 'replies')} you changed`;
-    learned.title = 'When you change a suggestion before sending it, Wheelman keeps what you sent as an example for similar messages. A suggestion used word for word is not kept. Only dashboard conversations are used.';
+    const bits = [s.learned.changed ? `${plural(s.learned.changed, 'reply', 'replies')} you changed` : '', s.learned.approved ? `${s.learned.approved} you approved` : '', s.learned.notes ? plural(s.learned.notes, 'note') : ''].filter(Boolean);
+    learned.textContent = `Learned from ${bits.length > 1 ? bits.slice(0, -1).join(', ') + ' and ' + bits[bits.length - 1] : bits[0]}`;
+    learned.title = 'Wheelman learns from the replies you change before sending, the ones you mark Good reply, and what you write under Could be better. Only dashboard conversations are used.';
   }
 }
 
@@ -596,7 +600,7 @@ function blanksIn(text) {
 
 function composerSignature(item) {
   const d = item.draft;
-  return [item.key, item.state, item.dismissed, d?.id, d?.status, d?.rating, state.busy.has(item.key), state.rewriteOpen, state.copied === d?.id].join('|');
+  return [item.key, item.state, item.dismissed, d?.id, d?.status, d?.rating, state.busy.has(item.key), state.rewriteOpen, state.betterOpen, state.copied === d?.id].join('|');
 }
 
 function renderComposer(item, els, { arriving = false } = {}) {
@@ -773,6 +777,7 @@ function renderComposer(item, els, { arriving = false } = {}) {
   });
   const rewriteBtn = h('button', { class: `btn ${state.rewriteOpen ? 'is-on' : ''}`.trim(), type: 'button', 'aria-expanded': state.rewriteOpen ? 'true' : 'false', onclick: () => {
     state.rewriteOpen = !state.rewriteOpen;
+    if (state.rewriteOpen && state.betterOpen) { state.betterOpen = false; betterRow.hidden = true; betterBtn?.classList.remove('is-on'); betterBtn?.setAttribute('aria-expanded', 'false'); }
     rewriteRow.hidden = !state.rewriteOpen;
     rewriteBtn.classList.toggle('is-on', state.rewriteOpen);
     rewriteBtn.setAttribute('aria-expanded', state.rewriteOpen ? 'true' : 'false');
@@ -780,11 +785,34 @@ function renderComposer(item, els, { arriving = false } = {}) {
     if (state.rewriteOpen) rewriteInput.focus();
   } }, icon('pencil'), 'Rewrite');
 
-  put(after,
-    h('span', { class: 'said' }, icon('check'), 'Copied'),
-    h('span', { text: 'How was the suggestion?' }),
-    [['good', 'Good'], ['edit', 'Needed edits'], ['bad', 'Not usable']].map(([value, label]) =>
-      h('button', { class: `btn ${d.rating === value ? 'is-on' : ''}`.trim(), type: 'button', 'aria-pressed': d.rating === value ? 'true' : 'false', onclick: () => rate(item, value) }, label)));
+  put(after, h('span', { class: 'said' }, icon('check'), 'Copied'));
+
+  // Two ways to teach Wheelman. Marketplace chats are never learned from, so they have neither.
+  const teach = item.channel !== 'marketplace';
+  const approved = d.rating === 'good';
+  const approveBtn = teach ? h('button', { class: `btn ${approved ? 'is-on' : ''}`.trim(), type: 'button', 'aria-pressed': approved ? 'true' : 'false',
+    title: approved ? 'You approved this reply. Click to take that back.' : 'This reply is right as it is. Wheelman will write similar replies the same way.',
+    onclick: () => approve(item) }, icon('check'), approved ? 'Approved' : 'Good reply') : null;
+  const betterInput = h('input', { type: 'text', maxlength: '600', placeholder: 'How should this be handled? For example: too long, or invite them to inspect before talking price', 'aria-label': 'What could be better about this reply' });
+  const betterRow = h('div', { class: 'rewrite', hidden: !state.betterOpen },
+    betterInput,
+    h('button', { class: 'btn outline', type: 'button', onclick: () => improve(item, betterInput.value) }, 'Rewrite and learn'));
+  const closeBetter = () => { state.betterOpen = false; betterRow.hidden = true; betterBtn.classList.remove('is-on'); betterBtn.setAttribute('aria-expanded', 'false'); };
+  betterInput.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); improve(item, betterInput.value); }
+    if (ev.key === 'Escape') { closeBetter(); betterBtn.focus(); }
+  });
+  const betterBtn = teach ? h('button', { class: `btn ${state.betterOpen ? 'is-on' : ''}`.trim(), type: 'button', 'aria-expanded': state.betterOpen ? 'true' : 'false',
+    title: 'Coach Wheelman on how to handle this kind of message. It rewrites this reply and keeps the lesson, not your words, for similar messages.',
+    onclick: () => {
+      state.betterOpen = !state.betterOpen;
+      if (state.betterOpen && state.rewriteOpen) { state.rewriteOpen = false; rewriteRow.hidden = true; rewriteBtn.classList.remove('is-on'); rewriteBtn.setAttribute('aria-expanded', 'false'); }
+      betterRow.hidden = !state.betterOpen;
+      betterBtn.classList.toggle('is-on', state.betterOpen);
+      betterBtn.setAttribute('aria-expanded', state.betterOpen ? 'true' : 'false');
+      state.composerSig = composerSignature(item);
+      if (state.betterOpen) betterInput.focus();
+    } }, 'Could be better') : null;
 
   box.append(
     h('div', { class: 'draft-head' },
@@ -795,10 +823,13 @@ function renderComposer(item, els, { arriving = false } = {}) {
       h('div', { class: 'field' }, backdrop, ta),
       h('div', { class: 'sheet-foot' },
         rewriteBtn,
+        approveBtn,
+        betterBtn,
         h('span', { class: 'grow' }),
         count,
         copyBtn)),
     rewriteRow,
+    teach ? betterRow : null,
     after);
 
   sync();
@@ -930,6 +961,7 @@ async function open(key) {
   if (state.selected === key && state.detail) { $('#app').dataset.view = 'chat'; return; }
   state.selected = key;
   state.rewriteOpen = false;
+  state.betterOpen = false;
   state.copied = null;
   $('#app').dataset.view = 'chat';
   renderList();
@@ -955,6 +987,7 @@ async function write(item, instruction) {
   if (state.busy.has(item.key)) return;
   state.busy.add(item.key);
   state.rewriteOpen = false;
+  state.betterOpen = false;
   if (state.selected === item.key) { renderHead(state.detail, chatFrame()); renderComposer(state.detail, chatFrame()); }
   try {
     const out = await api(`/api/items/${item.key}/draft`, { body: { instruction } });
@@ -1005,20 +1038,51 @@ async function restoreItem(key, reopen = false) {
   } catch (e) { toast(e.message); }
 }
 
-async function rate(item, value) {
+/** "Good reply": this suggestion is right as written. Wheelman keeps it as a model for similar messages. */
+async function approve(item) {
   const d = item.draft;
-  const next = d.rating === value ? '' : value;
+  const next = d.rating === 'good' ? '' : 'good';
   try {
-    await api(`/api/drafts/${d.id}/rating`, { body: { rating: next } });
+    const out = await api(`/api/drafts/${d.id}/rating`, { body: { rating: next } });
     d.rating = next;
-    for (const b of document.querySelectorAll('.after .btn')) {
-      const on = b.textContent === { good: 'Good', edit: 'Needed edits', bad: 'Not usable' }[next];
-      b.classList.toggle('is-on', on);
-      b.setAttribute('aria-pressed', on ? 'true' : 'false');
-    }
-    state.composerSig = composerSignature(item);
-    if (next) toast('Thanks, noted');
+    if (state.selected === item.key) renderComposer(item, chatFrame());
+    toast(!next ? 'Approval taken back' : out.learned ? 'Approved. Wheelman will write similar replies this way.' : 'Approved');
+    refreshStatus();
   } catch (e) { toast(e.message); }
+}
+
+/**
+ * "Could be better": you coach Wheelman on how to handle this kind of message. It takes a lesson
+ * from what you wrote, keeps the lesson (not your words) for similar messages, and writes this
+ * reply again.
+ */
+async function improve(item, note) {
+  const said = String(note || '').trim();
+  if (!said) { toast('Say what could be better first'); return; }
+  if (state.busy.has(item.key)) return;
+  state.busy.add(item.key);
+  state.betterOpen = false;
+  state.rewriteOpen = false;
+  if (state.selected === item.key) { renderHead(state.detail, chatFrame()); renderComposer(state.detail, chatFrame()); }
+  try {
+    const out = await api(`/api/drafts/${item.draft.id}/advice`, { body: { note: said } });
+    state.busy.delete(item.key);
+    if (out.item && state.selected === item.key) {
+      state.detail = out.item;
+      state.copied = null;
+      renderHead(out.item, chatFrame());
+      renderComposer(out.item, chatFrame(), { arriving: true });
+      renderInfo();
+    } else if (state.selected === item.key) { renderHead(state.detail, chatFrame()); renderComposer(state.detail, chatFrame()); }
+    const lesson = (out.lessons || [])[0];
+    toast(!out.learned ? 'That could not be saved' : lesson ? `Learned: ${lesson.do}` : out.pending ? 'Noted. The lesson will be worked out when the AI is free.' : 'Noted for this reply. Nothing to reuse was found in it.');
+  } catch (e) {
+    state.busy.delete(item.key);
+    if (state.selected === item.key) { renderHead(state.detail, chatFrame()); renderComposer(state.detail, chatFrame()); }
+    toast(e.message);
+  }
+  refreshList();
+  refreshStatus();
 }
 
 // ---- refreshing ------------------------------------------------------------------
@@ -1098,7 +1162,7 @@ async function showSection(section) {
   state.q = '';
   $('#q').value = '';
   $('#q').placeholder = section === 'marketplace' ? 'Search name, car or message' : 'Search name, number or message';
-  state.selected = null; state.detail = null; state.rewriteOpen = false; state.copied = null;
+  state.selected = null; state.detail = null; state.rewriteOpen = false; state.betterOpen = false; state.copied = null;
   state.list = [];
   state.counts = { waiting: state.sections[section] || 0, quiet: 0, other: 0 };
   for (const b of document.querySelectorAll('.section')) { const on = b.dataset.section === section; b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }

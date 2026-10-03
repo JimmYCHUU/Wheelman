@@ -156,8 +156,6 @@ export function recentPractice({ days = 45, now = Date.now() } = {}) {
       if (reply.opening.length > 900) continue;
 
       const situation = classify(customerText, { events, leadStatus: item.lead?.status });
-      // A complaint is held for a person. How one was answered before is not a pattern to repeat.
-      if (situation.primary === 'complaint') continue;
       rows.push({
         id: `p-${t[i].key}`,
         itemKey: item.itemKey,

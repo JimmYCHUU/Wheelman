@@ -147,6 +147,55 @@ export function relevantWebsite(query, max = 3) {
   return out;
 }
 
+// ---- the website's importing pages ------------------------------------------------------------
+
+const TWO_WORD_MAKES = new Set(['alfa-romeo', 'mercedes-benz', 'land-rover', 'aston-martin', 'rolls-royce']);
+let importPages = { dir: '', at: 0, list: [] };
+
+/** One entry per saved importing page: its address, a title, and the make and model words in its name. */
+function loadImportPages() {
+  const dir = config.importPagesDir;
+  if (importPages.dir === dir && Date.now() - importPages.at < CACHE_MS) return importPages.list;
+  const list = [];
+  if (fs.existsSync(dir)) {
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith('.md')) continue;
+      const head = fs.readFileSync(path.join(dir, name), 'utf8').slice(0, 500).replace(/\r/g, '');
+      const url = (head.match(/source:\s*(https:\/\/\S+)/) || [])[1];
+      const tokens = name.replace(/\.md$/, '').toLowerCase().split('-').filter(Boolean);
+      if (!url || tokens.length < 3) continue;
+      const makeWords = TWO_WORD_MAKES.has(`${tokens[0]}-${tokens[1]}`) ? 2 : 1;
+      const model = tokens.slice(makeWords, -1);
+      if (!model.length) continue;
+      // "Toyota Crown GRS182": the words of the name, with the model code in capitals.
+      const title = (head.match(/^Import (.+?) \| Carbarn$/m) || [])[1]
+        || [...tokens.slice(0, -1).map((t) => t[0].toUpperCase() + t.slice(1)), tokens[tokens.length - 1].toUpperCase()].join(' ');
+      list.push({ url, title, make: tokens.slice(0, makeWords), model, code: tokens[tokens.length - 1] });
+    }
+  }
+  importPages = { dir, at: Date.now(), list };
+  return list;
+}
+
+/**
+ * The website's importing pages for a model the customer named: "can you import a Toyota Crown?"
+ * gives the Crown page. A short or numeric model name ("Fit", "X5") counts only with its make.
+ */
+export function importPagesFor(text, max = 2) {
+  const said = new Set(String(text || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean));
+  if (!said.size) return [];
+  const scored = [];
+  for (const p of loadImportPages()) {
+    const first = p.model[0];
+    if (!said.has(first)) continue;
+    const makeNamed = p.make.some((m) => said.has(m));
+    if (!makeNamed && (first.length < 4 || /^\d+$/.test(first))) continue;
+    const matched = p.model.filter((m) => said.has(m)).length;
+    scored.push({ p, score: matched + (said.has(p.code) ? 2 : 0) + (makeNamed ? 0.5 : 0) - 0.25 * (p.model.length - matched) });
+  }
+  return scored.sort((a, b) => b.score - a.score || a.p.url.localeCompare(b.p.url)).slice(0, max).map(({ p }) => ({ url: p.url, title: p.title }));
+}
+
 export function websiteStats() {
   const all = loadWebsiteChunks();
   return { passages: all.length, pages: new Set(all.map((c) => c.source)).size };
