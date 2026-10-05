@@ -120,6 +120,33 @@ test('when every model has used up its day, it says so plainly and stops asking'
   await assert.rejects(() => quickly(() => llm.complete('s', 'u')), (e) => /Quota exceeded for metric/.test(e.detail) && /model-c/.test(e.detail));
 });
 
+test('Marketplace chats are asked of the small model onwards, and never of the better ones', async () => {
+  const { config } = await import('../src/config.js');
+  const kept = config.llm.marketplaceModel;
+  config.llm.marketplaceModel = 'model-c';
+  try {
+    assert.deepEqual(llm.providers({ marketplace: true }).map((p) => p.model), ['model-c']);
+    assert.deepEqual(llm.modelStatus().map((m) => m.marketplace), [false, false, true]);
+    const chat = await quickly(() => llm.complete('s', 'u', { marketplace: true }));
+    assert.equal(chat.model, 'model-c');
+    assert.deepEqual(asked, ['model-c']);
+
+    // Its day is used up: Marketplace says so and stops. Dashboard customers still get the best model.
+    behave = { 'model-c': () => usedUp('model-c') };
+    asked.length = 0;
+    await assert.rejects(() => quickly(() => llm.complete('s', 'u', { marketplace: true })), (e) => e.daily === true && /^The AI models used for Marketplace have used up their allowance for today/.test(e.message));
+    assert.deepEqual(asked, ['model-c']);
+    asked.length = 0;
+    assert.equal((await quickly(() => llm.complete('s', 'u'))).model, 'model-a');
+
+    // With no small model named, or one that is not in the list, there is no split.
+    config.llm.marketplaceModel = '';
+    assert.equal(llm.providers({ marketplace: true }).length, 3);
+    config.llm.marketplaceModel = 'some-other-model';
+    assert.equal(llm.providers({ marketplace: true }).length, 3);
+  } finally { config.llm.marketplaceModel = kept; }
+});
+
 test('busy models give a plain message that needs nobody, and a rejected key one that does', async () => {
   behave = { 'model-a': busyMinute, 'model-b': overloaded, 'model-c': busyMinute };
   const busy = await quickly(() => drafter.draftFor(item(101), { save: false }));

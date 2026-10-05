@@ -170,6 +170,8 @@ export function openDb(file = config.dbPath) {
   ensureColumn(db, 'drafts', 'copied_text', 'TEXT');
   ensureColumn(db, 'drafts', 'copied_at', 'INTEGER');
   ensureColumn(db, 'drafts', 'context_json', 'TEXT');
+  ensureColumn(db, 'drafts', 'edited_text', 'TEXT');
+  ensureColumn(db, 'drafts', 'edited_at', 'INTEGER');
   ensureColumn(db, 'advice', 'lessons_json', 'TEXT');
   ensureColumn(db, 'leads', 'status_history_json', 'TEXT');
   ensureColumn(db, 'conversations', 'lead_platform', 'TEXT');
@@ -538,6 +540,14 @@ export function undismiss(itemKey) {
 
 export function recordCopied(id, text) {
   openDb().prepare('UPDATE drafts SET copied_text = ?, copied_at = ? WHERE id = ?').run(text, Date.now(), id);
+}
+
+/**
+ * Keeps what the person has typed over a suggestion, so it is still there after a reload.
+ * `null` means the box holds the suggestion as it was written. An empty text means it was cleared.
+ */
+export function recordEdit(id, text) {
+  openDb().prepare('UPDATE drafts SET edited_text = ?, edited_at = ? WHERE id = ?').run(text, text === null ? null : Date.now(), id);
 }
 
 /** Notes that Copy was pressed, without keeping the text. Used for Marketplace suggestions. */

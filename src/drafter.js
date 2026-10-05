@@ -236,15 +236,17 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
     // answer, or it will not keep figures out of its lines, the opening is the standard one.
     const standardOpening = () => ({ json: { reply: plan.opening, needs_human: [], facts_used: [], hold: false }, provider: 'none', model: 'standard wording' });
     const usable = (e) => plan?.stage === 'offer' && e instanceof LlmError && e.status !== 401 && e.status !== 403;
+    // Marketplace chats are written by the small model, so the better ones stay free for dashboard customers.
+    const which = { marketplace: chat };
     let result;
-    try { result = await complete(prompt.system, prompt.user); }
+    try { result = await complete(prompt.system, prompt.user, which); }
     catch (e) { if (!usable(e)) throw e; logLine('suggestion', `${item.itemKey}: no AI model for the opening of an auction offer, standard opening used. ${e.detail || e.message}`); result = standardOpening(); }
     let best = assess(result.json);
 
     // One second attempt when a hard check fails.
     if (worst(best.checks) === 'fail' && result.provider !== 'none') {
       try {
-        const again = await complete(prompt.system, `${prompt.user}\n\n${retryNote(best.checks)}\n\nYour rejected draft was:\n${redact(best.body, item.lead)}`);
+        const again = await complete(prompt.system, `${prompt.user}\n\n${retryNote(best.checks)}\n\nYour rejected draft was:\n${redact(best.body, item.lead)}`, which);
         const second = assess(again.json);
         if (failures(second.checks) < failures(best.checks)) { result = again; best = second; }
       } catch (e) { if (!usable(e)) throw e; }
