@@ -7,8 +7,8 @@ import { findUrls, hasEmoji, wordCount, stripEmoji, similarity } from './text.js
 import { sydneyHour } from './time.js';
 import { promiseChecks } from './promises.js';
 
-export const MARKERS = ['[PRICE?]', '[TRADE-IN VALUE?]', '[DELIVERY COST?]', '[DATE?]', '[CHECK?]'];
-const MARKER_RE = /\[(PRICE|TRADE-IN VALUE|DELIVERY COST|DATE|CHECK)\?\]/g;
+export const MARKERS = ['[PRICE?]', '[TRADE-IN VALUE?]', '[DELIVERY COST?]', '[DATE?]', '[CHECK?]', '[DEPOSIT LINK?]'];
+const MARKER_RE = /\[(PRICE|TRADE-IN VALUE|DELIVERY COST|DATE|CHECK|DEPOSIT LINK)\?\]/g;
 
 const BANNED = [
   [/i hope (this|you|that)/i, 'opens with "I hope…"'],

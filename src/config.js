@@ -23,10 +23,22 @@ export const config = {
     baseUrl: (env.DASHBOARD_API_URL || '').trim().replace(/\/+$/, ''),
     origin: 'https://dashboard.carbarn.com.au',
     platform: 'carbarnau',
+    // Import and auction enquiries are kept on a list of their own on the dashboard.
+    importsPlatform: 'IMPORTS',
     channel: 'SMS',
     username: env.DASHBOARD_USERNAME || '',
     password: env.DASHBOARD_PASSWORD || '',
     timezone: 'Australia/Sydney',
+  },
+
+  // The website's live Japan auction feed: the cars, Carbarn's suggested bid and the landed-cost
+  // calculator. Public (no login). It is on the same service as the dashboard unless set otherwise.
+  auction: {
+    baseUrl: (env.AUCTION_API_URL || env.DASHBOARD_API_URL || '').trim().replace(/\/+$/, ''),
+    // The bid Wheelman suggests is Carbarn's suggested bid rounded up to the next step.
+    bidStepYen: num(env.AUCTION_BID_STEP_YEN, 50000),
+    // How far over the customer's budget a car may be and still be offered (0.15 = 15%).
+    budgetSlack: num(env.AUCTION_BUDGET_SLACK, 0.15),
   },
 
   site: {

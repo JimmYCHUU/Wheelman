@@ -17,23 +17,26 @@ import { comparable } from './learn.js';
 const DAY = 24 * 3600 * 1000;
 const BURST_MS = 15 * 60 * 1000;
 export const BLOCK_LABEL = '[then our standard address block]';
+export const OFFER_LABEL = '[then the auction car: its details, link, bid and cost breakdown]';
 
 const LINK_LABELS = [
   [/https?:\/\/\S*carbarn\.com\.au\/vehicles\/\S+#inspection=online\S*/gi, '[online video inspection link]'],
   [/https?:\/\/\S*carbarn\.com\.au\/vehicles\/\S+#inspection\S*/gi, '[inspection booking link]'],
   [/https?:\/\/\S*carbarn\.com\.au\/vehicles\/\S+/gi, '[vehicle page link]'],
+  [/https?:\/\/\S*carbarn\.com\.au\/live-auction\/\S+/gi, '[live auction link]'],
+  [/https?:\/\/\S*carbarn\.com\.au\/customer-links\/\S+/gi, '[link]'],
   [/https?:\/\/(?:photos\.app\.goo\.gl|photos\.google\.com)\S*/gi, '[photo album link]'],
   [/https?:\/\/(?:maps\.app\.goo\.gl|(?:www\.)?google\.[a-z.]+\/maps)\S*/gi, '[Google Maps link]'],
   [/https?:\/\/\S+/gi, '[link]'],
 ];
 /** A label left in a finished reply means the AI copied an example instead of using the real thing. */
-export const LEFTOVER_LABEL = /\[(?:online video inspection link|inspection booking link|vehicle page link|photo album link|Google Maps link|link|amount|then our standard address block)\]/i;
+export const LEFTOVER_LABEL = /\[(?:online video inspection link|inspection booking link|vehicle page link|photo album link|Google Maps link|live auction link|link|amount|then our standard address block|then the auction car: its details, link, bid and cost breakdown)\]/i;
 
 /** Links and dollar amounts belong to the other customer's deal: only what kind of thing it was is kept. */
 export function labelled(text) {
   let t = String(text || '');
   for (const [re, label] of LINK_LABELS) t = t.replace(re, label);
-  return t.replace(/\$\s?\d[\d,]*(?:\.\d+)?(?:\s?k\b)?/gi, '[amount]');
+  return t.replace(/\$\s?\d[\d,]*(?:\.\d+)?(?:\s?k\b)?/gi, '[amount]').replace(/¥\s?\d[\d,]*/g, '[amount]');
 }
 
 const SIGN_LINE = [
@@ -67,15 +70,20 @@ const UNUSUAL_BREAKS = new RegExp('[' + String.fromCharCode(0x2028, 0x2029) + ']
 function cleanReply(texts, lead) {
   const parts = [];
   let hadBlock = false;
+  let hadOffer = false;
   for (const raw of texts) {
-    const block = /📍/.test(raw);
+    let own = String(raw).replace(/\r/g, '').replace(UNUSUAL_BREAKS, '\n');
+    // An auction offer: everything from the car's details down belongs to that customer's deal.
+    const offerAt = /\/live-auction\//i.test(own) ? own.search(/(^|\n)\s*Vehicle details:/i) : -1;
+    if (offerAt !== -1) { own = own.slice(0, offerAt); hadOffer = true; }
+    const block = /📍/.test(own);
     hadBlock = hadBlock || block;
-    const body = withoutAnySignature(stripLocationBlock(String(raw).replace(/\r/g, '').replace(UNUSUAL_BREAKS, '\n')));
+    const body = withoutAnySignature(stripLocationBlock(own));
     if (body) parts.push(body);
   }
   const opening = parts.join('\n');
   const text = maskTrailingNames(maskGreetingNames(redact(labelled(opening), lead)));
-  return { opening: text, hadBlock, text: [text, hadBlock ? BLOCK_LABEL : ''].filter(Boolean).join('\n') };
+  return { opening: text, hadBlock, text: [text, hadOffer ? OFFER_LABEL : '', hadBlock ? BLOCK_LABEL : ''].filter(Boolean).join('\n') };
 }
 
 const NOT_A_NAME = /^(Sydney|Lidcombe|Japan|Australia|Carbarn|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Yes|No|Thanks|Regards|Cheers|Sorry|Sure|Okay|Please|Today|Tomorrow|Perfect|Great|Noted|Done|Sir|Mate|Bro|Brother|Madam)$/;

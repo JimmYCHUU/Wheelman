@@ -349,7 +349,11 @@ function modelStock(vehicle, all) {
   return { name: `${make} ${vehicle.model}`, count: same.length, url: `${config.site.baseUrl}/used-cars/${slug(vehicle.make)}/${slug(vehicle.model)}` };
 }
 
-export function buildPrompt(item, { instruction = '', coaching = null, now = Date.now(), holdOutConversation = true } = {}) {
+/**
+ * @param importPlan  for an import or auction enquiry: what the reply should be (see imports.js).
+ *                    Its lines are given to the AI; what it adds under the AI's text is put on by the drafter.
+ */
+export function buildPrompt(item, { instruction = '', coaching = null, importPlan = null, now = Date.now(), holdOutConversation = true } = {}) {
   const lead = item.lead;
   const chat = item.channel === 'marketplace';
   const mp = chat ? item.marketplace || {} : null;
@@ -400,7 +404,8 @@ export function buildPrompt(item, { instruction = '', coaching = null, now = Dat
     P.push(`CHANNEL: Facebook Marketplace chat${mp.listingTitle ? `, about our listing "${redact(mp.listingTitle, lead)}"` : ''}. Keep it to one or two short lines.`);
     P.push(`CUSTOMER NAME: ${item.hasName ? 'known. If you use it, write {{NAME}} inside a sentence, never on a greeting line of its own.' : 'not known. Do not use {{NAME}}.'}`);
   } else {
-    P.push(writtenToday(item, now)
+    // An auction offer is a quote in its own right: it is greeted even when we wrote earlier today.
+    P.push(writtenToday(item, now) && importPlan?.stage !== 'offer'
       ? `CUSTOMER NAME: ${item.hasName ? 'known.' : 'not known. Do not use {{NAME}}.'} We have already written to this customer today, so do not greet them again: no "Hi" line and no opening with their name. Start with the answer.`
       : `CUSTOMER NAME: ${item.hasName ? 'known. Use {{NAME}} in the greeting.' : 'not known. Greet with "Hi," and do not use {{NAME}}.'}`);
     // Whether the record is complete, never what it holds. Some of the owner's lessons depend on it.
@@ -435,13 +440,15 @@ export function buildPrompt(item, { instruction = '', coaching = null, now = Dat
   P.push(`\nFull stock list: ${config.site.baseUrl}/used-cars`);
 
   // Which inspection booking link to offer: in person, or online video for a customer who is far away.
-  const inspection = inspectionPlan(item, primary, { instruction: [instruction, coaching?.note].filter(Boolean).join('\n'), now });
+  const noPlan = { kind: null, url: '', urls: [], lines: [], must: false };
+  const inspection = importPlan ? noPlan : inspectionPlan(item, primary, { instruction: [instruction, coaching?.note].filter(Boolean).join('\n'), now });
   if (inspection.lines.length) {
     P.push('\n=== INSPECTION ===');
     P.push(inspection.lines.join('\n'));
   }
 
-  const standard = standardPlan(item, primary, { gone: !!primaryGone, owner: !!primaryOpts.owner, inspection });
+  // An import enquiry has its own closing lines, added by the drafter, in place of the standard block.
+  const standard = importPlan ? { on: false, vehicleUrl: '', inspectionUrl: '', lines: [] } : standardPlan(item, primary, { gone: !!primaryGone, owner: !!primaryOpts.owner, inspection });
   if (standard.on) {
     P.push('\n=== STANDARD FIRST REPLY ===');
     P.push(standard.lines.join('\n'));
@@ -478,8 +485,13 @@ export function buildPrompt(item, { instruction = '', coaching = null, now = Dat
     P.push(guide);
   }
 
+  if (importPlan?.lines?.length) {
+    P.push(`\n=== ${importPlan.stage === 'offer' ? 'AUCTION CAR FOR THIS CUSTOMER' : 'IMPORT ENQUIRY'} ===`);
+    P.push(importPlan.lines.join('\n'));
+  }
+
   // A model the customer asks us to import: its page on our website, when there is one.
-  const importPages = !deal && item.situation.all.includes('import_sourcing') ? importPagesFor(item.pendingText) : [];
+  const importPages = !deal && importPlan?.stage !== 'offer' && item.situation.all.includes('import_sourcing') ? importPagesFor(`${item.pendingText} ${importPlan?.w?.car || ''}`) : [];
   if (importPages.length) {
     P.push('\n=== IMPORTING PAGES ON OUR WEBSITE ===');
     P.push('The customer named a model we can import to order. Its page on our website:');

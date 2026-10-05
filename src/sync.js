@@ -1,8 +1,8 @@
 // Pulls new leads, conversations, messages and stock from the dashboard into the local database.
 
 import * as dash from './dashboard.js';
-import { normalizeLead, normalizeConversation, normalizeMessage, normalizeVehicle, normalizeSale } from './normalize.js';
-import { upsertLead, upsertConversation, upsertMessage, upsertVehicle, upsertSale, deleteSale, rekeyLeadItems, getConversation, getMeta, setMeta, transaction, openDb, upsertMpConversation, replaceMpMessages, getMpConversation, countRows } from './db.js';
+import { normalizeLead, normalizeConversation, normalizeMessage, normalizeVehicle, normalizeSale, normalizeAuctionOrder } from './normalize.js';
+import { upsertLead, upsertConversation, upsertMessage, upsertVehicle, upsertSale, deleteSale, rekeyLeadItems, getConversation, getMeta, setMeta, transaction, openDb, upsertMpConversation, replaceMpMessages, getMpConversation, countRows, upsertAuctionOrder, importLeadsToCheck } from './db.js';
 import * as mp from './marketplace.js';
 import { config } from './config.js';
 
@@ -59,9 +59,33 @@ export async function syncLeads({ pages = 3, size = 50 } = {}) {
     n += storeLeads(list);
     if (page < pages) await pause(250);
   }
+  // Import and auction enquiries are on a list of their own. It is short, so one page covers it.
+  let imports = 0;
+  try {
+    const j = await dash.fetchLeadsPage(1, size, config.dashboard.importsPlatform);
+    imports = storeLeads(j.leadDtoList || []);
+  } catch (e) { if (!n) throw e; /* the usual leads were read; this list is tried again next time */ }
   // A lead that has gained a conversation keeps its suggestions under the conversation's key.
   rekeyLeadItems();
-  return { leads: n };
+  return { leads: n, importLeads: imports };
+}
+
+const DAY = 24 * 3600 * 1000;
+
+/**
+ * For import and auction leads that are active, reads what the customer asked us to find (the
+ * auction request the dashboard keeps for them). Each lead is looked at again every 20 minutes
+ * at most, and only a few per round.
+ */
+export async function syncAuctionOrders({ days = 21, everyMinutes = 20, now = Date.now() } = {}) {
+  let read = 0;
+  for (const leadId of importLeadsToCheck(config.dashboard.importsPlatform, now - days * DAY, now - everyMinutes * 60 * 1000)) {
+    const rows = await dash.fetchAuctionOrders(leadId);
+    upsertAuctionOrder(leadId, normalizeAuctionOrder(rows), now);
+    read++;
+    await pause(150);
+  }
+  return { auctionRequestsRead: read };
 }
 
 /**
@@ -98,6 +122,8 @@ export async function syncAll(opts = {}) {
   Object.assign(result, await syncVehicles(opts.vehicles));
   Object.assign(result, await syncLeads(opts.leads));
   Object.assign(result, await syncConversations(opts.conversations));
+  // What import customers asked us to find. A problem here must not fail the whole check.
+  try { Object.assign(result, await syncAuctionOrders(opts.auction)); } catch (e) { result.auctionRequestsError = e.message; }
   result.tookSeconds = Math.round((Date.now() - started) / 100) / 10;
   setMeta('last_sync', { at: Date.now(), ok: true, result });
   return result;
