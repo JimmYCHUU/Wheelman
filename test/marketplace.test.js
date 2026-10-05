@@ -80,11 +80,16 @@ function engine(req, res) {
 
 const aiSeen = [];
 let script = [];
+const usedUpModels = new Set(); // models that answer "today's free allowance is used up"
 function ai(req, res) {
   let body = '';
   req.on('data', (c) => { body += c; });
   req.on('end', () => {
     aiSeen.push(JSON.parse(body));
+    if (usedUpModels.has(aiSeen.at(-1).model)) {
+      res.writeHead(429, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify([{ error: { code: 429, message: 'You exceeded your current quota.\nPlease retry in 17h45m56.7s.', details: [{ violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }] }, { retryDelay: '63956s' }] } }]));
+    }
     const next = script.shift() || { reply: 'Yes, it is still available.', needs_human: [], facts_used: [], hold: false };
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(next) }, finish_reason: 'stop' }] }));
@@ -413,11 +418,14 @@ test('Marketplace has its own allowance, and dashboard customers are drafted fir
   assert.equal(await worker.draftWaiting(), 1);
   assert.ok(db.openDb().prepare("SELECT 1 FROM drafts WHERE item_key = 'c:901' AND status = 'ready'").get());
   assert.equal(db.openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key = 'mp:503'").get().n, 0);
+  assert.deepEqual([...new Set(aiSeen.map((b) => b.model))], ['gemini-3.8-flash'], 'a dashboard customer gets the best model');
 
-  // With allowance, the waiting Marketplace chats are drafted too.
+  // With allowance, the waiting Marketplace chats are drafted too, by the small model only.
   config.marketplace.dailyDrafts = 60;
+  aiSeen.length = 0;
   const made = await worker.draftWaiting();
   assert.equal(made, 2, 'mp:503 and mp:504');
+  assert.deepEqual([...new Set(aiSeen.map((b) => b.model))], ['gemini-3.5-flash-lite'], 'the better models are kept for dashboard customers');
   assert.equal(db.openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key = 'mp:503' AND status = 'ready'").get().n, 1);
   assert.equal(await worker.draftWaiting(), 0);
 });
@@ -445,4 +453,41 @@ test('when the engine cannot be reached, the dashboard side carries on and the s
   assert.equal(status.marketplace.lastSync.ok, false);
   // The dashboard login is not filled in for this test, and Marketplace did not need it.
   assert.ok(status.missing.some((m) => /dashboard/.test(m)));
+});
+
+test('when the small model has used up its day, only Marketplace waits: dashboard customers are still written for', async () => {
+  const { worker, db, sync } = await load();
+  const llm = await import('../src/llm.js');
+  const t = Date.now();
+  config.marketplace.url = `http://127.0.0.1:${engineServer.address().port}/inbox`;
+  chats.set(506, { row: row(506, 'Zoe Hart', 3), messages: [message(60, 'in', 'phone', 'Is the Noah still for sale?', 3)] });
+  await sync.syncMarketplace();
+  db.upsertLead({ id: 802, conversationId: 902, firstName: 'Omar', lastName: 'Haddad', phone: '0400111333', email: '', source: 'carsales', status: 'NEW', platform: 'CARSALES', state: 'NSW', leadAt: t - 3600e3, updatedAt: t - 300e3, stocks: ['1159'], inquiries: [] });
+  db.upsertConversation({ id: 902, phone: '+61400111333', channel: 'SMS', status: 'OPEN', leadId: 802, customerName: 'Omar Haddad', latestDirection: 'IN', latestAt: t - 300e3, latestBody: 'x' });
+  db.upsertMessage({ id: 7010, conversationId: 902, direction: 'IN', body: 'How many seats does the Noah have?', sentBy: null, status: 'SENT', mediaType: null, at: t - 300e3, importedAt: t - 300e3 });
+
+  llm.resetModelState();
+  usedUpModels.add('gemini-3.5-flash-lite');
+  aiSeen.length = 0; script = [];
+  const real = globalThis.setTimeout;
+  globalThis.setTimeout = (f, ms, ...a) => real(f, Math.min(ms, 5), ...a); // no real waiting between tries
+  try {
+    assert.equal(await worker.draftWaiting(), 1, 'the dashboard customer');
+    assert.ok(db.openDb().prepare("SELECT 1 FROM drafts WHERE item_key = 'c:902' AND status = 'ready' AND model = 'gemini-3.8-flash'").get());
+    const chat = db.openDb().prepare("SELECT status, error FROM drafts WHERE item_key = 'mp:506' ORDER BY id DESC").get();
+    assert.equal(chat.status, 'failed');
+    assert.match(chat.error, /^The AI models used for Marketplace have used up their allowance for today\. Marketplace suggestions start again by themselves around /);
+    assert.deepEqual([...new Set(aiSeen.map((b) => b.model))], ['gemini-3.8-flash', 'gemini-3.5-flash-lite'], 'no better model was asked for the chat');
+    assert.ok(worker.state.mpHoldUntil > Date.now() + 50 * 60e3, 'Marketplace waits about an hour');
+    assert.ok(worker.state.pausedUntil < Date.now(), 'the dashboard is not paused');
+    assert.equal(worker.state.lastDraftError, null, 'nothing red on the page');
+
+    // While Marketplace waits, nothing is asked for it, and a new dashboard message is still answered.
+    db.upsertMessage({ id: 7011, conversationId: 902, direction: 'OUT', body: 'It has 8 seats.', sentBy: 'Dana', status: 'SENT', mediaType: null, at: t - 200e3, importedAt: t - 200e3 });
+    db.upsertMessage({ id: 7012, conversationId: 902, direction: 'IN', body: 'Thanks. Is it petrol or hybrid?', sentBy: null, status: 'SENT', mediaType: null, at: t - 100e3, importedAt: t - 100e3 });
+    db.upsertConversation({ id: 902, phone: '+61400111333', channel: 'SMS', status: 'OPEN', leadId: 802, customerName: 'Omar Haddad', latestDirection: 'IN', latestAt: t - 100e3, latestBody: 'x' });
+    aiSeen.length = 0;
+    assert.equal(await worker.draftWaiting(), 1);
+    assert.ok(aiSeen.every((b) => b.model === 'gemini-3.8-flash'));
+  } finally { globalThis.setTimeout = real; usedUpModels.clear(); llm.resetModelState(); worker.state.mpHoldUntil = 0; }
 });

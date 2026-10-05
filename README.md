@@ -1,7 +1,7 @@
 # Wheelman 🛞
 
 ![Node.js 24](https://img.shields.io/badge/node-24-339933)
-![Tests](https://img.shields.io/badge/tests-175%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-181%20passing-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-lightgrey)
 ![Free AI models](https://img.shields.io/badge/AI-free%20models%20only-blue)
 ![Never sends](https://img.shields.io/badge/sending-never%2C%20copy%20only-orange)
@@ -404,14 +404,22 @@ A switch at the top chooses the section: **Dashboard** for leads and text messag
 
 ### The message box
 
-The suggestion waits in the message box, marked **not sent**.
+The suggestion waits in the message box, marked **not sent**. The box is an editor.
 
-- Edit the text directly in the box.
-- **Copy reply** copies it. `Ctrl + Enter` also copies.
+- **Change it.** Click in the text and type. What you type is saved a moment after you stop,
+  so it is still there after a reload, a restart or a look at another conversation. The top
+  right of the box says when it was saved.
+- **Clear** empties the box so you can write your own reply. `Ctrl + Z` undoes it.
+- **Bring back the suggestion** returns the box to what Wheelman wrote. It appears as soon as
+  the text differs from the suggestion.
+- **Copy reply** copies what is in the box. `Ctrl + Enter` also copies, and so does selecting
+  the whole text and pressing `Ctrl + C`. When you had changed the text, Wheelman learns from
+  the change.
 - **Rewrite** takes an instruction, for example `offer $27,500` or `make it shorter`. It
-  changes this reply only.
-- **Good reply** approves the suggestion as it is. Wheelman keeps it as the model for similar
-  messages. Press it again to take the approval back.
+  changes this reply only, and replaces what is in the box.
+- **Good reply** approves the reply as it stands in the box: the suggestion as written, or
+  with your changes. Wheelman keeps it as the model for similar messages. If you change the
+  text afterwards, the model follows. Press the button again to take the approval back.
 - **Could be better** is for coaching: say how this kind of message should be handled, for
   example `too long`, or `invite them to inspect before talking price`. Wheelman takes a
   lesson from what you wrote, shows you the lesson, writes this reply again, and keeps the
@@ -427,6 +435,8 @@ The suggestion waits in the message box, marked **not sent**.
 | A blue note | The reply needs a person's decision | Read the note before sending |
 | A blue tick | Figures and links match our records | Read it and send |
 | "You have changed the text" | What you typed has not been checked | Check your own figures |
+| "The suggestion is cleared" | The box is empty | Type your own reply, or bring the suggestion back. If no reply is needed at all, use Dismiss |
+| "Not saved yet" in red at the top right of the box | Wheelman did not answer when the text was being saved | Keep the page open. It is tried again every few seconds |
 
 | Gap | When |
 |---|---|
@@ -469,7 +479,12 @@ differences:
 - **Prices.** A price that appears only in an auto-reply or in the engine's notes is not
   treated as ours. If the price on the Facebook listing differs from the dashboard price, the
   suggestion says so.
-- **No learning.** The text copied from this section is not kept.
+- **No learning.** The text copied from this section is not kept. What you type over a
+  suggestion is saved so it is not lost, and is never learned from.
+- **The small AI model.** Marketplace chats are written by `gemini-3.5-flash-lite` and the
+  models after it in the list. The three better models are never asked, so their small daily
+  allowance is kept for dashboard customers. When Marketplace's models are busy or used up,
+  only Marketplace waits.
 
 Dashboard customers are drafted first, and Marketplace has its own allowance so it cannot use
 up the day's free AI requests.
@@ -479,6 +494,7 @@ up the day's free AI requests.
 | `MARKETPLACE_URL` | Where the inbox is read from | Empty: the section stays off |
 | `MARKETPLACE_ENABLED` | Set to `0` to switch the section off | `1` |
 | `MARKETPLACE_DAILY_DRAFTS` | Most Marketplace suggestions in any 24 hours | `60` |
+| `MARKETPLACE_MODEL` | Marketplace chats use this model and the ones after it in the list. Leave empty to let Marketplace use every model | `gemini-3.5-flash-lite` |
 
 If the content engine cannot be reached, the Dashboard section keeps working and the
 Marketplace section says so.
@@ -525,10 +541,12 @@ what the team really sends. **How to say it** comes from the two voices.
   bank details and texts sent exactly as Wheelman suggested are left out. From an auction
   offer the team sent, only the opening lines are kept: the car, its link, the bid and the
   costs belong to that customer and are cut off.
-- **Your edits.** When you change a suggestion before using it, Wheelman keeps both versions,
-  with the customer's details removed, and shows itself the difference next time. When the
-  reply later appears in the dashboard conversation, what was really sent replaces what was
-  copied.
+- **Your edits.** The message box is an editor, and what you type in it is saved as you type.
+  When you copy a reply you changed, Wheelman keeps both versions, with the customer's
+  details removed, and shows itself the difference next time. A reply you cleared and wrote
+  yourself counts the same way. When the reply later appears in the dashboard conversation,
+  what was really sent replaces what was copied. Typing alone teaches nothing: a half-written
+  change that was never copied, approved or sent is not learned from.
 - **Only what you changed.** A suggestion used word for word is Wheelman's own text, so it
   is not kept as an example of how the team writes.
 - **Only the reply to that message.** A sent reply counts for a suggestion only if it directly
@@ -538,7 +556,9 @@ what the team really sends. **How to say it** comes from the two voices.
   refreshes its bank of the two voices' genuine replies. Texts that Wheelman itself wrote are
   skipped.
 - **What you say about a suggestion.** A suggestion you mark **Good reply** is shown to the
-  AI for similar messages as "approved as written: handle this one the same way". What you
+  AI for similar messages as "approved as written: handle this one the same way". If you had
+  changed the text first, it is shown as "corrected by the owner and approved", with what
+  Wheelman wrote and what you made of it side by side. What you
   type under **Could be better** is coaching, written to Wheelman and never to a customer.
   One extra AI request turns the note into one to three general lessons: when the lesson
   applies, what to do or avoid, and whether it is internal (to act on, but not to tell the
@@ -583,6 +603,8 @@ often you asked for a rewrite. Counts only; no customer text.
 | Suggested auction bid | Carbarn's suggested bid for the car, rounded up to the next ¥50,000 |
 | Finance and complaints | Answered the way the team answered similar ones. Never a rate, a repayment or a promise of approval; a complaint is always marked for a person |
 | "Below" | A reply never points at the address block. It answers in the sentence itself |
+| The message box | An editor: change the text or clear it, and it is saved as you type. A changed reply teaches Wheelman when it is copied or approved |
+| AI models | The better models are kept for dashboard customers. Marketplace chats use the small one |
 | Marketplace | A suggestion for every chat where the buyer wrote last; short chat style |
 | Sending | Never. Copy and paste, in both sections |
 | Learning | Dashboard only |
@@ -602,6 +624,10 @@ Tried in order; the first that answers is used.
 
 Free models are often busy. A busy model is rested for five minutes and the next one is
 tried. Models lower in the list write less polished replies.
+
+Dashboard customers are asked of the whole list, best first. Marketplace chats start at the
+fourth model, so the first three are kept for dashboard customers. Hovering over the status
+line shows which models are for dashboard customers only.
 
 Each free model also has its own daily allowance, and it is small. On 3 October 2026 Gemini
 allowed 20 requests a day to each of the first three models; the fourth has a larger
@@ -652,7 +678,7 @@ Git never sees any of it.
 | `.env` | Dashboard address and login, the Marketplace inbox address, and the AI keys |
 | `voice\people.json` | The real names and logins of the two voices, and other staff names |
 | `PLAN.md`, `knowledge\business-facts-evidence.md` | Internal planning notes, and the evidence behind each business fact |
-| `data\app.db` | Leads, conversations, messages, stock, the stage of each sale, what each import customer asked us to find, Marketplace chats, every suggestion and its checks, what was learned, what was dismissed and read |
+| `data\app.db` | Leads, conversations, messages, stock, the stage of each sale, what each import customer asked us to find, Marketplace chats, every suggestion with its checks and what you typed over it, what was learned, what was dismissed and read |
 | `data\wheelman.log` | What went wrong and when: technical messages only, no customer details |
 | `data\raw\` | The history first copied from the dashboard |
 | `data\analysis\` | The cleaned samples behind the voice and the business facts |
@@ -671,6 +697,7 @@ Git never sees any of it.
 | "A suggestion could not be written" in red at the top of the list | An AI key was rejected, or something in Wheelman failed | `npm run check-model`, and look at `data\wheelman.log` |
 | "A suggestion could not be written. No AI model could answer just now" in one conversation | Every free model was busy or used up at that moment | Nothing. It is tried again in a few minutes, or press **Try again** |
 | "Suggestions are paused" | Every free model has used up its allowance for the day | It resumes by itself at the time shown |
+| "The AI models used for Marketplace have used up their allowance for today" in a chat | The small model's day is used up | Nothing. Dashboard suggestions carry on, and Marketplace resumes at the time shown. Press **Try again** later, or set `MARKETPLACE_MODEL=` (empty) to let Marketplace use every model |
 | Something went wrong and the black window has scrolled past it | | Open `data\wheelman.log`: each problem is noted there with its time |
 | "The live auction could not be read, so no car was looked for" | The website's auction feed did not answer | Press **Rewrite** to try again. The reply names no car in the meantime |
 | An import customer gets the asking reply although they told us what they want | What they want was said on the phone, not in writing | Press **Rewrite** and type it, for example "2015 or newer, under 100,000 km, budget 12k", or paste a live-auction link |
@@ -686,7 +713,7 @@ Git never sees any of it.
 npm.cmd test
 ```
 
-175 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
+181 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
 a stand-in auction feed on this computer: who counts as waiting and who does not, stock numbers matched to the right
 car however a portal writes them (a year in front, a portal code, upper or lower case), that
 no customer detail and no cost figure reaches the AI request, an invented price
@@ -720,7 +747,12 @@ up; the offer laid out with the calculator's figures and a blank for the deposit
 opening that states a price replaced; a bid or a car named in Rewrite or by the customer;
 nothing suitable, a request already under way and an unreadable feed; and an offer the team
 sent teaching only its opening. A model that has used up its day set aside while the next
-one carries on.
+one carries on; Marketplace chats asked of the small model only, and only Marketplace
+waiting when that model is used up. The message box as an editor: what is typed kept with the
+suggestion, a blank that was filled in no longer flagged, a cleared box and the suggestion
+brought back, a changed reply teaching when it is copied and when it is seen sent, Good reply
+approving the text as it stands and following later changes, an emptied box losing its
+approval, and a Marketplace edit kept but never learned from.
 
 ## Project layout
 
@@ -772,7 +804,7 @@ wheelman/
 │                                      build-voice · fetch-website · import-history
 │                                      check-private
 └── test/                              core · pipeline · greeting · inspection · marketplace
-                                       quality · scenarios · stock · models · imports
+                                       quality · scenarios · stock · models · imports · editor
 ```
 
 ## Status
@@ -796,6 +828,11 @@ written.
 the dashboard keeps them on a separate list that Wheelman did not read. The asking reply and
 the auction offer were checked on the automated tests and on a throwaway copy with invented
 customers against the real live auction. Not yet used over a working day.
+
+5 October 2026: the message box became an editor (saved as you type, Clear, the suggestion
+brought back, Good reply on your own version), and Marketplace chats were moved to the small
+AI model so the better ones stay free for dashboard customers. Both were checked on the
+automated tests and in a browser on a throwaway copy with invented customers.
 
 ### Open questions for Carbarn
 

@@ -9,7 +9,7 @@
 // "sent" replaces "copied" for the same suggestion once it is seen.
 
 import { config } from './config.js';
-import { getDraft, upsertLearned, deleteLearned, deleteLearnedForAnchor, learnedTextExists, allLearned, recordCopied, recordCopiedTime, getLearned, insertAdvice, allAdvice, setAdviceLessons } from './db.js';
+import { getDraft, upsertLearned, deleteLearned, deleteLearnedForAnchor, learnedTextExists, allLearned, recordCopied, recordCopiedTime, recordEdit, setDraftRating, getLearned, insertAdvice, allAdvice, setAdviceLessons } from './db.js';
 import { redact } from './redact.js';
 import { maskCustomerSignOff, maskGreetingNames, stripLocationBlock, loadExclusions } from './voice.js';
 import { stripModelSignOff } from './checks.js';
@@ -96,6 +96,9 @@ export function learnFrom(item, draft, finalText, source, { at = Date.now() } = 
   if (!customerText) return { learned: false, why: 'no customer message' };
 
   const final = maskGreetingNames(redact(finalBody, lead));
+  // The owner changed this reply and approved it, then copied that same text: the approval stands.
+  const kept = getLearned(draft.id);
+  if (source === 'copied' && kept?.source === 'approved' && kept.final_text === final) return { learned: true, why: 'approved', changed, similarity: sim };
   if (learnedTextExists(final, draft.id)) return { learned: false, why: 'already learned', changed, similarity: sim };
 
   // What the message was about is taken from when the suggestion was written. Once a conversation
@@ -130,6 +133,29 @@ export function onCopied(item, draftId, text) {
   return learnFrom(item, draft, text, 'copied');
 }
 
+/** The text in the message box: what the person typed over the suggestion, or the suggestion itself. */
+export const currentText = (draft) => (typeof draft?.edited_text === 'string' ? draft.edited_text : draft?.reply || '');
+
+/**
+ * Called as the text in the message box changes. The edit is kept with the suggestion, so it is
+ * still there after a reload. Nothing is learned from typing alone: that happens when the reply
+ * is copied, approved, or seen sent. Marketplace edits are kept the same way and never learned from.
+ */
+export function onEdited(item, draftId, text) {
+  const draft = getDraft(draftId);
+  if (!draft) return { ok: false, why: 'suggestion not found' };
+  const clean = String(text ?? '').replace(/\r/g, '').slice(0, 4000);
+  const edited = clean !== String(draft.reply || '');
+  recordEdit(draftId, edited ? clean : null);
+  let rating = draft.rating || '';
+  // A reply that was approved and is then changed: the approval follows the text. Emptied, it is taken back.
+  if (rating === 'good' && item && canLearnFrom(draft.item_key) && canLearnFrom(item.itemKey)) {
+    if (clean.trim()) onApproved(item, draftId, true);
+    else { setDraftRating(draftId, ''); onApproved(item, draftId, false); rating = ''; }
+  }
+  return { ok: true, edited, cleared: edited && !clean.trim(), rating };
+}
+
 /** Called when a rating changes: a suggestion marked not usable is forgotten unless a sent reply confirmed it. */
 export function onRated(draftId, rating) {
   if (rating !== 'bad') return;
@@ -140,9 +166,10 @@ export function onRated(draftId, rating) {
 // ---- what the owner says about a suggestion ----------------------------------------------------
 
 /**
- * "Good reply": the owner approves a suggestion as written. It becomes a model for similar
- * messages. Approving is the one case where Wheelman's own wording is kept, because a person
- * has said it is right. Taking the approval back forgets it.
+ * "Good reply": the owner approves the reply as it stands in the message box, which is the
+ * suggestion as written or with their own changes. It becomes a model for similar messages.
+ * Approving is the one case where Wheelman's own wording is kept, because a person has said it
+ * is right. Taking the approval back forgets it.
  */
 export function onApproved(item, draftId, approved = true) {
   const draft = getDraft(draftId);
@@ -152,20 +179,25 @@ export function onApproved(item, draftId, approved = true) {
     if (getLearned(draftId)?.source === 'approved') deleteLearned(draftId);
     return { learned: false, why: 'approval taken back' };
   }
-  const body = comparable(draft.reply);
-  if (!body || wordCount(body) < 2) return { learned: false, why: 'too short' };
-  if (/\bbsb\b/i.test(body)) return { learned: false, why: 'contains bank details' };
+  const written = comparable(draft.reply);
+  const body = comparable(currentText(draft));
+  const forget = (why) => { if (getLearned(draftId)?.source === 'approved') deleteLearned(draftId); return { learned: false, why }; };
+  if (!body || wordCount(body) < 2) return forget('too short');
+  if (/\b\d{3}[\s-]?\d{3}\b[^\n]{0,30}\b\d{6,10}\b/.test(body) || /\bbsb\b/i.test(body)) return forget('contains bank details');
   const { customerText, upto } = askedBefore(item, draft);
   if (!customerText) return { learned: false, why: 'no customer message' };
   const { situations, firstReply } = aboutOf(item, draft, upto);
   const text = maskGreetingNames(redact(body, item.lead));
+  const changed = squash(written).toLowerCase() !== squash(body).toLowerCase();
   deleteLearnedForAnchor(draft.item_key, draft.anchor_key, draft.id);
   upsertLearned({
     draftId: draft.id, itemKey: item.itemKey, situations, firstReply,
     customerText: maskCustomerSignOff(redact(customerText, item.lead)).slice(0, 900),
-    draftText: text, finalText: text, source: 'approved', changed: false, similarity: 1, at: Date.now(),
+    // With changes, both versions are kept: what Wheelman wrote, and what the owner made of it.
+    draftText: changed ? maskGreetingNames(redact(written, item.lead)) : text, finalText: text,
+    source: 'approved', changed, similarity: changed ? similarity(written, body) : 1, at: Date.now(),
   });
-  return { learned: true };
+  return { learned: true, changed };
 }
 
 const LESSON_SYSTEM = [

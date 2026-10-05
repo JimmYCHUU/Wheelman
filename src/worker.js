@@ -20,6 +20,7 @@ export const state = {
   lastDraftError: null, // { at, message }
   pausedUntil: 0,       // set when the AI daily limit is hit
   holdUntil: 0,         // set for a few minutes when every AI model was busy
+  mpHoldUntil: 0,       // Marketplace only: its own models are busy or used up; the dashboard carries on
   mpSyncing: false,
   mpSync: null,         // Marketplace: { at, ok, message, result }
 };
@@ -150,7 +151,7 @@ export async function draftWaiting({ max = 25 } = {}) {
     for (const item of queue) {
       if (made >= max) break;
       const chat = item.channel === 'marketplace';
-      if (chat && marketplaceLeft <= 0) continue;
+      if (chat && (marketplaceLeft <= 0 || Date.now() < state.mpHoldUntil)) continue;
       if (!item.autoDraft) continue;
       if (isDismissed(item.itemKey, item.anchorKey)) continue;
       const existing = latestDraft(item.itemKey, item.anchorKey);
@@ -165,6 +166,12 @@ export async function draftWaiting({ max = 25 } = {}) {
         // Only a problem that needs somebody (a rejected key, a fault) is put on the page.
         // Busy or used-up free models are tried again without bothering anyone.
         state.lastDraftError = d.temporary ? null : { at: Date.now(), message: d.error };
+        // Marketplace has its own models. When they are busy or used up, only Marketplace waits:
+        // the better models may still be answering for dashboard customers.
+        if (chat && d.temporary && providers({ marketplace: true }).length < providers().length) {
+          state.mpHoldUntil = Date.now() + (d.daily ? 60 * 60 * 1000 : HOLD_AFTER_BUSY_MS);
+          continue;
+        }
         if (d.daily) { state.pausedUntil = Date.now() + 60 * 60 * 1000; break; }
         if (d.temporary) { state.holdUntil = Date.now() + HOLD_AFTER_BUSY_MS; break; }
         if (/could not be reached|No AI key/i.test(d.error || '')) break;

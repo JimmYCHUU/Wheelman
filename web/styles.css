@@ -468,6 +468,7 @@ svg.icon { width: 1.25rem; height: 1.25rem; flex: none; display: block; }
 .draft-tag { font-size: 0.8125rem; font-weight: 650; color: var(--text); }
 .draft-tag span { font-weight: 500; color: var(--faint); }
 .draft-meta { font-size: 0.75rem; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.draft-meta.bad { color: var(--red); font-weight: 600; }
 
 .advice { display: grid; gap: 0.25rem; }
 .advice:empty { display: none; }
@@ -493,9 +494,10 @@ svg.icon { width: 1.25rem; height: 1.25rem; flex: none; display: block; }
 }
 .blank-btn:active { transform: scale(.96); }
 
+/* The message box is an editor: it has an outline at rest, so it reads as something to type in. */
 .sheet {
   background: var(--sheet); border-radius: 0.75rem; box-shadow: var(--shadow-1);
-  border: 1px solid transparent;
+  border: 1px solid var(--line-strong);
   transition: border-color 160ms ease;
 }
 .sheet:focus-within { border-color: var(--accent); }
@@ -522,8 +524,9 @@ svg.icon { width: 1.25rem; height: 1.25rem; flex: none; display: block; }
 .draft {
   position: relative; z-index: 1;
   min-height: 4.5rem; max-height: 38dvh; resize: none;
-  background: transparent; color: var(--text); caret-color: var(--accent);
+  background: transparent; color: var(--text); caret-color: var(--accent); cursor: text;
 }
+.draft::placeholder { color: var(--faint); opacity: 1; }
 .draft:focus-visible { outline: none; }
 .draft.arriving { animation: arrive 220ms var(--ease-out); }
 @keyframes arrive { from { opacity: 0; filter: blur(2px); } to { opacity: 1; filter: none; } }
