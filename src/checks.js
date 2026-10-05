@@ -8,7 +8,10 @@ import { sydneyHour } from './time.js';
 import { promiseChecks } from './promises.js';
 
 export const MARKERS = ['[PRICE?]', '[TRADE-IN VALUE?]', '[DELIVERY COST?]', '[DATE?]', '[CHECK?]', '[DEPOSIT LINK?]'];
-const MARKER_RE = /\[(PRICE|TRADE-IN VALUE|DELIVERY COST|DATE|CHECK|DEPOSIT LINK)\?\]/g;
+// A blank is any short label in capitals with a question mark, in square brackets: [PRICE?], [SOLD PRICE?].
+// The page (web/app.js) uses the same pattern to highlight them.
+export const BLANK_PATTERN = String.raw`\[[A-Z][A-Z0-9 &'/-]{1,30}\?\]`;
+const MARKER_RE = new RegExp(BLANK_PATTERN, 'g');
 
 const BANNED = [
   [/i hope (this|you|that)/i, 'opens with "I hope…"'],
@@ -247,7 +250,7 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
     const copied = examples.some((e) => wordCount(e) >= 8 && similarity(body, e) >= 0.75);
     if (copied) add(words >= 16 ? 'fail' : 'warn', 'copied', words >= 16 ? 'Copies an earlier reply written for a different customer almost word for word.' : 'Almost the same words as an earlier reply to another customer. Check it fits this one.');
   }
-  if (/(^|\n)\s*\[(PRICE|TRADE-IN VALUE|DELIVERY COST|DATE|CHECK)\?\]\s*[.]?\s*(\n|$)/.test(String(body))) {
+  if (new RegExp(String.raw`(^|\n)\s*${BLANK_PATTERN}\s*[.]?\s*(\n|$)`).test(String(body))) {
     add('warn', 'bare-marker', 'A blank is standing alone. Say what it is for when you fill it in.');
   }
 

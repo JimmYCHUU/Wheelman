@@ -1,8 +1,8 @@
 // Pulls new leads, conversations, messages and stock from the dashboard into the local database.
 
 import * as dash from './dashboard.js';
-import { normalizeLead, normalizeConversation, normalizeMessage, normalizeVehicle, normalizeSale, normalizeAuctionOrder } from './normalize.js';
-import { upsertLead, upsertConversation, upsertMessage, upsertVehicle, upsertSale, deleteSale, rekeyLeadItems, getConversation, getMeta, setMeta, transaction, openDb, upsertMpConversation, replaceMpMessages, getMpConversation, countRows, upsertAuctionOrder, importLeadsToCheck } from './db.js';
+import { normalizeLead, normalizeConversation, normalizeMessage, normalizeVehicle, normalizeSale, normalizeOrder, phoneKey } from './normalize.js';
+import { upsertLead, upsertConversation, upsertMessage, upsertVehicle, upsertSale, deleteSale, rekeyLeadItems, getConversation, getMeta, setMeta, transaction, openDb, upsertMpConversation, replaceMpMessages, getMpConversation, countRows, upsertOrder, getOrder, markOrdersGone, leadsByPhone, conversationForPhone } from './db.js';
 import * as mp from './marketplace.js';
 import { config } from './config.js';
 
@@ -73,19 +73,45 @@ export async function syncLeads({ pages = 3, size = 50 } = {}) {
 const DAY = 24 * 3600 * 1000;
 
 /**
- * For import and auction leads that are active, reads what the customer asked us to find (the
- * auction request the dashboard keeps for them). Each lead is looked at again every 20 minutes
- * at most, and only a few per round.
+ * Stores the auction orders read from the dashboard. An order that names no lead is matched to
+ * one by the customer's phone number, and to their SMS conversation the same way. Orders that
+ * ended long ago and were never seen while open are not kept at all. `complete` says the whole
+ * list was read: only then is a missing order taken to have been removed.
  */
-export async function syncAuctionOrders({ days = 21, everyMinutes = 20, now = Date.now() } = {}) {
-  let read = 0;
-  for (const leadId of importLeadsToCheck(config.dashboard.importsPlatform, now - days * DAY, now - everyMinutes * 60 * 1000)) {
-    const rows = await dash.fetchAuctionOrders(leadId);
-    upsertAuctionOrder(leadId, normalizeAuctionOrder(rows), now);
-    read++;
-    await pause(150);
+export function storeAuctionOrders(rawRows, { complete = true, now = Date.now() } = {}) {
+  const orders = (rawRows || []).map(normalizeOrder).filter(Boolean);
+  const byPhone = orders.some((o) => !o.leadId) ? leadsByPhone() : new Map();
+  let changed = 0;
+  const listed = [];
+  transaction(() => {
+    for (const o of orders) {
+      listed.push(o.id);
+      const known = !!getOrder(o.id);
+      if (o.closed && !known && now - (o.cancelledAt || o.createdAt || 0) > 60 * DAY) continue;
+      const key = phoneKey(o.customer.phone);
+      const lead = o.leadId ? null : byPhone.get(key) || null;
+      const links = { leadId: lead?.leadId ?? null, conversationId: lead?.conversationId ?? conversationForPhone(key) };
+      if (upsertOrder(o, { now, links }).changed) changed++;
+    }
+    if (complete) markOrdersGone(listed, now);
+  });
+  return { auctionOrders: orders.length, auctionOrdersChanged: changed };
+}
+
+/**
+ * Reads the whole list of auction orders: one request for every 50 orders. Reading changes
+ * nothing on the dashboard.
+ */
+export async function syncAuctionOrders({ size = 50, maxPages = 10, now = Date.now() } = {}) {
+  const rows = [];
+  let complete = false;
+  for (let page = 0; page < maxPages; page++) {
+    const j = await dash.fetchAuctionOrdersPage(page, size);
+    rows.push(...j.rows);
+    if (!j.rows.length || page + 1 >= j.totalPages) { complete = true; break; }
+    await pause(200);
   }
-  return { auctionRequestsRead: read };
+  return storeAuctionOrders(rows, { complete, now });
 }
 
 /**
@@ -122,8 +148,8 @@ export async function syncAll(opts = {}) {
   Object.assign(result, await syncVehicles(opts.vehicles));
   Object.assign(result, await syncLeads(opts.leads));
   Object.assign(result, await syncConversations(opts.conversations));
-  // What import customers asked us to find. A problem here must not fail the whole check.
-  try { Object.assign(result, await syncAuctionOrders(opts.auction)); } catch (e) { result.auctionRequestsError = e.message; }
+  // The auction orders. A problem here must not fail the whole check.
+  try { Object.assign(result, await syncAuctionOrders(opts.auction)); } catch (e) { result.auctionOrdersError = e.message; }
   result.tookSeconds = Math.round((Date.now() - started) / 100) / 10;
   setMeta('last_sync', { at: Date.now(), ok: true, result });
   return result;

@@ -8,7 +8,7 @@ import { stripLocationBlock } from './voice.js';
 
 const plain = (s) => String(s || '').replace(/[’‘]/g, "'");
 const sentences = (s) => plain(s).split(/(?<=[.!?])\s+|\n+/).map((x) => x.trim()).filter(Boolean);
-const MARKER = /\[(PRICE|TRADE-IN VALUE|DELIVERY COST|DATE|CHECK)\?\]/;
+const MARKER = /\[[A-Z][A-Z0-9 &'/-]{1,30}\?\]/;
 
 // ---- days -----------------------------------------------------------------------------------
 

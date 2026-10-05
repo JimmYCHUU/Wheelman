@@ -3,6 +3,8 @@
 // (purchase cost, shipping, margin, buyer details) never reach the vehicle record.
 // A sale is reduced to a small digest (normalizeSale): stage, date and whether it is paid.
 // No amount and no buyer name is kept, and the buyer's contact details are used only for matching.
+// An auction order (normalizeOrder) is the exception the owner asked for: who it is for and what
+// they were charged and paid are kept, because its messages have to say so. Our own costs are not.
 
 import { parseDashboardTime, parseDashboardDate } from './time.js';
 import { config } from './config.js';
@@ -173,25 +175,44 @@ export function normalizeSale(raw) {
 }
 
 /**
- * A customer's auction request, reduced to what a reply needs: which car they want found, the
- * years, their target bid and budget, their own notes, and how far the request has got.
- * The newest request that has not been cancelled is used. Returns null when there is none.
+ * One auction order from the dashboard, reduced to what the Auction section needs: who it is for,
+ * what they want found, the auction car or the car secured, how far it has got, and what the
+ * customer has been charged and has paid. Every field is copied by name, so nothing new on the
+ * dashboard's record can arrive here by accident.
  *
- * Deliberately not kept: who it is invoiced or delivered to (name, phone, email, address, licence,
- * date of birth), the staff member, payments, and the link the customer pays through.
+ * Deliberately not kept: street address, licence, date of birth, the delivery contact, the
+ * salesperson, who wrote a staff note, photo addresses, the link the customer pays through, how a
+ * payment was made and its reference, and every cost of ours on the vehicle record (purchase,
+ * freight, repairs, supplier payments).
  */
-export function normalizeAuctionOrder(rows) {
-  const list = (Array.isArray(rows) ? rows : []).filter((o) => o && !/^cancel/i.test(clean(o.stage)) && !o.cancelledAt);
-  const o = list[0];
-  if (!o) return null;
+export function normalizeOrder(o) {
+  const id = Number(o?.id);
+  if (!o || !Number.isInteger(id) || id <= 0) return null;
   const n = (v) => (Number(v) > 0 ? Math.round(Number(v)) : 0);
+  const amount = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v) * 100) / 100 : 0);
+  const stage = clean(o.stage).toUpperCase();
+  const who = o.invoiceTo || {};
+  const snap = o.lotSnapshot || null;
+  const v = o.vehicle || null;
+  const note = o.latestUpdate || null;
+  const link = o.agreementLink || null;
+  const lotId = o.auctionVehicleId || snap?.auctionVehicleId || '';
+  const secured = v || clean(o.vehicleMake) || clean(o.vehicleModel);
   return {
-    leadId: o.leadId ?? null,
+    id,
     orderNo: clean(o.orderNo),
-    stage: clean(o.stage).toUpperCase(),
+    stage,
     lotPhase: clean(o.lotPhase).toUpperCase(),
     source: clean(o.source).toUpperCase(),
-    lotId: o.auctionVehicleId ? String(o.auctionVehicleId) : '',
+    // An order that has ended without a car: it is shown under Finished, and nothing more is suggested.
+    closed: /^refund/i.test(stage) ? 'refunded' : /^cancel/i.test(stage) || o.cancelledAt ? 'cancelled' : '',
+    leadId: Number.isInteger(Number(o.leadId)) && Number(o.leadId) > 0 ? Number(o.leadId) : null,
+    customer: { firstName: clean(who.firstName), lastName: clean(who.lastName), phone: clean(who.mobileNumber), email: clean(who.email).toLowerCase() },
+    preferredContact: clean(o.preferredContact).toUpperCase(),
+    followUpAt: parseDashboardTime(o.followUpAt),
+    followUpDue: !!o.followUpDue,
+    updateCount: n(o.updateCount),
+    note: note && clean(note.body) ? { id: clean(note.id), at: parseDashboardTime(note.at), channel: clean(note.channel).toUpperCase(), body: clean(note.body).slice(0, 600) } : null,
     depositState: clean(o.depositState).toUpperCase() || 'NONE',
     wanted: {
       make: clean(o.reqMake), model: clean(o.reqModel), modelCode: clean(o.reqModelCode), variant: clean(o.reqVariant),
@@ -199,7 +220,38 @@ export function normalizeAuctionOrder(rows) {
       targetBidYen: n(o.targetBidJpy), budgetAud: n(o.budgetAud),
       notes: clean(o.requirementNotes).slice(0, 1500),
     },
+    // The one auction car this order is tied to, when there is one.
+    lot: lotId ? {
+      id: String(lotId), title: clean(snap?.title), make: clean(snap?.make), model: clean(snap?.model), modelCode: clean(snap?.modelCode),
+      variant: clean(snap?.variant), year: n(snap?.year), grade: clean(snap?.auctionGrade), km: n(snap?.odometerKm),
+      auctionDate: clean(snap?.auctionDate || o.auctionDate).slice(0, 10), auctionHouse: clean(snap?.auctionHouse || o.auctionHouse),
+      lotNumber: clean(snap?.lotNumber || o.lotNumber), transmission: clean(snap?.transmission), fuel: clean(snap?.fuelType), colour: clean(snap?.colour),
+    } : null,
+    // The car that was bought for them, and where the stock record says it is.
+    car: secured ? {
+      stockNo: clean(v?.stockNo), title: clean(v?.title),
+      year: n(v?.year ?? o.vehicleYear), make: clean(v?.make || o.vehicleMake), model: clean(v?.model || o.vehicleModel),
+      modelCode: clean(v?.modelCode || o.vehicleModelCode), variant: clean(v?.variant || o.vehicleVariant),
+      km: n(v?.odometer ?? o.vehicleMileage), grade: clean(v?.auctionGrade || o.auctionGrade),
+      colour: clean(v?.color), fuel: clean(v?.fuel), transmission: clean(v?.transmission), seats: n(v?.seats),
+      stockIn: clean(v?.stockIn), status: clean(v?.status).toUpperCase(), soldStatus: clean(v?.soldStatus),
+      lastSeenShipping: parseDashboardDate(v?.lastSeenAtShipping), blueSlip: parseDashboardDate(v?.blueSlipDate),
+      regoDone: parseDashboardDate(v?.registrationCompletedDate),
+    } : null,
+    // What the customer is charged and has paid. Customer-facing figures only.
+    money: {
+      quotedDeposit: amount(o.quotedDepositAud), depositPaid: amount(o.depositPaidAud),
+      lines: (Array.isArray(o.items) ? o.items : []).map((i) => ({ stage: clean(i?.stage).toUpperCase(), description: clean(i?.description || i?.type), amount: amount(i?.totalIncGst) })).filter((i) => i.description),
+      payments: (Array.isArray(o.payments) ? o.payments : []).map((p) => ({ stage: clean(p?.stage).toUpperCase(), type: clean(p?.type).toUpperCase(), amount: amount(p?.amount), at: parseDashboardTime(p?.paymentDateTime) })).filter((p) => p.amount > 0),
+      tax: amount(o.taxTotal), total: amount(o.totalAmount), paid: amount(o.totalPaid), due: amount(o.totalDue),
+    },
+    // Whether the payment page has been used. The link itself is never kept.
+    agreement: link ? { status: clean(link.status).toUpperCase(), paymentStatus: clean(link.paymentStatus).toUpperCase(), accepted: !!link.agreementAccepted } : null,
     createdAt: parseDashboardTime(o.createdAt),
+    securedAt: parseDashboardTime(o.vehicleSecuredAt),
+    completedAt: parseDashboardTime(o.completedAt),
+    cancelledAt: parseDashboardTime(o.cancelledAt),
+    refundRequestedAt: parseDashboardTime(o.refundRequestedAt),
   };
 }
 

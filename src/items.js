@@ -1,6 +1,7 @@
 // Builds the list of "work items": customers who have said something and are waiting for a reply.
 
-import { openDb, getLead, getLeadByConversation, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages } from './db.js';
+import { openDb, getLead, getLeadByConversation, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes } from './db.js';
+import { orderKey, orderMarks, orderStatus, orderRow, occasionFor, MESSAGES } from './orders.js';
 import { readInquiry, isSilentInquiry, isReaction, isAcknowledgement, isOptOut, menuReply, sameText, squash, resolveStock, stockFromUrl, findUrls, unwrapRelay } from './text.js';
 import { classify, labelFor } from './situations.js';
 import { importContext } from './imports.js';
@@ -400,12 +401,106 @@ export function buildMarketplaceItem(id, { now = Date.now() } = {}) {
   return item;
 }
 
-/** Finds an item by its key: c:<conversation>, l:<lead> or mp:<Marketplace chat>. */
-export function itemFromKey(key) {
-  const m = String(key || '').match(/^(c|l|mp):(\d+)$/);
+// ---- auction orders -----------------------------------------------------------------
+
+const money = (n) => `$${Math.round(Number(n) || 0).toLocaleString('en-AU')}`;
+
+/**
+ * One auction order, in the shape the page and the drafter use. Key: ao:<order id>.
+ *
+ * It is not built by finishItem: an order is not a conversation waiting for a reply. Its thread
+ * is what is known to have happened (the order's own steps, staff notes, any SMS conversation
+ * with that number, what was copied from Wheelman and what the owner pasted in). It is "waiting"
+ * when a pasted customer message has no reply yet, or when a message is due for its stage.
+ * `message` is a kind of message the owner picked from the "Which message?" list.
+ */
+export function buildOrderItem(id, { message = '', now = Date.now() } = {}) {
+  const o = getOrder(Number(id));
+  if (!o || o.goneAt) return null;
+  const key = orderKey(o.id);
+  const marks = orderMarks().of(key);
+  const status = orderStatus(o, marks, { now });
+  const lead = { id: o.leadId, first_name: o.customer.firstName, last_name: o.customer.lastName, phone: o.customer.phone, email: o.customer.email, status: '', source: 'Auction order', state: '', stocks: [], inquiries: [] };
+
+  const timeline = [];
+  // The texts and website enquiries the dashboard has for this customer: context, shown as they are.
+  const smsLead = o.leadId ? getLead(o.leadId) : null;
+  const convId = o.conversationId ?? smsLead?.conversation_id ?? null;
+  if (smsLead || convId) timeline.push(...buildTimeline(smsLead, convId, { now }));
+
+  // A step of the order is a record of ours, not something said to the customer: it is marked
+  // internal, so it never counts as "we have written to them".
+  const step = (text, at, k) => { if (at) timeline.push({ who: 'us', internal: true, via: 'order', text: '', event: text, at, by: null, key: `ev:${k}` }); };
+  step(`Auction order ${o.orderNo} opened`, o.createdAt, 'opened');
+  o.money.payments.forEach((p, i) => step(`${p.type === 'DEPOSIT' || p.stage === 'INITIAL_DEPOSIT' ? 'Deposit' : 'Payment'} of ${money(p.amount)} received`, p.at, `pay${i}`));
+  step('Car secured', o.securedAt, 'secured');
+  step('Refund requested', o.refundRequestedAt, 'refund');
+  step(o.closed === 'refunded' ? 'Order refunded' : 'Order cancelled', o.closed ? o.cancelledAt || o.marks[`stage:${o.closed}`] : null, 'closed');
+  step('Order completed', o.completedAt, 'completed');
+
+  for (const n of orderNotes(o.id)) timeline.push({ who: 'us', internal: true, via: 'staff note', text: n.body, at: n.at || 0, by: null, key: `on:${n.note_id}` });
+  for (const d of openDb().prepare('SELECT id, copied_at, copied_text FROM drafts WHERE item_key = ? AND copied_at IS NOT NULL ORDER BY copied_at').all(key)) {
+    if (d.copied_text) timeline.push({ who: 'us', via: 'WhatsApp', text: d.copied_text, event: '', at: d.copied_at, by: 'Copied from Wheelman', key: `cp:${d.id}` });
+  }
+  for (const p of marks.pastes) {
+    timeline.push(p.direction === 'in'
+      ? { who: 'customer', via: 'WhatsApp', text: p.text, event: '', at: p.at, by: null, key: `in:${p.id}` }
+      : { who: 'us', via: 'WhatsApp', text: p.text, event: '', at: p.at, by: 'Pasted by you', key: `po:${p.id}` });
+  }
+  timeline.sort((a, b) => (a.at - b.at) || (a.who === 'customer' ? -1 : 1));
+
+  const waitingKeys = new Set(status.waiting.map((p) => `in:${p.id}`));
+  const pending = timeline.filter((e) => waitingKeys.has(e.key));
+  const pendingText = pending.map((e) => e.text).filter(Boolean).join('\n');
+  // A reply to what the customer wrote is about whatever they asked, on top of being an order.
+  const asked = pending.length ? classify(pendingText, { events: [], leadStatus: '', buyer: false }).all.filter((s) => s !== 'general') : [];
+  const chosen = message && MESSAGES[message] ? message : '';
+
+  return {
+    channel: 'auction',
+    mediaOnly: false,
+    autoDraft: false,
+    autoReason: '',
+    noLead: false,
+    hasLeadRecord: true,
+    hasName: !!firstNameOf(lead),
+    itemKey: key,
+    anchorKey: chosen ? `out:${occasionFor(o, chosen, status.next)}` : status.anchorKey,
+    conversationId: convId,
+    lead,
+    conversation: null,
+    phone: o.customer.phone || '',
+    timeline,
+    pending,
+    pendingText,
+    events: [],
+    menu: null,
+    state: status.state,
+    note: '',
+    situation: { primary: 'import_sourcing', all: ['import_sourcing', ...asked.filter((s) => s !== 'import_sourcing')], label: status.stage.label },
+    isFirstReply: !timeline.some((e) => e.who === 'us' && !e.internal && e.text),
+    isNewEnquiry: false,
+    deal: null,
+    pastBuyer: null,
+    lastInboundAt: pending.length ? pending[pending.length - 1].at : null,
+    lastActivityAt: timeline.length ? timeline[timeline.length - 1].at : o.createdAt || now,
+    vehicles: [],
+    imports: null,
+    order: o,
+    orderStatus: status,
+    orderRow: orderRow(o, marks, { now }),
+    // The kind of message in the box: the one picked, else the one that is due.
+    message: chosen || (status.kind === 'send' ? status.next.type : ''),
+  };
+}
+
+/** Finds an item by its key: c:<conversation>, l:<lead>, mp:<Marketplace chat> or ao:<auction order>. */
+export function itemFromKey(key, opts = {}) {
+  const m = String(key || '').match(/^(c|l|mp|ao):(\d+)$/);
   if (!m) return null;
   const id = Number(m[2]);
   if (m[1] === 'mp') return buildMarketplaceItem(id);
+  if (m[1] === 'ao') return buildOrderItem(id, opts);
   return buildItem(m[1] === 'c' ? { conversationId: id } : { leadId: id });
 }
 

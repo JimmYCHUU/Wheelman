@@ -1,9 +1,10 @@
 // Read-only client for the website's live Japan auction feed.
 //
-// Safety: this module can ask for exactly three things, and nothing else.
+// Safety: this module can ask for exactly four things, and nothing else.
 //   1. the list of cars in the coming auctions (GET)
 //   2. one car (GET)
-//   3. the landed-cost estimate for one car at a given bid (the website's own calculator)
+//   3. what similar cars sold for at recent auctions, for one car (GET)
+//   4. the landed-cost estimate for one car at a given bid (the website's own calculator)
 // The calculator is asked with a POST because that is how the website asks it. It only works
 // out a figure: it places no bid, makes no enquiry and changes nothing. Only the bid amount is
 // sent. No login, no cookies and no customer detail ever goes to this feed.
@@ -13,6 +14,7 @@ import { config } from './config.js';
 const LIST = '/auc/api/public/auction-vehicles';
 const ONE = /^\/auc\/api\/public\/auction-vehicles\/\d{1,12}$/;
 const ESTIMATE = /^\/auc\/api\/public\/auction-vehicles\/\d{1,12}\/price-estimate$/;
+const SOLD = /^\/auc\/api\/public\/auction-vehicles\/\d{1,12}\/sold-comparables$/;
 
 export class AuctionError extends Error {
   constructor(message, status = 0) { super(message); this.status = status; }
@@ -31,7 +33,7 @@ const HEADERS = { accept: 'application/json', origin: config.site.baseUrl, refer
 
 async function ask(pathname, { params = null, bidYen = null } = {}) {
   const calculator = bidYen !== null;
-  if (calculator ? !ESTIMATE.test(pathname) : !(pathname === LIST || ONE.test(pathname))) throw new AuctionError(`Blocked: ${pathname} is not on the auction feed's read-only list`);
+  if (calculator ? !ESTIMATE.test(pathname) : !(pathname === LIST || ONE.test(pathname) || SOLD.test(pathname))) throw new AuctionError(`Blocked: ${pathname} is not on the auction feed's read-only list`);
   const url = new URL(baseUrl() + pathname);
   for (const [k, v] of Object.entries(params || {})) if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));
   let res;
@@ -67,12 +69,24 @@ export function tidyVariant(variant, model = '') {
   const said = new Set(clean(model).toLowerCase().split(/\s+/));
   const words = clean(variant).split(/\s+/).filter(Boolean).filter((w) => !said.has(w.toLowerCase()));
   while (words.length && !known(words[words.length - 1])) words.pop();
+  const part = (w) => (/^eyesight$/i.test(w) ? 'EyeSight' : /^e:?hev$/i.test(w) ? 'e:HEV' : KEEP_UPPER.test(w.toUpperCase()) ? w.toUpperCase() : cap(w));
   return words.map((w) => {
-    if (/^eyesight$/i.test(w)) return 'EyeSight';
-    if (KEEP_UPPER.test(w.toUpperCase())) return w.toUpperCase();
     if (/^\d\.\d[A-Z]{1,2}(-[A-Z])?$/i.test(w)) return w.replace(/^(\d\.\d)([A-Za-z]+)(-[A-Za-z])?$/, (m, n, l, s) => n + l.toLowerCase() + (s ? s.toUpperCase() : ''));
-    return cap(w);
+    // "S-Z" and "X-BREAK": each side of the hyphen is tidied on its own.
+    return w.split('-').map(part).join('-');
   }).join(' ');
+}
+
+const REAL_WORDS = /^(BOX|FIT|VAN|MAX|ONE|ACE)$/;
+
+/**
+ * A make or model as a person would write it. The website and the dashboard hold some in
+ * capitals ("NOAH", "N BOX CUSTOM", "MERCEDES-BENZ"). Short codes stay as they are (BMW, LS, GT-R,
+ * MR2, XV); longer plain words are given one capital.
+ */
+export function tidyName(name) {
+  return clean(name).split(/\s+/).filter(Boolean).map((w) => w.split('-').map((p) =>
+    (/^[A-Z]+$/.test(p) && (p.length >= 4 || REAL_WORDS.test(p)) ? cap(p) : p)).join('-')).join(' ');
 }
 
 /** One auction car, reduced to what a reply needs. Photo addresses and the feed's customer block are not kept. */
@@ -130,7 +144,7 @@ export function normalizeEstimate(raw) {
   };
 }
 
-// ---- the three things that can be asked ----------------------------------------------------------
+// ---- the four things that can be asked -----------------------------------------------------------
 
 /** The cars of one make and model in the coming auctions. The feed shows the next few auction days only. */
 export async function searchLots({ make, model = '', modelCode = '', yearFrom = '', maxPages = 3 } = {}) {
@@ -155,6 +169,23 @@ export async function estimateFor(id, bidYen) {
   const bid = Math.round(Number(bidYen));
   if (!/^\d{1,12}$/.test(String(id)) || !(bid >= 10000 && bid <= 100000000)) return null;
   return normalizeEstimate(await ask(`${LIST}/${id}/price-estimate`, { bidYen: bid }));
+}
+
+/** The website's "Japan auction sold prices" for one lot, reduced to what the bid rule needs. */
+export function normalizeSold(raw) {
+  const rows = Array.isArray(raw?.comparables) ? raw.comparables : [];
+  return {
+    matchLevel: clean(raw?.matchLevel),
+    benchmarkYen: int(raw?.benchmarkYen),
+    comparables: rows.map((c) => ({ year: int(c?.year), km: int(c?.odometerKm), grade: clean(c?.grade), variant: clean(c?.variant), soldYen: int(c?.soldPriceYen) })).filter((c) => c.soldYen > 0),
+  };
+}
+
+/** What up to ten similar cars sold for at recent auctions, as the website shows for this lot. */
+export async function soldComparables(id) {
+  if (!/^\d{1,12}$/.test(String(id))) return null;
+  const j = await ask(`${LIST}/${id}/sold-comparables`);
+  return j ? normalizeSold(j) : null;
 }
 
 /** The lot number in a live-auction page link, or ''. */

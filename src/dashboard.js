@@ -13,7 +13,7 @@ const READ_ALLOWLIST = [
   /^\/core\/user\/api\/v1\/lead\/conversations$/,
   /^\/core\/user\/api\/v1\/lead\/conversations\/\d+\/messages$/,
   /^\/carbarnau\/api\/v1\/vehicles$/,
-  // What a customer asked us to find at auction (their requirements), one lead at a time.
+  // The auction orders: who asked us to buy a car at auction, what they want, and how far it has got.
   /^\/carbarnau\/api\/v1\/sales\/auction$/,
   /^\/carbarnau\/auth\/v1\/api\/user\/validate-session$/,
 ];
@@ -122,11 +122,13 @@ export async function fetchLeadsPage(page, size = 50, platform = config.dashboar
   return get('/core/user/api/v1/lead/paginated', { page, size, platform });
 }
 
-/** The auction requests recorded for one lead: what they want us to find, and how far it has got. */
-export async function fetchAuctionOrders(leadId) {
-  if (!Number.isInteger(Number(leadId)) || Number(leadId) <= 0) return [];
-  const j = await get('/carbarnau/api/v1/sales/auction', { leadId: Number(leadId), page: 0, size: 20, sort: 'createdAt,desc' });
-  return Array.isArray(j?.content) ? j.content : [];
+/**
+ * One page of the auction orders: every customer who asked us to buy a car at auction, at every
+ * stage, including orders that were cancelled or refunded (so an order that ends is seen to end).
+ */
+export async function fetchAuctionOrdersPage(page = 0, size = 50) {
+  const j = await get('/carbarnau/api/v1/sales/auction', { page, size });
+  return { rows: Array.isArray(j?.content) ? j.content : [], totalPages: Number(j?.page?.totalPages ?? j?.totalPages) || 1 };
 }
 
 export async function fetchConversationsPage(page, size = 50) {

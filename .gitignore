@@ -17,6 +17,9 @@ voice/people.json
 PLAN.md
 knowledge/business-facts-evidence.md
 
+# Real messages sent to auction customers, kept as the source for voice/auction-messages.md
+Auction.txt
+
 # Downloaded website pages: rebuilt with "npm run fetch-website -- --all"
 knowledge/website/
 

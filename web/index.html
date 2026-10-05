@@ -27,6 +27,7 @@
       <div class="sections" id="sections" role="group" aria-label="Which inbox to show" hidden>
         <button class="section is-on" aria-pressed="true" data-section="dashboard" type="button">Dashboard <span class="badge" id="section-dashboard" hidden></span></button>
         <button class="section" aria-pressed="false" data-section="marketplace" type="button">Marketplace <span class="badge" id="section-marketplace" hidden></span></button>
+        <button class="section" aria-pressed="false" data-section="auction" type="button" hidden>Auction <span class="badge" id="section-auction" hidden></span></button>
       </div>
 
       <p id="status" class="sync-line" role="status" aria-live="polite">Starting</p>
@@ -40,9 +41,9 @@
       </label>
 
       <div class="filters" role="group" aria-label="Which conversations to show">
-        <button class="filter is-on" aria-pressed="true" data-tab="waiting" type="button">Waiting <span class="n" id="count-waiting"></span></button>
-        <button class="filter" aria-pressed="false" data-tab="quiet" type="button">No reply needed <span class="n" id="count-quiet"></span></button>
-        <button class="filter" aria-pressed="false" data-tab="other" type="button">Not customers <span class="n" id="count-other"></span></button>
+        <button class="filter is-on" aria-pressed="true" data-tab="waiting" type="button"><span class="t">Waiting</span> <span class="n" id="count-waiting"></span></button>
+        <button class="filter" aria-pressed="false" data-tab="quiet" type="button"><span class="t">No reply needed</span> <span class="n" id="count-quiet"></span></button>
+        <button class="filter" aria-pressed="false" data-tab="other" type="button"><span class="t">Not customers</span> <span class="n" id="count-other"></span></button>
       </div>
 
       <nav id="chats" class="chats" aria-label="Conversation list"></nav>
