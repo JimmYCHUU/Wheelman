@@ -59,6 +59,9 @@ export const config = {
       models: list(env.OPENROUTER_MODEL || 'google/gemma-4-31b-it:free', env.OPENROUTER_FALLBACK_MODELS ?? 'google/gemma-4-26b-a4b-it:free'),
       url: 'https://openrouter.ai/api/v1/chat/completions',
     },
+    // Marketplace chats are written by this model and the ones after it in the list, so the
+    // small daily allowance of the better models is kept for dashboard customers. Empty: no split.
+    marketplaceModel: (env.MARKETPLACE_MODEL ?? 'gemini-3.5-flash-lite').trim(),
     busyCooldownMinutes: num(env.BUSY_COOLDOWN_MINUTES, 5),
     temperature: 0.4,
     maxOutputTokens: 1500,

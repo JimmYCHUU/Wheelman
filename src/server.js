@@ -11,7 +11,7 @@ import { availability } from './normalize.js';
 import { firstNameOf, isPlaceholderName } from './redact.js';
 import { businessFactsForPrompt, loadBusinessFacts } from './knowledge.js';
 import * as worker from './worker.js';
-import { onCopied, onRated, onApproved, onAdvice } from './learn.js';
+import { onCopied, onRated, onApproved, onAdvice, onEdited } from './learn.js';
 import { displayNameFor } from './people.js';
 import { reservedByAnother } from './deal.js';
 import { wantedFrom } from './imports.js';
@@ -64,6 +64,8 @@ function draftOf(item) {
   const draft = latestDraft(item.itemKey, item.anchorKey);
   return draft ? {
     id: draft.id, status: draft.status, reply: draft.reply || '', checks: draft.checks, factsUsed: draft.factsUsed,
+    // What the person has typed over the suggestion: null when untouched, '' when they cleared it.
+    edited: typeof draft.edited_text === 'string' ? draft.edited_text : null, editedAt: draft.edited_at || null,
     model: draft.model, provider: draft.provider, createdAt: draft.created_at, instruction: draft.instruction || '', error: draft.error || '', rating: draft.rating || '',
     needsHuman: (draft.needsHuman || []).filter((n) => n && n.marker && n.reason).map((n) => ({ marker: String(n.marker), reason: String(n.reason) })),
   } : null;
@@ -71,7 +73,10 @@ function draftOf(item) {
 
 function flagLevel(draft) {
   if (!draft || draft.status !== 'ready') return draft && draft.status === 'failed' ? 'error' : 'none';
-  const c = draft.checks || [];
+  // Judged on the text as it stands: a blank the person has filled in, or a figure they removed, no longer counts.
+  const text = draft.edited ?? draft.reply;
+  if (!text.trim()) return 'none';
+  const c = (draft.checks || []).filter((x) => draft.edited === null || !x.tokens?.length || x.tokens.some((t) => text.includes(t)));
   return c.some((x) => x.level === 'fail') ? 'fail' : c.some((x) => x.level === 'input') ? 'input' : 'ok';
 }
 
@@ -264,6 +269,17 @@ async function api(req, res, url) {
     const item = itemFromKey(draft.item_key);
     const result = item ? onCopied(item, draft.id, String(body.text || '')) : { learned: false, why: 'conversation not found' };
     return send(res, 200, { ok: true, ...result });
+  }
+
+  // The text in the message box changed: keep it with the suggestion, so it is still there after a reload.
+  m = p.match(/^\/api\/drafts\/(\d+)\/edit$/);
+  if (req.method === 'POST' && m) {
+    const body = await readBody(req);
+    const draft = getDraft(Number(m[1]));
+    if (!draft) return send(res, 404, { error: 'Suggestion not found.' });
+    if (typeof body.text !== 'string') return send(res, 400, { error: 'No text was given.' });
+    const result = onEdited(itemFromKey(draft.item_key), draft.id, body.text);
+    return send(res, 200, { ...result, savedAt: Date.now() });
   }
 
   m = p.match(/^\/api\/drafts\/(\d+)\/rating$/);
