@@ -3,7 +3,8 @@
 
 import { config, missingSettings } from './config.js';
 import { syncAll, syncMarketplace } from './sync.js';
-import { listItems, itemFromKey } from './items.js';
+import { listItems, itemFromKey, buildOrderItem } from './items.js';
+import { prepareOrders } from './ordermessages.js';
 import { draftFor } from './drafter.js';
 import { latestDraft, isDismissed, draftsAwaitingOutcome, recordOutcome, markSuperseded, setMeta, getMeta, openDb, mpDraftsLastDay } from './db.js';
 import { providers, usage, modelStatus, lastModel } from './llm.js';
@@ -194,6 +195,9 @@ export async function cycle() {
   try { refreshVoiceBankIfStale(); } catch { /* keep the existing bank */ }
   // A coaching note written while every AI model was busy still has its lesson to be worked out.
   try { if (providers().length && Date.now() >= state.pausedUntil) await distilPending(2); } catch { /* next time */ }
+  // Auction orders: look at the live auction for the ones still searching, and write the message
+  // that is due. These come from the wording file, so no AI is asked and no key is needed.
+  try { await prepareOrders(buildOrderItem); } catch (e) { logLine('auction', `Preparing auction orders failed: ${e.message}`); }
   await draftWaiting();
 }
 

@@ -52,6 +52,9 @@ export function redact(text, lead) {
   let t = String(text ?? '');
   if (!t) return t;
 
+  // A customer's own payment or agreement link: whoever holds the address can open it.
+  t = t.replace(/(?:https?:\/\/)?(?:www\.)?carbarn\.com\.au\/customer-links\/[^\s)>\]]+/gi, '[CUSTOMER LINK]');
+
   // Emails
   t = t.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, (m) => (OWN_EMAILS.includes(m.toLowerCase()) ? m : '[EMAIL]'));
 
@@ -110,7 +113,9 @@ export function restore(text, lead) {
 
 /** Placeholders that must never be left in a finished draft. */
 export function leftoverPlaceholders(text) {
-  return String(text || '').match(/\{\{NAME\}\}|\[(NAME|EMAIL|PHONE|REGO|VIN|BANK|ADDRESS)\]/g) || [];
+  // {{NAME}}, and any other marker in double curly brackets (an auction order's amounts travel as
+  // markers such as {{DUE}}: one that code could not fill in must not reach a customer).
+  return String(text || '').match(/\{\{[A-Z][A-Z0-9_]*\}\}|\[(NAME|EMAIL|PHONE|REGO|VIN|BANK|ADDRESS|CUSTOMER LINK)\]/g) || [];
 }
 
 export const ownDetails = { phones: OWN_PHONE_DIGITS, emails: OWN_EMAILS, sitePhone: config.site.phone };

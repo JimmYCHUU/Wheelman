@@ -496,10 +496,19 @@ A small label in front of a row's preview text, used for "Dismissed" under No re
 - **Style:** Panel Mist ground, Muted text at 0.75rem / 650, 0.25rem corners, 0.375rem side padding. It sits inline with the preview and never changes the row's height. A dismissed row shows no number badge and is not bold.
 
 ### Section switch
-Two segments under the brand block: Dashboard and Marketplace. It chooses which inbox the list shows; the two are never mixed.
-- **Style:** a Panel Mist track with 0.75rem corners and 0.1875rem padding, holding two equal segments 2.125rem tall with 0.5625rem corners. Labels are Muted at 0.875rem / 500. A badge after each label counts who is waiting there, and is hidden at zero.
+Up to three segments under the brand block: Dashboard, Marketplace and Auction. It chooses which list is shown; they are never mixed. A section that is switched off has no segment, and the others share the width.
+- **Style:** a Panel Mist track with 0.75rem corners and 0.1875rem padding, holding equal segments 2.125rem tall with 0.5625rem corners. Labels are Muted at 0.875rem / 500. A badge after each label counts who is waiting there, and is hidden at zero.
 - **State:** the selected segment takes the list ground (white in light, the open-row colour in dark), Ink text at 650 and the hairline shadow in light. Exactly one is selected. Hover on the other segment darkens its label. Press scales to 0.97.
-- **Behaviour:** switching resets the filter to Waiting, clears the search and closes the open chat. In Marketplace the "Not customers" chip is hidden. The switch itself is hidden when the Marketplace section is turned off.
+- **Behaviour:** switching resets the filter to the first chip, clears the search and closes the open chat. In Marketplace the "Not customers" chip is hidden. In Auction the three chips read To do, In progress and Finished, and the "Showing the last 3 days" choice is hidden, because every order is listed.
+
+### Auction orders
+An order uses the same three columns as a conversation, with these differences.
+- **Row:** the customer, the car on its own line in Muted, then what is due in amber 650 ("Send: car secured") followed by the stage in plain words. When the customer wrote, the due words are "Reply to their message" and their message follows.
+- **Car strip:** the car, the stage with the amber dot (red once the order is finished), the deposit state, and a link to the auction car when there is one.
+- **Thread:** steps of the order (opened, deposit received, car secured) are event pills. A message copied from Wheelman is an outgoing bubble labelled "Copied from Wheelman"; a pasted one is labelled "via WhatsApp" or "Pasted by you" and carries a small underlined "Remove".
+- **Order bar:** a row above the message box. On the left "Which message?" at 0.8125rem / 650 with a pill select (2.25rem tall, Strong Line outline, Sheet ground); on the right the "Paste their message" button.
+- **Paste box:** a Sheet with the Strong Line outline and an Action Blue border on focus, holding a plain text area and a footer: a Faint line saying nothing is sent, then an Outline button "We sent this" and the Primary "They wrote this".
+- **Message box:** the shared editor. Rewrite becomes "Add what you know"; "Refresh figures" appears for a message that quotes the live auction; there is no Good reply or Could be better, because nothing is learned here.
 
 ### Chips
 The three filters above the list: Waiting, No reply needed, Not customers.

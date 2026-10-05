@@ -5,7 +5,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 import { listItems, itemFromKey } from './items.js';
-import { latestDraft, getDraft, dismiss, undismiss, isDismissed, setDraftRating, markSeen, isSeen } from './db.js';
+import { latestDraft, getDraft, dismiss, undismiss, isDismissed, setDraftRating, markSeen, isSeen, dataStamp, uncopy, addOrderMessage, removeOrderMessage } from './db.js';
+import { listOrderRows, MESSAGES, messagesFor, wantedText, carTitle, lotName, lotPageUrl, cleanPaste } from './orders.js';
+import { draftOrderMessage } from './ordermessages.js';
 import { draftFor } from './drafter.js';
 import { availability } from './normalize.js';
 import { firstNameOf, isPlaceholderName } from './redact.js';
@@ -59,6 +61,7 @@ function displayName(item) {
 }
 
 const THREAD_LIMIT = 80;
+const LIST_LIMIT = 200;
 
 function draftOf(item) {
   const draft = latestDraft(item.itemKey, item.anchorKey);
@@ -82,6 +85,7 @@ function flagLevel(draft) {
 
 /** One row in the conversation list. Deliberately small. */
 function summary(item) {
+  if (item.order) return { ...item.orderRow, anchor: item.anchorKey, flag: flagLevel(draftOf(item)) };
   const draft = draftOf(item);
   const last = item.timeline[item.timeline.length - 1];
   const lastShown = [...item.timeline].reverse().find((e) => !e.internal) || last;
@@ -146,10 +150,69 @@ function shownAvailability(item, v) {
   return a;
 }
 
+const WHERE = { japan: 'Still in Japan', transit: 'On the way to Australia', arrived: 'Arrived in Australia', online: 'At the Lidcombe yard', sold: 'Handed over' };
+const CONTACT = { WHATSAPP: 'WhatsApp', SMS: 'Text message', EMAIL: 'Email', PHONE: 'Phone call' };
+const DEPOSIT = { NONE: 'Not paid', PARTIAL: 'Part paid', RECEIVED: 'Paid', PAID: 'Paid' };
+
+/** What the details panel and the message box show about an auction order. */
+function orderOf(item) {
+  const o = item.order;
+  if (!o) return null;
+  const s = item.orderStatus;
+  const w = o.wanted || {};
+  const found = o.watch?.lot || null;
+  const depositLine = o.money.lines.find((l) => l.stage === 'INITIAL_DEPOSIT');
+  return {
+    orderNo: o.orderNo,
+    stage: s.stage.label, stageCode: s.stage.code, finished: !!s.stage.finished,
+    due: s.due, why: s.kind === 'send' ? s.next.why : '',
+    // Set once the message that was due has been copied or dismissed: "Put back" undoes it.
+    handled: item.orderRow.handled,
+    cameFrom: o.source === 'IMPORTING' ? 'Import page' : 'Live auction',
+    prefers: CONTACT[o.preferredContact] || '',
+    followUp: o.followUpDue ? 'A follow-up is due' : '',
+    staffNote: o.note ? { text: o.note.body, at: o.note.at } : null,
+    deposit: { state: DEPOSIT[o.depositState] || o.depositState.toLowerCase(), paid: o.money.depositPaid, asked: o.money.quotedDeposit || depositLine?.amount || 0 },
+    wanted: { car: [wantedText(w), w.modelCode ? `(${w.modelCode})` : ''].filter(Boolean).join(' '), variant: w.variant, targetBidYen: w.targetBidYen, budget: w.budgetAud, notes: w.notes },
+    lot: o.lot ? { title: lotName(o), grade: o.lot.grade, km: o.lot.km, auctionDate: o.lot.auctionDate, auctionHouse: o.lot.auctionHouse, lotNumber: o.lot.lotNumber, url: lotPageUrl(o) } : null,
+    found: found ? { title: found.title, grade: found.grade, km: found.km, auctionDate: found.auctionDate, url: found.url, seenAt: o.watchedAt } : null,
+    car: o.car ? { title: carTitle(o.car), km: o.car.km, grade: o.car.grade, colour: o.car.colour, stockNo: o.car.stockNo, where: WHERE[String(o.car.stockIn).toLowerCase()] || '' } : null,
+    money: { lines: o.money.lines, payments: o.money.payments, total: o.money.total, paid: o.money.paid, due: o.money.due },
+    dates: { opened: o.createdAt, secured: o.securedAt, completed: o.completedAt },
+    // The "Which message?" list, the one that is due first.
+    messages: messagesFor(o).map((type) => ({ type, label: MESSAGES[type], due: s.kind === 'send' && s.next.type === type })).sort((a, b) => Number(b.due) - Number(a.due)),
+    message: item.message,
+    replying: s.kind === 'reply' && item.anchorKey === s.anchorKey,
+  };
+}
+
+const threadOf = (item, shown) => {
+  const pendingKeys = new Set(item.pending.map((e) => e.key));
+  return shown.map((e) => ({
+    key: e.key, who: e.who, internal: !!e.internal, text: e.text || '', event: e.event || '', media: e.media || null,
+    by: displayNameFor(e.by) || '', auto: !!e.auto, via: e.via || '', at: e.at, unanswered: item.state === 'awaiting' && pendingKeys.has(e.key),
+  }));
+};
+
+/** Everything needed to show one open auction order. */
+function presentOrder(item) {
+  const shown = item.timeline.slice(-THREAD_LIMIT);
+  return {
+    ...summary(item),
+    note: '', channel: 'auction', marketplace: null,
+    firstName: firstNameOf(item.lead), source: 'Auction order', leadStatus: '', location: '', email: item.lead.email || '',
+    noLead: false, autoDraft: false, autoReason: '', firstReply: item.isFirstReply, looking: null, vehicle: null,
+    order: orderOf(item),
+    thread: threadOf(item, shown),
+    earlier: item.timeline.length - shown.length,
+    draft: draftOf(item),
+  };
+}
+
 /** Everything needed to show one open conversation. */
 function present(item) {
+  if (item.order) return presentOrder(item);
   const v = item.vehicles[0];
-  const pendingKeys = new Set(item.pending.map((e) => e.key));
   const shown = item.timeline.slice(-THREAD_LIMIT);
   return {
     ...summary(item),
@@ -167,13 +230,54 @@ function present(item) {
     firstReply: item.isFirstReply,
     looking: lookingFor(item),
     vehicle: v ? { title: v.title, stockNo: v.stockNo, price: v.price, odometer: v.odometer, availability: shownAvailability(item, v), url: v.url, year: v.year, fuel: v.fuel, transmission: v.transmission, seats: v.seats, colour: v.color, included: v.outline || [] } : null,
-    thread: shown.map((e) => ({
-      key: e.key, who: e.who, internal: !!e.internal, text: e.text || '', event: e.event || '', media: e.media || null,
-      by: displayNameFor(e.by) || '', auto: !!e.auto, via: e.via || '', at: e.at, unanswered: item.state === 'awaiting' && pendingKeys.has(e.key),
-    })),
+    thread: threadOf(item, shown),
     earlier: item.timeline.length - shown.length,
     draft: draftOf(item),
   };
+}
+
+const SECTIONS = ['dashboard', 'marketplace', 'auction'];
+const sectionOn = (s) => (s === 'marketplace' ? config.marketplace.enabled : true);
+const KEY = '((?:c|l|mp|ao):\\d+)';
+const itemRoute = (tail = '') => new RegExp(`^/api/items/${KEY}${tail}$`);
+
+const listCache = new Map();
+
+/**
+ * The rows of one section, by tab. Built once and reused until something in the database is
+ * written, or a minute has passed (some rules depend on the time of day). The page asks every
+ * twenty seconds; without this every conversation was rebuilt three or four times each time.
+ *
+ * A dismissed conversation is not lost: it moves to the second tab, where it can be put back.
+ */
+function sectionRows(section, hours) {
+  const stamp = `${dataStamp()}|${Math.floor(Date.now() / 60000)}`;
+  const key = `${section}|${hours}`;
+  const hit = listCache.get(key);
+  if (hit && hit.stamp === stamp) return hit.value;
+
+  let value;
+  if (section === 'auction') {
+    // To do, In progress, Finished.
+    const rows = listOrderRows();
+    value = { waiting: rows.filter((r) => r.state === 'awaiting'), quiet: rows.filter((r) => r.state === 'answered'), other: rows.filter((r) => r.state === 'closed') };
+  } else {
+    const all = listItems({ states: ['awaiting', 'ack', 'closed', 'optout', 'other'], maxAgeHours: hours, source: section, limit: Infinity });
+    const newest = (x, y) => (y.lastInboundAt || y.lastActivityAt) - (x.lastInboundAt || x.lastActivityAt);
+    const awaiting = all.filter((i) => i.state === 'awaiting').slice(0, LIST_LIMIT);
+    const setAside = awaiting.filter((i) => isDismissed(i.itemKey, i.anchorKey));
+    const quiet = all.filter((i) => ['ack', 'closed', 'optout'].includes(i.state)).slice(0, LIST_LIMIT);
+    value = {
+      waiting: awaiting.filter((i) => !setAside.includes(i)).map(summary),
+      quiet: [...setAside, ...quiet].sort(newest).map(summary),
+      other: section === 'dashboard' ? all.filter((i) => i.state === 'other').slice(0, LIST_LIMIT).map(summary) : [],
+    };
+  }
+  value.unread = value.waiting.filter((r) => r.unread).length;
+  // Building the rows can itself write (a first-time match key), which moves the stamp.
+  listCache.set(key, { stamp: `${dataStamp()}|${Math.floor(Date.now() / 60000)}`, value });
+  while (listCache.size > 12) listCache.delete(listCache.keys().next().value);
+  return value;
 }
 
 async function api(req, res, url) {
@@ -185,30 +289,21 @@ async function api(req, res, url) {
   }
 
   if (req.method === 'GET' && p === '/api/items') {
-    const tab = url.searchParams.get('tab') || 'waiting';
+    const tab = ['waiting', 'quiet', 'other'].includes(url.searchParams.get('tab')) ? url.searchParams.get('tab') : 'waiting';
     const hours = Number(url.searchParams.get('hours')) || config.draftMaxAgeHours;
-    // Two separate sections: dashboard leads, and Facebook Marketplace chats.
-    const source = url.searchParams.get('section') === 'marketplace' && config.marketplace.enabled ? 'marketplace' : 'dashboard';
-    // Waiting conversations in a section, without the ones that were dismissed.
-    const waitingList = (s) => listItems({ states: ['awaiting'], maxAgeHours: hours, source: s }).filter((i) => !isDismissed(i.itemKey, i.anchorKey));
-    const newIn = (list) => list.filter((i) => !isSeen(i.itemKey, i.anchorKey)).length;
-    // A dismissed conversation is not lost. It moves to "No reply needed", where it can be put back.
-    const awaiting = listItems({ states: ['awaiting'], maxAgeHours: hours, source });
-    const setAside = awaiting.filter((i) => isDismissed(i.itemKey, i.anchorKey));
-    const here = awaiting.filter((i) => !setAside.includes(i));
-    const quiet = listItems({ states: ['ack', 'closed', 'optout'], maxAgeHours: hours, source });
-    const others = source === 'dashboard' ? listItems({ states: ['other'], maxAgeHours: hours, source }) : [];
-    const newest = (x, y) => (y.lastInboundAt || y.lastActivityAt) - (x.lastInboundAt || x.lastActivityAt);
-    const chosen = tab === 'waiting' ? here : tab === 'quiet' ? [...setAside, ...quiet].sort(newest) : others;
-    const visible = chosen.map(summary);
-    const counts = { waiting: here.length, quiet: quiet.length + setAside.length, other: others.length };
-    const elsewhere = source === 'dashboard' ? 'marketplace' : 'dashboard';
-    const there = elsewhere === 'marketplace' && !config.marketplace.enabled ? null : waitingList(elsewhere);
-    const sections = { [source]: here.length, [elsewhere]: there ? there.length : null };
-    // Waiting conversations with messages nobody has looked at yet. These are the numbers shown on
-    // the page and in the browser tab; they clear when the conversation is opened.
-    const unread = { [source]: newIn(here), [elsewhere]: there ? newIn(there) : null };
-    return send(res, 200, { items: visible, counts, sections, unread, section: source, hours });
+    // Three separate sections: dashboard leads, Facebook Marketplace chats, and auction orders.
+    const asked = url.searchParams.get('section');
+    const section = SECTIONS.includes(asked) && sectionOn(asked) ? asked : 'dashboard';
+    const here = sectionRows(section, hours);
+    // How many are waiting in each section, and how many of those have something nobody has looked
+    // at yet. The second is the number on the page and in the browser tab; it clears on opening.
+    const sections = {}, unread = {};
+    for (const s of SECTIONS) {
+      const rows = sectionOn(s) ? sectionRows(s, hours) : null;
+      sections[s] = rows ? rows.waiting.length : null;
+      unread[s] = rows ? rows.unread : null;
+    }
+    return send(res, 200, { items: here[tab], counts: { waiting: here.waiting.length, quiet: here.quiet.length, other: here.other.length }, sections, unread, section, hours });
   }
 
   if (req.method === 'POST' && p === '/api/sync') {
@@ -218,23 +313,33 @@ async function api(req, res, url) {
     return send(res, 200, worker.statusReport());
   }
 
-  let m = p.match(/^\/api\/items\/((?:c|l|mp):\d+)$/);
+  // For an auction order, `message` is the kind of message picked from the "Which message?" list.
+  let m = p.match(itemRoute());
   if (req.method === 'GET' && m) {
-    const item = itemFromKey(m[1]);
+    const item = itemFromKey(m[1], { message: url.searchParams.get('message') || '' });
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
     return send(res, 200, { item: present(item) });
   }
 
-  m = p.match(/^\/api\/items\/((?:c|l|mp):\d+)\/draft$/);
+  m = p.match(itemRoute('/draft'));
   if (req.method === 'POST' && m) {
-    const item = itemFromKey(m[1]);
-    if (!item) return send(res, 404, { error: 'That conversation was not found.' });
     const body = await readBody(req);
-    const draft = await draftFor(item, { instruction: String(body.instruction || '').slice(0, 600) });
-    return send(res, 200, { item: present(item), ok: draft.status === 'ready', error: draft.error || '' });
+    const picked = { message: String(body.message || '') };
+    const item = itemFromKey(m[1], picked);
+    if (!item) return send(res, 404, { error: 'That conversation was not found.' });
+    const instruction = String(body.instruction || '').slice(0, 600);
+    let draft;
+    if (item.order && !(item.orderStatus.kind === 'reply' && !picked.message)) {
+      // A message to an auction customer is written from its template. No AI is asked.
+      if (!item.message) return send(res, 400, { error: 'Choose which message to write first.' });
+      draft = await draftOrderMessage(item, { type: item.message, facts: instruction });
+    } else {
+      draft = await draftFor(item, { instruction });
+    }
+    return send(res, 200, { item: present(itemFromKey(m[1], picked) || item), ok: draft.status === 'ready', error: draft.error || '' });
   }
 
-  m = p.match(/^\/api\/items\/((?:c|l|mp):\d+)\/dismiss$/);
+  m = p.match(itemRoute('/dismiss'));
   if (req.method === 'POST' && m) {
     const item = itemFromKey(m[1]);
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
@@ -243,7 +348,7 @@ async function api(req, res, url) {
   }
 
   // The conversation was opened on the page: its number badge goes away until a new message arrives.
-  m = p.match(/^\/api\/items\/((?:c|l|mp):\d+)\/seen$/);
+  m = p.match(itemRoute('/seen'));
   if (req.method === 'POST' && m) {
     const item = itemFromKey(m[1]);
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
@@ -251,13 +356,39 @@ async function api(req, res, url) {
     return send(res, 200, { ok: true });
   }
 
-  // Undo for Dismiss: the conversation goes back to Waiting.
-  m = p.match(/^\/api\/items\/((?:c|l|mp):\d+)\/restore$/);
+  // Undo for Dismiss: the conversation goes back to Waiting. For an auction order it also undoes
+  // "copied": the message that was due is due again, and leaves the thread.
+  m = p.match(itemRoute('/restore'));
   if (req.method === 'POST' && m) {
     const item = itemFromKey(m[1]);
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
     undismiss(item.itemKey);
-    return send(res, 200, { ok: true, item: present(item) });
+    if (item.order) uncopy(item.itemKey, item.anchorKey);
+    return send(res, 200, { ok: true, item: present(itemFromKey(m[1]) || item) });
+  }
+
+  // The owner pasted a message into an auction order: what the customer wrote on WhatsApp (a
+  // reply is then suggested), or something we sent by hand (so the thread stays true).
+  m = p.match(itemRoute('/paste'));
+  if (req.method === 'POST' && m) {
+    const item = itemFromKey(m[1]);
+    if (!item?.order) return send(res, 404, { error: 'That order was not found.' });
+    const body = await readBody(req);
+    const direction = body.direction === 'out' ? 'out' : 'in';
+    const text = cleanPaste(body.text).slice(0, 4000);
+    if (!text) return send(res, 400, { error: 'There was nothing to paste.' });
+    const id = addOrderMessage(item.order.id, direction, text);
+    let draft = null;
+    if (direction === 'in') draft = await draftFor(itemFromKey(m[1]));
+    return send(res, 200, { item: present(itemFromKey(m[1])), pasteId: id, ok: !draft || draft.status === 'ready', error: draft?.error || '' });
+  }
+
+  m = p.match(itemRoute('/paste/(\\d+)/remove'));
+  if (req.method === 'POST' && m) {
+    const item = itemFromKey(m[1]);
+    if (!item?.order) return send(res, 404, { error: 'That order was not found.' });
+    removeOrderMessage(item.order.id, Number(m[2]));
+    return send(res, 200, { ok: true, item: present(itemFromKey(m[1])) });
   }
 
   // Copy was pressed: remember exactly what the person chose to use.

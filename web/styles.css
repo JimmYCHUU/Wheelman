@@ -190,9 +190,10 @@ svg.icon { width: 1.25rem; height: 1.25rem; flex: none; display: block; }
 .icon-btn.is-busy svg.icon { animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* section switch: Dashboard | Marketplace. One list at a time. */
+/* section switch: Dashboard | Marketplace | Auction. One list at a time. A section that is
+   switched off is hidden, and the others share the width. */
 .sections {
-  flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 0.1875rem;
+  flex: none; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 0.1875rem;
   margin: 0.5rem 0.75rem 0.625rem; padding: 0.1875rem;
   border-radius: 0.75rem; background: var(--panel);
 }
@@ -552,6 +553,37 @@ svg.icon { width: 1.25rem; height: 1.25rem; flex: none; display: block; }
 .btn.primary.wait { background: var(--sheet); color: var(--text); border-color: var(--line-strong); }
 .btn.outline { border-color: var(--line-strong); color: var(--text); }
 .btn.is-on { background: var(--accent-soft); color: var(--accent-text); }
+
+/* Auction orders: which message to write, and the box for pasting what the customer wrote. */
+.order-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 0.375rem 0.5rem; padding: 0 0.125rem; }
+.order-bar .grow { flex: 1; }
+.pick-label { display: inline-flex; align-items: center; gap: 0.5rem; min-width: 0; font-size: 0.8125rem; font-weight: 650; color: var(--text); }
+.pick {
+  min-width: 0; max-width: 100%; height: 2.25rem; padding: 0 0.625rem;
+  border: 1px solid var(--line-strong); border-radius: 1.125rem;
+  background: var(--sheet); color: var(--text); font-weight: 500;
+}
+.pick:focus-visible { outline: none; border-color: var(--accent); }
+.pick option { background: var(--sheet); color: var(--text); }
+.paste { display: grid; gap: 0.375rem; background: var(--sheet); border: 1px solid var(--line-strong); border-radius: 0.75rem; box-shadow: var(--shadow-1); }
+.paste:focus-within { border-color: var(--accent); }
+.paste textarea {
+  display: block; width: 100%; min-height: 4.5rem; max-height: 30dvh; resize: vertical;
+  margin: 0; border: 0; padding: 0.75rem 0.875rem 0.25rem;
+  background: transparent; color: var(--text); caret-color: var(--accent);
+  font-size: 0.9375rem; line-height: 1.5;
+}
+.paste textarea::placeholder { color: var(--faint); opacity: 1; }
+.paste textarea:focus-visible { outline: none; }
+.paste-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 0.375rem; padding: 0.25rem 0.375rem 0.375rem 0.875rem; }
+.paste-foot .fine { font-size: 0.75rem; color: var(--faint); }
+.paste-foot .grow { flex: 1; }
+.msg .unpaste {
+  margin-left: 0.5rem; padding: 0; border: 0; background: transparent;
+  color: inherit; opacity: .7; font-size: 0.6875rem; font-weight: 600;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.msg .unpaste:hover, .msg .unpaste:focus-visible { opacity: 1; }
 
 .rewrite { display: flex; gap: 0.5rem; }
 .rewrite[hidden] { display: none; }
