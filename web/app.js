@@ -86,9 +86,11 @@ function icon(name) {
 // ---- state -------------------------------------------------------------------
 
 const state = {
-  section: 'dashboard',  // 'dashboard' or 'marketplace'
-  sections: { dashboard: 0, marketplace: null }, // waiting in each; null means the section is switched off
-  unread: { dashboard: 0, marketplace: null },   // waiting conversations with messages not looked at yet
+  section: 'dashboard',  // 'dashboard', 'marketplace' or 'auction'
+  sections: { dashboard: 0, marketplace: null, auction: null }, // waiting in each; null means the section is switched off
+  unread: { dashboard: 0, marketplace: null, auction: null },   // waiting conversations with messages not looked at yet
+  message: '',           // Auction: the kind of message picked from "Which message?" for the open order
+  pasteOpen: false,      // Auction: the box for pasting what the customer wrote is open
   listSeq: 0,            // guards against a slow list response landing in the wrong section
   tab: 'waiting',
   hours: 72,
@@ -112,6 +114,16 @@ const state = {
 
 const narrow = () => window.matchMedia('(max-width: 860px)').matches;
 const inMarketplace = () => state.section === 'marketplace';
+const inAuction = () => state.section === 'auction';
+const SECTIONS = ['dashboard', 'marketplace', 'auction'];
+const sectionOf = (key) => (String(key).startsWith('mp:') ? 'marketplace' : String(key).startsWith('ao:') ? 'auction' : 'dashboard');
+// The three lists of a section, in plain words. Auction orders are not conversations waiting for
+// a reply, so their lists are named for what there is to do.
+const TABS = {
+  dashboard: ['Waiting', 'No reply needed', 'Not customers'],
+  marketplace: ['Waiting', 'No reply needed', ''],
+  auction: ['To do', 'In progress', 'Finished'],
+};
 
 // ---- small helpers -----------------------------------------------------------
 
@@ -388,7 +400,7 @@ function visibleRows() {
   if (!q) return state.list;
   const digits = q.replace(/\D/g, '');
   return state.list.filter((r) =>
-    [r.name, r.preview.text, r.car, r.situation, r.account].some((f) => String(f || '').toLowerCase().includes(q))
+    [r.name, r.preview.text, r.car, r.situation, r.account, r.due, r.orderNo].some((f) => String(f || '').toLowerCase().includes(q))
     || (digits.length >= 3 && String(r.phone || '').replace(/\D/g, '').includes(digits)));
 }
 
@@ -401,6 +413,10 @@ function renderList() {
   if (!rows.length) {
     const empty = state.q.trim()
       ? ['Nothing matches', 'Try a name, part of a phone number, or a word from the message.']
+      : inAuction()
+        ? { waiting: ['Nothing to do', 'Auction orders that need a message appear here with the message ready to check.'],
+            quiet: ['Nothing here', 'Orders that are under way with no message due.'],
+            other: ['Nothing here', 'Orders that are completed, cancelled or refunded.'] }[state.tab]
       : inMarketplace()
         ? { waiting: ['Nobody is waiting', 'Marketplace chats where the buyer wrote last appear here with a reply ready to check.'],
             quiet: ['Nothing here', 'Buyers who only said thanks, archived chats, and chats you dismissed.'],
@@ -414,14 +430,16 @@ function renderList() {
 
   for (const r of rows) {
     const chat = r.section === 'marketplace';
-    const title = r.name || r.phone || (chat ? 'Marketplace buyer' : 'Unknown number');
+    const order = r.section === 'auction';
+    const title = r.name || r.phone || (chat ? 'Marketplace buyer' : order ? 'Auction customer' : 'Unknown number');
     const setAside = r.dismissed && r.state === 'awaiting';
     // The open conversation is being read, so it never shows a number.
     // A dismissed conversation has been dealt with, so it shows no number either.
     const unread = r.key === state.selected || setAside ? 0 : r.unread || 0;
-    const flagWords = setAside ? 'Dismissed' : r.flag === 'fail' ? 'Check the reply' : r.flag === 'input' ? 'Blank to fill' : r.needsPerson && r.unanswered ? 'Needs a person' : '';
+    // An order's row says what is due, then where the order has got to (or their message, when they wrote).
+    const flagWords = order ? r.due : setAside ? 'Dismissed' : r.flag === 'fail' ? 'Check the reply' : r.flag === 'input' ? 'Blank to fill' : r.needsPerson && r.unanswered ? 'Needs a person' : '';
     const flagClass = r.flag === 'fail' ? 'fail' : 'input';
-    const previewText = r.preview.media && !r.preview.text ? 'Photo' : r.preview.text;
+    const previewText = order ? (r.dueKind === 'reply' ? r.preview.text : r.stage) : r.preview.media && !r.preview.text ? 'Photo' : r.preview.text;
     const row = h('button', {
       class: `row ${unread ? 'has-unanswered' : ''}`.trim(),
       type: 'button',
@@ -434,11 +452,11 @@ function renderList() {
         h('span', { class: 'row-top' },
           h('span', { class: 'row-name', text: title }),
           h('span', { class: 'row-time', text: listTime(r.lastAt) })),
-        chat && r.car ? h('span', { class: 'row-car', text: r.car }) : null,
+        (chat || order) && r.car ? h('span', { class: 'row-car', text: r.car }) : null,
         h('span', { class: 'row-bottom' },
           h('span', { class: 'row-preview' },
             setAside ? h('span', { class: 'row-tag', text: 'Dismissed' }) : flagWords ? h('span', { class: `row-flag ${flagClass}`, text: `${flagWords}: ` }) : null,
-            r.preview.who === 'us' ? h('span', { class: 'you', text: 'You: ' }) : null, previewText),
+            !order && r.preview.who === 'us' ? h('span', { class: 'you', text: 'You: ' }) : null, previewText),
           unread ? h('span', { class: 'badge' }, String(unread), h('span', { class: 'visually-hidden', text: unread === 1 ? ' unread message' : ' unread messages' })) : null)));
     nav.append(row);
   }
@@ -461,17 +479,26 @@ function renderCounts() {
   $('#count-quiet').textContent = '';
   $('#count-other').textContent = '';
   const s = state.sections;
-  const hasMarketplace = s.marketplace !== null && s.marketplace !== undefined;
-  $('#sections').hidden = !hasMarketplace;
+  const on = (k) => k === 'dashboard' || (s[k] !== null && s[k] !== undefined);
+  $('#sections').hidden = !SECTIONS.some((k) => k !== 'dashboard' && on(k));
   let total = 0;
-  for (const k of ['dashboard', 'marketplace']) {
+  for (const k of SECTIONS) {
     const badge = $(`#section-${k}`);
-    const n = newCount(k);
+    badge.closest('.section').hidden = !on(k);
+    const n = on(k) ? newCount(k) : 0;
     total += n;
     badge.hidden = !n;
-    badge.replaceChildren(String(n), h('span', { class: 'visually-hidden', text: n === 1 ? ' conversation with new messages' : ' conversations with new messages' }));
+    badge.replaceChildren(String(n), h('span', { class: 'visually-hidden', text: k === 'auction' ? (n === 1 ? ' order with something new' : ' orders with something new') : n === 1 ? ' conversation with new messages' : ' conversations with new messages' }));
   }
-  $('.filter[data-tab="other"]').hidden = inMarketplace();
+  // Every order is listed, however old: the "last 3 days" choice is for conversations only.
+  $('.side-foot label').hidden = inAuction();
+  // The three lists are named for the section on screen.
+  for (const [i, tab] of ['waiting', 'quiet', 'other'].entries()) {
+    const f = $(`.filter[data-tab="${tab}"]`);
+    const label = TABS[state.section][i];
+    f.hidden = !label;
+    $('.t', f).textContent = label;
+  }
   document.title = total ? `(${total}) Wheelman` : 'Wheelman';
 }
 
@@ -481,11 +508,13 @@ function renderWelcome() {
   const chat = $('#chat');
   chat.replaceChildren(h('div', { class: 'welcome' },
     h('div', { class: 'welcome-mark' }, wheelMark()),
-    h('h2', { text: state.counts.waiting ? `${plural(state.counts.waiting, inMarketplace() ? 'buyer' : 'customer')} waiting for a reply` : 'Nobody is waiting right now' }),
+    h('h2', { text: inAuction()
+      ? (state.counts.waiting ? `${plural(state.counts.waiting, 'order')} with something to do` : 'No auction order needs a message right now')
+      : state.counts.waiting ? `${plural(state.counts.waiting, inMarketplace() ? 'buyer' : 'customer')} waiting for a reply` : 'Nobody is waiting right now' }),
     h('ol', {},
-      h('li', {}, h('span', {}, h('b', { text: inMarketplace() ? 'Pick a buyer' : 'Pick a customer' }), ' from the list.')),
-      h('li', {}, h('span', {}, h('b', { text: 'Check the reply' }), ' waiting in the message box. Fill in anything highlighted.')),
-      h('li', {}, h('span', {}, h('b', { text: 'Copy it' }), inMarketplace() ? ' and paste it into the Marketplace chat.' : ' and send it from the dashboard.'))),
+      h('li', {}, h('span', {}, h('b', { text: inAuction() ? 'Pick an order' : inMarketplace() ? 'Pick a buyer' : 'Pick a customer' }), ' from the list.')),
+      h('li', {}, h('span', {}, h('b', { text: inAuction() ? 'Check the message' : 'Check the reply' }), ' waiting in the message box. Fill in anything highlighted.')),
+      h('li', {}, h('span', {}, h('b', { text: 'Copy it' }), inAuction() ? ' and paste it into WhatsApp.' : inMarketplace() ? ' and paste it into the Marketplace chat.' : ' and send it from the dashboard.'))),
     h('p', { text: 'Nothing is ever sent to a customer from this page.' })));
   state.threadSig = '';
   state.composerSig = '';
@@ -534,11 +563,13 @@ function paintLatest() {
 function renderHead(item, els) {
   const chat = item.channel === 'marketplace';
   const listing = item.marketplace || null;
-  const title = item.name || item.phone || (chat ? 'Marketplace buyer' : 'Unknown number');
+  const order = item.order || null;
+  const title = item.name || item.phone || (chat ? 'Marketplace buyer' : order ? 'Auction customer' : 'Unknown number');
   const writing = state.busy.has(item.key);
   const where = chat ? `Marketplace${listing?.account ? `, ${listing.account}` : ''}` : (item.name ? item.phone : '');
   const sub = writing ? 'writing a suggestion…'
-    : [where, item.situation && item.situation !== 'General enquiry' ? `Asking about: ${item.situation.toLowerCase()}` : ''].filter(Boolean).join(' · ');
+    : order ? [where, `Order ${order.orderNo}`, order.prefers ? `prefers ${order.prefers}` : ''].filter(Boolean).join(' · ')
+      : [where, item.situation && item.situation !== 'General enquiry' ? `Asking about: ${item.situation.toLowerCase()}` : ''].filter(Boolean).join(' · ');
   const others = newCount(state.section);
   els.head.replaceChildren(
     h('button', { class: 'back', type: 'button', 'aria-label': others ? `Back to conversations. ${plural(others, 'conversation')} with new messages.` : 'Back to conversations', onclick: closeChat },
@@ -552,8 +583,17 @@ function renderHead(item, els) {
 
   const v = item.vehicle;
   const unmatched = !v && !!listing?.listingTitle;
-  els.car.hidden = !v && !unmatched;
+  els.car.hidden = !v && !unmatched && !order;
   els.car.replaceChildren();
+  if (order) {
+    // The car this order is about, and where the order has got to.
+    const page = order.lot?.url || order.found?.url || '';
+    put(els.car,
+      h('span', { class: 'car-title', text: item.car || 'No car named yet' }),
+      h('span', { class: `avail ${order.finished ? 'sold' : 'transit'}`, text: order.stage }),
+      order.deposit.state ? h('span', { text: `Deposit: ${order.deposit.state.toLowerCase()}` }) : null,
+      page ? h('a', { href: page, target: '_blank', rel: 'noopener noreferrer' }, 'Open the auction car', icon('external')) : null);
+  }
   if (unmatched) {
     put(els.car,
       h('span', { class: 'car-title', text: listing.listingTitle }),
@@ -601,7 +641,8 @@ function renderThread(item, els, { toBottom = false } = {}) {
       markedUnanswered = true; lastSide = ''; lastBy = null;
     }
 
-    if (e.internal) {
+    // A staff note. (A step of an auction order is internal too, but has no text: it is shown as an event below.)
+    if (e.internal && e.text) {
       box.append(h('div', { class: 'pill note' }, `Staff note${e.by ? ` by ${sender(e.by)}` : ''}: ${e.text}`, h('span', { class: 'when', text: clock(e.at) })));
       lastSide = ''; lastBy = null;
       continue;
@@ -621,7 +662,8 @@ function renderThread(item, els, { toBottom = false } = {}) {
       first && by ? h('span', { class: 'from', 'aria-hidden': side === 'out' ? 'true' : null, text: by }) : null,
       e.media ? h('span', { class: 'media' }, icon('image'), e.media === 'photo' ? 'Photo' : 'Attachment', e.text ? '\n' : '') : null,
       e.text ? linked(e.text) : null,
-      h('span', { class: 'time', text: clock(e.at) }));
+      h('span', { class: 'time', text: clock(e.at) }),
+      item.order && /^(in|po):\d+$/.test(e.key) ? h('button', { class: 'unpaste', type: 'button', title: 'Take this pasted message out of the order', onclick: () => removePaste(item, e.key.split(':')[1]) }, 'Remove') : null);
     box.append(bubble);
     lastSide = side; lastBy = by;
   }
@@ -648,8 +690,11 @@ function renderThread(item, els, { toBottom = false } = {}) {
 
 // ---- message box ---------------------------------------------------------------
 
-const BLANK = /\[(PRICE|TRADE-IN VALUE|DELIVERY COST|DATE|CHECK|DEPOSIT LINK)\?\]/g;
-const BLANK_NAME = { PRICE: 'the price', 'TRADE-IN VALUE': 'the trade-in value', 'DELIVERY COST': 'the delivery cost', DATE: 'the date', CHECK: 'something to confirm', 'DEPOSIT LINK': 'the deposit link' };
+// A blank is any short label in capitals with a question mark, in square brackets: [PRICE?], [SOLD PRICE?].
+// The same pattern is used in src/checks.js and src/learn.js.
+const BLANK = /\[([A-Z][A-Z0-9 &'/-]{1,30})\?\]/g;
+const BLANK_NAME = { PRICE: 'the price', 'TRADE-IN VALUE': 'the trade-in value', 'DELIVERY COST': 'the delivery cost', DATE: 'the date', CHECK: 'something to confirm', 'DEPOSIT LINK': 'the deposit link', SHIP: "the ship's name", 'WHICH CAR': 'which car' };
+const blankName = (kind) => BLANK_NAME[kind] || `the ${kind.toLowerCase()}`;
 
 function blanksIn(text) {
   const found = [];
@@ -658,7 +703,7 @@ function blanksIn(text) {
   const seen = {};
   for (const b of found) {
     seen[b.kind] = (seen[b.kind] || 0) + 1;
-    b.label = BLANK_NAME[b.kind] + (totals[b.kind] > 1 ? ` ${seen[b.kind]}` : '');
+    b.label = blankName(b.kind) + (totals[b.kind] > 1 ? ` ${seen[b.kind]}` : '');
     const lineStart = text.lastIndexOf('\n', b.start - 1) + 1;
     const lineEnd = text.indexOf('\n', b.end);
     b.line = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd).trim();
@@ -668,7 +713,7 @@ function blanksIn(text) {
 
 function composerSignature(item) {
   const d = item.draft;
-  return [item.key, item.state, item.dismissed, d?.id, d?.status, d?.rating, state.busy.has(item.key), state.rewriteOpen, state.betterOpen, state.copied === d?.id].join('|');
+  return [item.key, item.state, item.dismissed, d?.id, d?.status, d?.rating, state.busy.has(item.key), state.rewriteOpen, state.betterOpen, state.copied === d?.id, item.anchor, item.order?.message, item.order?.handled, item.order?.replying, state.pasteOpen].join('|');
 }
 
 function renderComposer(item, els, { arriving = false } = {}) {
@@ -686,6 +731,8 @@ function renderComposer(item, els, { arriving = false } = {}) {
   }
 
   const writeBtn = (label, kind = 'primary') => h('button', { class: `btn ${kind}`, type: 'button', onclick: () => write(item, '') }, icon('pencil'), label);
+
+  if (item.order) { renderOrderComposer(box, item, d, { arriving, writeBtn }); return; }
 
   if (item.state === 'optout') {
     box.append(h('div', { class: 'quiet bad' }, icon('stop'), h('p', { text: 'This customer asked not to be contacted. Do not reply.' })));
@@ -713,15 +760,73 @@ function renderComposer(item, els, { arriving = false } = {}) {
     return;
   }
 
-  // A ready suggestion: an unsent draft in the message box. The box is an editor: the text can be
-  // changed or cleared, and what is typed is saved as it is typed.
-  const ta = h('textarea', { class: `draft ${arriving ? 'arriving' : ''}`.trim(), rows: '3', spellcheck: 'true', placeholder: 'Type your reply here', 'aria-label': 'Your reply, not sent. Change it here, then copy it.' });
+  mountEditor(box, item, d, { arriving });
+}
+
+/**
+ * The message box for an auction order: which message to write, the message itself, and a box
+ * for pasting what the customer wrote on WhatsApp (Wheelman cannot read WhatsApp).
+ */
+function renderOrderComposer(box, item, d, { arriving = false, writeBtn }) {
+  const o = item.order;
+  const picker = h('select', { class: 'pick', 'aria-label': 'Which message to write' },
+    h('option', { value: '', text: o.replying ? 'A reply to what they wrote' : 'Choose a message' }),
+    o.messages.map((m) => h('option', { value: m.type, text: m.due ? `${m.label} (due now)` : m.label })));
+  picker.value = o.replying && !state.message ? '' : o.message || '';
+  picker.addEventListener('change', () => pickMessage(item, picker.value));
+  const pasteBtn = h('button', { class: `btn ${state.pasteOpen ? 'is-on' : ''}`.trim(), type: 'button', 'aria-expanded': state.pasteOpen ? 'true' : 'false',
+    title: 'Paste what the customer wrote on WhatsApp, or type what they said on the phone. Wheelman then suggests a reply.',
+    onclick: () => { state.pasteOpen = !state.pasteOpen; renderComposer(item, chatFrame()); if (state.pasteOpen) $('#chat .paste textarea')?.focus(); } }, icon('chat'), 'Paste their message');
+  box.append(h('div', { class: 'order-bar' }, h('label', { class: 'pick-label' }, h('span', { text: 'Which message?' }), picker), h('span', { class: 'grow' }), pasteBtn));
+
+  if (state.pasteOpen) {
+    const ta = h('textarea', { rows: '3', placeholder: 'Paste what the customer wrote on WhatsApp, or type what they said', 'aria-label': 'What the customer wrote' });
+    box.append(h('div', { class: 'paste' }, ta,
+      h('div', { class: 'paste-foot' },
+        h('span', { class: 'fine', text: 'Nothing is sent. It is added to this order so the reply knows what was said.' }),
+        h('span', { class: 'grow' }),
+        h('button', { class: 'btn outline', type: 'button', title: 'Add a message we sent by hand, so the conversation here stays true. No reply is written.', onclick: () => pasteMessage(item, ta.value, 'out') }, 'We sent this'),
+        h('button', { class: 'btn primary', type: 'button', onclick: () => pasteMessage(item, ta.value, 'in') }, 'They wrote this'))));
+    return;
+  }
+
+  // The message that was due has been dealt with, and no other was picked: say so, with a way back.
+  const done = !o.replying && !state.message && (o.handled || item.state !== 'awaiting');
+  if (d && d.status === 'ready' && !done) { mountEditor(box, item, d, { arriving }); return; }
+  if (d && d.status === 'failed' && !done) {
+    box.append(h('div', { class: 'quiet bad' }, h('p', { text: d.error || 'This message could not be written.' }), writeBtn('Try again')));
+    return;
+  }
+  if (!done) {
+    box.append(h('div', { class: 'quiet' },
+      h('p', { text: o.replying ? 'They wrote to us. A reply has not been written yet.' : `${o.why || 'A message is due.'} It is being prepared.` }),
+      writeBtn('Write it now')));
+    return;
+  }
+  const words = o.handled === 'copied' ? 'You copied the message that was due. It is shown in the conversation above.'
+    : o.handled === 'dismissed' ? 'You dismissed the message that was due.'
+      : o.finished ? 'This order is finished. No message is due.'
+        : 'No message is due for this order right now. Choose one above to write it anyway.';
+  box.append(h('div', { class: 'quiet' }, o.handled === 'copied' ? icon('check') : null, h('p', { text: words }),
+    o.handled ? h('button', { class: 'btn outline', type: 'button', title: o.handled === 'copied' ? 'It was not sent after all: the message becomes due again.' : 'The message becomes due again.', onclick: () => restoreItem(item.key) }, 'Put back in To do') : null));
+}
+
+/**
+ * A ready suggestion: an unsent draft in the message box. The box is an editor: the text can be
+ * changed or cleared, and what is typed is saved as it is typed. Shared by every section.
+ */
+function mountEditor(box, item, d, { arriving = false } = {}) {
+  // An auction order: a message written from the wording file, or a reply to what the customer wrote.
+  const order = item.order || null;
+  const outbound = !!order && !order.replying;
+  const what = outbound ? 'message' : 'reply';
+  const ta = h('textarea', { class: `draft ${arriving ? 'arriving' : ''}`.trim(), rows: '3', spellcheck: 'true', placeholder: `Type your ${what} here`, 'aria-label': `Your ${what}, not sent. Change it here, then copy it.` });
   ta.value = state.edits.has(d.id) ? state.edits.get(d.id) : d.edited ?? d.reply;
   const backdrop = h('div', { class: 'backdrop', 'aria-hidden': 'true' });
   const advice = h('div', { class: 'advice' });
   const count = h('span', { class: 'count' });
-  const copyBtn = h('button', { class: 'btn primary', type: 'button', title: 'Copy (Ctrl + Enter)' }, icon('copy'), h('span', { text: 'Copy reply' }));
-  const clearBtn = h('button', { class: 'btn', type: 'button', title: 'Empty the box to write your own reply. The suggestion can be brought back.', onclick: () => replaceText(ta, '') }, icon('x'), 'Clear');
+  const copyBtn = h('button', { class: 'btn primary', type: 'button', title: 'Copy (Ctrl + Enter)' }, icon('copy'), h('span', { text: `Copy ${what}` }));
+  const clearBtn = h('button', { class: 'btn', type: 'button', title: `Empty the box to write your own ${what}. The suggestion can be brought back.`, onclick: () => replaceText(ta, '') }, icon('x'), 'Clear');
   const after = h('div', { class: 'after', hidden: state.copied !== d.id });
   const tag = h('span', { class: 'draft-tag' });
   const meta = h('span', { class: 'draft-meta', title: d.model || '', 'data-draft': String(d.id), 'data-written': String(d.createdAt || 0), 'data-saved-at': String(d.editedAt || 0) });
@@ -730,7 +835,8 @@ function renderComposer(item, els, { arriving = false } = {}) {
   const backToSuggestion = () => h('button', { class: 'blank-btn', type: 'button', onclick: () => replaceText(ta, d.reply) }, 'Bring back the suggestion');
 
   function paintHead() {
-    tag.replaceChildren(isEmpty() ? 'Your reply ' : isEdited() ? 'Suggested reply, changed by you ' : 'Suggested reply ',
+    const named = outbound ? (order.messages.find((m) => m.type === order.message)?.label || 'Message') : 'Suggested reply';
+    tag.replaceChildren(isEmpty() ? `Your ${what} ` : isEdited() ? `${named}, changed by you ` : `${named} `,
       h('span', { text: isEdited() ? '· not sent' : '· not sent · click in the text to change it' }));
     meta.dataset.edited = isEdited() ? 'yes' : 'no';
     paintSaveNote(d.id);
@@ -779,14 +885,14 @@ function renderComposer(item, els, { arriving = false } = {}) {
   function paintAdvice() {
     const blanks = blanksIn(ta.value);
     const lines = [];
-    const teaches = item.channel !== 'marketplace';
+    const teaches = item.channel === 'sms';
     // The box was cleared: what the checks said about the suggestion no longer applies.
     if (isEmpty()) {
       advice.replaceChildren(h('div', { class: 'tip input' }, icon('pencil'),
-        h('span', { text: 'The suggestion is cleared. Type your own reply here.' }), backToSuggestion(),
+        h('span', { text: `The suggestion is cleared. Type your own ${what} here.` }), backToSuggestion(),
         h('span', { class: 'tip-why', text: 'If no reply is needed at all, use Dismiss in the details panel.' })));
       copyBtn.classList.remove('wait');
-      copyBtn.lastChild.textContent = 'Copy reply';
+      copyBtn.lastChild.textContent = `Copy ${what}`;
       return;
     }
     for (const c of d.checks.filter((x) => x.level === 'fail' && x.code !== 'placeholder' && stillThere(x))) {
@@ -819,14 +925,14 @@ function renderComposer(item, els, { arriving = false } = {}) {
 
     const open = blanks.length > 0;
     copyBtn.classList.toggle('wait', open);
-    copyBtn.lastChild.textContent = open ? 'Copy with blanks' : 'Copy reply';
+    copyBtn.lastChild.textContent = open ? 'Copy with blanks' : `Copy ${what}`;
   }
 
   function paintCount() {
     const t = ta.value;
     const chars = t.length;
     const parts = Math.ceil(chars / 153);
-    count.textContent = `${plural((t.trim().match(/\S+/g) || []).length, 'word')}${chars > 160 && item.channel !== 'marketplace' ? ` · about ${parts} texts` : ''}`;
+    count.textContent = `${plural((t.trim().match(/\S+/g) || []).length, 'word')}${chars > 160 && item.channel === 'sms' ? ` · about ${parts} texts` : ''}`;
   }
 
   function grow() {
@@ -869,7 +975,11 @@ function renderComposer(item, els, { arriving = false } = {}) {
     saveEdit(d.id, ta.value, { now: true });
     // Dashboard only: Marketplace chats are never learned from, so their text is not even sent.
     api(`/api/drafts/${d.id}/copied`, { body: { text: chat ? '' : ta.value } })
-      .then((out) => { if (out.learned && changed) { toast('Copied. Wheelman will use your changes for similar messages.'); refreshStatus(); } })
+      .then((out) => {
+        if (out.learned && changed) { toast('Copied. Wheelman will use your changes for similar messages.'); refreshStatus(); }
+        // An order's message counts as done once it is copied: the list and the thread show that now.
+        if (order) { refreshList(); refreshDetail(); }
+      })
       .catch(() => {});
   }
 
@@ -879,7 +989,7 @@ function renderComposer(item, els, { arriving = false } = {}) {
     if (!ok) { toast('Copying is blocked by the browser. Select the text and press Ctrl + C.'); return; }
     const left = blanksIn(ta.value).length;
     const chat = item.channel === 'marketplace';
-    toast(left ? `Copied, with ${plural(left, 'blank')} still to fill` : chat ? 'Copied. Paste it into the Marketplace chat to send.' : 'Copied. Paste it into the dashboard to send.');
+    toast(left ? `Copied, with ${plural(left, 'blank')} still to fill` : chat ? 'Copied. Paste it into the Marketplace chat to send.' : order ? `Copied. Paste it into ${order.prefers === 'WhatsApp' || !order.prefers ? 'WhatsApp' : 'your message to them'} to send.` : 'Copied. Paste it into the dashboard to send.');
     noteCopied();
   }
 
@@ -894,11 +1004,13 @@ function renderComposer(item, els, { arriving = false } = {}) {
   });
   copyBtn.addEventListener('click', doCopy);
 
-  const rewriteInput = h('input', { type: 'text', maxlength: '300', placeholder: 'What should change? For example: offer $27,500, or make it shorter', 'aria-label': 'What should change in the reply' });
+  const rewriteInput = outbound
+    ? h('input', { type: 'text', maxlength: '300', placeholder: 'For example: we bid 1.2m, sold for 1.31m. Or: ETA 14 Nov, ship Hoegh Trader', 'aria-label': 'What you know that the message needs' })
+    : h('input', { type: 'text', maxlength: '300', placeholder: 'What should change? For example: offer $27,500, or make it shorter', 'aria-label': 'What should change in the reply' });
   rewriteInput.value = d.instruction || '';
   const rewriteRow = h('div', { class: 'rewrite', hidden: !state.rewriteOpen },
     rewriteInput,
-    h('button', { class: 'btn outline', type: 'button', onclick: () => write(item, rewriteInput.value) }, 'Write it again'));
+    h('button', { class: 'btn outline', type: 'button', onclick: () => write(item, rewriteInput.value) }, outbound ? 'Fill it in' : 'Write it again'));
   rewriteInput.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter') { ev.preventDefault(); write(item, rewriteInput.value); }
     if (ev.key === 'Escape') { state.rewriteOpen = false; rewriteRow.hidden = true; rewriteBtn.classList.remove('is-on'); rewriteBtn.setAttribute('aria-expanded', 'false'); rewriteBtn.focus(); }
@@ -911,12 +1023,12 @@ function renderComposer(item, els, { arriving = false } = {}) {
     rewriteBtn.setAttribute('aria-expanded', state.rewriteOpen ? 'true' : 'false');
     state.composerSig = composerSignature(item);
     if (state.rewriteOpen) rewriteInput.focus();
-  } }, icon('pencil'), 'Rewrite');
+  } }, icon('pencil'), outbound ? 'Add what you know' : 'Rewrite');
 
   put(after, h('span', { class: 'said' }, icon('check'), 'Copied'));
 
   // Two ways to teach Wheelman. Marketplace chats are never learned from, so they have neither.
-  const teach = item.channel !== 'marketplace';
+  const teach = item.channel === 'sms';
   const approved = d.rating === 'good';
   const approveBtn = teach ? h('button', { class: `btn ${approved ? 'is-on' : ''}`.trim(), type: 'button', 'aria-pressed': approved ? 'true' : 'false',
     title: approved ? 'You approved this reply. Click to take that back.' : 'This reply is right as it is. Wheelman will write similar replies the same way.',
@@ -942,13 +1054,16 @@ function renderComposer(item, els, { arriving = false } = {}) {
       if (state.betterOpen) betterInput.focus();
     } }, 'Could be better') : null;
 
-  box.append(
+  put(box,
     h('div', { class: 'draft-head' }, tag, meta),
     advice,
     h('div', { class: 'sheet' },
       h('div', { class: 'field' }, backdrop, ta),
       h('div', { class: 'sheet-foot' },
         rewriteBtn,
+        // A message with live figures (an auction car, a landed estimate) can be read again.
+        outbound && ['lot_offer', 'lot_short', 'lots_coming', 'first_estimate'].includes(order.message)
+          ? h('button', { class: 'btn', type: 'button', title: 'Read the live auction again and write this message with the figures as they are now.', onclick: () => write(item, d.instruction || '') }, icon('refresh'), 'Refresh figures') : null,
         approveBtn,
         betterBtn,
         h('span', { class: 'grow' }),
@@ -997,12 +1112,14 @@ function renderInfo() {
         h('dl', {},
           row('Phone', item.phone ? h('button', { class: 'link-btn', type: 'button', onclick: async () => { await copyText(item.phone); toast('Phone number copied'); } }, `${item.phone} (copy)`) : ''),
           row('Email', item.email),
-          row('Came from', sourceLabel(item.source)),
+          row('Prefers', item.order?.prefers),
+          row('Came from', item.order ? item.order.cameFrom : sourceLabel(item.source)),
           row('State', item.location),
           row('Lead status', item.leadStatus ? item.leadStatus.replace(/_/g, ' ').toLowerCase() : ''),
-          row('Asking about', item.situation)),
+          row('Asking about', item.order ? '' : item.situation)),
         item.noLead ? h('p', { class: 'fine', text: 'This number has no customer record in the dashboard.' }) : null),
       item.marketplace ? marketplaceInfo(item.marketplace, row) : null,
+      item.order ? orderInfo(item.order, row) : null,
       // An import or auction enquiry: what they asked us to find from Japan.
       item.looking ? h('section', {},
         h('h4', { text: 'Looking for, from Japan' }),
@@ -1014,7 +1131,7 @@ function renderInfo() {
           row('Grade', item.looking.grade ? `${item.looking.grade} or better` : ''),
           row('Auction request', item.looking.order)),
         item.looking.missing ? h('p', { class: 'fine', text: `Not known yet: ${item.looking.missing}.` }) : null) : null,
-      item.looking && !v ? null : v ? h('section', {},
+      (item.looking || item.order) && !v ? null : v ? h('section', {},
         h('h4', { text: 'Car' }),
         h('dl', {},
           row('Vehicle', v.title),
@@ -1032,12 +1149,79 @@ function renderInfo() {
       d && d.status === 'ready' ? h('section', {},
         h('h4', { text: 'What the suggestion relies on' }),
         d.factsUsed.length ? h('ul', { class: 'facts' }, d.factsUsed.map((f) => h('li', { text: f }))) : h('p', { class: 'fine', text: 'No particular facts were listed.' }),
-        h('p', { class: 'fine', text: `Written by ${d.model || 'the AI model'} at ${clock(d.createdAt)}.${d.instruction ? ` Your instruction: “${d.instruction}”.` : ''}` })) : null,
+        h('p', { class: 'fine', text: d.provider === 'none' ? `Written from ${d.model || 'your wording'} at ${clock(d.createdAt)}, with no AI.${d.instruction ? ` What you added: “${d.instruction}”.` : ''}` : `Written by ${d.model || 'the AI model'} at ${clock(d.createdAt)}.${d.instruction ? ` Your instruction: “${d.instruction}”.` : ''}` })) : null,
       item.state === 'awaiting' && !item.dismissed ? h('section', {},
         h('h4', { text: 'Dismiss' }),
-        h('p', { class: 'fine', text: 'Takes this conversation out of Waiting, for example when you have already phoned them. Nothing is deleted: it stays under No reply needed and can be put back.' }),
-        h('button', { class: 'btn outline dismiss-btn', type: 'button', onclick: () => dismissItem(item) }, 'Dismiss this conversation')) : null,
+        h('p', { class: 'fine', text: item.order
+          ? 'Takes this order out of To do, for example when you have already told them by phone. Nothing is deleted: the order stays under In progress and the message can be put back.'
+          : 'Takes this conversation out of Waiting, for example when you have already phoned them. Nothing is deleted: it stays under No reply needed and can be put back.' }),
+        h('button', { class: 'btn outline dismiss-btn', type: 'button', onclick: () => dismissItem(item) }, item.order ? 'Dismiss this message' : 'Dismiss this conversation')) : null,
       h('section', {}, h('p', { class: 'fine', text: 'All times are Sydney time.' }))));
+}
+
+/** The auction-order part of the details panel: the order, what they asked for, the car, and what has been charged and paid. */
+function orderInfo(o, row) {
+  const km = (n) => (n ? `${Number(n).toLocaleString('en-AU')} km` : '');
+  const day = (ms) => (ms ? fmtShort.format(new Date(ms)) : '');
+  const link = (url, text) => (url ? h('a', { href: url, target: '_blank', rel: 'noopener noreferrer', text }) : '');
+  const m = o.money;
+  return [
+    h('section', {},
+      h('h4', { text: 'Auction order' }),
+      h('dl', {},
+        row('Order', o.orderNo),
+        row('Stage', o.stage),
+        row('To do', o.due),
+        row('Deposit', [o.deposit.state, o.deposit.paid ? money(o.deposit.paid) : o.deposit.asked ? `${money(o.deposit.asked)} asked` : ''].filter(Boolean).join(', ')),
+        row('Dashboard says', o.followUp),
+        row('Opened', day(o.dates.opened)),
+        row('Car secured', day(o.dates.secured)),
+        row('Completed', day(o.dates.completed))),
+      o.why ? h('p', { class: 'fine', text: o.why }) : null,
+      o.staffNote ? [h('h4', { text: 'Latest staff note' }), h('p', { class: 'fine', text: `${o.staffNote.text} (${day(o.staffNote.at)})` })] : null),
+    h('section', {},
+      h('h4', { text: 'Looking for, from Japan' }),
+      h('dl', {},
+        row('Car', o.wanted.car),
+        row('Variant', o.wanted.variant),
+        row('Target bid', o.wanted.targetBidYen ? `¥${Number(o.wanted.targetBidYen).toLocaleString('en-AU')}` : ''),
+        row('Budget', o.wanted.budget ? `about ${money(o.wanted.budget)} landed` : '')),
+      o.wanted.notes ? h('p', { class: 'fine', text: o.wanted.notes }) : null),
+    o.lot ? h('section', {},
+      h('h4', { text: 'Auction car on this order' }),
+      h('dl', {},
+        row('Car', o.lot.title),
+        row('Odometer', km(o.lot.km)),
+        row('Auction grade', o.lot.grade),
+        row('Auction', [o.lot.auctionDate, o.lot.auctionHouse, o.lot.lotNumber ? `lot ${o.lot.lotNumber}` : ''].filter(Boolean).join(', ')),
+        row('Page', link(o.lot.url, 'Open on the website')))) : null,
+    o.found ? h('section', {},
+      h('h4', { text: 'Found in the coming auctions' }),
+      h('dl', {},
+        row('Car', o.found.title),
+        row('Odometer', km(o.found.km)),
+        row('Auction grade', o.found.grade),
+        row('Auction', o.found.auctionDate ? String(o.found.auctionDate).slice(0, 10) : ''),
+        row('Page', link(o.found.url, 'Open on the website'))),
+      h('p', { class: 'fine', text: `The best match when the live auction was last looked at, ${ago(o.found.seenAt)}.` })) : null,
+    o.car ? h('section', {},
+      h('h4', { text: 'Car secured' }),
+      h('dl', {},
+        row('Car', o.car.title),
+        row('Odometer', km(o.car.km)),
+        row('Auction grade', o.car.grade),
+        row('Colour', o.car.colour ? String(o.car.colour).toLowerCase() : ''),
+        row('Where it is', o.car.where),
+        row('Stock number', o.car.stockNo))) : null,
+    m.lines.length || m.payments.length ? h('section', {},
+      h('h4', { text: 'Charged and paid' }),
+      h('dl', {},
+        m.lines.map((l) => row(l.description, money(l.amount))),
+        row('Total charged', m.total ? money(m.total) : ''),
+        row('Paid', m.paid ? money(m.paid) : ''),
+        row('Still due', m.due > 0 ? money(m.due) : m.total ? 'Nothing' : '')),
+      m.payments.length ? h('p', { class: 'fine', text: `Payments: ${m.payments.map((p) => `${money(p.amount)} on ${day(p.at)}`).join(', ')}.` }) : null) : null,
+  ];
 }
 
 /** The Marketplace part of the details panel: the seller account, the listing, and what the auto-reply noted. */
@@ -1088,7 +1272,7 @@ function markRead(item) {
   const row = state.list.find((r) => r.key === item.key);
   if (row) row.unread = 0;
   // One fewer conversation with new messages: the numbers on the chip, the switch and the browser tab drop.
-  const section = item.key.startsWith('mp:') ? 'marketplace' : 'dashboard';
+  const section = sectionOf(item.key);
   if (item.state === 'awaiting' && !item.dismissed && state.unread[section]) state.unread[section] -= 1;
   renderList();
   renderCounts();
@@ -1101,6 +1285,8 @@ async function open(key) {
   state.rewriteOpen = false;
   state.betterOpen = false;
   state.copied = null;
+  state.message = '';
+  state.pasteOpen = false;
   $('#app').dataset.view = 'chat';
   renderList();
   renderCounts();
@@ -1128,7 +1314,7 @@ async function write(item, instruction) {
   state.betterOpen = false;
   if (state.selected === item.key) { renderHead(state.detail, chatFrame()); renderComposer(state.detail, chatFrame()); }
   try {
-    const out = await api(`/api/items/${item.key}/draft`, { body: { instruction } });
+    const out = await api(`/api/items/${item.key}/draft`, { body: { instruction, message: item.order ? state.message || item.order.message || '' : '' } });
     state.busy.delete(item.key);
     if (state.selected === item.key) {
       state.detail = out.item;
@@ -1137,7 +1323,7 @@ async function write(item, instruction) {
       renderComposer(out.item, chatFrame(), { arriving: true });
       renderInfo();
     }
-    toast(out.ok ? 'A new suggestion is ready' : 'A suggestion could not be written');
+    toast(out.ok ? (item.order && !item.order.replying ? 'The message is ready' : 'A new suggestion is ready') : (out.error || 'A suggestion could not be written'));
   } catch (e) {
     state.busy.delete(item.key);
     if (state.selected === item.key) { renderHead(state.detail, chatFrame()); renderComposer(state.detail, chatFrame()); }
@@ -1145,6 +1331,54 @@ async function write(item, instruction) {
   }
   refreshList();
   refreshStatus();
+}
+
+/** Auction: another kind of message was picked. One already written for it is shown; otherwise it is written now. */
+async function pickMessage(item, type) {
+  state.message = type;
+  state.rewriteOpen = false;
+  try {
+    const { item: fresh } = await api(`/api/items/${item.key}${type ? `?message=${encodeURIComponent(type)}` : ''}`);
+    if (state.selected !== item.key) return;
+    state.detail = fresh;
+    if (type && !(fresh.draft && fresh.draft.status === 'ready')) { await write(fresh, ''); return; }
+    renderHead(fresh, chatFrame()); renderComposer(fresh, chatFrame(), { arriving: true }); renderInfo();
+  } catch (e) { toast(e.message); }
+}
+
+/**
+ * Auction: adds a message to the order that Wheelman could not see for itself. One the customer
+ * wrote gets a suggested reply; one we sent by hand is only added, so the conversation stays true.
+ */
+async function pasteMessage(item, text, direction) {
+  if (!String(text || '').trim()) { toast('Paste or type the message first'); return; }
+  if (state.busy.has(item.key)) return;
+  state.pasteOpen = false;
+  state.message = '';
+  if (direction === 'in') state.busy.add(item.key);
+  if (state.selected === item.key) { renderHead(state.detail, chatFrame()); renderComposer(state.detail, chatFrame()); }
+  try {
+    const out = await api(`/api/items/${item.key}/paste`, { body: { text, direction } });
+    state.busy.delete(item.key);
+    if (state.selected === item.key) { state.detail = out.item; state.copied = null; renderChat({ toBottom: true, arriving: true }); }
+    toast(direction === 'out' ? 'Added to the conversation' : out.ok ? 'A reply is ready' : (out.error || 'The reply could not be written'));
+  } catch (e) {
+    state.busy.delete(item.key);
+    if (state.selected === item.key) { renderHead(state.detail, chatFrame()); renderComposer(state.detail, chatFrame()); }
+    toast(e.message);
+  }
+  refreshList();
+  refreshStatus();
+}
+
+/** Auction: takes a wrongly pasted message out of the order. */
+async function removePaste(item, id) {
+  try {
+    const out = await api(`/api/items/${item.key}/paste/${id}/remove`, { body: {} });
+    if (state.selected === item.key) { state.detail = out.item; renderChat(); }
+    toast('Removed');
+    refreshList();
+  } catch (e) { toast(e.message); }
 }
 
 async function dismissItem(item) {
@@ -1157,7 +1391,7 @@ async function dismissItem(item) {
     state.counts.waiting = Math.max(0, state.counts.waiting - (item.state === 'awaiting' ? 1 : 0));
     if (item.state === 'awaiting' && state.sections[state.section]) state.sections[state.section] -= 1;
     renderCounts();
-    toast('Dismissed. It is kept under No reply needed.', { label: 'Undo', run: () => restoreItem(item.key, true) });
+    toast(item.order ? 'Dismissed. The order is kept under In progress.' : 'Dismissed. It is kept under No reply needed.', { label: 'Undo', run: () => restoreItem(item.key, true) });
     if (next && !narrow()) { state.selected = null; state.detail = null; await open(next.key); }
     else { state.selected = null; state.detail = null; renderList(); renderChat(); $('#app').dataset.view = 'list'; }
     refreshList();
@@ -1169,10 +1403,10 @@ async function restoreItem(key, reopen = false) {
   try {
     const out = await api(`/api/items/${key}/restore`, { body: {} });
     await refreshList();
-    const here = (key.startsWith('mp:') ? 'marketplace' : 'dashboard') === state.section;
+    const here = sectionOf(key) === state.section;
     if (state.selected === key) { state.detail = out.item; renderChat(); }
     else if (reopen && here && !narrow()) { state.selected = null; state.detail = null; await open(key); }
-    toast('Back in Waiting');
+    toast(sectionOf(key) === 'auction' ? 'Back in To do' : 'Back in Waiting');
   } catch (e) { toast(e.message); }
 }
 
@@ -1258,7 +1492,8 @@ async function refreshDetail() {
   const key = state.selected;
   if (!key || state.busy.has(key)) return;
   try {
-    const { item } = await api(`/api/items/${key}`);
+    // For an auction order, the message that was picked stays picked.
+    const { item } = await api(`/api/items/${key}${state.message && key.startsWith('ao:') ? `?message=${encodeURIComponent(state.message)}` : ''}`);
     if (state.selected !== key) return;
     const previous = state.detail;
     state.detail = item;
@@ -1295,15 +1530,15 @@ for (const f of document.querySelectorAll('.filter')) {
   });
 }
 
-/** Switches between the Dashboard and Marketplace sections. Each starts on its Waiting list with nothing open. */
+/** Switches between the Dashboard, Marketplace and Auction sections. Each starts on its first list with nothing open. */
 async function showSection(section) {
   if (state.section === section) return;
   state.section = section;
   state.tab = 'waiting';
   state.q = '';
   $('#q').value = '';
-  $('#q').placeholder = section === 'marketplace' ? 'Search name, car or message' : 'Search name, number or message';
-  state.selected = null; state.detail = null; state.rewriteOpen = false; state.betterOpen = false; state.copied = null;
+  $('#q').placeholder = section === 'marketplace' ? 'Search name, car or message' : section === 'auction' ? 'Search name, car or order number' : 'Search name, number or message';
+  state.selected = null; state.detail = null; state.rewriteOpen = false; state.betterOpen = false; state.copied = null; state.message = ''; state.pasteOpen = false;
   state.list = [];
   state.counts = { waiting: state.sections[section] || 0, quiet: 0, other: 0 };
   for (const b of document.querySelectorAll('.section')) { const on = b.dataset.section === section; b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }

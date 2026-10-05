@@ -140,15 +140,42 @@ CREATE TABLE IF NOT EXISTS sales (
   phone_hash TEXT, email_hash TEXT,
   updated_at INTEGER
 );
--- What a customer asked us to find at auction: the car, the years, their budget and their own
--- notes, and how far the request has got. No name, address, licence or payment detail is kept.
+-- One row per auction order on the dashboard: who it is for, what they asked us to find, the car,
+-- how far it has got, and what the customer has been charged and has paid. Never kept: address,
+-- licence, date of birth, the payment link, the salesperson, photos, or any cost of ours.
 CREATE TABLE IF NOT EXISTS auction_orders (
-  lead_id INTEGER PRIMARY KEY,
-  order_no TEXT, stage TEXT, lot_phase TEXT, source TEXT,
-  lot_id TEXT, deposit_state TEXT,
-  wanted_json TEXT,
-  created_at INTEGER, checked_at INTEGER
+  id INTEGER PRIMARY KEY,
+  order_no TEXT,
+  lead_id INTEGER, conversation_id INTEGER,
+  stage TEXT, lot_phase TEXT, deposit_state TEXT, closed TEXT,
+  first_name TEXT, last_name TEXT, phone TEXT, phone_key TEXT, email TEXT,
+  created_at INTEGER,
+  first_seen_at INTEGER, changed_at INTEGER, listed_at INTEGER, gone_at INTEGER,
+  sig TEXT,
+  marks_json TEXT,                 -- when each step of the order was first seen
+  watch_json TEXT, watched_at INTEGER, -- what the live auction held for this order when last looked
+  data_json TEXT
 );
+CREATE INDEX IF NOT EXISTS auction_orders_lead ON auction_orders(lead_id);
+CREATE INDEX IF NOT EXISTS auction_orders_phone ON auction_orders(phone_key);
+
+-- The dashboard shows only the newest staff note on an order. Each one is kept as it appears.
+CREATE TABLE IF NOT EXISTS order_notes (
+  order_id INTEGER NOT NULL, note_id TEXT NOT NULL,
+  at INTEGER, channel TEXT, body TEXT,
+  PRIMARY KEY (order_id, note_id)
+);
+
+-- What the owner pasted into an order: a message the customer sent on WhatsApp, or one we sent by hand.
+CREATE TABLE IF NOT EXISTS order_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id INTEGER NOT NULL,
+  direction TEXT NOT NULL,         -- 'in' the customer wrote it, 'out' we sent it
+  text TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  removed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS order_messages_order ON order_messages(order_id, at);
 CREATE INDEX IF NOT EXISTS sales_phone ON sales(phone_hash);
 CREATE INDEX IF NOT EXISTS sales_email ON sales(email_hash);
 `;
@@ -166,6 +193,10 @@ export function openDb(file = config.dbPath) {
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
   db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
+  // Earlier versions kept one auction request per lead. That table held nothing of the owner's,
+  // only a copy of the dashboard, so it is dropped and read again in its new shape.
+  const oldOrders = db.prepare('PRAGMA table_info(auction_orders)').all().map((c) => c.name);
+  if (oldOrders.length && !oldOrders.includes('id')) db.exec('DROP TABLE auction_orders');
   db.exec(SCHEMA);
   ensureColumn(db, 'drafts', 'copied_text', 'TEXT');
   ensureColumn(db, 'drafts', 'copied_at', 'INTEGER');
@@ -200,6 +231,14 @@ function migrate(d) {
 
 export function closeDb() {
   if (db) { db.close(); db = null; salt = null; }
+}
+
+/**
+ * A number that changes whenever anything in the database is written. The page's lists are built
+ * once and reused until it moves, instead of being rebuilt on every refresh.
+ */
+export function dataStamp() {
+  return openDb().prepare('SELECT total_changes() AS n').get().n;
 }
 
 export function getMeta(key, fallback = null) {
@@ -272,36 +311,146 @@ export function matchHash(value) {
   return crypto.createHash('sha256').update(`${salt}:${v}`).digest('hex').slice(0, 32);
 }
 
-/** Stores the digest from normalizeAuctionOrder, or only notes that the lead was checked when it has none. */
-export function upsertAuctionOrder(leadId, o, now = Date.now()) {
-  if (!o) {
-    openDb().prepare('INSERT INTO auction_orders(lead_id, checked_at) VALUES(?, ?) ON CONFLICT(lead_id) DO UPDATE SET checked_at = excluded.checked_at').run(leadId, now);
-    return;
+// ---- auction orders ----------------------------------------------------------
+
+const DAY_MS = 24 * 3600 * 1000;
+
+/** A stored order as the rest of the app uses it: the normalised record plus what Wheelman has noted about it. */
+function parseOrder(r) {
+  if (!r) return null;
+  return {
+    ...JSON.parse(r.data_json || '{}'),
+    leadId: r.lead_id ?? null,
+    conversationId: r.conversation_id ?? null,
+    firstSeenAt: r.first_seen_at, changedAt: r.changed_at, listedAt: r.listed_at, goneAt: r.gone_at,
+    marks: JSON.parse(r.marks_json || '{}'),
+    watch: r.watch_json ? JSON.parse(r.watch_json) : null,
+    watchedAt: r.watched_at || 0,
+  };
+}
+
+/**
+ * Stores one order from normalizeOrder. `links` says which lead and SMS conversation belong to
+ * the same customer. `marks` records when each step of the order was first seen: the dashboard
+ * gives no time for most of them, and a message for a step is only suggested while it is recent.
+ * Returns { isNew, changed }.
+ */
+export function upsertOrder(o, { now = Date.now(), links = {} } = {}) {
+  const d = openDb();
+  const known = d.prepare('SELECT sig, marks_json, first_seen_at, lead_id, conversation_id FROM auction_orders WHERE id = ?').get(o.id);
+  const sig = crypto.createHash('sha1').update(JSON.stringify(o)).digest('hex');
+  const marks = JSON.parse(known?.marks_json || '{}');
+  // A step met on first sight may be weeks old: it is dated from the order's own record. One
+  // seen to change while Wheelman is running happened now.
+  const since = (key, recorded) => { if (!marks[key]) marks[key] = known ? now : Math.min(now, recorded || o.createdAt || now); };
+  since(`stage:${o.closed || o.stage}`, o.closed ? o.cancelledAt : o.stage === 'COMPLETED' ? o.completedAt : o.stage === 'VEHICLE_SECURED' ? o.securedAt : o.stage === 'SHIPPING_COMPLIANCE' ? o.securedAt : o.createdAt);
+  if (o.lotPhase) since(`phase:${o.lotPhase}:${o.lot?.id || ''}`);
+  if (o.depositState !== 'NONE') since('deposit', Math.max(0, ...o.money.payments.filter((p) => p.stage === 'INITIAL_DEPOSIT').map((p) => p.at || 0)));
+  if (o.car?.stockIn) since(`car:${o.car.stockIn.toLowerCase()}`, o.securedAt);
+  if (o.refundRequestedAt) since('refund', o.refundRequestedAt);
+
+  const leadId = o.leadId ?? links.leadId ?? known?.lead_id ?? null;
+  const conversationId = links.conversationId ?? known?.conversation_id ?? null;
+  const changed = !known || known.sig !== sig;
+  const phoneKey = String(o.customer.phone || '').replace(/\D/g, '').slice(-9);
+  d.prepare(`
+    INSERT INTO auction_orders(id, order_no, lead_id, conversation_id, stage, lot_phase, deposit_state, closed, first_name, last_name, phone, phone_key, email,
+      created_at, first_seen_at, changed_at, listed_at, gone_at, sig, marks_json, data_json)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      order_no = excluded.order_no, lead_id = excluded.lead_id, conversation_id = excluded.conversation_id,
+      stage = excluded.stage, lot_phase = excluded.lot_phase, deposit_state = excluded.deposit_state, closed = excluded.closed,
+      first_name = excluded.first_name, last_name = excluded.last_name, phone = excluded.phone, phone_key = excluded.phone_key, email = excluded.email,
+      created_at = excluded.created_at, changed_at = CASE WHEN auction_orders.sig = excluded.sig THEN auction_orders.changed_at ELSE excluded.changed_at END,
+      listed_at = excluded.listed_at, gone_at = NULL, sig = excluded.sig, marks_json = excluded.marks_json, data_json = excluded.data_json
+  `).run(o.id, o.orderNo, leadId, conversationId, o.stage, o.lotPhase, o.depositState, o.closed || '',
+    o.customer.firstName, o.customer.lastName, o.customer.phone, phoneKey.length === 9 ? phoneKey : '', o.customer.email,
+    o.createdAt ?? null, known?.first_seen_at ?? now, now, now, sig, JSON.stringify(marks), JSON.stringify(o));
+  if (o.note?.id) {
+    d.prepare('INSERT INTO order_notes(order_id, note_id, at, channel, body) VALUES(?, ?, ?, ?, ?) ON CONFLICT(order_id, note_id) DO UPDATE SET body = excluded.body, at = excluded.at')
+      .run(o.id, o.note.id, o.note.at ?? now, o.note.channel || '', o.note.body);
   }
-  openDb().prepare(`
-    INSERT INTO auction_orders(lead_id, order_no, stage, lot_phase, source, lot_id, deposit_state, wanted_json, created_at, checked_at)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(lead_id) DO UPDATE SET
-      order_no = excluded.order_no, stage = excluded.stage, lot_phase = excluded.lot_phase, source = excluded.source,
-      lot_id = excluded.lot_id, deposit_state = excluded.deposit_state, wanted_json = excluded.wanted_json,
-      created_at = excluded.created_at, checked_at = excluded.checked_at
-  `).run(leadId, o.orderNo, o.stage, o.lotPhase, o.source, o.lotId, o.depositState, JSON.stringify(o.wanted || {}), o.createdAt ?? null, now);
+  return { isNew: !known, changed };
 }
 
-/** The auction request recorded for a lead, or null. */
-export function getAuctionOrder(leadId) {
-  if (!leadId) return null;
-  const r = openDb().prepare('SELECT * FROM auction_orders WHERE lead_id = ?').get(leadId);
-  if (!r || !r.order_no) return null;
-  return { leadId: r.lead_id, orderNo: r.order_no, stage: r.stage || '', lotPhase: r.lot_phase || '', source: r.source || '', lotId: r.lot_id || '', depositState: r.deposit_state || '', wanted: JSON.parse(r.wanted_json || '{}'), createdAt: r.created_at };
+/** After a complete read of the list: an order that is no longer on it has been removed from the dashboard. */
+export function markOrdersGone(listedIds, now = Date.now()) {
+  const keep = new Set(listedIds.map(Number));
+  const d = openDb();
+  let n = 0;
+  for (const r of d.prepare('SELECT id FROM auction_orders WHERE gone_at IS NULL').all()) {
+    if (!keep.has(r.id)) { d.prepare('UPDATE auction_orders SET gone_at = ? WHERE id = ?').run(now, r.id); n++; }
+  }
+  return n;
 }
 
-/** Import and auction leads active since `since` whose auction request has not been looked at since `staleBefore`. */
-export function importLeadsToCheck(platform, since, staleBefore) {
-  return openDb().prepare(`
-    SELECT l.id FROM leads l LEFT JOIN auction_orders a ON a.lead_id = l.id
-    WHERE l.platform = ? AND (l.lead_at >= ? OR l.updated_at >= ?) AND (a.checked_at IS NULL OR a.checked_at < ?)
-    ORDER BY l.updated_at DESC LIMIT 12`).all(platform, since, since, staleBefore).map((r) => r.id);
+export function getOrder(id) {
+  return parseOrder(openDb().prepare('SELECT * FROM auction_orders WHERE id = ?').get(Number(id)));
+}
+
+/** Every order still on the dashboard, newest first. Ended orders stay for 60 days. */
+export function listOrders({ now = Date.now() } = {}) {
+  return openDb().prepare('SELECT * FROM auction_orders WHERE gone_at IS NULL ORDER BY created_at DESC').all()
+    .map(parseOrder)
+    .filter((o) => !o.closed || now - (o.marks[`stage:${o.closed}`] || o.cancelledAt || o.createdAt || 0) < 60 * DAY_MS);
+}
+
+export function orderNotes(orderId) {
+  return openDb().prepare('SELECT note_id, at, channel, body FROM order_notes WHERE order_id = ? ORDER BY at').all(Number(orderId));
+}
+
+export function setOrderWatch(id, watch, now = Date.now()) {
+  openDb().prepare('UPDATE auction_orders SET watch_json = ?, watched_at = ? WHERE id = ?').run(watch ? JSON.stringify(watch) : null, now, Number(id));
+}
+
+/**
+ * The live auction order for a lead, in the short form the import-enquiry replies use, or null.
+ * Matched by the lead the dashboard names on the order, or else by the customer's phone number.
+ */
+export function getAuctionOrder(leadId, phone = '') {
+  const d = openDb();
+  const live = "gone_at IS NULL AND (closed IS NULL OR closed = '')";
+  let r = leadId ? d.prepare(`SELECT * FROM auction_orders WHERE lead_id = ? AND ${live} ORDER BY created_at DESC LIMIT 1`).get(leadId) : null;
+  const key = String(phone || '').replace(/\D/g, '').slice(-9);
+  if (!r && key.length === 9) r = d.prepare(`SELECT * FROM auction_orders WHERE phone_key = ? AND ${live} ORDER BY created_at DESC LIMIT 1`).get(key);
+  const o = parseOrder(r);
+  if (!o || !o.orderNo) return null;
+  return { id: o.id, leadId: o.leadId, orderNo: o.orderNo, stage: o.stage || '', lotPhase: o.lotPhase || '', source: o.source || '', lotId: o.lot?.id || '', depositState: o.depositState || '', wanted: o.wanted || {}, createdAt: o.createdAt };
+}
+
+/** A message the owner pasted into an order. Returns its id. */
+export function addOrderMessage(orderId, direction, text, at = Date.now()) {
+  const info = openDb().prepare('INSERT INTO order_messages(order_id, direction, text, at) VALUES(?, ?, ?, ?)').run(Number(orderId), direction === 'out' ? 'out' : 'in', String(text), at);
+  return Number(info.lastInsertRowid);
+}
+
+/** Takes a wrong paste out of the order. It is kept, marked as removed. */
+export function removeOrderMessage(orderId, id, now = Date.now()) {
+  openDb().prepare('UPDATE order_messages SET removed_at = ? WHERE id = ? AND order_id = ?').run(now, Number(id), Number(orderId));
+}
+
+/** Undoes "copied" for one message of an auction order: it was not sent after all. */
+export function uncopy(itemKey, anchorKey) {
+  openDb().prepare("UPDATE drafts SET copied_at = NULL WHERE item_key = ? AND anchor_key = ? AND item_key LIKE 'ao:%'").run(itemKey, anchorKey);
+}
+
+/** Phone number (last nine digits) to the newest lead with that number, for matching orders that name no lead. */
+export function leadsByPhone() {
+  const out = new Map();
+  for (const r of openDb().prepare("SELECT id, phone, conversation_id FROM leads WHERE phone IS NOT NULL AND phone != '' ORDER BY updated_at").all()) {
+    for (const part of String(r.phone).split(/[|,/]/)) {
+      const k = part.replace(/\D/g, '').slice(-9);
+      if (k.length === 9) out.set(k, { leadId: r.id, conversationId: r.conversation_id ?? null });
+    }
+  }
+  return out;
+}
+
+/** The SMS conversation with a phone number (last nine digits), if the dashboard has one. */
+export function conversationForPhone(key) {
+  if (String(key || '').length !== 9) return null;
+  const r = openDb().prepare('SELECT id FROM conversations WHERE phone LIKE ? ORDER BY latest_at DESC LIMIT 1').get(`%${key}`);
+  return r ? r.id : null;
 }
 
 /** Stores the digest from normalizeSale. The buyer's phone and email are scrambled here. */
