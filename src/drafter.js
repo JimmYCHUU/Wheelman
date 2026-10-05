@@ -6,7 +6,8 @@ import { logLine } from './log.js';
 import { finishReply, fixGreeting, checkDraft, retryNote, stripModelSignOff, worst, chatStyle, dropGreeting } from './checks.js';
 import { config } from './config.js';
 import { redact, restore } from './redact.js';
-import { planImport, auctionNote } from './imports.js';
+import { planImport, auctionNote, bidBasisLine } from './imports.js';
+import { planOrderReply, restoreAmounts } from './ordermessages.js';
 import { insertDraft } from './db.js';
 import { sydneyHour } from './time.js';
 import { standardBlock, repeatsBlock, tidyOpening } from './firstreply.js';
@@ -152,7 +153,9 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
 
     // An import or auction enquiry: what to ask, or which auction car to offer, is worked out first.
     let plan = null;
-    if (!chat && item.imports) {
+    // A reply to an auction customer: the order's facts go to the AI, its amounts only as markers.
+    if (item.order) plan = planOrderReply(item);
+    else if (!chat && item.imports) {
       try { plan = await planImport(item, { instruction: staffSaid, now }); }
       catch (e) {
         logLine('auction', `${item.itemKey}: ${e.message}`);
@@ -173,6 +176,8 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
     const allowed = allowedMaterial(item, prompt);
     // The auction car, its link and its figures are ours to state: they came from the live auction.
     if (plan?.stage === 'offer') allowed.trusted += `\n${plan.tail}\n${plan.lines.join('\n')}`;
+    // The order's own amounts are ours to state: code puts them where the AI left their markers.
+    if (plan?.stage === 'order') allowed.trusted += `\n${plan.trustedText}`;
     const said = saidIn(item);
 
     const assess = (json) => {
@@ -183,6 +188,7 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
       // An import reply has its own lines underneath: the whole offer, or the short contact block.
       const block = plan ? (json.hold ? '' : plan.tail || '') : prompt.standard.on && !json.hold ? standardBlock({ vehicleUrl, inspectionUrl }) : '';
       let text = String(json.reply || '').replace(/\\n/g, '\n');
+      if (plan?.tokens) text = restoreAmounts(text, plan.tokens);
       if (block) text = tidyOpening(text, vehicleUrl, inspectionUrl);
       // An offer opens the way the team writes it: the greeting, a blank line, then one short paragraph.
       if (offer) text = text.trim().replace(/^([^\n]{1,40},)\n+/, (m, hi) => `${hi}\n\n`).replace(/([^\n])\n(?!\n)/g, (m, c) => `${c} `);
@@ -207,7 +213,8 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
         : block ? blockCheck(body, vehicleUrl, inspectionUrl, { askedWhere: !plan && item.situation.all.includes('location_hours') }) : null;
       if (offer) {
         checks = [...checks.filter((c) => c.level !== 'ok'),
-          { level: 'input', code: 'marker', tokens: ['[DEPOSIT LINK?]'], message: 'Paste the deposit link before sending.' },
+          // Left out of the offer once a deposit is paid, so there is nothing to paste then.
+          ...(plan.tail.includes('[DEPOSIT LINK?]') ? [{ level: 'input', code: 'marker', tokens: ['[DEPOSIT LINK?]'], message: 'Paste the deposit link before sending.' }] : []),
           ...(plan.estimate.needsReview ? [{ level: 'input', code: 'auction-review', tokens: [], message: 'The cost calculator marks this car for a manual check (tax or import limits). Confirm the figures before sending.' }] : []),
           { level: 'warn', code: 'auction', tokens: [], message: auctionNote(plan) }];
       }
@@ -259,7 +266,7 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
       reply: best.reply,
       needsHuman: Array.isArray(result.json.needs_human) ? result.json.needs_human : [],
       factsUsed: [
-        ...(plan?.stage === 'offer' ? [`Auction car ${plan.lot.id}: ${plan.lot.title}, ${plan.lot.km.toLocaleString('en-AU')} km, grade ${plan.lot.grade}`, `Carbarn's suggested bid ¥${plan.lot.benchmarkYen.toLocaleString('en-AU')}; bid used ¥${plan.bidYen.toLocaleString('en-AU')} (${plan.bidBy === 'suggested' ? 'rounded up' : plan.bidBy === 'staff' ? 'yours' : "the customer's"})`, `Estimated landed and complied $${plan.estimate.totalAud.toLocaleString('en-AU')} from the website's calculator`] : []),
+        ...(plan?.stage === 'offer' ? [`Auction car ${plan.lot.id}: ${plan.lot.title}, ${plan.lot.km.toLocaleString('en-AU')} km, grade ${plan.lot.grade}`, `The website's suggested bid ¥${plan.lot.benchmarkYen.toLocaleString('en-AU')}; bid used ¥${plan.bidYen.toLocaleString('en-AU')} (${plan.bidBy === 'suggested' ? 'ours' : plan.bidBy === 'staff' ? 'yours' : "the customer's"})`, ...(plan.pick ? [bidBasisLine(plan.pick)] : []), `Estimated landed and complied $${plan.estimate.totalAud.toLocaleString('en-AU')} from the website's calculator`] : []),
         ...(Array.isArray(result.json.facts_used) ? result.json.facts_used.map(String).slice(0, 12) : []),
       ],
       nextStep: String(result.json.next_step || ''),

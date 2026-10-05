@@ -8,16 +8,15 @@
 // The figures in an offer (the car, the suggested bid, each line of the cost) are put in by code
 // from the auction feed, never written by the AI. The deposit link is left as a blank for a person.
 
-import fs from 'node:fs';
-import path from 'node:path';
 import { config } from './config.js';
 import { getAuctionOrder } from './db.js';
 import { readImportForm } from './text.js';
-import { searchLots, getLot, estimateFor, lotIdFromUrl } from './auction.js';
+import { searchLots, getLot, estimateFor, soldComparables, lotIdFromUrl } from './auction.js';
 import { formatSydney, formatDay } from './time.js';
+import { template, fill, fillParts } from './templates.js';
 
-const money = (n) => `$${Math.round(n).toLocaleString('en-AU')}`;
-const yen = (n) => `¥${Math.round(n).toLocaleString('en-AU')}`;
+export const money = (n) => `$${Math.round(n).toLocaleString('en-AU')}`;
+export const yen = (n) => `¥${Math.round(n).toLocaleString('en-AU')}`;
 
 // ---- who is an import customer --------------------------------------------------------------
 
@@ -27,7 +26,7 @@ export function importContext(lead) {
   const forms = [...(lead.inquiries || [])].sort((a, b) => (a.at || 0) - (b.at || 0)).map((i) => readImportForm(i.text, i)).filter(Boolean);
   const onImportsList = String(lead.platform || '').toUpperCase() === config.dashboard.importsPlatform;
   if (!onImportsList && !forms.length) return null;
-  const order = lead.id ? getAuctionOrder(lead.id) : null;
+  const order = getAuctionOrder(lead.id, lead.phone);
   return { kind: forms[forms.length - 1]?.kind || (order ? 'auction' : 'import'), forms, order };
 }
 
@@ -132,10 +131,44 @@ function wantedLine(w) {
 
 // ---- choosing a car from the live auction -------------------------------------------------------
 
-/** The bid Wheelman suggests: Carbarn's suggested bid, rounded up to the next step for a stronger chance. */
-export function suggestedBid(benchmarkYen, step = config.auction.bidStepYen) {
+/**
+ * The bid Wheelman suggests for an auction car.
+ *
+ * The owner's rule (5 Oct 2026): look at what similar cars really sold for. The website lists up
+ * to ten recent sales for each lot. The three closest to this car are taken (the same auction
+ * grade first, then the nearest kilometres), their prices averaged, and the average rounded up to
+ * the next step (¥50,000). With fewer than three sales, the average of what there is.
+ *
+ * Never below the website's own suggested bid (the owner, 5 Oct 2026): the customer sees that
+ * figure on the car's page. When similar cars sold for less, or there are no sales to go by, the
+ * website's suggested bid is rounded up and used instead.
+ *
+ * Returns { bidYen, basis, used: the sales looked at }, where basis is
+ *   'sold'    the average of the closest sales, rounded up
+ *   'floor'   those sales came out below the website's suggested bid, so that was rounded up
+ *   'website' there were no sales, so the website's suggested bid was rounded up
+ */
+export function suggestedBid(lot, sold = null, step = config.auction.bidStepYen) {
   const s = Math.max(1000, Number(step) || 50000);
-  return Math.ceil(Number(benchmarkYen) / s) * s;
+  const up = (n) => Math.ceil(Number(n) / s) * s;
+  const website = lot?.benchmarkYen > 0 ? Number(lot.benchmarkYen) : 0;
+  const sales = (sold?.comparables || []).filter((c) => c && c.soldYen > 0);
+  if (!sales.length) return { bidYen: website ? up(website) : 0, basis: 'website', used: [] };
+  const grade = gradeNumber(lot?.grade);
+  const km = Number(lot?.km) || 0;
+  const far = (c) => [Math.abs(gradeNumber(c.grade) - grade), Math.abs((Number(c.km) || 0) - km)];
+  const used = [...sales].sort((a, b) => { const [ga, ka] = far(a), [gb, kb] = far(b); return ga - gb || ka - kb; }).slice(0, 3);
+  const fromSold = up(used.reduce((sum, c) => sum + c.soldYen, 0) / used.length);
+  return fromSold >= website ? { bidYen: fromSold, basis: 'sold', used } : { bidYen: up(website), basis: 'floor', used };
+}
+
+/** One line for "What the suggestion relies on": where the suggested bid came from. */
+export function bidBasisLine(pick) {
+  if (pick.basis === 'website') return "No sold prices for this car, so the website's suggested bid was rounded up";
+  const each = pick.used.map((c) => `grade ${c.grade || '?'}, ${Number(c.km || 0).toLocaleString('en-AU')} km, sold ${yen(c.soldYen)}`).join('; ');
+  const which = pick.used.length === 1 ? 'closest sold car' : `${pick.used.length} closest sold cars`;
+  if (pick.basis === 'floor') return `The ${which} went for less than the website's suggested bid, and we never suggest below it, so the website's bid was rounded up: ${each}`;
+  return `Bid from the ${which}, averaged and rounded up: ${each}`;
 }
 
 /**
@@ -181,23 +214,6 @@ function fitLines(lot, estimate, w) {
 
 // ---- the wording kept in voice/*.md -----------------------------------------------------------------
 
-const cache = new Map();
-function template(name) {
-  const file = path.join(config.voiceDir, name);
-  let stat;
-  try { stat = fs.statSync(file); } catch { return null; }
-  const hit = cache.get(file);
-  if (hit && hit.mtime === stat.mtimeMs) return hit.value;
-  const lines = fs.readFileSync(file, 'utf8').replace(/^﻿/, '').replace(/\r/g, '').split('\n').filter((l) => !l.startsWith('#'));
-  const snippets = {};
-  const body = [];
-  for (const l of lines) { const m = l.match(/^@([a-z_]+):\s*(.+)$/); if (m) snippets[m[1]] = m[2].trim(); else body.push(l); }
-  const value = { text: body.join('\n').replace(/\n{3,}/g, '\n\n').trim(), snippets };
-  cache.set(file, { mtime: stat.mtimeMs, value });
-  return value;
-}
-const fill = (text, values) => String(text).replace(/\{([a-z_]+)\}/g, (m, k) => (k in values ? values[k] : m));
-
 /** The message and the closing lines of the first reply to an import enquiry. */
 export function askParts(w) {
   const t = template('import-ask.md');
@@ -207,26 +223,37 @@ export function askParts(w) {
   return { message: fill(message.trim(), values), closing: fill(closing.trim(), values) };
 }
 
-function vehicleLines(lot) {
-  const engine = lot.engineCc >= 1000 ? `${(lot.engineCc / 1000).toFixed(1)}L ${lot.fuel}` : lot.engineCc ? `${lot.engineCc}cc ${lot.fuel}` : lot.fuel;
+export function vehicleLines(lot) {
+  const engine = lot.engineCc >= 1000 ? `${(lot.engineCc / 1000).toFixed(1)}L ${lot.fuel}` : lot.engineCc ? `${lot.engineCc}cc ${lot.fuel}` : lot.fuel || '';
   return [lot.title, lot.km ? `${lot.km.toLocaleString('en-AU')} km` : '', lot.grade ? `Auction Grade ${lot.grade}` : '', engine.trim(), lot.drive, lot.seats ? `${lot.seats} seats` : ''].filter(Boolean);
 }
 
-/** Everything under the opening lines of an offer: the car, its link, the bid, the cost and the sign-off. */
-export function offerBlock(lot, estimate, bidBy = 'suggested') {
+export const costLines = (estimate) => estimate.lines.map((l) => `- ${l.label}: ${money(l.aud)} AUD`).join('\n');
+
+/**
+ * Everything under the opening lines of an offer: the car, its link, the bid, the cost and the sign-off.
+ *   bidBy         'customer' when the customer named the bid; anything else is our suggestion
+ *   websiteBidYen the website's own suggested bid, named beside ours when ours is the higher
+ *   depositPaid   true when they have already paid a deposit: the deposit paragraph is left out
+ */
+export function offerBlock(lot, estimate, bidBy = 'suggested', { websiteBidYen = 0, depositPaid = false } = {}) {
   const t = template('auction-offer.md');
   if (!t) return '';
   const bid = yen(estimate.bidYen);
-  return fill(t.text, {
+  // "own" only when the customer named the bid. A bid our staff chose is still our suggestion.
+  // Ours above the website's: both are named. (Ours is never suggested below it; a bid typed in
+  // by the owner that is lower is given without the comparison.)
+  const which = bidBy === 'customer' ? 'own' : websiteBidYen > 0 && estimate.bidYen > websiteBidYen && t.snippets.suggested_both ? 'suggested_both' : 'suggested';
+  return fillParts(t.text, {
     vehicle_lines: vehicleLines(lot).join('\n'),
     lot_url: lot.url,
-    // "own" only when the customer named the bid. A bid our staff chose is still our suggestion.
-    bid_sentence: fill(t.snippets[bidBy === 'customer' ? 'own' : 'suggested'] || '', { bid }),
+    bid_sentence: fill(t.snippets[which] || '', { bid, website_bid: yen(websiteBidYen) }),
     bid,
     total: money(estimate.totalAud),
-    cost_lines: estimate.lines.map((l) => `- ${l.label}: ${money(l.aud)} AUD`).join('\n'),
+    cost_lines: costLines(estimate),
+    if_deposit: !depositPaid,
     sender: config.firstReplySender,
-  }).replace(/\n{3,}/g, '\n\n');
+  });
 }
 
 // ---- deciding what this reply should be ---------------------------------------------------------------
@@ -289,16 +316,20 @@ export async function planImport(item, { instruction = '', now = Date.now() } = 
   if (!lot) return nonePlan(item, w, searched);
 
   const ownLot = lotId && lotId === w.lotId && w.lotBidYen;
-  const bidYen = staff.bidYen || theirs.bidYen || w.bidYen || (ownLot ? w.lotBidYen : 0) || suggestedBid(lot.benchmarkYen);
+  const named_ = staff.bidYen || theirs.bidYen || w.bidYen || (ownLot ? w.lotBidYen : 0);
+  // Our own suggestion comes from what similar cars sold for. If that list cannot be read, the
+  // website's suggested bid is used instead.
+  const pick = named_ ? null : suggestedBid(lot, await soldComparables(lot.id).catch(() => null));
+  const bidYen = named_ || pick.bidYen;
   const bidBy = staff.bidYen ? 'staff' : (theirs.bidYen || w.bidYen || ownLot) ? 'customer' : 'suggested';
-  const estimate = await estimateFor(lot.id, bidYen);
+  const estimate = bidYen ? await estimateFor(lot.id, bidYen) : null;
   if (!estimate) return nonePlan(item, w, searched, 'The cost calculator gave no figure for the car that was found, so no car is offered in this reply.');
 
   const fit = fitLines(lot, estimate, w);
   const name = [lot.year || '', lot.make, lot.model].filter(Boolean).join(' ');
   return {
-    stage: 'offer', w, lot, estimate, bidYen, bidBy, readAt: now,
-    tail: offerBlock(lot, estimate, bidBy),
+    stage: 'offer', w, lot, estimate, bidYen, bidBy, pick, readAt: now,
+    tail: offerBlock(lot, estimate, bidBy, { websiteBidYen: lot.benchmarkYen, depositPaid: !!ctx.order && ctx.order.depositState !== 'NONE' }),
     opening: `Hi {{NAME}},\n\nWe’ve found a ${name} that may be worth considering.`,
     lines: [
       `This customer asked us to find a ${w.car} from the Japan auctions. What they asked for: ${wantedLine(w)}.`,

@@ -77,6 +77,10 @@ const rawOrder = (leadId, extra = {}) => ({
 });
 let dashboardLeads = { IMPORTS: [rawLead(7001)], carbarnau: [] };
 let dashboardOrders = { 7001: [rawOrder(7001)] };
+let soldFor = {};          // lot id -> what similar cars sold for: [grade, km, yen]
+// The ten sales the website lists for the car in these tests. The three closest to it (grade 3.5,
+// 121,000 km) are the first three: their average is ¥322,333.
+const SOLD_XV = [['3.5', 120000, 401000], ['3.5', 122000, 388000], ['3.5', 117000, 178000], ['3.5', 115000, 319000], ['3.5', 147000, 251000], ['3.5', 148000, 233000], ['3.5', 93000, 211000], ['3.5', 150000, 166000], ['3.5', 152000, 179000], ['4', 127000, 205000]];
 
 before(async () => {
   server = http.createServer((req, res) => {
@@ -94,13 +98,15 @@ before(async () => {
       }
       if (p === '/carbarnau/auth/v1/api/user/signin') return json(200, { username: 'tester' }, { 'set-cookie': 'carbarn_session=stand-in; Path=/' });
       if (p === '/core/user/api/v1/lead/paginated') return json(200, { leadDtoList: Number(url.searchParams.get('page')) === 1 ? dashboardLeads[url.searchParams.get('platform')] || [] : [] });
-      if (p === '/carbarnau/api/v1/sales/auction') return json(200, { content: dashboardOrders[url.searchParams.get('leadId')] || [], page: {} });
+      if (p === '/carbarnau/api/v1/sales/auction') return json(200, { content: Object.values(dashboardOrders).flat(), page: { totalPages: 1 } });
       if (p === '/auc/api/public/auction-vehicles') {
         const rows = /subaru/i.test(url.searchParams.get('make') || '') && /xv hybrid/i.test(url.searchParams.get('model') || '') ? LOTS.map(lotRow) : [];
         return json(200, { vehicles: Number(url.searchParams.get('page')) === 0 ? rows : [], total: rows.length });
       }
       let m = p.match(/^\/auc\/api\/public\/auction-vehicles\/(\d+)$/);
       if (m) { const row = LOTS.find((l) => l[0] === m[1]); return row ? json(200, lotDetail(row)) : json(404, { error: 'Not Found' }); }
+      m = p.match(/^\/auc\/api\/public\/auction-vehicles\/(\d+)\/sold-comparables$/);
+      if (m && req.method === 'GET') return soldFor[m[1]] ? json(200, { sampleCount: soldFor[m[1]].length, matchLevel: 'EXACT_VARIANT', benchmarkYen: 253100, comparables: soldFor[m[1]].map(([grade, odometerKm, soldPriceYen]) => ({ year: 2015, odometerKm, grade, variant: 'HYBRID 2.0I EYESIGHT', soldPriceYen, soldPriceAud: Math.round(soldPriceYen * 0.009138) })) }) : json(404, { error: 'Not Found' });
       m = p.match(/^\/auc\/api\/public\/auction-vehicles\/(\d+)\/price-estimate$/);
       if (m && req.method === 'POST') return json(200, estimateFor(JSON.parse(body).bidYen));
       return json(404, { error: 'Not Found' });
@@ -126,7 +132,9 @@ before(async () => {
 });
 
 after(() => new Promise((r) => { fs.rmSync(sessionFile, { force: true }); server.close(r); server.closeAllConnections?.(); }));
-beforeEach(() => { calls.length = 0; aiScript = []; aiDown = false; llm.resetModelState(); });
+beforeEach(() => { calls.length = 0; aiScript = []; aiDown = false; soldFor = {}; llm.resetModelState(); });
+/** Stores an auction order for a lead, as a sync would. */
+const order = (leadId, extra = {}) => sync.storeAuctionOrders([rawOrder(leadId, { id: leadId, ...extra })], { complete: false, now });
 
 const quickly = async (fn) => { const real = globalThis.setTimeout; globalThis.setTimeout = (f, ms, ...a) => real(f, Math.min(ms, 5), ...a); try { return await fn(); } finally { globalThis.setTimeout = real; } };
 const ai = () => calls.filter((c) => c.path === '/chat');
@@ -150,7 +158,7 @@ const OFFER = (bidSentence, bid, total, lines) => [
   'We do not bid blindly. Our Japan-side team will inspect the vehicle first and share the photos, auction sheet and inspection feedback. We will only place the final bid once you are happy and confirm us to proceed.',
   'Kind regards,\nTeam Carbarn',
 ].join('\n\n');
-const SUGGESTED = 'For this vehicle, we would suggest a bid of around ¥300,000 for a stronger winning chance. However, if you have your own preferred bid amount, please let us know and we can proceed with that amount.';
+const SUGGESTED = "The website's suggested bid is ¥253,590. We usually suggest around ¥300,000 to improve the chance of winning. However, if you have your own preferred bid amount, please let us know and we can proceed with that amount.";
 const COSTS_300K = '- Auction price: $2,741 AUD\n- Japan agent fee: $822 AUD\n- Carbarn agent fee: $1,500 AUD\n- Shipping, logistics, duty & import charges: $3,426 AUD\n- Compliance package: $1,540 AUD\n- GST: $989 AUD';
 
 // ---- reading the enquiries -------------------------------------------------------------------------
@@ -191,25 +199,27 @@ test('what a customer says about budget, kilometres, years, grade and a bid is p
 
 // ---- reading them from the dashboard, read-only ----------------------------------------------------
 
-test('import and auction leads are fetched from their own list, and the auction request is kept without personal details', async () => {
+test('import and auction leads are fetched from their own list, and the auction orders are read as one list with no address, licence or payment link kept', async () => {
   const out = await sync.syncLeads({ pages: 1 });
   assert.equal(out.importLeads, 1);
   assert.ok(calls.some((c) => c.path === '/core/user/api/v1/lead/paginated' && c.query.platform === 'IMPORTS'));
   assert.equal(db.getLead(7001).platform, 'IMPORTS');
 
   calls.length = 0;
-  assert.deepEqual(await sync.syncAuctionOrders({ now }), { auctionRequestsRead: 1 });
+  assert.deepEqual(await sync.syncAuctionOrders({ now }), { auctionOrders: 1, auctionOrdersChanged: 1 });
   const asked = calls.filter((c) => c.path === '/carbarnau/api/v1/sales/auction');
-  assert.deepEqual(asked.map((c) => [c.method, c.query.leadId]), [['GET', '7001']]);
+  assert.deepEqual(asked.map((c) => [c.method, c.query.leadId, c.query.page]), [['GET', undefined, '0']], 'the whole list is asked for once, not lead by lead');
   const order = db.getAuctionOrder(7001);
   assert.deepEqual(order.wanted, { make: 'Subaru', model: 'XV Hybrid', modelCode: 'GPE', variant: '', yearFrom: 2014, yearTo: 2015, targetBidYen: 220000, budgetAud: 10400, notes: 'A light colour if possible. Call me on 0491 570 110.' });
   const stored = JSON.stringify(db.openDb().prepare('SELECT * FROM auction_orders').all());
-  for (const secret of ['Halvorsen', 'nina@example.com', 'LIC998877', '1988-02-03', 'Gum Tree', 'pay-token-abc123def456', 'Some Staff'])
+  // Who the order is for is kept, so it can be shown and matched to their conversation. The rest is not.
+  for (const kept of ['Halvorsen', 'nina@example.com', '0491570110']) assert.ok(stored.includes(kept), `not kept: ${kept}`);
+  for (const secret of ['LIC998877', '1988-02-03', 'Gum Tree', 'pay-token-abc123def456', 'Some Staff'])
     assert.ok(!stored.includes(secret), `kept: ${secret}`);
-  // Looked at again only after twenty minutes.
+  // Read again: one request, and nothing has changed.
   calls.length = 0;
-  assert.deepEqual(await sync.syncAuctionOrders({ now: now + 5 * MIN }), { auctionRequestsRead: 0 });
-  assert.equal((await sync.syncAuctionOrders({ now: now + 25 * MIN })).auctionRequestsRead, 1);
+  assert.deepEqual(await sync.syncAuctionOrders({ now: now + 5 * MIN }), { auctionOrders: 1, auctionOrdersChanged: 0 });
+  assert.equal(calls.filter((c) => c.path === '/carbarnau/api/v1/sales/auction').length, 1);
   // Nothing on the dashboard was written to.
   assert.ok(calls.every((c) => c.method === 'GET' || c.path.endsWith('/signin')));
 });
@@ -251,7 +261,7 @@ test('the details panel is given what the customer is looking for, and the list 
   try {
     db.upsertLead({ id: 9100, conversationId: null, firstName: 'Tess', lastName: 'Test', phone: '0491 570 100', email: '', source: 'Auction', status: 'NEW', platform: 'IMPORTS', state: '', leadAt: now - HOUR, updatedAt: now - 5 * MIN, stocks: ['0'], statusHistory: [],
       inquiries: [{ id: 91000, type: 'Auction', subject: 'Auction alert for Subaru XV Hybrid', text: FORM.replace('Max odometer: Not provided', 'Max odometer: 90000'), stockNo: '0', at: now - HOUR, status: 'NEW', url: '', leadType: '', staffNotes: [] }] });
-    db.upsertAuctionOrder(9100, { orderNo: 'AS-50', stage: 'INITIAL_DEPOSIT', lotPhase: 'SOURCING', source: 'LIVE_AUCTION', lotId: '', depositState: 'NONE', wanted: { make: 'Subaru', model: 'XV Hybrid', modelCode: 'GPE', yearFrom: 2014, yearTo: 2015, budgetAud: 10400, targetBidYen: 220000, notes: '' }, createdAt: now });
+    order(9100, { orderNo: 'AS-50', requirementNotes: '' });
     const one = await (await fetch(`http://127.0.0.1:${app.address().port}/api/items/l:9100`)).json();
     assert.deepEqual(one.item.looking, { car: 'Subaru XV Hybrid (GPE)', years: '2014 to 2015', maxKm: 90000, budget: 10400, grade: 0, order: 'AS-50, sourcing', missing: 'preferred grade or specification, colour or feature preferences' });
     assert.equal(one.item.car, 'Subaru XV Hybrid');
@@ -259,8 +269,26 @@ test('the details panel is given what the customer is looking for, and the list 
   } finally { config.port = keptPort; await new Promise((r) => { app.close(r); app.closeAllConnections?.(); }); }
 });
 
-test('the suggested bid is Carbarn\'s suggested bid rounded up, and the car is chosen for what was asked', () => {
-  assert.deepEqual([253590, 300000, 217210, 455820].map((y) => imports.suggestedBid(y)), [300000, 300000, 250000, 500000]);
+test('the suggested bid is the average of the three closest sold cars, rounded up, and the car is chosen for what was asked', () => {
+  const car = { grade: '3.5', km: 121000, benchmarkYen: 253590 };
+  const sold = (rows) => ({ comparables: rows.map(([grade, km, soldYen]) => ({ grade, km, soldYen })) });
+  // The same grade first, then the nearest kilometres: the cars with 120,000, 122,000 and 117,000 km.
+  const bid = imports.suggestedBid(car, sold(SOLD_XV));
+  assert.deepEqual([bid.bidYen, bid.basis, bid.used.map((c) => c.soldYen)], [350000, 'sold', [401000, 388000, 178000]]);
+  assert.match(imports.bidBasisLine(bid),/^Bid from the 3 closest sold cars, averaged and rounded up: grade 3\.5, 120,000 km, sold ¥401,000; grade 3\.5, 122,000 km, sold ¥388,000; /);
+  // A sale of another grade is used only when there are not three of the same grade.
+  assert.deepEqual(imports.suggestedBid(car, sold([['4.5', 121000, 900000], ['4', 122000, 310000], ['3.5', 150000, 200000], ['4', 121000, 300000]])).used.map((c) => c.soldYen), [200000, 300000, 310000]);
+  // Fewer than three sales: the average of what there is. An average already on a step stays there.
+  assert.equal(imports.suggestedBid({ ...car, benchmarkYen: 201000 }, sold([['3.5', 100000, 200000], ['3.5', 90000, 250000]])).bidYen, 250000);
+  // Never below the website's own suggested bid: when similar cars sold for less, that bid is rounded up instead.
+  const floor = imports.suggestedBid(car, sold([['3.5', 100000, 200000], ['3.5', 90000, 250000]]));
+  assert.deepEqual([floor.bidYen, floor.basis, floor.used.length], [300000, 'floor', 2]);
+  assert.match(imports.bidBasisLine(floor), /^The 2 closest sold cars went for less than the website's suggested bid, and we never suggest below it, so the website's bid was rounded up: /);
+  assert.equal(imports.suggestedBid({ grade: '4', km: 13000, benchmarkYen: 1063580 }, sold([['4', 12000, 819000], ['4', 11000, 900000], ['4', 15000, 1017000]])).bidYen, 1100000);
+  assert.equal(imports.suggestedBid(car, sold([['3.5', 100000, 300000]])).bidYen, 300000);
+  // No sold prices: the website's own suggested bid, rounded up.
+  assert.deepEqual(imports.suggestedBid(car, sold([])), { bidYen: 300000, basis: 'website', used: [] });
+  assert.deepEqual([217210, 300000, 455820].map((y) => imports.suggestedBid({ grade: '4', km: 1, benchmarkYen: y }, null).bidYen), [250000, 300000, 500000]);
   const lots = LOTS.map((r) => auction.normalizeLot(lotRow(r)));
   const pick = (w) => imports.chooseLot(lots, { yearFrom: 0, yearTo: 0, maxKm: 0, budgetAud: 0, ceilingAud: 0, minGrade: 0, modelCode: '', ...w })?.id;
   // Newer than 2014, about $10,000, under 100,000 km preferred: the 2015 grade 3.5 car, not the cheaper repaired one.
@@ -340,13 +368,25 @@ test('once the customer says what they want, the live auction is searched and th
   const d = await drafter.draftFor(it, { save: false, now });
 
   // What was read: the list, the chosen car, and one calculation at the rounded-up bid.
-  assert.deepEqual(feed().map((c) => `${c.method} ${c.path.split('/').slice(5).join('/') || 'list'}`), ['GET list', 'GET 1992541', 'POST 1992541/price-estimate']);
-  assert.equal(feed()[2].body, '{"bidYen":300000}');
+  // The website lists no sold prices for this car here, so its own suggested bid is rounded up.
+  assert.deepEqual(feed().map((c) => `${c.method} ${c.path.split('/').slice(5).join('/') || 'list'}`), ['GET list', 'GET 1992541', 'GET 1992541/sold-comparables', 'POST 1992541/price-estimate']);
+  assert.equal(feed()[3].body, '{"bidYen":300000}');
   assert.equal(d.reply, `${opening.replace('{{NAME}}', 'Nina')}\n\n${OFFER(SUGGESTED, '¥300,000', '$11,019', COSTS_300K)}`);
   assert.deepEqual(fails(d), [], JSON.stringify(d.checks));
   assert.ok(d.checks.some((c) => c.level === 'input' && c.code === 'marker' && c.tokens.includes('[DEPOSIT LINK?]')), 'the deposit link is a blank for a person');
   assert.match(d.checks.find((c) => c.code === 'auction').message, /^Auction car 1992541, auction on 7 Oct 2026 at MIRIVE Saitama\. The bid and costs were read from the live auction at /);
-  assert.ok(d.factsUsed.some((f) => /suggested bid ¥253,590; bid used ¥300,000 \(rounded up\)/.test(f)));
+  assert.ok(d.factsUsed.some((f) => /The website's suggested bid ¥253,590; bid used ¥300,000 \(ours\)/.test(f)));
+  assert.ok(d.factsUsed.includes("No sold prices for this car, so the website's suggested bid was rounded up"));
+
+  // With sold prices on the website, the bid comes from the three closest sold cars.
+  soldFor = { 1992541: SOLD_XV };
+  calls.length = 0;
+  aiScript = [{ reply: opening, needs_human: [], facts_used: [], hold: false }];
+  const fromSold = await drafter.draftFor(it, { save: false, now });
+  assert.equal(feed().find((c) => c.method === 'POST').body, '{"bidYen":350000}');
+  assert.ok(fromSold.reply.includes("The website's suggested bid is ¥253,590. We usually suggest around ¥350,000 to improve the chance of winning."));
+  assert.ok(fromSold.factsUsed.some((f) => /^Bid from the 3 closest sold cars, averaged and rounded up/.test(f)));
+  soldFor = {};
 
   // What the AI was told, and not told.
   const asked = JSON.parse(ai()[0].body).messages[1].content;
@@ -383,13 +423,14 @@ test('Rewrite can name the bid or the car, and a bid the customer names is calle
   aiScript = [opening];
   const bid = await drafter.draftFor(it, { save: false, now, instruction: 'bid 280000' });
   assert.equal(feed().filter((c) => c.method === 'POST')[0].body, '{"bidYen":280000}');
-  assert.ok(bid.reply.includes('we would suggest a bid of around ¥280,000 for a stronger winning chance'), 'a bid our staff chose is still our suggestion');
+  assert.ok(bid.reply.includes('We usually suggest around ¥280,000 to improve the chance of winning'), 'a bid our staff chose is still our suggestion');
+  assert.equal(feed().filter((c) => c.path.endsWith('/sold-comparables')).length, 0, 'the bid was given, so the sold prices are not needed');
 
   calls.length = 0;
   aiScript = [opening];
   const car = await drafter.draftFor(it, { save: false, now, instruction: 'use https://www.carbarn.com.au/live-auction/subaru/xv-hybrid/gpe/2006629' });
-  assert.deepEqual(feed().map((c) => c.path.split('/').pop()), ['2006629', 'price-estimate'], 'no search: the car was named');
-  assert.equal(feed()[1].body, '{"bidYen":500000}');
+  assert.deepEqual(feed().map((c) => c.path.split('/').pop()), ['2006629', 'sold-comparables', 'price-estimate'], 'no search: the car was named');
+  assert.equal(feed()[2].body, '{"bidYen":500000}');
   assert.ok(car.reply.includes('https://www.carbarn.com.au/live-auction/subaru/xv-hybrid/gpe/2006629'));
   assert.ok(car.reply.includes('73,000 km\nAuction Grade 4'));
 
@@ -431,7 +472,7 @@ test('a request that is already under way, a compliance enquiry and an unreadabl
   lead(9006, 906, 'Quin');
   conv(906, 9006, 'Quin Test');
   msg(906, 'IN', 'My budget is around 12k', 5 * MIN);
-  db.upsertAuctionOrder(9006, { orderNo: 'AS-40', stage: 'INITIAL_DEPOSIT', lotPhase: 'SOURCING', source: 'LIVE_AUCTION', lotId: '', depositState: 'PAID', wanted: { make: 'Subaru', model: 'XV Hybrid' }, createdAt: now });
+  order(9006, { orderNo: 'AS-40', depositState: 'PAID' });
   assert.equal(await imports.planImport(items.buildItem({ conversationId: 906 }), { now }), null, 'a deposit is paid: no new quote');
 
   lead(9007, null, 'Rhea', { inquiries: [{ id: 90070, type: 'Compliance Request', subject: 'Compliance-only enquiry for Toyota Crown (GWS204)', text: '<strong>Compliance-only Request</strong><br>Make: Toyota<br>Model: Crown', stockNo: '', at: now - HOUR, status: 'NEW', url: '', leadType: '', staffNotes: [] }] });

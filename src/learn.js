@@ -12,12 +12,12 @@ import { config } from './config.js';
 import { getDraft, upsertLearned, deleteLearned, deleteLearnedForAnchor, learnedTextExists, allLearned, recordCopied, recordCopiedTime, recordEdit, setDraftRating, getLearned, insertAdvice, allAdvice, setAdviceLessons } from './db.js';
 import { redact } from './redact.js';
 import { maskCustomerSignOff, maskGreetingNames, stripLocationBlock, loadExclusions } from './voice.js';
-import { stripModelSignOff } from './checks.js';
+import { stripModelSignOff, BLANK_PATTERN } from './checks.js';
 import { similarity, wordCount, squash } from './text.js';
 import { complete } from './llm.js';
 import { SITUATIONS } from './situations.js';
 
-const BLANK = /\[(PRICE|TRADE-IN VALUE|DELIVERY COST|DATE|CHECK|DEPOSIT LINK)\?\]/;
+const BLANK = new RegExp(BLANK_PATTERN);
 
 /** Only dashboard conversations and leads teach Wheelman. */
 export const canLearnFrom = (itemKey) => /^[cl]:\d+$/.test(String(itemKey || ''));
@@ -127,6 +127,9 @@ export function learnFrom(item, draft, finalText, source, { at = Date.now() } = 
 export function onCopied(item, draftId, text) {
   const draft = getDraft(draftId);
   if (!draft) return { learned: false, why: 'suggestion not found' };
+  // A message for an auction order: the text is kept, because Wheelman cannot see WhatsApp and
+  // this is its only record of what was said to the customer. Nothing is learned from it.
+  if (/^ao:\d+$/.test(String(draft.item_key || ''))) { recordCopied(draftId, String(text || '').slice(0, 4000)); return { learned: false, why: 'an auction order' }; }
   // A Marketplace suggestion: note that Copy was pressed, keep none of the text, learn nothing.
   if (!canLearnFrom(draft.item_key) || !canLearnFrom(item?.itemKey)) { recordCopiedTime(draftId); return { learned: false, why: 'not a dashboard conversation' }; }
   recordCopied(draftId, String(text || '').slice(0, 4000));

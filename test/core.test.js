@@ -81,6 +81,16 @@ test('bank details are removed', () => {
   assert.ok(!/24681378/.test(out));
 });
 
+test('a customer\'s own payment link is removed, and a draft that repeats the label is caught', () => {
+  const out = redact('If you would like to proceed, use the link below:\nhttps://www.carbarn.com.au/customer-links/deadbeefcafe00aa11bb22cc33dd44ee\nThanks', lead);
+  assert.ok(!/deadbeefcafe/.test(out));
+  assert.match(out, /use the link below:\n\[CUSTOMER LINK\]\nThanks/);
+  assert.equal(redact('see carbarn.com.au/customer-links/abc123).', lead), 'see [CUSTOMER LINK]).');
+  // Our public pages are not customer links and stay as they are.
+  assert.equal(redact('https://www.carbarn.com.au/live-auction/honda/vezel/ru3/2022708', lead), 'https://www.carbarn.com.au/live-auction/honda/vezel/ru3/2022708');
+  assert.deepEqual(leftoverPlaceholders('Please use [CUSTOMER LINK] to pay.'), ['[CUSTOMER LINK]']);
+});
+
 test('first name goes back in, and the greeting is tidied when there is no name', () => {
   assert.equal(restore('Hi {{NAME}},\nYes, it is available.', lead), 'Hi Priya,\nYes, it is available.');
   assert.equal(restore('Hi {{NAME}},\nYes, it is available.', { firstName: '' }), 'Hi,\nYes, it is available.');
