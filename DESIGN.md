@@ -489,7 +489,7 @@ Rounded, low, quiet until needed. One filled button per view.
 - **Hover / Focus:** hover, on fine pointers only, washes the button with 5 to 8% of the text colour and turns the label to Navy Ink; the primary goes to Action Blue Pressed. Pressing scales to 0.97 (0.94 for icon buttons) over 160ms. Keyboard focus is a 2px Action Blue outline, 2px out. Disabled is 55% opacity (50% for icon buttons).
 
 ### Dismiss placement
-Dismiss is not in the message box. It lives in the last section of the details panel, as an outline button under a one-line explanation. The message box footer holds only Rewrite, the word count and Copy.
+Dismiss is not in the message box. It lives in the last section of the details panel, as an outline button under a one-line explanation. The message box footer holds Rewrite, the two teaching buttons (Good reply, Could be better), the word count, Clear and Copy. Clear only empties the box; it does not dismiss the conversation.
 
 ### Row tag
 A small label in front of a row's preview text, used for "Dismissed" under No reply needed.
@@ -515,7 +515,7 @@ There are no cards. The containers are message-shaped:
 ### Inputs / Fields
 - **Search:** 2.25rem pill, Panel Mist fill, no visible border, a 1rem search icon inside the left edge. On focus the fill turns List White and the border turns Action Blue; there is no outline ring.
 - **Instruction field** (what to change in a rewrite): 2.5rem pill, sheet fill, Strong Line border, Action Blue border on focus.
-- **Draft textarea:** borderless and transparent inside the message box; the box itself shows focus with an Action Blue border.
+- **Draft textarea:** borderless and transparent inside the message box. The box is an editor, so it carries a 1px Strong Line outline at rest and an Action Blue border on focus; empty, it shows "Type your reply here" in Faint. The line above it says whose text it holds ("Suggested reply", "Suggested reply, changed by you", "Your reply") and, at the right, when it was written or saved.
 - **Time-window select:** borderless Muted text in the list footer; turns Navy Ink on hover.
 - Placeholders use Faint at full opacity. Carets are Action Blue.
 

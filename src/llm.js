@@ -45,23 +45,33 @@ export function isDailyLimit(text, seconds = 0) {
 /** Forgets which models are resting or used up. For tests. */
 export function resetModelState() { resting.clear(); exhausted.clear(); lastCallAt = 0; }
 
-/** Every provider + model the app may use, in the order they are tried. */
-export function providers() {
+/**
+ * Every provider + model the app may use, in the order they are tried.
+ * For Marketplace chats the list starts at the small model: the better models before it are
+ * never asked, so their daily allowance is kept for dashboard customers.
+ */
+export function providers({ marketplace = false } = {}) {
   const out = [];
   for (const name of ['gemini', 'openrouter']) {
     const p = config.llm[name];
     if (!p.apiKey) continue;
     for (const model of p.models) out.push({ name, model, url: p.url, apiKey: p.apiKey });
   }
-  return out;
+  if (!marketplace || !config.llm.marketplaceModel) return out;
+  const from = out.findIndex((p) => p.model === config.llm.marketplaceModel);
+  return from > 0 ? out.slice(from) : out;
 }
 
 export function modelStatus() {
   const now = Date.now();
-  return providers().map((p) => {
+  const all = providers();
+  const forChats = new Set(providers({ marketplace: true }).map(keyOf));
+  return all.map((p) => {
     const out = exhausted.get(keyOf(p)) || 0;
     return {
       name: p.name, model: p.model,
+      // False for a model kept for dashboard customers only.
+      marketplace: forChats.has(keyOf(p)),
       restingMinutes: Math.max(0, Math.ceil(((resting.get(keyOf(p)) || 0) - now) / 60000)),
       // Set while the model's daily allowance is used up: when it says the allowance returns.
       usedUpUntil: out > now ? out : null,
@@ -130,9 +140,10 @@ const isBusy = (status) => [408, 429, 500, 502, 503, 504, 529].includes(status);
 /**
  * Sends one request. Respects the per-minute gap and the daily cap. Works down the list of
  * models until one answers; if all are busy it waits briefly and goes round once more.
+ * With `marketplace`, only the models Marketplace chats may use are asked.
  */
-export async function complete(system, user) {
-  const list = providers();
+export async function complete(system, user, { marketplace = false } = {}) {
+  const list = providers({ marketplace });
   if (!list.length) throw new LlmError('No AI key is filled in. Add GEMINI_API_KEY (or OPENROUTER_API_KEY) to the .env file.');
   if (usage().remaining <= 0) throw new LlmError(`Daily limit of ${config.llm.dailyLimit} AI requests reached. It resets at midnight Sydney time.`, { daily: true });
 
@@ -180,9 +191,12 @@ export async function complete(system, user) {
     throw new LlmError(`The AI service rejected the key in the .env file (${[...badKey].join(' and ')}). ${detail}`, { status: 401, detail });
   }
   const now = Date.now();
+  const split = marketplace && list.length < providers().length;
   if (usable.every((p) => (exhausted.get(keyOf(p)) || 0) > now)) {
     const back = Math.min(...usable.map((p) => exhausted.get(keyOf(p))));
+    if (split) throw new LlmError(`The AI models used for Marketplace have used up their allowance for today. Marketplace suggestions start again by themselves around ${formatSydney(back)}.`, { daily: true, detail });
     throw new LlmError(`Every free AI model has used up its allowance for today. Suggestions start again by themselves around ${formatSydney(back)}.`, { daily: true, detail });
   }
+  if (split) throw new LlmError('The AI models used for Marketplace could not answer just now. Wheelman tries again by itself in a few minutes.', { detail });
   throw new LlmError('No AI model could answer just now. The free models are busy or have used up their allowance for today. Wheelman tries again by itself in a few minutes.', { detail });
 }

@@ -567,7 +567,10 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
       owner.lessons.forEach((l) => P.push(`- ${l.internal ? 'INTERNAL. ' : ''}${l.when ? `When ${l.when.replace(/^when\s+/i, '').replace(/[.:]\s*$/, '')}: ` : ''}${l.do}`));
     }
     owner.raw.forEach((n) => P.push(`A coaching note on a similar message, in the owner's own words. Take the lesson from it; do not quote it.\n  You had written: ${flat(n.draft_text, 300)}\n  The note: ${flat(n.note, 500)}`));
-    owner.approved.forEach((x) => P.push(`Approved as written, for a similar message\n  Customer: ${flat(x.customer_text, 260)}\n  You wrote: ${flat(x.final_text, 420)}\n  Handle this one the same way: the same things said, about the same length. The words need not be the same.`));
+    owner.approved.forEach((x) => P.push(x.changed
+      // The owner rewrote the suggestion and approved their own version: that version is the model.
+      ? `Corrected by the owner and approved, for a similar message\n  Customer: ${flat(x.customer_text, 260)}\n  You wrote: ${flat(x.draft_text, 300)}\n  The owner changed it to: ${flat(x.final_text, 420)}\n  Handle this one the way the owner's version does: the same things said and left out, about the same length. The words need not be the same.`
+      : `Approved as written, for a similar message\n  Customer: ${flat(x.customer_text, 260)}\n  You wrote: ${flat(x.final_text, 420)}\n  Handle this one the same way: the same things said, about the same length. The words need not be the same.`));
   }
 
   if (coaching) {

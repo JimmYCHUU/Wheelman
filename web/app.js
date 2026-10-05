@@ -98,6 +98,7 @@ const state = {
   selected: null,
   detail: null,
   edits: new Map(),      // draft id -> what the user has typed
+  saving: new Map(),     // draft id -> { text, timer, pending, busy, failed, savedAt }: edits being kept by Wheelman
   busy: new Set(),       // conversation keys with a request in flight
   rewriteOpen: false,
   betterOpen: false,
@@ -151,6 +152,72 @@ async function copyText(text) {
   let ok = false;
   try { ok = document.execCommand('copy'); } finally { ta.remove(); }
   return ok;
+}
+
+// ---- the message box is an editor: what is typed is kept as it is typed -----------------------
+// Each change is saved with the suggestion a moment after the typing stops, so it is still there
+// after a reload or a restart. Saving does not depend on which conversation is on screen.
+
+function saveEdit(draftId, text, { now = false } = {}) {
+  let s = state.saving.get(draftId);
+  if (!s) { s = { text: '', timer: null, pending: false, busy: false, failed: false, savedAt: 0 }; state.saving.set(draftId, s); }
+  s.text = text;
+  s.pending = true;
+  clearTimeout(s.timer);
+  if (now) return flushEdit(draftId);
+  s.timer = setTimeout(() => flushEdit(draftId), 600);
+  paintSaveNote(draftId);
+  return Promise.resolve();
+}
+
+async function flushEdit(draftId, { leaving = false } = {}) {
+  const s = state.saving.get(draftId);
+  if (!s || !s.pending || s.busy) return;
+  clearTimeout(s.timer);
+  const text = s.text;
+  s.pending = false;
+  s.busy = true;
+  paintSaveNote(draftId);
+  try {
+    // "keepalive" lets the last change still be saved while the page is being closed.
+    const res = await fetch(`/api/drafts/${draftId}/edit`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }), keepalive: leaving });
+    if (!res.ok) throw new Error('not saved');
+    s.failed = false;
+    s.savedAt = Date.now();
+  } catch {
+    s.failed = true;
+    if (!s.pending) { s.pending = true; s.timer = setTimeout(() => flushEdit(draftId), 5000); }
+  }
+  s.busy = false;
+  paintSaveNote(draftId);
+  if (s.pending && !s.failed) flushEdit(draftId); // more was typed while this was being saved
+}
+
+/** The few words at the top right of the message box: written when, or saved when. */
+function paintSaveNote(draftId) {
+  const note = document.querySelector(`.draft-meta[data-draft="${draftId}"]`);
+  if (!note) return;
+  const s = state.saving.get(draftId);
+  const edited = note.dataset.edited === 'yes';
+  const savedAt = s?.savedAt || Number(note.dataset.savedAt) || 0;
+  note.classList.toggle('bad', !!s?.failed);
+  if (s?.failed) note.textContent = 'Not saved yet. Your text is kept in this window.';
+  else if (s?.pending || s?.busy) note.textContent = 'Saving…';
+  else if (edited) note.textContent = savedAt ? `Your changes are saved · ${clock(savedAt)}` : 'Your changes are saved';
+  else note.textContent = `Written ${clock(Number(note.dataset.written))}`;
+}
+
+function saveAllEditsNow() { for (const id of state.saving.keys()) flushEdit(id, { leaving: true }); }
+window.addEventListener('pagehide', saveAllEditsNow);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveAllEditsNow(); });
+
+/** Replaces the whole text the way typing would, so Ctrl + Z still brings the old text back. */
+function replaceText(ta, text) {
+  ta.focus();
+  ta.select();
+  let done = false;
+  try { done = text ? document.execCommand('insertText', false, text) : document.execCommand('delete'); } catch { done = false; }
+  if (!done || ta.value !== text) { ta.value = text; ta.dispatchEvent(new Event('input', { bubbles: true })); }
 }
 
 const TZ = 'Australia/Sydney';
@@ -275,7 +342,8 @@ function renderStatus() {
   else if (last) text = `${place} not reached`;
   else text = `${place} not checked yet`;
   box.append(`${text} · ${s.ai.usedToday} of ${s.ai.limit} AI requests used today`);
-  const models = s.ai.providers.map((p) => `${p.model}${p.usedUpUntil ? ` (today's free allowance used up, back about ${clock(p.usedUpUntil)})` : p.restingMinutes ? ' (busy)' : ''}`).join('\n');
+  // The better models are kept for dashboard customers; Marketplace chats use the rest.
+  const models = s.ai.providers.map((p) => `${p.model}${p.marketplace === false ? ' (dashboard customers only)' : ''}${p.usedUpUntil ? ` (today's free allowance used up, back about ${clock(p.usedUpUntil)})` : p.restingMinutes ? ' (busy)' : ''}`).join('\n');
   if (models) box.title = `AI models, tried in order:\n${models}`;
 
   // What Wheelman has learned from replies that were really used.
@@ -645,14 +713,28 @@ function renderComposer(item, els, { arriving = false } = {}) {
     return;
   }
 
-  // A ready suggestion: an unsent draft in the message box.
-  const ta = h('textarea', { class: `draft ${arriving ? 'arriving' : ''}`.trim(), rows: '3', spellcheck: 'true', 'aria-label': 'Suggested reply, not sent. Edit it here, then copy it.' });
-  ta.value = state.edits.has(d.id) ? state.edits.get(d.id) : d.reply;
+  // A ready suggestion: an unsent draft in the message box. The box is an editor: the text can be
+  // changed or cleared, and what is typed is saved as it is typed.
+  const ta = h('textarea', { class: `draft ${arriving ? 'arriving' : ''}`.trim(), rows: '3', spellcheck: 'true', placeholder: 'Type your reply here', 'aria-label': 'Your reply, not sent. Change it here, then copy it.' });
+  ta.value = state.edits.has(d.id) ? state.edits.get(d.id) : d.edited ?? d.reply;
   const backdrop = h('div', { class: 'backdrop', 'aria-hidden': 'true' });
   const advice = h('div', { class: 'advice' });
   const count = h('span', { class: 'count' });
   const copyBtn = h('button', { class: 'btn primary', type: 'button', title: 'Copy (Ctrl + Enter)' }, icon('copy'), h('span', { text: 'Copy reply' }));
+  const clearBtn = h('button', { class: 'btn', type: 'button', title: 'Empty the box to write your own reply. The suggestion can be brought back.', onclick: () => replaceText(ta, '') }, icon('x'), 'Clear');
   const after = h('div', { class: 'after', hidden: state.copied !== d.id });
+  const tag = h('span', { class: 'draft-tag' });
+  const meta = h('span', { class: 'draft-meta', title: d.model || '', 'data-draft': String(d.id), 'data-written': String(d.createdAt || 0), 'data-saved-at': String(d.editedAt || 0) });
+  const isEdited = () => ta.value !== d.reply;
+  const isEmpty = () => !ta.value.trim();
+  const backToSuggestion = () => h('button', { class: 'blank-btn', type: 'button', onclick: () => replaceText(ta, d.reply) }, 'Bring back the suggestion');
+
+  function paintHead() {
+    tag.replaceChildren(isEmpty() ? 'Your reply ' : isEdited() ? 'Suggested reply, changed by you ' : 'Suggested reply ',
+      h('span', { text: isEdited() ? '· not sent' : '· not sent · click in the text to change it' }));
+    meta.dataset.edited = isEdited() ? 'yes' : 'no';
+    paintSaveNote(d.id);
+  }
 
   const stillThere = (check) => !check.tokens?.length || check.tokens.some((t) => ta.value.includes(t));
   const reasonFor = (kind) => {
@@ -697,6 +779,16 @@ function renderComposer(item, els, { arriving = false } = {}) {
   function paintAdvice() {
     const blanks = blanksIn(ta.value);
     const lines = [];
+    const teaches = item.channel !== 'marketplace';
+    // The box was cleared: what the checks said about the suggestion no longer applies.
+    if (isEmpty()) {
+      advice.replaceChildren(h('div', { class: 'tip input' }, icon('pencil'),
+        h('span', { text: 'The suggestion is cleared. Type your own reply here.' }), backToSuggestion(),
+        h('span', { class: 'tip-why', text: 'If no reply is needed at all, use Dismiss in the details panel.' })));
+      copyBtn.classList.remove('wait');
+      copyBtn.lastChild.textContent = 'Copy reply';
+      return;
+    }
     for (const c of d.checks.filter((x) => x.level === 'fail' && x.code !== 'placeholder' && stillThere(x))) {
       lines.push(h('div', { class: 'tip fail' }, icon('alert'), h('span', { class: 'tip-text', text: c.message })));
     }
@@ -710,16 +802,18 @@ function renderComposer(item, els, { arriving = false } = {}) {
     for (const c of d.checks.filter((x) => x.level === 'input' && x.code !== 'marker')) {
       lines.push(h('div', { class: 'tip input' }, icon('info'), h('span', { class: 'tip-text', text: c.message })));
     }
-    for (const c of d.checks.filter((x) => x.level === 'warn' && x.code !== 'bare-marker')) {
+    // What was said about the length or the wording was about the suggestion, not about what the person typed.
+    for (const c of d.checks.filter((x) => x.level === 'warn' && x.code !== 'bare-marker' && (!isEdited() || x.tokens?.length || x.code === 'auction'))) {
       lines.push(h('div', { class: 'tip warn' }, h('span', { class: 'tip-text', text: c.message })));
     }
-    // Only claim a match for text that was actually checked.
-    if (!lines.length) {
-      const edited = ta.value !== d.reply;
+    if (isEdited()) {
+      lines.push(h('div', { class: 'tip warn' },
+        h('span', { text: teaches ? 'You have changed the text. What you typed has not been checked. Wheelman learns from your changes when you copy the reply.' : 'You have changed the text. What you typed has not been checked.' }),
+        backToSuggestion()));
+    } else if (!lines.length) {
+      // Only claim a match for text that was actually checked.
       const body = d.reply.replace(/\n+Regards,[\s\S]*$/i, '');
-      const hadSomethingToCheck = /\d|https?:\/\//i.test(body);
-      if (edited) lines.push(h('div', { class: 'tip warn' }, h('span', { class: 'tip-text', text: 'You have changed the text. Anything you typed has not been checked.' })));
-      else if (hadSomethingToCheck) lines.push(h('div', { class: 'tip ok' }, icon('check'), h('span', { class: 'tip-text', text: 'Figures and links match your records.' })));
+      if (/\d|https?:\/\//i.test(body)) lines.push(h('div', { class: 'tip ok' }, icon('check'), h('span', { class: 'tip-text', text: 'Figures and links match your records.' })));
     }
     advice.replaceChildren(...lines);
 
@@ -745,25 +839,59 @@ function renderComposer(item, els, { arriving = false } = {}) {
     backdrop.scrollTop = ta.scrollTop;
   }
 
-  const sync = () => { paintBackdrop(); paintAdvice(); paintCount(); grow(); };
+  // What the buttons may do depends on what is in the box right now.
+  function paintButtons() {
+    const empty = isEmpty();
+    copyBtn.disabled = empty;
+    clearBtn.hidden = empty;
+    if (!approveBtn) return;
+    // An emptied box cannot be a good reply: the approval goes, here and in Wheelman's records.
+    if (empty && d.rating === 'good') { d.rating = ''; state.composerSig = composerSignature(item); }
+    const approved = d.rating === 'good';
+    approveBtn.disabled = empty;
+    approveBtn.classList.toggle('is-on', approved);
+    approveBtn.setAttribute('aria-pressed', approved ? 'true' : 'false');
+    approveBtn.lastChild.textContent = approved ? 'Approved' : 'Good reply';
+    approveBtn.title = approved ? 'You approved this reply. Click to take that back.'
+      : isEdited() ? 'This reply, with your changes, is right. Wheelman will write similar replies this way.'
+        : 'This reply is right as it is. Wheelman will write similar replies the same way.';
+  }
+
+  const sync = () => { paintBackdrop(); paintAdvice(); paintCount(); paintHead(); paintButtons(); grow(); };
+
+  /** The reply was copied: tell Wheelman what was actually used, so it learns from it. */
+  function noteCopied() {
+    const chat = item.channel === 'marketplace';
+    const changed = isEdited();
+    state.copied = d.id;
+    after.hidden = false;
+    state.composerSig = composerSignature(item);
+    saveEdit(d.id, ta.value, { now: true });
+    // Dashboard only: Marketplace chats are never learned from, so their text is not even sent.
+    api(`/api/drafts/${d.id}/copied`, { body: { text: chat ? '' : ta.value } })
+      .then((out) => { if (out.learned && changed) { toast('Copied. Wheelman will use your changes for similar messages.'); refreshStatus(); } })
+      .catch(() => {});
+  }
 
   async function doCopy() {
+    if (isEmpty()) return;
     const ok = await copyText(ta.value);
     if (!ok) { toast('Copying is blocked by the browser. Select the text and press Ctrl + C.'); return; }
     const left = blanksIn(ta.value).length;
     const chat = item.channel === 'marketplace';
     toast(left ? `Copied, with ${plural(left, 'blank')} still to fill` : chat ? 'Copied. Paste it into the Marketplace chat to send.' : 'Copied. Paste it into the dashboard to send.');
-    state.copied = d.id;
-    after.hidden = false;
-    // Tell Wheelman what was actually used, so it learns from it. Dashboard only:
-    // Marketplace chats are never learned from, so their text is not even sent.
-    api(`/api/drafts/${d.id}/copied`, { body: { text: chat ? '' : ta.value } }).catch(() => {});
-    state.composerSig = composerSignature(item);
+    noteCopied();
   }
 
-  ta.addEventListener('input', () => { state.edits.set(d.id, ta.value); sync(); });
+  ta.addEventListener('input', () => { state.edits.set(d.id, ta.value); saveEdit(d.id, ta.value); sync(); });
+  ta.addEventListener('blur', () => flushEdit(d.id));
   ta.addEventListener('scroll', () => { backdrop.scrollTop = ta.scrollTop; });
   ta.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); doCopy(); } });
+  // The whole reply selected and copied by hand counts the same as pressing Copy.
+  ta.addEventListener('copy', () => {
+    const picked = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim();
+    if (picked && picked === ta.value.trim()) noteCopied();
+  });
   copyBtn.addEventListener('click', doCopy);
 
   const rewriteInput = h('input', { type: 'text', maxlength: '300', placeholder: 'What should change? For example: offer $27,500, or make it shorter', 'aria-label': 'What should change in the reply' });
@@ -815,9 +943,7 @@ function renderComposer(item, els, { arriving = false } = {}) {
     } }, 'Could be better') : null;
 
   box.append(
-    h('div', { class: 'draft-head' },
-      h('span', { class: 'draft-tag' }, 'Suggested reply ', h('span', { text: '· not sent' })),
-      h('span', { class: 'draft-meta', title: d.model || '', text: `Written ${clock(d.createdAt)}` })),
+    h('div', { class: 'draft-head' }, tag, meta),
     advice,
     h('div', { class: 'sheet' },
       h('div', { class: 'field' }, backdrop, ta),
@@ -827,6 +953,7 @@ function renderComposer(item, els, { arriving = false } = {}) {
         betterBtn,
         h('span', { class: 'grow' }),
         count,
+        clearBtn,
         copyBtn)),
     rewriteRow,
     teach ? betterRow : null,
@@ -1054,8 +1181,11 @@ async function approve(item) {
   const d = item.draft;
   const next = d.rating === 'good' ? '' : 'good';
   try {
+    // What is approved is the text as it stands in the box, so any change still on its way is saved first.
+    await flushEdit(d.id);
     const out = await api(`/api/drafts/${d.id}/rating`, { body: { rating: next } });
     d.rating = next;
+    if (state.detail?.draft?.id === d.id) state.detail.draft.rating = next;
     if (state.selected === item.key) renderComposer(item, chatFrame());
     toast(!next ? 'Approval taken back' : out.learned ? 'Approved. Wheelman will write similar replies this way.' : 'Approved');
     refreshStatus();
