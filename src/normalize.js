@@ -172,6 +172,37 @@ export function normalizeSale(raw) {
   };
 }
 
+/**
+ * A customer's auction request, reduced to what a reply needs: which car they want found, the
+ * years, their target bid and budget, their own notes, and how far the request has got.
+ * The newest request that has not been cancelled is used. Returns null when there is none.
+ *
+ * Deliberately not kept: who it is invoiced or delivered to (name, phone, email, address, licence,
+ * date of birth), the staff member, payments, and the link the customer pays through.
+ */
+export function normalizeAuctionOrder(rows) {
+  const list = (Array.isArray(rows) ? rows : []).filter((o) => o && !/^cancel/i.test(clean(o.stage)) && !o.cancelledAt);
+  const o = list[0];
+  if (!o) return null;
+  const n = (v) => (Number(v) > 0 ? Math.round(Number(v)) : 0);
+  return {
+    leadId: o.leadId ?? null,
+    orderNo: clean(o.orderNo),
+    stage: clean(o.stage).toUpperCase(),
+    lotPhase: clean(o.lotPhase).toUpperCase(),
+    source: clean(o.source).toUpperCase(),
+    lotId: o.auctionVehicleId ? String(o.auctionVehicleId) : '',
+    depositState: clean(o.depositState).toUpperCase() || 'NONE',
+    wanted: {
+      make: clean(o.reqMake), model: clean(o.reqModel), modelCode: clean(o.reqModelCode), variant: clean(o.reqVariant),
+      yearFrom: n(o.reqYearFrom), yearTo: n(o.reqYearTo),
+      targetBidYen: n(o.targetBidJpy), budgetAud: n(o.budgetAud),
+      notes: clean(o.requirementNotes).slice(0, 1500),
+    },
+    createdAt: parseDashboardTime(o.createdAt),
+  };
+}
+
 /** Plain-language availability from the dashboard's three status fields. */
 export function availability(v) {
   if (!v) return { code: 'unknown', text: 'Unknown' };

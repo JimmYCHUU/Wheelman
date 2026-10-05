@@ -1,7 +1,7 @@
 # Wheelman 🛞
 
 ![Node.js 24](https://img.shields.io/badge/node-24-339933)
-![Tests](https://img.shields.io/badge/tests-155%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-175%20passing-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-lightgrey)
 ![Free AI models](https://img.shields.io/badge/AI-free%20models%20only-blue)
 ![Never sends](https://img.shields.io/badge/sending-never%2C%20copy%20only-orange)
@@ -28,6 +28,7 @@ purpose.
 - [The voice](#the-voice)
 - [How a suggestion is written](#how-a-suggestion-is-written)
 - [Buyers, first replies and promises](#buyers-first-replies-and-promises)
+- [Import and auction enquiries](#import-and-auction-enquiries)
 - [Non-negotiable rules](#non-negotiable-rules)
 - [Install & run](#install--run)
 - [The daily workflow](#the-daily-workflow)
@@ -203,16 +204,80 @@ stay listed with **Write it now**.
 | `FIRST_REPLY_SENDER` | The name on the last lines of the standard block | `Team Carbarn` |
 | `AUTO_DRAFT_MAX_AGE_HOURS` | Older messages are listed, but written only when asked | `24` |
 
+## Import and auction enquiries
+
+Customers who ask us to find a car from Japan come in through the website's importing pages
+and live auction pages. The dashboard keeps them on a separate list from the car portals, and
+Wheelman reads that list too. For each one it also reads the auction request our staff keep
+for that customer (which car, which years, the budget, a target bid), and the conversation as
+usual. The details panel shows it under **Looking for, from Japan**.
+
+What the reply is depends on how much we know.
+
+### We do not know what they are after yet
+
+The reply thanks them for the enquiry and asks for what is missing: year range, maximum
+odometer, grade or specification, landed budget, and colour or feature preferences. It ends
+with the address, phone number and hours. The wording is in `voice/import-ask.md`. When the
+customer only filled in the website form, it is used exactly as written and no AI request is
+spent. When they also wrote something of their own, the AI answers that and still asks.
+
+### We know enough to look
+
+Once the customer has given a year, a kilometre limit, a grade, a budget or a bid, Wheelman
+searches the website's live auction for that make and model, picks one car, asks the
+website's own cost calculator what that car would cost landed and complied, and lays out the
+offer:
+
+- the car: year and model, kilometres, auction grade, engine, drive, seats;
+- the link to its page in the live auction;
+- the suggested bid, and the estimated landed and complied cost with each part of it;
+- a blank for the deposit link, `[DEPOSIT LINK?]`, which you paste in yourself;
+- that we inspect before bidding, and the sign-off.
+
+The AI writes only the greeting and a sentence on why the car may suit. Everything else is
+put in by code from the auction feed and `voice/auction-offer.md`, so the figures are exactly
+the website's. An opening that states a figure or a link is sent back. If no AI model is
+free, a plain opening is used and the offer is still written.
+
+- **Which car.** Repaired and ungraded cars (R, RA) go last. Then a car inside the budget
+  comes before one a little above it, then under the kilometres asked, then inside the years
+  asked, then the better grade and the lower kilometres. A car more than half as much again
+  over the budget is never offered. Cars the website marks as not eligible, or as needing a
+  manual check, are left out.
+- **Which bid.** Carbarn's suggested bid for that car, rounded up to the next ¥50,000 "for a
+  stronger winning chance": ¥262,000 becomes ¥300,000. A bid the customer named is used as
+  it is.
+- **Telling it otherwise.** In **Rewrite**, paste a live-auction link (or type
+  "lot 2006629") to offer that car, type "bid 280000" to cost it at that bid, or "find
+  another one" to search again. The same happens when the customer sends a link or a bid.
+- **When nothing fits.** The reply says nothing suitable is in the coming auctions and that
+  we are keeping the search going. It names no car.
+
+The auction changes every day and the costs move with the exchange rate, so the suggestion
+shows when the figures were read and when the auction is. Write it again if it is sent much
+later. The feed shows the next few auction days only. Once a deposit is paid, or the request
+has moved past its first stage, Wheelman stops offering cars and answers as usual.
+
+| Setting in `.env` | What it does | Default |
+|---|---|---|
+| `AUCTION_BID_STEP_YEN` | The suggested bid is rounded up to the next step of this size | `50000` |
+| `AUCTION_BUDGET_SLACK` | How far over the budget still counts as "a little above": `0.15` is 15% | `0.15` |
+| `AUCTION_API_URL` | Where the live auction is read from | The dashboard's address |
+
 ## Non-negotiable rules
 
 Enforced in code, not by convention.
 
 - **RULE-0 Never sends.** There is no code path that sends a message. The only way a reply
   leaves is a person's copy and paste.
-- **RULE-1 Read-only.** The dashboard client can sign in and GET four addresses. The content
-  engine client can GET three. Any other address or method is refused before a request is
-  made. Reading does not mark anything as read, and never triggers the dashboard's own drafts
-  or the engine's auto-reply.
+- **RULE-1 Read-only.** The dashboard client can sign in and GET five addresses. The content
+  engine client can GET three. The live auction client uses no login: it can GET two
+  addresses and ask the website's cost calculator for one figure. That one request is a
+  POST, because that is how the website's own page asks. It carries the bid amount and
+  nothing else, places no bid and stores nothing. Any other address or method is refused
+  before a request is made. Reading does not mark anything as read, and never triggers the
+  dashboard's own drafts or the engine's auto-reply.
 - **RULE-2 Customer details stay here.** Names, phone numbers, emails, rego plates, VINs,
   street addresses and bank details are removed on this computer before any text goes to an
   AI service. The first name is put back afterwards.
@@ -226,7 +291,9 @@ Enforced in code, not by convention.
 - **RULE-5 No costs, no sale amounts.** Purchase cost, shipping cost and margin are never
   stored and never sent anywhere. From a sale record Wheelman keeps the stage and the date,
   and whether a deposit or the full amount is recorded. It keeps no amount and no buyer name,
-  and the buyer's phone and email only as scrambled match keys.
+  and the buyer's phone and email only as scrambled match keys. From an auction request it
+  keeps what the customer asked us to find. It keeps no name, address, licence, payment or
+  deposit link.
 - **RULE-6 STOP means stop.** Nothing is ever drafted for a customer who opted out.
 - **RULE-7 Nothing on the page is final.** Dismiss can be undone, and a dismissed
   conversation stays findable.
@@ -372,7 +439,9 @@ The suggestion waits in the message box, marked **not sent**.
 ### The details panel
 
 The customer, the car with everything included with it, and the facts the suggestion relied
-on. **Dismiss** is at the bottom of this panel, away from Copy and Rewrite. It takes a
+on. For an import or auction enquiry it shows what the customer asked us to find instead of
+a car from our stock: the model, the years, the kilometre limit, the budget, and what we
+still do not know. **Dismiss** is at the bottom of this panel, away from Copy and Rewrite. It takes a
 conversation out of Waiting, for example when you have already phoned the customer. Nothing is
 deleted: press **Undo** in the message that appears, or open the conversation later under
 **No reply needed** and press **Put back in Waiting**. It also comes back by itself if the
@@ -424,6 +493,7 @@ Wheelman only states facts it has been given.
 | Business facts: deposit, warranty, delivery, payment | `knowledge/business-facts.md` | You edit it |
 | How Carbarn works: the steps of a sale, common questions | `knowledge/how-carbarn-works.md` | You edit it |
 | The website: policy pages, guides, blog, import pages | `knowledge/website/` | `npm run fetch-website -- --all` |
+| Cars in the coming Japan auctions, and what one would cost landed | The website's live auction | Read at the moment an offer is written |
 
 In `knowledge/business-facts.md` each topic is marked `CONFIRMED` (stated freely), `WORKING`
 (in use, please check) or `NEEDS ANSWER` (Wheelman says nothing and leaves a blank). Write the
@@ -452,7 +522,9 @@ what the team really sends. **How to say it** comes from the two voices.
   sender's name are removed, and every link and dollar amount is replaced by a label such as
   `[inspection booking link]`, so nothing from another customer's deal can be carried over.
   A label that turns up in a suggestion is rejected. Complaints, automatic texts, texts with
-  bank details and texts sent exactly as Wheelman suggested are left out.
+  bank details and texts sent exactly as Wheelman suggested are left out. From an auction
+  offer the team sent, only the opening lines are kept: the car, its link, the bid and the
+  costs belong to that customer and are cut off.
 - **Your edits.** When you change a suggestion before using it, Wheelman keeps both versions,
   with the customer's details removed, and shows itself the difference next time. When the
   reply later appears in the dashboard conversation, what was really sent replaces what was
@@ -506,6 +578,9 @@ often you asked for a rewrite. Counts only; no customer text.
 | Price | A customer who asks for a discount is not given the price again. They are invited to inspect first; price is talked about once they have seen the car |
 | A car that is sold or reserved | The closest available car, and the page listing our other cars of that model when there are any. Not the full stock list |
 | Importing a model to order | The reply gives that model's importing page from the website, when there is one |
+| Import or auction enquiry, nothing known yet | The asking reply: year range, maximum odometer, grade, landed budget, colour or features; then address, phone, hours |
+| Import or auction enquiry, once they say what they want | One car from the live auction: its details and link, a bid rounded up from Carbarn's suggested bid, the landed cost from the website's calculator part by part, and a blank for the deposit link |
+| Suggested auction bid | Carbarn's suggested bid for the car, rounded up to the next ¥50,000 |
 | Finance and complaints | Answered the way the team answered similar ones. Never a rate, a repayment or a promise of approval; a complaint is always marked for a person |
 | "Below" | A reply never points at the address block. It answers in the sentence itself |
 | Marketplace | A suggestion for every chat where the buyer wrote last; short chat style |
@@ -526,9 +601,19 @@ Tried in order; the first that answers is used.
 6. `google/gemma-4-26b-a4b-it:free` (OpenRouter)
 
 Free models are often busy. A busy model is rested for five minutes and the next one is
-tried. Models lower in the list write less polished replies. There is a cap of 200 AI requests
-a day. OpenRouter allows 50 free requests a day; a one-off US$10 credit purchase raises that
-to 1,000.
+tried. Models lower in the list write less polished replies.
+
+Each free model also has its own daily allowance, and it is small. On 3 October 2026 Gemini
+allowed 20 requests a day to each of the first three models; the fourth has a larger
+allowance. A model that says its day is used up is left alone until the time it gives, and
+the next model carries on, so on a busy day the later suggestions come from the smaller
+models. Hover over the status line at the top of the list to see which models are used up.
+When no model can answer, the suggestion is tried again by itself a few minutes later, up to
+three times an hour; nothing red is shown for that. When every model is used up for the day,
+the page says suggestions are paused and when they resume.
+
+Wheelman's own cap is 200 AI requests a day. OpenRouter allows 50 free requests a day; a
+one-off US$10 credit purchase raises that to 1,000.
 
 ## Privacy
 
@@ -567,7 +652,8 @@ Git never sees any of it.
 | `.env` | Dashboard address and login, the Marketplace inbox address, and the AI keys |
 | `voice\people.json` | The real names and logins of the two voices, and other staff names |
 | `PLAN.md`, `knowledge\business-facts-evidence.md` | Internal planning notes, and the evidence behind each business fact |
-| `data\app.db` | Leads, conversations, messages, stock, the stage of each sale, Marketplace chats, every suggestion and its checks, what was learned, what was dismissed and read |
+| `data\app.db` | Leads, conversations, messages, stock, the stage of each sale, what each import customer asked us to find, Marketplace chats, every suggestion and its checks, what was learned, what was dismissed and read |
+| `data\wheelman.log` | What went wrong and when: technical messages only, no customer details |
 | `data\raw\` | The history first copied from the dashboard |
 | `data\analysis\` | The cleaned samples behind the voice and the business facts |
 | `voice\examples.json` | The bank of genuine replies, rebuilt daily |
@@ -582,8 +668,12 @@ Git never sees any of it.
 | "Setup is not finished" | A setting in `.env` is empty | Fill it in, then restart |
 | "The dashboard could not be reached" | Wrong username or password, or no internet | `npm run check-login` |
 | "The Marketplace inbox could not be reached" | The content engine is down, or no internet | Nothing to do. Dashboard keeps working; Marketplace is tried again every few minutes |
-| "The AI service returned an error" | All free models are busy, or a key is wrong | `npm run check-model` |
-| "Suggestions are paused" | The day's free AI allowance is used up | It resumes by itself |
+| "A suggestion could not be written" in red at the top of the list | An AI key was rejected, or something in Wheelman failed | `npm run check-model`, and look at `data\wheelman.log` |
+| "A suggestion could not be written. No AI model could answer just now" in one conversation | Every free model was busy or used up at that moment | Nothing. It is tried again in a few minutes, or press **Try again** |
+| "Suggestions are paused" | Every free model has used up its allowance for the day | It resumes by itself at the time shown |
+| Something went wrong and the black window has scrolled past it | | Open `data\wheelman.log`: each problem is noted there with its time |
+| "The live auction could not be read, so no car was looked for" | The website's auction feed did not answer | Press **Rewrite** to try again. The reply names no car in the meantime |
+| An import customer gets the asking reply although they told us what they want | What they want was said on the phone, not in writing | Press **Rewrite** and type it, for example "2015 or newer, under 100,000 km, budget 12k", or paste a live-auction link |
 | "Port 3210 is already in use" | Wheelman is already running in another window | Use that window, or close it |
 | "running scripts is disabled on this system" | Windows PowerShell blocks `npm` | Use the double-click file, or type `npm.cmd` |
 | The page says Wheelman is not responding | The black window was closed | Double-click **Start Wheelman.cmd** again |
@@ -596,8 +686,8 @@ Git never sees any of it.
 npm.cmd test
 ```
 
-155 tests, all on invented data, against a stand-in AI service and a stand-in content engine
-on this computer: who counts as waiting and who does not, stock numbers matched to the right
+175 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
+a stand-in auction feed on this computer: who counts as waiting and who does not, stock numbers matched to the right
 car however a portal writes them (a year in front, a portal code, upper or lower case), that
 no customer detail and no cost figure reaches the AI request, an invented price
 rejected and retried, a customer's own price never accepted as ours, a staff figure in a
@@ -622,6 +712,15 @@ a similar message reaching the request with no name, link or amount of the other
 later requests, the owner's own words do not, and nothing is learned from Marketplace; a
 reply that points "below" sent back; the booking link offered on a "where are you" question;
 the page of our other cars of a model, and a model's importing page, supplied and accepted.
+Import and auction enquiries: the website forms read into plain words; the leads fetched from
+their own list and the auction request kept with no name, address, licence or deposit link;
+the auction feed limited to three requests with no login and only the bid sent; the asking
+reply word for word with no AI request; the car chosen for what was asked; the bid rounded
+up; the offer laid out with the calculator's figures and a blank for the deposit link; an
+opening that states a price replaced; a bid or a car named in Rewrite or by the customer;
+nothing suitable, a request already under way and an unreadable feed; and an offer the team
+sent teaching only its opening. A model that has used up its day set aside while the next
+one carries on.
 
 ## Project layout
 
@@ -638,11 +737,15 @@ wheelman/
 │   ├── house-voice.md                 the tone, from our salespeople's real replies
 │   ├── sales-playbook.md              how it sells, and what it hands to a person
 │   ├── first-reply.md                 the standard block under a first reply; edit freely
+│   ├── import-ask.md                  the first reply to an import or auction enquiry; edit freely
+│   ├── auction-offer.md               the layout of an auction offer; edit freely
 │   ├── people.example.json            whose writing sets the voice (invented names; the real file is local)
 │   └── exclusions.json                templates and conversations kept out of the example bank
 ├── src/
-│   ├── dashboard.js                   dashboard client: sign in and four GET addresses
+│   ├── dashboard.js                   dashboard client: sign in and five GET addresses
 │   ├── marketplace.js                 content engine client: three GET addresses
+│   ├── auction.js                     live auction client: two GET addresses and the cost calculator
+│   ├── imports.js                     import enquiries: what they want, which auction car, the offer
 │   ├── sync.js · normalize.js         what is read, and what is kept of it
 │   ├── items.js                       who is waiting: one shape for a lead and a Marketplace chat
 │   ├── situations.js · text.js        what a message is about, by keyword rules
@@ -655,7 +758,9 @@ wheelman/
 │   ├── examples.js · learn.js         which examples fit; what was copied, sent and changed
 │   ├── practice.js                    what the team really sent for similar messages
 │   ├── prompt.js                      the request: facts, rules for the channel, inspection plan
-│   ├── llm.js                         free models in order, resting busy ones, the daily cap
+│   ├── llm.js                         free models in order, resting busy ones, setting aside
+│   │                                  ones that are used up for the day, the daily cap
+│   ├── log.js                         what went wrong, written to data/wheelman.log
 │   ├── checks.js · drafter.js         figures and links traced, blanks, greeting once a day
 │   ├── firstreply.js · promises.js    the standard first reply; promises, days and places
 │   ├── worker.js                      the loop: read, note what was sent, draft what is waiting
@@ -667,7 +772,7 @@ wheelman/
 │                                      build-voice · fetch-website · import-history
 │                                      check-private
 └── test/                              core · pipeline · greeting · inspection · marketplace
-                                       quality · scenarios · stock
+                                       quality · scenarios · stock · models · imports
 ```
 
 ## Status
@@ -687,6 +792,11 @@ replaying real past messages from buyers and new enquiries on a private copy of 
 `npm run report` after a few days of use will show whether more suggestions are sent as
 written.
 
+3 October 2026: import and auction enquiries were added. They had never been listed, because
+the dashboard keeps them on a separate list that Wheelman did not read. The asking reply and
+the auction offer were checked on the automated tests and on a throwaway copy with invented
+customers against the real live auction. Not yet used over a working day.
+
 ### Open questions for Carbarn
 
 - Blue slips are not stored in the dashboard, only a blue slip date, and only for some cars.
@@ -698,5 +808,8 @@ written.
   recognised only from the lead's status or from our own earlier texts.
 - A customer who describes what they want without naming a car ("a 2016 or newer HiAce, high
   roof") is asked which one. Wheelman does not search the stock list for them yet.
+- An auction offer covers one car. The feed shows only the next few auction days and the
+  makes the website lists, so "nothing suitable right now" is common for rarer models.
+- The deposit link is left as a blank and pasted in by hand.
 - "Far away" is recognised from wording and from states and cities. A small town Wheelman
   does not know gets the in-person link.

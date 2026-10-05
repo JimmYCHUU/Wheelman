@@ -3,22 +3,47 @@
 //
 // Free models are often busy. Each provider has a list of models, best first. A model that
 // reports it is busy is rested for a few minutes and the next one is tried.
+//
+// Each free model also has its own daily allowance (in October 2026 Gemini gave 20 requests a
+// day to each of its better models). A model that says its allowance is used up is left alone
+// until the time it says the allowance returns, and the next model carries on.
 
 import { config } from './config.js';
 import { addUsage, usageToday } from './db.js';
-import { sydneyDay } from './time.js';
+import { sydneyDay, formatSydney } from './time.js';
 
 export class LlmError extends Error {
-  constructor(message, { status = 0, provider = '', model = '', retryAfter = 0, daily = false } = {}) {
+  constructor(message, { status = 0, provider = '', model = '', retryAfter = 0, daily = false, detail = '' } = {}) {
     super(message);
     this.status = status; this.provider = provider; this.model = model; this.retryAfter = retryAfter; this.daily = daily;
+    this.detail = detail; // what the AI services actually answered, for the log
   }
 }
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 let lastCallAt = 0;
-const resting = new Map(); // "provider/model" -> time it may be tried again
+const resting = new Map();   // "provider/model" -> time it may be tried again (it was busy)
+const exhausted = new Map(); // "provider/model" -> time its daily allowance returns
 const lastAnswered = { provider: '', model: '', at: 0 };
+const keyOf = (p) => `${p.name}/${p.model}`;
+
+/** Seconds until a model says it may be tried again: a header, "retryDelay": "63956s", or "retry in 17h45m56s". */
+export function retrySeconds(text, header = '') {
+  if (Number(header) > 0) return Math.ceil(Number(header));
+  const d = String(text).match(/"retryDelay":\s*"(\d+(?:\.\d+)?)s"/);
+  if (d) return Math.ceil(Number(d[1]));
+  const m = String(text).match(/retry in (?:(\d+)h)?(?:(\d+)m(?!s))?(?:([\d.]+)s)?/i);
+  if (m && (m[1] || m[2] || m[3])) return Math.ceil((Number(m[1]) || 0) * 3600 + (Number(m[2]) || 0) * 60 + (Number(m[3]) || 0));
+  return 0;
+}
+
+/** True when a refusal means the day's allowance is used up, not that the model is busy for a moment. */
+export function isDailyLimit(text, seconds = 0) {
+  return /(per\s?day|per-day|daily|\bRPD\b|free-models-per-day)/i.test(String(text)) || seconds >= 30 * 60;
+}
+
+/** Forgets which models are resting or used up. For tests. */
+export function resetModelState() { resting.clear(); exhausted.clear(); lastCallAt = 0; }
 
 /** Every provider + model the app may use, in the order they are tried. */
 export function providers() {
@@ -33,7 +58,15 @@ export function providers() {
 
 export function modelStatus() {
   const now = Date.now();
-  return providers().map((p) => ({ name: p.name, model: p.model, restingMinutes: Math.max(0, Math.ceil(((resting.get(`${p.name}/${p.model}`) || 0) - now) / 60000)) }));
+  return providers().map((p) => {
+    const out = exhausted.get(keyOf(p)) || 0;
+    return {
+      name: p.name, model: p.model,
+      restingMinutes: Math.max(0, Math.ceil(((resting.get(keyOf(p)) || 0) - now) / 60000)),
+      // Set while the model's daily allowance is used up: when it says the allowance returns.
+      usedUpUntil: out > now ? out : null,
+    };
+  });
 }
 
 export const lastModel = () => ({ ...lastAnswered });
@@ -77,10 +110,10 @@ export async function callModel(p, system, user, { maxTokens = config.llm.maxOut
     throw new LlmError(`${p.model} did not answer in time (${e.name === 'TimeoutError' ? 'timed out' : e.message}).`, { status: 504, provider: p.name, model: p.model });
   }
   if (!res.ok) {
-    const retryAfter = Number(res.headers.get('retry-after')) || 0;
+    const retryAfter = res.status === 429 ? retrySeconds(text, res.headers.get('retry-after')) : Number(res.headers.get('retry-after')) || 0;
     let detail = text.slice(0, 300);
-    try { const j = JSON.parse(text); const e = (Array.isArray(j) ? j[0] : j)?.error; detail = [e?.message, e?.metadata?.raw].filter(Boolean).join(' — ').slice(0, 300) || detail; } catch { /* keep raw */ }
-    const daily = res.status === 429 && /(per day|per-day|daily|requests per day|RPD|free-models-per-day|quota exceeded for metric.*day)/i.test(text);
+    try { const j = JSON.parse(text); const e = (Array.isArray(j) ? j[0] : j)?.error; detail = [e?.message, e?.metadata?.raw].filter(Boolean).join(' — ').replace(/\s+/g, ' ').slice(0, 300) || detail; } catch { /* keep raw */ }
+    const daily = res.status === 429 && isDailyLimit(text, retryAfter);
     throw new LlmError(`${p.model} returned ${res.status}: ${detail}`, { status: res.status, provider: p.name, model: p.model, retryAfter, daily });
   }
   let json;
@@ -104,13 +137,15 @@ export async function complete(system, user) {
   if (usage().remaining <= 0) throw new LlmError(`Daily limit of ${config.llm.dailyLimit} AI requests reached. It resets at midnight Sydney time.`, { daily: true });
 
   const errors = [];
-  const dailyOut = new Set();
+  const badKey = new Set(); // providers that rejected the key
   for (let round = 0; round < 2; round++) {
     let tried = 0;
     for (const p of list) {
-      const key = `${p.name}/${p.model}`;
-      if (dailyOut.has(p.name)) continue;
-      // On the first round skip models that recently said they were busy; on the second, try everything.
+      const key = keyOf(p);
+      if (badKey.has(p.name)) continue;
+      // A model whose daily allowance is used up is not asked again until the allowance returns.
+      if ((exhausted.get(key) || 0) > Date.now()) continue;
+      // On the first round skip models that recently said they were busy; on the second, try them again.
       if (round === 0 && (resting.get(key) || 0) > Date.now()) continue;
       const wait = lastCallAt + config.llm.secondsBetween * 1000 - Date.now();
       if (wait > 0 && tried === 0) await pause(wait);
@@ -121,17 +156,33 @@ export async function complete(system, user) {
         const json = parseJsonReply(out.content);
         addUsage(sydneyDay(), p.name);
         resting.delete(key);
+        exhausted.delete(key);
         Object.assign(lastAnswered, { provider: p.name, model: p.model, at: Date.now() });
         return { ...out, json };
       } catch (e) {
         errors.push(e.message);
-        if (e.status === 401 || e.status === 403) { dailyOut.add(p.name); continue; } // bad key: skip this provider
-        if (e.daily) { dailyOut.add(p.name); continue; }
+        if (e.status === 401 || e.status === 403) { badKey.add(p.name); continue; }
+        if (e.daily) {
+          // The allowance is per model, so only this model is set aside. With no time given, look again in an hour.
+          const seconds = Math.min(26 * 3600, Math.max(10 * 60, e.retryAfter || 3600));
+          exhausted.set(key, Date.now() + seconds * 1000);
+          continue;
+        }
         if (isBusy(e.status) || !e.status) resting.set(key, Date.now() + config.llm.busyCooldownMinutes * 60000);
       }
     }
     if (round === 0) await pause(tried ? 8000 : 0);
   }
-  const allDaily = dailyOut.size && [...new Set(list.map((p) => p.name))].every((n) => dailyOut.has(n));
-  throw new LlmError('No AI model could answer. ' + [...new Set(errors)].slice(-3).join(' | '), { daily: !!allDaily });
+
+  const detail = [...new Set(errors)].slice(-4).join(' | ');
+  const usable = list.filter((p) => !badKey.has(p.name));
+  if (!usable.length) {
+    throw new LlmError(`The AI service rejected the key in the .env file (${[...badKey].join(' and ')}). ${detail}`, { status: 401, detail });
+  }
+  const now = Date.now();
+  if (usable.every((p) => (exhausted.get(keyOf(p)) || 0) > now)) {
+    const back = Math.min(...usable.map((p) => exhausted.get(keyOf(p))));
+    throw new LlmError(`Every free AI model has used up its allowance for today. Suggestions start again by themselves around ${formatSydney(back)}.`, { daily: true, detail });
+  }
+  throw new LlmError('No AI model could answer just now. The free models are busy or have used up their allowance for today. Wheelman tries again by itself in a few minutes.', { detail });
 }

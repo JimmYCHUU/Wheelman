@@ -13,6 +13,8 @@ const READ_ALLOWLIST = [
   /^\/core\/user\/api\/v1\/lead\/conversations$/,
   /^\/core\/user\/api\/v1\/lead\/conversations\/\d+\/messages$/,
   /^\/carbarnau\/api\/v1\/vehicles$/,
+  // What a customer asked us to find at auction (their requirements), one lead at a time.
+  /^\/carbarnau\/api\/v1\/sales\/auction$/,
   /^\/carbarnau\/auth\/v1\/api\/user\/validate-session$/,
 ];
 const SIGNIN = '/carbarnau/auth/v1/api/user/signin';
@@ -115,8 +117,16 @@ export async function get(pathname, params = {}) {
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function fetchLeadsPage(page, size = 50) {
-  return get('/core/user/api/v1/lead/paginated', { page, size, platform: config.dashboard.platform });
+/** One page of leads. `platform` picks the list: the usual one, or the import and auction enquiries. */
+export async function fetchLeadsPage(page, size = 50, platform = config.dashboard.platform) {
+  return get('/core/user/api/v1/lead/paginated', { page, size, platform });
+}
+
+/** The auction requests recorded for one lead: what they want us to find, and how far it has got. */
+export async function fetchAuctionOrders(leadId) {
+  if (!Number.isInteger(Number(leadId)) || Number(leadId) <= 0) return [];
+  const j = await get('/carbarnau/api/v1/sales/auction', { leadId: Number(leadId), page: 0, size: 20, sort: 'createdAt,desc' });
+  return Array.isArray(j?.content) ? j.content : [];
 }
 
 export async function fetchConversationsPage(page, size = 50) {
