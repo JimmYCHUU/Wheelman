@@ -275,7 +275,7 @@ function renderStatus() {
   else if (last) text = `${place} not reached`;
   else text = `${place} not checked yet`;
   box.append(`${text} · ${s.ai.usedToday} of ${s.ai.limit} AI requests used today`);
-  const models = s.ai.providers.map((p) => `${p.model}${p.restingMinutes ? ' (busy)' : ''}`).join('\n');
+  const models = s.ai.providers.map((p) => `${p.model}${p.usedUpUntil ? ` (today's free allowance used up, back about ${clock(p.usedUpUntil)})` : p.restingMinutes ? ' (busy)' : ''}`).join('\n');
   if (models) box.title = `AI models, tried in order:\n${models}`;
 
   // What Wheelman has learned from replies that were really used.
@@ -309,8 +309,8 @@ function renderNotices() {
   if (inMarketplace() && s.marketplace?.enabled && s.marketplace.lastSync && !s.marketplace.lastSync.ok) {
     box.append(notice('is-bad', 'alert', 'The Marketplace inbox could not be reached', h('p', { text: `${s.marketplace.lastSync.message} The Dashboard section is not affected.` })));
   }
-  if (s.lastDraftError) box.append(notice('is-bad', 'alert', 'The AI service returned an error', h('p', { text: s.lastDraftError.message })));
-  if (s.paused) box.append(notice('is-warn', 'info', 'Suggestions are paused', h('p', { text: 'Today\'s free AI allowance is used up. Suggestions resume by themselves.' })));
+  if (s.lastDraftError) box.append(notice('is-bad', 'alert', 'A suggestion could not be written', h('p', { text: s.lastDraftError.message })));
+  if (s.paused) box.append(notice('is-warn', 'info', 'Suggestions are paused', h('p', { text: 'Every free AI model has used up its allowance for today. Suggestions resume by themselves.' })));
 }
 
 // ---- conversation list ---------------------------------------------------------
@@ -580,8 +580,8 @@ function renderThread(item, els, { toBottom = false } = {}) {
 
 // ---- message box ---------------------------------------------------------------
 
-const BLANK = /\[(PRICE|TRADE-IN VALUE|DELIVERY COST|DATE|CHECK)\?\]/g;
-const BLANK_NAME = { PRICE: 'the price', 'TRADE-IN VALUE': 'the trade-in value', 'DELIVERY COST': 'the delivery cost', DATE: 'the date', CHECK: 'something to confirm' };
+const BLANK = /\[(PRICE|TRADE-IN VALUE|DELIVERY COST|DATE|CHECK|DEPOSIT LINK)\?\]/g;
+const BLANK_NAME = { PRICE: 'the price', 'TRADE-IN VALUE': 'the trade-in value', 'DELIVERY COST': 'the delivery cost', DATE: 'the date', CHECK: 'something to confirm', 'DEPOSIT LINK': 'the deposit link' };
 
 function blanksIn(text) {
   const found = [];
@@ -876,7 +876,18 @@ function renderInfo() {
           row('Asking about', item.situation)),
         item.noLead ? h('p', { class: 'fine', text: 'This number has no customer record in the dashboard.' }) : null),
       item.marketplace ? marketplaceInfo(item.marketplace, row) : null,
-      v ? h('section', {},
+      // An import or auction enquiry: what they asked us to find from Japan.
+      item.looking ? h('section', {},
+        h('h4', { text: 'Looking for, from Japan' }),
+        h('dl', {},
+          row('Car', item.looking.car),
+          row('Years', item.looking.years),
+          row('Odometer', item.looking.maxKm ? `under ${Number(item.looking.maxKm).toLocaleString('en-AU')} km` : ''),
+          row('Budget', item.looking.budget ? `about ${money(item.looking.budget)} landed` : ''),
+          row('Grade', item.looking.grade ? `${item.looking.grade} or better` : ''),
+          row('Auction request', item.looking.order)),
+        item.looking.missing ? h('p', { class: 'fine', text: `Not known yet: ${item.looking.missing}.` }) : null) : null,
+      item.looking && !v ? null : v ? h('section', {},
         h('h4', { text: 'Car' }),
         h('dl', {},
           row('Vehicle', v.title),

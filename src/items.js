@@ -2,7 +2,8 @@
 
 import { openDb, getLead, getLeadByConversation, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages } from './db.js';
 import { readInquiry, isSilentInquiry, isReaction, isAcknowledgement, isOptOut, menuReply, sameText, squash, resolveStock, stockFromUrl, findUrls, unwrapRelay } from './text.js';
-import { classify } from './situations.js';
+import { classify, labelFor } from './situations.js';
+import { importContext } from './imports.js';
 import { firstNameOf } from './redact.js';
 import { config } from './config.js';
 import { dealFor } from './deal.js';
@@ -76,10 +77,14 @@ export function buildTimeline(lead, conversationId, { now = Date.now() } = {}) {
   }
 
   const inbound = entries.filter((e) => e.who === 'customer');
+  const formsSeen = new Set();
   for (const inq of lead?.inquiries || []) {
     if (isSilentInquiry(inq)) continue;
     const { text, event } = readInquiry(inq);
     if (!text && !event) continue;
+    // The same website form sent twice is one enquiry.
+    if (event && formsSeen.has(`${event}|${text}`)) continue;
+    formsSeen.add(`${event}|${text}`);
     // Texts relayed by the portals also arrive as an SMS; keep only one copy. The copy that is
     // kept takes the enquiry's key, so the key is the same before and after the lead gains a
     // conversation, and a suggestion already written for the enquiry still belongs to it.
@@ -141,14 +146,17 @@ function findVehicles(lead, timeline, deal = null, pending = []) {
     return out;
   }
 
+  // An import or auction enquiry carries the name of a website page or an auction lot where a
+  // stock number would be. Only a link to one of our own cars counts for those leads.
+  const importLead = String(lead?.platform || '').toUpperCase() === config.dashboard.importsPlatform;
   const refs = [];
   const recent = timeline.slice(-10).reverse();
   for (const e of recent) {
     for (const u of findUrls(e.text)) { const s = stockFromUrl(u); if (s) refs.push(s); }
     if (e.url) { const s = stockFromUrl(e.url); if (s) refs.push(s); }
-    if (e.stockNo) refs.push(e.stockNo);
+    if (e.stockNo && !importLead) refs.push(e.stockNo);
   }
-  for (const s of [...(lead?.stocks || [])].reverse()) refs.push(s);
+  if (!importLead) for (const s of [...(lead?.stocks || [])].reverse()) refs.push(s);
 
   const out = [];
   const seen = new Set();
@@ -307,7 +315,7 @@ export function buildItem({ conversationId = null, leadId = null }) {
   const timeline = buildTimeline(lead, convId);
   if (!timeline.length) return null;
 
-  return finishItem({
+  const item = finishItem({
     itemKey: convId ? `c:${convId}` : `l:${lead.id}`,
     channel: 'sms',
     lead,
@@ -316,6 +324,16 @@ export function buildItem({ conversationId = null, leadId = null }) {
     conversationId: convId,
     phone: conversation?.phone || lead?.phone || '',
   }, timeline);
+
+  // An import or auction enquiry: what they asked us to find travels with the item.
+  item.imports = importContext(lead);
+  if (item.imports && !item.deal && !item.situation.all.includes('import_sourcing')) {
+    const rest = item.situation.all.filter((s) => s !== 'general');
+    item.situation.all = item.situation.primary === 'complaint' ? [...rest, 'import_sourcing'] : ['import_sourcing', ...rest];
+    item.situation.primary = item.situation.all[0];
+    item.situation.label = labelFor(item.situation.primary);
+  }
+  return item;
 }
 
 // ---- Marketplace chats -----------------------------------------------------------

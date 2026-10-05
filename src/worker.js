@@ -10,6 +10,7 @@ import { providers, usage, modelStatus, lastModel } from './llm.js';
 import { learnFrom, canLearnFrom, comparable, distilPending } from './learn.js';
 import { refreshVoiceBankIfStale } from './voicebank.js';
 import { similarity } from './text.js';
+import { logLine } from './log.js';
 
 export const state = {
   startedAt: Date.now(),
@@ -18,34 +19,48 @@ export const state = {
   lastSync: null,       // { at, ok, message, result }
   lastDraftError: null, // { at, message }
   pausedUntil: 0,       // set when the AI daily limit is hit
+  holdUntil: 0,         // set for a few minutes when every AI model was busy
   mpSyncing: false,
   mpSync: null,         // Marketplace: { at, ok, message, result }
 };
 
 const RETRY_FAILED_AFTER_MS = 10 * 60 * 1000;
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 3; // in any hour, for one customer message
+const HOLD_AFTER_BUSY_MS = 4 * 60 * 1000;
 
-function attemptsFor(itemKey, anchorKey) {
-  return openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key = ? AND anchor_key = ? AND status = 'failed'").get(itemKey, anchorKey).n;
+/** Failed tries for one customer message in the last hour. Older ones no longer count, so it is tried again later. */
+function attemptsFor(itemKey, anchorKey, now = Date.now()) {
+  return openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key = ? AND anchor_key = ? AND status = 'failed' AND created_at >= ?").get(itemKey, anchorKey, now - 60 * 60 * 1000).n;
 }
 
-export async function runSync() {
-  if (state.syncing) return state.lastSync;
+let dashboardCheck = null; // the check that is under way, if any
+
+/**
+ * Reads the dashboard. A second caller while a check is under way waits for that same check, so
+ * nothing is drafted from a half-read dashboard (which once let Marketplace chats go first).
+ */
+export function runSync() {
+  if (dashboardCheck) return dashboardCheck;
   if (!config.dashboard.baseUrl || !config.dashboard.username || !config.dashboard.password) {
     state.lastSync = { at: Date.now(), ok: false, message: 'Dashboard address or login is not filled in (.env file).' };
-    return state.lastSync;
+    return Promise.resolve(state.lastSync);
   }
   state.syncing = true;
-  try {
-    const result = await syncAll();
-    state.lastSync = { at: Date.now(), ok: true, message: `Checked the dashboard: ${result.conversationsUpdated} conversation(s) updated.`, result };
-  } catch (e) {
-    state.lastSync = { at: Date.now(), ok: false, message: e.message };
-  } finally {
-    state.syncing = false;
-    setMeta('last_sync_status', state.lastSync);
-  }
-  return state.lastSync;
+  dashboardCheck = (async () => {
+    try {
+      const result = await syncAll();
+      state.lastSync = { at: Date.now(), ok: true, message: `Checked the dashboard: ${result.conversationsUpdated} conversation(s) updated.`, result };
+    } catch (e) {
+      state.lastSync = { at: Date.now(), ok: false, message: e.message };
+      logLine('dashboard', e.message);
+    } finally {
+      state.syncing = false;
+      dashboardCheck = null;
+      setMeta('last_sync_status', state.lastSync);
+    }
+    return state.lastSync;
+  })();
+  return dashboardCheck;
 }
 
 /**
@@ -61,6 +76,7 @@ export async function runMarketplaceSync() {
     state.mpSync = { at: Date.now(), ok: true, message: `Checked Marketplace: ${result.chatsUpdated} chat(s) updated.`, result };
   } catch (e) {
     state.mpSync = { at: Date.now(), ok: false, message: e.message };
+    logLine('marketplace', e.message);
   } finally {
     state.mpSyncing = false;
     setMeta('mp_sync_status', state.mpSync);
@@ -119,7 +135,7 @@ export function updateOutcomes() {
 export async function draftWaiting({ max = 25 } = {}) {
   if (state.drafting) return 0;
   if (!providers().length) return 0;
-  if (Date.now() < state.pausedUntil) return 0;
+  if (Date.now() < state.pausedUntil || Date.now() < state.holdUntil) return 0;
   state.drafting = true;
   let made = 0;
   try {
@@ -146,8 +162,11 @@ export async function draftWaiting({ max = 25 } = {}) {
       if (usage().remaining <= 0) { state.pausedUntil = Date.now() + 30 * 60 * 1000; break; }
       const d = await draftFor(item);
       if (d.status === 'failed') {
-        state.lastDraftError = { at: Date.now(), message: d.error };
+        // Only a problem that needs somebody (a rejected key, a fault) is put on the page.
+        // Busy or used-up free models are tried again without bothering anyone.
+        state.lastDraftError = d.temporary ? null : { at: Date.now(), message: d.error };
         if (d.daily) { state.pausedUntil = Date.now() + 60 * 60 * 1000; break; }
+        if (d.temporary) { state.holdUntil = Date.now() + HOLD_AFTER_BUSY_MS; break; }
         if (/could not be reached|No AI key/i.test(d.error || '')) break;
       } else {
         state.lastDraftError = null;
@@ -163,7 +182,7 @@ export async function draftWaiting({ max = 25 } = {}) {
 
 export async function cycle() {
   await Promise.all([runSync(), runMarketplaceSync()]);
-  try { updateOutcomes(); } catch (e) { state.lastDraftError = { at: Date.now(), message: 'Comparing sent replies failed: ' + e.message }; }
+  try { updateOutcomes(); } catch (e) { state.lastDraftError = { at: Date.now(), message: 'Comparing sent replies failed: ' + e.message }; logLine('outcomes', `${e.message} | ${String(e.stack || '').split('\n').slice(1, 4).join(' ')}`); }
   // Once a day, relearn our salespeople's genuine replies from the latest dashboard conversations.
   try { refreshVoiceBankIfStale(); } catch { /* keep the existing bank */ }
   // A coaching note written while every AI model was busy still has its lesson to be worked out.

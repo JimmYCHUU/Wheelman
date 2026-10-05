@@ -17,7 +17,7 @@ import { similarity, wordCount, squash } from './text.js';
 import { complete } from './llm.js';
 import { SITUATIONS } from './situations.js';
 
-const BLANK = /\[(PRICE|TRADE-IN VALUE|DELIVERY COST|DATE|CHECK)\?\]/;
+const BLANK = /\[(PRICE|TRADE-IN VALUE|DELIVERY COST|DATE|CHECK|DEPOSIT LINK)\?\]/;
 
 /** Only dashboard conversations and leads teach Wheelman. */
 export const canLearnFrom = (itemKey) => /^[cl]:\d+$/.test(String(itemKey || ''));
