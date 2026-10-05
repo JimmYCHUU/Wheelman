@@ -97,6 +97,8 @@ export function readInquiry(inq) {
   if (!raw.trim()) {
     if (/finance application/i.test(type)) out.event = financeEvent(inq);
     if (/waitlist/i.test(type)) out.event = 'Customer joined the waitlist for a reserved vehicle.';
+    const empty = readImportForm('', inq);
+    if (empty) out.event = empty.event;
     return out;
   }
   if (SYSTEM_ONLY.some((re) => re.test(raw.trim()))) {
@@ -104,6 +106,10 @@ export function readInquiry(inq) {
     else if (/callback/i.test(raw)) out.event = 'Customer requested a call back through the website chat.';
     return out;
   }
+
+  // The website's import and auction forms: a list of fields, then the customer's own notes.
+  const form = readImportForm(raw, inq);
+  if (form) { out.event = form.event; out.text = form.notes; return out; }
 
   let m = raw.match(/test drive has been requested by the user for the scheduled time:\s*([^.]+?)\.\s/i);
   if (m) { out.event = `Customer booked a test drive through the website for ${m[1].trim()}.`; return out; }
@@ -152,6 +158,72 @@ export function readInquiry(inq) {
     out.event = 'Customer ticked "I have a vehicle to trade in" on the portal enquiry form.';
   }
   out.text = text;
+  return out;
+}
+
+const NOT_GIVEN = /^(not provided|not specified|n\/?a|none|any|-)?$/i;
+
+/**
+ * Reads an enquiry made through the website's importing or live-auction pages.
+ * Returns null for any other enquiry. Otherwise:
+ *   kind      'auction' (tell me when one comes up, or a bid request), 'import' (source one for me), 'compliance'
+ *   make, model, modelCode
+ *   grade, maxKm, ceilingAud   what the form's own boxes said, when filled in
+ *   viewing   the auction car they were looking at
+ *   notes     the customer's own words
+ *   event     one plain sentence describing the enquiry, for the conversation
+ */
+export function readImportForm(rawText, inq = {}) {
+  const raw = String(rawText || '').replace(/\r/g, '');
+  const type = String(inq?.type || '');
+  const kind = /compliance-only|compliance request/i.test(raw + type) ? 'compliance'
+    : /auction alert request|^auction$/i.test(raw.slice(0, 60) + '\n' + type) || /^auction$/i.test(type) ? 'auction'
+      : /request available vehicles lead|sourcing option selected|^import request$/i.test(raw.slice(0, 80) + '\n' + type) || /^import request$/i.test(type) ? 'import'
+        : '';
+  if (!kind) return null;
+
+  // The form arrives as plain lines, as one comma-separated sentence, or as HTML.
+  const plain = raw.replace(/<\s*br\s*\/?>|<\/?(li|ul|ol|p|div)\b[^>]*>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{2,}/g, '\n');
+  const field = (label) => {
+    const m = plain.match(new RegExp(`(?:^|[\\n,.]\\s*|:\\s)${label}:\\s*([^\\n,]+?)\\s*(?=$|\\n|,|\\.\\s|\\.$)`, 'im'));
+    const v = m ? m[1].trim() : '';
+    return NOT_GIVEN.test(v) ? '' : v;
+  };
+  const notesAt = plain.search(/additional notes:/i);
+  const notes = notesAt === -1 ? '' : plain.slice(notesAt).replace(/^additional notes:\s*/i, '').trim();
+  const head = notesAt === -1 ? plain : plain.slice(0, notesAt);
+  const inHead = (label) => { const m = head.match(new RegExp(`${label}:\\s*\\n?\\s*([^\\n]+)`, 'i')); return m && !NOT_GIVEN.test(m[1].trim()) ? m[1].trim() : ''; };
+
+  // The subject names the car too: "Sourcing enquiry for Audi R8 (4S)", "Auction alert for Subaru XV Hybrid".
+  const subject = String(inq?.subject || '').match(/\bfor\s+(.+?)(?:\s*\(([^)]+)\))?\s*$/i);
+  const make = field('Make');
+  const model = field('Model');
+  const modelCode = field('Model Code') || (subject?.[2] || '');
+  const car = [make, model].filter(Boolean).join(' ') || (subject?.[1] || '').trim();
+  const km = field('Max odometer').replace(/[^\d]/g, '');
+  const budget = field('Landed budget');
+  const cap = budget.match(/under\s*\$?\s*(\d+)\s*k/i) || budget.match(/\$?\s*\d+\s*k?\s*-\s*\$?\s*(\d+)\s*k/i);
+  const out = {
+    kind, make, model, modelCode, car,
+    grade: field('Grade'),
+    maxKm: km ? Number(km) : 0,
+    budgetText: budget,
+    ceilingAud: cap ? Number(cap[1]) * 1000 : 0,
+    viewing: field('While viewing lot'),
+    pathway: inHead('Selected Pathway') || field('Sourcing option selected'),
+    contact: field('Preferred contact') || inHead('Preferred Contact'),
+    notes,
+  };
+  const bits = [];
+  if (out.grade) bits.push(`Grade: ${out.grade}`);
+  if (out.maxKm) bits.push(`Maximum odometer: ${out.maxKm.toLocaleString('en-AU')} km`);
+  if (out.budgetText) bits.push(`Landed budget: ${out.budgetText.toLowerCase()}`);
+  if (out.viewing) bits.push(`They were looking at this auction car: ${out.viewing}`);
+  if (out.pathway) bits.push(`Service chosen: ${out.pathway}`);
+  const what = `${car || 'a vehicle'}${modelCode && !car.includes(modelCode) ? ` (model code ${modelCode})` : ''}`;
+  out.event = (kind === 'auction' ? `Asked on the website's live auction pages to be told when a ${what} comes up at auction in Japan.`
+    : kind === 'import' ? `Import enquiry through the website: asked us to source a ${what} from Japan.`
+      : `Compliance-only enquiry through the website for a ${what}.`) + (bits.length ? ` ${bits.join('. ')}.` : '');
   return out;
 }
 

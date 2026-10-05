@@ -14,6 +14,7 @@ import * as worker from './worker.js';
 import { onCopied, onRated, onApproved, onAdvice } from './learn.js';
 import { displayNameFor } from './people.js';
 import { reservedByAnother } from './deal.js';
+import { wantedFrom } from './imports.js';
 import { learnedStats } from './db.js';
 
 const TYPES = { '.woff2': 'font/woff2', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
@@ -98,7 +99,24 @@ function summary(item) {
     unread: item.state === 'awaiting' && !isSeen(item.itemKey, item.anchorKey) ? item.pending.length : 0,
     preview: { who: lastShown.who, text: lastShown.text || lastShown.event || (lastShown.media ? 'Photo' : ''), media: lastShown.media || null },
     flag: flagLevel(draft),
-    car: item.vehicles[0]?.title || item.marketplace?.listingTitle || '',
+    car: item.vehicles[0]?.title || item.marketplace?.listingTitle || (item.imports ? wantedFrom(item).car : ''),
+  };
+}
+
+/** What an import customer asked us to find, for the details panel. No figure of ours, only theirs. */
+function lookingFor(item) {
+  if (!item.imports) return null;
+  const w = wantedFrom(item);
+  if (!w.car) return null;
+  const o = item.imports.order;
+  return {
+    car: w.car + (w.modelCode ? ` (${w.modelCode})` : ''),
+    years: w.yearFrom && w.yearTo && w.yearFrom !== w.yearTo ? `${w.yearFrom} to ${w.yearTo}` : w.yearFrom ? `${w.yearFrom}${w.yearTo === w.yearFrom ? '' : ' or newer'}` : '',
+    maxKm: w.maxKm || 0,
+    budget: w.budgetAud || 0,
+    grade: w.minGrade || 0,
+    order: o ? `${o.orderNo}${o.lotPhase ? `, ${o.lotPhase.replace(/_/g, ' ').toLowerCase()}` : ''}${o.depositState && o.depositState !== 'NONE' ? `, deposit ${o.depositState.toLowerCase()}` : ''}` : '',
+    missing: w.given.length < 4 ? w.missing.map((m) => m.replace(/^your |^any | you have$/g, '').replace(/ you have$/, '')).join(', ') : '',
   };
 }
 
@@ -142,6 +160,7 @@ function present(item) {
     autoDraft: item.autoDraft,
     autoReason: item.autoReason,
     firstReply: item.isFirstReply,
+    looking: lookingFor(item),
     vehicle: v ? { title: v.title, stockNo: v.stockNo, price: v.price, odometer: v.odometer, availability: shownAvailability(item, v), url: v.url, year: v.year, fuel: v.fuel, transmission: v.transmission, seats: v.seats, colour: v.color, included: v.outline || [] } : null,
     thread: shown.map((e) => ({
       key: e.key, who: e.who, internal: !!e.internal, text: e.text || '', event: e.event || '', media: e.media || null,

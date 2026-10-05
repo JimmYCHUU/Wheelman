@@ -140,6 +140,15 @@ CREATE TABLE IF NOT EXISTS sales (
   phone_hash TEXT, email_hash TEXT,
   updated_at INTEGER
 );
+-- What a customer asked us to find at auction: the car, the years, their budget and their own
+-- notes, and how far the request has got. No name, address, licence or payment detail is kept.
+CREATE TABLE IF NOT EXISTS auction_orders (
+  lead_id INTEGER PRIMARY KEY,
+  order_no TEXT, stage TEXT, lot_phase TEXT, source TEXT,
+  lot_id TEXT, deposit_state TEXT,
+  wanted_json TEXT,
+  created_at INTEGER, checked_at INTEGER
+);
 CREATE INDEX IF NOT EXISTS sales_phone ON sales(phone_hash);
 CREATE INDEX IF NOT EXISTS sales_email ON sales(email_hash);
 `;
@@ -259,6 +268,38 @@ export function matchHash(value) {
     if (!salt) { salt = crypto.randomBytes(16).toString('hex'); setMeta('match_salt', salt); }
   }
   return crypto.createHash('sha256').update(`${salt}:${v}`).digest('hex').slice(0, 32);
+}
+
+/** Stores the digest from normalizeAuctionOrder, or only notes that the lead was checked when it has none. */
+export function upsertAuctionOrder(leadId, o, now = Date.now()) {
+  if (!o) {
+    openDb().prepare('INSERT INTO auction_orders(lead_id, checked_at) VALUES(?, ?) ON CONFLICT(lead_id) DO UPDATE SET checked_at = excluded.checked_at').run(leadId, now);
+    return;
+  }
+  openDb().prepare(`
+    INSERT INTO auction_orders(lead_id, order_no, stage, lot_phase, source, lot_id, deposit_state, wanted_json, created_at, checked_at)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(lead_id) DO UPDATE SET
+      order_no = excluded.order_no, stage = excluded.stage, lot_phase = excluded.lot_phase, source = excluded.source,
+      lot_id = excluded.lot_id, deposit_state = excluded.deposit_state, wanted_json = excluded.wanted_json,
+      created_at = excluded.created_at, checked_at = excluded.checked_at
+  `).run(leadId, o.orderNo, o.stage, o.lotPhase, o.source, o.lotId, o.depositState, JSON.stringify(o.wanted || {}), o.createdAt ?? null, now);
+}
+
+/** The auction request recorded for a lead, or null. */
+export function getAuctionOrder(leadId) {
+  if (!leadId) return null;
+  const r = openDb().prepare('SELECT * FROM auction_orders WHERE lead_id = ?').get(leadId);
+  if (!r || !r.order_no) return null;
+  return { leadId: r.lead_id, orderNo: r.order_no, stage: r.stage || '', lotPhase: r.lot_phase || '', source: r.source || '', lotId: r.lot_id || '', depositState: r.deposit_state || '', wanted: JSON.parse(r.wanted_json || '{}'), createdAt: r.created_at };
+}
+
+/** Import and auction leads active since `since` whose auction request has not been looked at since `staleBefore`. */
+export function importLeadsToCheck(platform, since, staleBefore) {
+  return openDb().prepare(`
+    SELECT l.id FROM leads l LEFT JOIN auction_orders a ON a.lead_id = l.id
+    WHERE l.platform = ? AND (l.lead_at >= ? OR l.updated_at >= ?) AND (a.checked_at IS NULL OR a.checked_at < ?)
+    ORDER BY l.updated_at DESC LIMIT 12`).all(platform, since, since, staleBefore).map((r) => r.id);
 }
 
 /** Stores the digest from normalizeSale. The buyer's phone and email are scrambled here. */

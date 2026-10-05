@@ -1,10 +1,12 @@
 // Produces one suggested reply for one waiting customer.
 
 import { buildPrompt, writtenToday } from './prompt.js';
-import { complete } from './llm.js';
+import { complete, LlmError } from './llm.js';
+import { logLine } from './log.js';
 import { finishReply, fixGreeting, checkDraft, retryNote, stripModelSignOff, worst, chatStyle, dropGreeting } from './checks.js';
 import { config } from './config.js';
-import { redact } from './redact.js';
+import { redact, restore } from './redact.js';
+import { planImport, auctionNote } from './imports.js';
 import { insertDraft } from './db.js';
 import { sydneyHour } from './time.js';
 import { standardBlock, repeatsBlock, tidyOpening } from './firstreply.js';
@@ -145,24 +147,52 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
     const chat = item.channel === 'marketplace';
     // The greeting and "Regards, Team Carbarn" go on the first reply to a customer each day, not on every message.
     const again = !chat && writtenToday(item, now);
-    const prompt = buildPrompt(item, { instruction, coaching, holdOutConversation, now });
     // The owner's figures, links and promises count as staff-given, whichever box they were typed in.
     const staffSaid = [instruction, coaching?.note].filter(Boolean).join('\n');
+
+    // An import or auction enquiry: what to ask, or which auction car to offer, is worked out first.
+    let plan = null;
+    if (!chat && item.imports) {
+      try { plan = await planImport(item, { instruction: staffSaid, now }); }
+      catch (e) {
+        logLine('auction', `${item.itemKey}: ${e.message}`);
+        plan = { stage: 'unread', tail: '', lines: ['The live auction could not be read just now. Do not name or describe any auction car, and give no price. Say we are looking into it and will come back to them shortly.'] };
+      }
+    }
+    context.importStage = plan?.stage || null;
+
+    // Nothing of the customer's own to answer: the first reply is the standard wording, no AI needed.
+    if (plan?.stage === 'ask' && plan.ready) {
+      const reply = [restore(plan.ready, item.lead), plan.tail].filter(Boolean).join('\n\n');
+      const d = { ...base, status: 'ready', reply, needsHuman: [], factsUsed: [], nextStep: 'asked what they are looking for', checks: [{ level: 'ok', code: 'ok', message: 'Standard wording for a new import enquiry.', tokens: [] }], provider: 'none', model: 'standard wording', exampleIds: [] };
+      if (save) d.id = insertDraft(d);
+      return d;
+    }
+
+    const prompt = buildPrompt(item, { instruction, coaching, importPlan: plan, holdOutConversation, now });
     const allowed = allowedMaterial(item, prompt);
+    // The auction car, its link and its figures are ours to state: they came from the live auction.
+    if (plan?.stage === 'offer') allowed.trusted += `\n${plan.tail}\n${plan.lines.join('\n')}`;
     const said = saidIn(item);
 
     const assess = (json) => {
       // A brand-new enquiry gets the team's standard block in place of the sign-off. A holding
       // reply (a complaint, say) does not.
       const { vehicleUrl, inspectionUrl } = prompt.standard;
-      const block = prompt.standard.on && !json.hold ? standardBlock({ vehicleUrl, inspectionUrl }) : '';
+      const offer = plan?.stage === 'offer';
+      // An import reply has its own lines underneath: the whole offer, or the short contact block.
+      const block = plan ? (json.hold ? '' : plan.tail || '') : prompt.standard.on && !json.hold ? standardBlock({ vehicleUrl, inspectionUrl }) : '';
       let text = String(json.reply || '').replace(/\\n/g, '\n');
       if (block) text = tidyOpening(text, vehicleUrl, inspectionUrl);
+      // An offer opens the way the team writes it: the greeting, a blank line, then one short paragraph.
+      if (offer) text = text.trim().replace(/^([^\n]{1,40},)\n+/, (m, hi) => `${hi}\n\n`).replace(/([^\n])\n(?!\n)/g, (m, c) => `${c} `);
       let body = fixGreeting(stripModelSignOff(text), sydneyHour(now));
       if (chat) body = chatStyle(body);
-      else if (again) body = dropGreeting(body);
-      // Marketplace suggestions carry no sign-off: it is a chat, not a text message.
-      const reply = finishReply(text, item.lead, { now, signOff: chat || again ? '' : block || config.signOff, chat, greeting: !again });
+      else if (again && !offer) body = dropGreeting(body);
+      // Marketplace suggestions carry no sign-off: it is a chat, not a text message. An import
+      // reply keeps its closing lines even when we have already written today.
+      const signOff = chat ? '' : plan && block ? block : again ? '' : block || config.signOff;
+      const reply = finishReply(text, item.lead, { now, signOff, chat, greeting: offer || !again });
       let checks = checkDraft({
         channel: item.channel,
         reply, body,
@@ -172,7 +202,16 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
         examples: prompt.exampleReplies, inConversation: !item.isFirstReply,
         said, now,
       });
-      const repeat = block ? blockCheck(body, vehicleUrl, inspectionUrl, { askedWhere: item.situation.all.includes('location_hours') }) : null;
+      const repeat = offer
+        ? (/[$¥]\s?\d|https?:\/\//.test(body) ? { level: 'fail', code: 'block-repeat', tokens: [], message: 'The opening states a figure or a link. The block below it gives the car, the bid, the costs and the link: write only the greeting and why the car may suit.' } : null)
+        : block ? blockCheck(body, vehicleUrl, inspectionUrl, { askedWhere: !plan && item.situation.all.includes('location_hours') }) : null;
+      if (offer) {
+        checks = [...checks.filter((c) => c.level !== 'ok'),
+          { level: 'input', code: 'marker', tokens: ['[DEPOSIT LINK?]'], message: 'Paste the deposit link before sending.' },
+          ...(plan.estimate.needsReview ? [{ level: 'input', code: 'auction-review', tokens: [], message: 'The cost calculator marks this car for a manual check (tax or import limits). Confirm the figures before sending.' }] : []),
+          { level: 'warn', code: 'auction', tokens: [], message: auctionNote(plan) }];
+      }
+      if (plan?.stage === 'unread') checks = [...checks.filter((c) => c.level !== 'ok'), { level: 'warn', code: 'auction', tokens: [], message: 'The live auction could not be read, so no car was looked for. Use Rewrite to try again.' }];
       // "Your inspection is booked" is only true once somebody has booked it.
       const booked = !chat && /\binspection\b[^.!?\n]{0,60}\b(is|has been|have been|'s)\s+(now\s+)?booked\b|\bbooked\b[^.!?\n]{0,40}\binspection\b/i.test(body)
         && !item.timeline.some((e) => /booked (an inspection|a test drive)/i.test(e.event || ''));
@@ -193,14 +232,23 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
     };
     const failures = (checks) => checks.filter((c) => c.level === 'fail').length;
 
-    let result = await complete(prompt.system, prompt.user);
+    // An offer does not depend on the AI: its figures come from the auction. If no model can
+    // answer, or it will not keep figures out of its lines, the opening is the standard one.
+    const standardOpening = () => ({ json: { reply: plan.opening, needs_human: [], facts_used: [], hold: false }, provider: 'none', model: 'standard wording' });
+    const usable = (e) => plan?.stage === 'offer' && e instanceof LlmError && e.status !== 401 && e.status !== 403;
+    let result;
+    try { result = await complete(prompt.system, prompt.user); }
+    catch (e) { if (!usable(e)) throw e; logLine('suggestion', `${item.itemKey}: no AI model for the opening of an auction offer, standard opening used. ${e.detail || e.message}`); result = standardOpening(); }
     let best = assess(result.json);
 
     // One second attempt when a hard check fails.
-    if (worst(best.checks) === 'fail') {
-      const again = await complete(prompt.system, `${prompt.user}\n\n${retryNote(best.checks)}\n\nYour rejected draft was:\n${redact(best.body, item.lead)}`);
-      const second = assess(again.json);
-      if (failures(second.checks) < failures(best.checks)) { result = again; best = second; }
+    if (worst(best.checks) === 'fail' && result.provider !== 'none') {
+      try {
+        const again = await complete(prompt.system, `${prompt.user}\n\n${retryNote(best.checks)}\n\nYour rejected draft was:\n${redact(best.body, item.lead)}`);
+        const second = assess(again.json);
+        if (failures(second.checks) < failures(best.checks)) { result = again; best = second; }
+      } catch (e) { if (!usable(e)) throw e; }
+      if (plan?.stage === 'offer' && worst(best.checks) === 'fail') { result = standardOpening(); best = assess(result.json); }
     }
 
     const draft = {
@@ -208,7 +256,10 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
       status: 'ready',
       reply: best.reply,
       needsHuman: Array.isArray(result.json.needs_human) ? result.json.needs_human : [],
-      factsUsed: Array.isArray(result.json.facts_used) ? result.json.facts_used.map(String).slice(0, 12) : [],
+      factsUsed: [
+        ...(plan?.stage === 'offer' ? [`Auction car ${plan.lot.id}: ${plan.lot.title}, ${plan.lot.km.toLocaleString('en-AU')} km, grade ${plan.lot.grade}`, `Carbarn's suggested bid ¥${plan.lot.benchmarkYen.toLocaleString('en-AU')}; bid used ¥${plan.bidYen.toLocaleString('en-AU')} (${plan.bidBy === 'suggested' ? 'rounded up' : plan.bidBy === 'staff' ? 'yours' : "the customer's"})`, `Estimated landed and complied $${plan.estimate.totalAud.toLocaleString('en-AU')} from the website's calculator`] : []),
+        ...(Array.isArray(result.json.facts_used) ? result.json.facts_used.map(String).slice(0, 12) : []),
+      ],
       nextStep: String(result.json.next_step || ''),
       checks: best.checks,
       provider: result.provider,
@@ -221,6 +272,9 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
     const d = { ...base, status: 'failed', reply: '', error: e.message, checks: [{ level: 'fail', code: 'error', message: e.message }] };
     if (save) d.id = insertDraft(d);
     d.daily = !!e.daily;
+    // Busy or used-up free models sort themselves out. A rejected key, or a fault in the app, does not.
+    d.temporary = e instanceof LlmError && e.status !== 401 && e.status !== 403 && !/No AI key/.test(e.message);
+    logLine('suggestion', `${item.itemKey} could not be written. ${e.message}${e.detail ? ` | ${e.detail}` : ''}${e instanceof LlmError ? '' : ` | ${String(e.stack || '').split('\n').slice(1, 4).join(' ')}`}`);
     return d;
   }
 }
