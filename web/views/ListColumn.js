@@ -12,16 +12,17 @@ import { EmptyState } from '../components/empty.js';
 import { Skeleton } from '../components/skeleton.js';
 import { SECTIONS, SECTION_IDS, TAB_STATE, ORDER_LIST } from '../sections/registry.js';
 import { newCount } from '../lib/counts.js';
+import { rowMatches } from '../lib/search.js';
 
-/** The rows a search leaves, from the list on screen (or, in Auction, from every list). */
+/**
+ * The rows a search leaves among those loaded (or, in Auction, among every order). The server
+ * searches every row and sends the matches; this keeps the list right while that answer is on its way.
+ */
 export function visibleRows(state) {
-  const q = state.q.trim().toLowerCase();
+  const q = state.q.trim();
   if (!q) return state.list;
-  const digits = q.replace(/\D/g, '');
   const rows = state.section === 'auction' && state.everything.length ? state.everything : state.list;
-  return rows.filter((r) =>
-    [r.name, r.preview?.text, r.car, r.situation, r.account, r.due, r.orderNo].some((f) => String(f || '').toLowerCase().includes(q))
-    || (digits.length >= 3 && String(r.phone || '').replace(/\D/g, '').includes(digits)));
+  return rows.filter((r) => rowMatches(r, q));
 }
 
 /** The one or two tags on a row, in the settled words, from what the server says about it. */
@@ -59,7 +60,7 @@ export function noticesFor(s, section) {
 }
 
 /**
- * mountListColumn(root, store, { open, showSection, setTab, setSearch })
+ * mountListColumn(root, store, { open, showSection, setTab, setSearch, loadMore })
  * Builds the column once and repaints each part when what it shows has changed.
  */
 export function mountListColumn(root, store, actions) {
@@ -118,7 +119,7 @@ export function mountListColumn(root, store, actions) {
   });
 
   // The rows. Focus and the scroll position survive a repaint.
-  store.select((s) => ({ list: s.list, q: s.q, selected: s.selected, section: s.section, tab: s.tab, loading: s.listLoading, error: s.listError, tick: s.listTick }), () => {
+  store.select((s) => ({ list: s.list, q: s.q, selected: s.selected, section: s.section, tab: s.tab, loading: s.listLoading, error: s.listError, total: s.listTotal, more: s.listLoadingMore, tick: s.listTick }), () => {
     const focusedKey = document.activeElement?.closest?.('.row')?.dataset.key || null;
     const sec = SECTIONS[state.section];
     if (state.listError) { nav.replaceChildren(EmptyState({ title: t('list.notResponding.title'), body: t('list.notResponding.body') })); return; }
@@ -144,6 +145,13 @@ export function mountListColumn(root, store, actions) {
     });
     // One row is always reachable with the Tab key, even when the open conversation is not in the list.
     if (!els.some((el) => el.tabIndex === 0)) els[0].tabIndex = 0;
+    // Twenty at a time: the rest come with the button under the last row, twenty more per press.
+    const remaining = Math.max(0, state.listTotal - state.list.length);
+    if (remaining > 0) {
+      els.push(h('div', { class: 'list-more' },
+        h('button', { class: 'btn outline load-more', type: 'button', disabled: state.listLoadingMore || null, onclick: () => actions.loadMore() },
+          sec.more, h('span', { class: 'count', text: t('list.more', { n: remaining }) }))));
+    }
     nav.replaceChildren(...els);
     if (focusedKey) { const again = nav.querySelector(`.row[data-key="${CSS.escape(focusedKey)}"]`); if (again) { again.tabIndex = 0; again.focus({ preventScroll: true }); } }
   });

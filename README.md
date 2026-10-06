@@ -1127,7 +1127,9 @@ customer signed in a text (shown only; never given to the AI). A conversation op
 twenty messages, with "Load older messages" at the top for the rest. Photos in texts are shown
 in the bubble, fetched once from the address the dashboard holds and kept under `data/media`.
 Senders on the ignore list (`IGNORED_SENDERS`) are never listed, and the "Not customers" list is
-gone with them.
+gone with them. The list itself comes twenty conversations at a time, with "Load older
+conversations" under the last row; the search looks through every conversation. Only a text from
+the last fortnight counts as new for the blue numbers.
 
 ### Open questions for Carbarn
 
