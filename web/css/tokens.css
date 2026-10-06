@@ -1,0 +1,202 @@
+/* Wheelman design tokens. Every colour, size, space, corner, shadow and duration the page uses is
+   named here and nowhere else: the other stylesheets only ever say var(--something). The check in
+   scripts/check-css-budget.js keeps it that way.
+
+   Density: a working tool. 15px text, 36px controls, 64px list rows, 56px bars, 8px between
+   bubble runs and 2px within one, 16px column gutters. Light or dark follows the computer's own
+   setting; the two themes share every name below. */
+
+@layer tokens, base, components, views, utilities;
+
+@layer tokens {
+  :root {
+    /* ---- colour: Carbarn's palette. Blue wordmark, navy text, pale blue surfaces, white ground. */
+    --brand: #0073ea;
+    --panel: #f2f6fb;
+    --side: #ffffff;
+    --side-hover: #f3f8fe;
+    --side-on: #e6f1fe;
+    --thread: #edf3fa;
+    --bubble-in: #ffffff;
+    --bubble-out: #d7eaff;
+    --bubble-sys: #fff3cf;
+    --pill: #ffffff;
+    --sheet: #ffffff;
+    --line: #e1e8f0;
+    --line-strong: #c5d1de;
+
+    --text: #061d33;
+    --muted: #3b5068;
+    --faint: #54687d;
+    --on-out: #061d33;
+    --on-sys: #55431a;
+
+    --accent: #0473ea;
+    --accent-press: #035fc4;
+    --accent-ink: #ffffff;
+    --accent-soft: #deeeff;
+    --accent-text: #0459b8;
+
+    --red: #a8261d;
+    --red-soft: #fde9e6;
+    --amber: #6d4a00;
+    --amber-soft: #ffeaa6;
+    --blue: #0c3a66;
+    --blue-soft: #e3effc;
+
+    /* Roles that differ between the themes beyond the palette. */
+    --bubble-out-meta: var(--accent-text);  /* the sender line on our own bubbles */
+    --segment-on-bg: var(--side);           /* the chosen section in the switch */
+    --segment-on-shadow: var(--shadow-1);
+    --toast-bg: #061d33;
+    --toast-ink: #f2f7fc;
+    --avatar-ink: #ffffff;
+    --avatar-default: #5a6f85;
+    --avatar-0: #0c3a66;
+    --avatar-1: #2a6f97;
+    --avatar-2: #5b4b8a;
+    --avatar-3: #1f7a6d;
+    --avatar-4: #9b4a3c;
+    --avatar-5: #3f5a73;
+    --avatar-6: #8a4f7d;
+    --avatar-7: #8f5a14;
+
+    /* ---- elevation: two shadows, and the scrim behind a drawer or dialog. Chips and buttons have none. */
+    --shadow-1: 0 1px 1px rgba(6, 29, 51, .10);
+    --shadow-2: 0 2px 6px rgba(6, 29, 51, .10), 0 8px 24px rgba(6, 29, 51, .10);
+    --scrim: rgba(6, 29, 51, .40);
+
+    /* ---- type: one ramp. Weight does the work, not size. */
+    --sans: "Manrope", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, sans-serif;
+    --wordmark: "Montserrat", "Manrope", "Segoe UI", system-ui, sans-serif;
+    --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+
+    --fs-caption: 0.75rem;     /* 12px: times, badge numerals, word counts */
+    --fs-label: 0.8125rem;     /* 13px: status, tags, car strip, notices, pills, sender lines, details rows */
+    --fs-ui: 0.875rem;         /* 14px: buttons, chips, previews, menus, toasts */
+    --fs-body: 0.9375rem;      /* 15px: bubbles, the editor, row names */
+    --fs-title: 1.0625rem;     /* 17px: the open conversation's name, panel titles */
+    --fs-headline: 1.375rem;   /* 22px: the welcome headline, the details name */
+    --fs-wordmark: 1.3125rem;  /* the wordmark only */
+
+    --lh-tight: 1.2;
+    --lh-body: 1.45;
+    --lh-edit: 1.5;
+
+    --fw-regular: 400;
+    --fw-medium: 500;
+    --fw-semibold: 650;
+    --fw-bold: 700;
+    --fw-black: 800;
+
+    /* ---- space: a 4/8 grid. */
+    --sp-05: 0.125rem;   /* 2px */
+    --sp-1: 0.25rem;     /* 4px */
+    --sp-2: 0.5rem;      /* 8px */
+    --sp-3: 0.75rem;     /* 12px */
+    --sp-4: 1rem;        /* 16px */
+    --sp-5: 1.25rem;     /* 20px */
+    --sp-6: 1.5rem;      /* 24px */
+    --sp-8: 2rem;        /* 32px */
+    --sp-10: 2.5rem;     /* 40px */
+
+    /* ---- corners. Pill controls are pills whatever their height. */
+    --r-xs: 0.25rem;
+    --r-sm: 0.5rem;
+    --r-md: 0.75rem;
+    --r-lg: 1rem;
+    --r-pill: 999px;
+    --r-full: 50%;
+
+    /* ---- sizes of things. */
+    --ctl-sm: 1.75rem;      /* 28px: chips, small buttons */
+    --ctl-md: 2.25rem;      /* 36px: buttons, inputs, the search field, segments */
+    --ctl-lg: 2.5rem;       /* 40px: icon buttons, the jump-to-latest button */
+    --bar-h: 3.5rem;        /* 56px: the conversation and details headers */
+    --row-h: 4rem;          /* 64px: a list row */
+    --avatar-sm: 2.5rem;
+    --avatar-md: 3rem;
+    --avatar-lg: 5rem;
+    --icon: 1.25rem;
+    --icon-sm: 1rem;
+    --icon-xs: 0.875rem;
+    --dot: 0.5rem;
+    --col-list-min: 20rem;
+    --col-list-max: 25rem;
+    --col-details: 22.5rem;
+    --measure-bubble: 36rem;
+    --measure-pill: 34rem;
+    --measure-prose: 28rem;
+    --measure-welcome: 26rem;
+    --editor-min: 4.5rem;
+    --editor-max: 38dvh;
+    --paste-max: 30dvh;
+    --thread-gutter: clamp(0.75rem, 6%, 4.5rem);  /* the side margins of the thread */
+
+    /* ---- stacking. */
+    --z-float: 10;
+    --z-drawer: 30;
+    --z-dialog: 35;
+    --z-toast: 40;
+
+    /* ---- motion. */
+    --dur-press: 120ms;
+    --dur-fast: 160ms;
+    --dur-base: 220ms;
+    --dur-drawer: 260ms;
+    --ease-out: cubic-bezier(.23, 1, .32, 1);
+    --ease-drawer: cubic-bezier(.32, .72, 0, 1);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --brand: #3d9bff;
+      --panel: #0b2640;
+      --side: #061d33;
+      --side-hover: #0b2640;
+      --side-on: #103252;
+      --thread: #041627;
+      --bubble-in: #12304d;
+      --bubble-out: #0c4a86;
+      --bubble-sys: #2c2a1c;
+      --pill: #0f2b47;
+      --sheet: #12304d;
+      --line: #153655;
+      --line-strong: #2a4d70;
+
+      --text: #e8f0f8;
+      --muted: #b1c3d6;
+      --faint: #94a9bf;
+      --on-out: #eef6ff;
+      --on-sys: #e6d9a4;
+
+      --accent: #3d9bff;
+      --accent-press: #2f86e3;
+      --accent-ink: #04162a;
+      --accent-soft: #0f3559;
+      --accent-text: #8cc4ff;
+
+      --red: #ff9f95;
+      --red-soft: #43211d;
+      --amber: #ffd977;
+      --amber-soft: #4a3a0c;
+      --blue: #a9d0ff;
+      --blue-soft: #123457;
+
+      --bubble-out-meta: #b9dcff;
+      --segment-on-bg: var(--side-on);
+      --segment-on-shadow: none;
+      --toast-bg: #e8f0f8;
+      --toast-ink: #061d33;
+
+      --shadow-1: 0 1px 1px rgba(0, 0, 0, .35);
+      --shadow-2: 0 2px 6px rgba(0, 0, 0, .35), 0 10px 28px rgba(0, 0, 0, .4);
+      --scrim: rgba(0, 0, 0, .55);
+    }
+  }
+
+  /* Less motion: every duration goes to nothing; the few looping animations stop. */
+  @media (prefers-reduced-motion: reduce) {
+    :root { --dur-press: 0ms; --dur-fast: 0ms; --dur-base: 0ms; --dur-drawer: 0ms; }
+  }
+}

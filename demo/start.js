@@ -41,7 +41,12 @@ applyTestEnv({
 });
 
 // 2. A fresh demo folder: no run can inherit anything.
-fs.rmSync(demoDir, { recursive: true, force: true });
+try {
+  fs.rmSync(demoDir, { recursive: true, force: true });
+} catch (e) {
+  console.error(`The demo folder could not be cleared (${e.code || e.message}). Is another demo still running? Close it and try again.`);
+  process.exit(2);
+}
 fs.mkdirSync(demoDir, { recursive: true });
 
 const { world } = await import('../test/support/fixtures.js');

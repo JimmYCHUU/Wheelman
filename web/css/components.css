@@ -1,0 +1,346 @@
+/* The pieces: buttons, chips, tags, badges, avatars, notices, rows, bubbles, pills, the editor
+   sheet, the toast. Each one once, each one on the token scales. The views compose these. */
+
+@layer components {
+  /* ---- buttons ------------------------------------------------------------- */
+
+  .icon-btn {
+    width: var(--ctl-lg); height: var(--ctl-lg); border: 0; border-radius: var(--r-full);
+    display: grid; place-items: center;
+    background: transparent; color: var(--muted);
+    transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur-fast) ease;
+  }
+  .icon-btn:active { transform: scale(.94); }
+  .icon-btn:disabled { opacity: .5; cursor: default; }
+  .icon-btn.is-busy svg.icon { animation: spin .7s linear infinite; }
+
+  .btn {
+    height: var(--ctl-md); padding: 0 var(--sp-4); border-radius: var(--r-pill); border: 1px solid transparent;
+    display: inline-flex; align-items: center; gap: var(--sp-2);
+    font-size: var(--fs-ui); font-weight: var(--fw-semibold); white-space: nowrap;
+    background: transparent; color: var(--muted);
+    transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur-fast) ease, color var(--dur-fast) ease, border-color var(--dur-fast) ease;
+  }
+  .btn svg.icon { width: var(--icon-sm); height: var(--icon-sm); }
+  .btn:active { transform: scale(.97); }
+  .btn:disabled { opacity: .55; cursor: default; transform: none; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); padding: 0 var(--sp-5); }
+  .btn.primary.wait { background: var(--sheet); color: var(--text); border-color: var(--line-strong); }
+  .btn.outline { border-color: var(--line-strong); color: var(--text); }
+  .btn.is-on { background: var(--accent-soft); color: var(--accent-text); }
+
+  .link-btn { border: 0; background: transparent; padding: 0; color: var(--accent-text); font-weight: var(--fw-semibold); text-decoration: underline; text-underline-offset: 3px; }
+
+  /* A blank's chip above the editor: pressing it selects the blank in the text. */
+  .blank-btn {
+    border: 1px solid color-mix(in srgb, currentColor 40%, transparent); border-radius: var(--r-xs);
+    background: var(--sheet); color: inherit;
+    padding: var(--sp-05) var(--sp-2); font-size: var(--fs-label); font-weight: var(--fw-semibold);
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+  .blank-btn:active { transform: scale(.96); }
+
+  /* ---- chips, tags and badges ---------------------------------------------- */
+
+  .filter {
+    height: var(--ctl-sm); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-pill);
+    background: var(--panel); color: var(--muted);
+    font-size: var(--fs-ui); font-weight: var(--fw-medium); white-space: nowrap;
+    transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+  }
+  .filter:active { transform: scale(.97); }
+  .filter.is-on { background: var(--accent-soft); color: var(--accent-text); font-weight: var(--fw-semibold); }
+  .filter .n:not(:empty) { margin-left: var(--sp-1); font-weight: var(--fw-semibold); }
+
+  /* The one small tag: "Dismissed", "Phone only", "In progress", in front of a preview. */
+  .row-tag {
+    display: inline-block; margin-right: var(--sp-2); padding: 0 var(--sp-2); border-radius: var(--r-xs);
+    background: var(--panel); color: var(--muted);
+    font-size: var(--fs-caption); font-weight: var(--fw-semibold); line-height: var(--lh-edit);
+  }
+  .row-flag { font-weight: var(--fw-semibold); }
+  .row-flag.fail { color: var(--red); }
+  .row-flag.input { color: var(--amber); }
+
+  .badge {
+    flex: none; min-width: var(--icon); height: var(--icon); padding: 0 var(--sp-2); border-radius: var(--r-pill);
+    display: inline-grid; place-items: center;
+    background: var(--accent); color: var(--accent-ink);
+    font-size: var(--fs-caption); font-weight: var(--fw-bold); line-height: 1;
+  }
+
+  .dot { width: var(--dot); height: var(--dot); border-radius: var(--r-full); background: var(--faint); flex: none; }
+  .dot.ok { background: var(--accent); }
+  .dot.bad { background: var(--red); }
+  .dot.busy { background: var(--amber); animation: breathe 1.4s ease-in-out infinite; }
+
+  /* ---- avatar ---------------------------------------------------------------- */
+
+  .avatar {
+    width: var(--avatar-md); height: var(--avatar-md); border-radius: var(--r-full);
+    display: grid; place-items: center; flex: none;
+    font-weight: var(--fw-semibold); font-size: calc(var(--avatar-md) * .36); letter-spacing: 0.01em;
+    color: var(--avatar-ink); background: var(--avatar-default);
+  }
+  .avatar svg.icon { width: var(--sp-6); height: var(--sp-6); }
+  .avatar.h0 { background: var(--avatar-0); }
+  .avatar.h1 { background: var(--avatar-1); }
+  .avatar.h2 { background: var(--avatar-2); }
+  .avatar.h3 { background: var(--avatar-3); }
+  .avatar.h4 { background: var(--avatar-4); }
+  .avatar.h5 { background: var(--avatar-5); }
+  .avatar.h6 { background: var(--avatar-6); }
+  .avatar.h7 { background: var(--avatar-7); }
+  .avatar.small { width: var(--avatar-sm); height: var(--avatar-sm); font-size: calc(var(--avatar-sm) * .36); }
+
+  /* ---- notices ----------------------------------------------------------------- */
+
+  .notices { flex: none; display: grid; gap: 1px; max-height: 40%; overflow-y: auto; }
+  .notices:empty { display: none; }
+  .notice {
+    display: grid; grid-template-columns: var(--icon) 1fr; gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--amber-soft); color: var(--amber);
+    font-size: var(--fs-label); line-height: var(--lh-body);
+  }
+  .notice.is-warn { background: var(--amber-soft); color: var(--amber); }
+  .notice.is-bad { background: var(--red-soft); color: var(--red); }
+  .notice strong { display: block; font-weight: var(--fw-semibold); }
+  .notice code { font-family: var(--mono); font-size: var(--fs-caption); }
+  .notice ul { margin-top: var(--sp-1); display: grid; gap: var(--sp-05); }
+  .notice p { margin-top: var(--sp-05); }
+
+  /* ---- the demo ribbon ------------------------------------------------------- */
+
+  .demo-ribbon {
+    margin: var(--sp-1) var(--sp-4) var(--sp-2); padding: var(--sp-1) var(--sp-3); border-radius: var(--r-xs);
+    background: var(--amber-soft); color: var(--amber);
+    font-size: var(--fs-caption); font-weight: var(--fw-semibold); letter-spacing: 0.02em; text-align: center;
+  }
+
+  /* ---- fields ------------------------------------------------------------------ */
+
+  .search { position: relative; display: block; margin: var(--sp-3) var(--sp-3) var(--sp-2); }
+  .search-icon { position: absolute; left: var(--sp-3); top: 50%; translate: 0 -50%; color: var(--faint); pointer-events: none; }
+  .search-icon svg.icon { width: var(--icon-sm); height: var(--icon-sm); }
+  .search input {
+    width: 100%; height: var(--ctl-md); border: 1px solid transparent; border-radius: var(--r-pill);
+    padding: 0 var(--sp-4) 0 var(--sp-10);
+    background: var(--panel); caret-color: var(--accent);
+    transition: border-color var(--dur-fast) ease, background-color var(--dur-fast) ease;
+  }
+  .search input::placeholder { color: var(--faint); opacity: 1; }
+  .search input:focus-visible { outline: none; border-color: var(--accent); background: var(--side); }
+  .search input::-webkit-search-cancel-button { cursor: pointer; }
+
+  .pick {
+    min-width: 0; max-width: 100%; height: var(--ctl-md); padding: 0 var(--sp-3);
+    border: 1px solid var(--line-strong); border-radius: var(--r-pill);
+    background: var(--sheet); color: var(--text); font-weight: var(--fw-medium);
+  }
+  .pick:focus-visible { outline: none; border-color: var(--accent); }
+  .pick option { background: var(--sheet); color: var(--text); }
+
+  .rewrite input {
+    flex: 1; min-width: 0; height: var(--ctl-md); padding: 0 var(--sp-4);
+    border: 1px solid var(--line-strong); border-radius: var(--r-pill);
+    background: var(--sheet); caret-color: var(--accent);
+  }
+  .rewrite input::placeholder { color: var(--faint); opacity: 1; }
+  .rewrite input:focus-visible { outline: none; border-color: var(--accent); }
+
+  /* ---- list rows ------------------------------------------------------------------ */
+
+  .row {
+    position: relative;
+    width: 100%; min-height: var(--row-h); border: 0; background: transparent; text-align: left;
+    display: grid; grid-template-columns: var(--avatar-md) minmax(0, 1fr); gap: var(--sp-3); align-items: center;
+    padding: var(--sp-2) var(--sp-4) var(--sp-2) var(--sp-3);
+  }
+  .row::after {
+    content: ""; position: absolute; left: calc(var(--sp-3) + var(--avatar-md) + var(--sp-3)); right: 0; bottom: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .row[aria-current="true"] { background: var(--side-on); }
+  .row:focus-visible { outline-offset: -2px; }
+  .row-main { min-width: 0; display: grid; gap: var(--sp-05); }
+  .row-top, .row-bottom { display: flex; align-items: baseline; gap: var(--sp-2); min-width: 0; }
+  .row-name { flex: 1; min-width: 0; font-size: var(--fs-body); font-weight: var(--fw-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-time { flex: none; font-size: var(--fs-caption); color: var(--faint); }
+  .row.has-unanswered .row-time { color: var(--accent-text); font-weight: var(--fw-semibold); }
+  .row.has-unanswered .row-name { font-weight: var(--fw-semibold); }
+  .row-bottom { align-items: center; }
+  .row-car { min-width: 0; font-size: var(--fs-label); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-preview { flex: 1; min-width: 0; color: var(--faint); font-size: var(--fs-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-preview .you { color: var(--muted); }
+
+  .list-empty { padding: var(--sp-10) var(--sp-6); text-align: center; color: var(--faint); font-size: var(--fs-ui); }
+  .list-empty strong { display: block; color: var(--text); font-size: var(--fs-title); font-weight: var(--fw-semibold); margin-bottom: var(--sp-1); }
+
+  /* ---- the thread: pills and bubbles --------------------------------------------- */
+
+  .pill {
+    align-self: center; max-width: min(var(--measure-pill), 85%);
+    margin: var(--sp-3) 0 var(--sp-2);
+    padding: var(--sp-1) var(--sp-3); border-radius: var(--r-sm);
+    background: var(--pill); color: var(--muted); box-shadow: var(--shadow-1);
+    font-size: var(--fs-label); text-align: center; line-height: var(--lh-body);
+  }
+  .pill.event { background: var(--bubble-sys); color: var(--on-sys); }
+  .pill.note { background: transparent; box-shadow: none; color: var(--muted); margin: var(--sp-1) 0; }
+  .pill.unanswered { background: var(--accent-soft); color: var(--accent-text); font-weight: var(--fw-semibold); box-shadow: none; }
+  .pill .when { opacity: .85; margin-left: var(--sp-2); white-space: nowrap; }
+
+  .msg {
+    position: relative;
+    max-width: min(var(--measure-bubble), 72%);
+    padding: var(--sp-1) var(--sp-2) var(--sp-2);
+    border-radius: var(--r-sm);
+    box-shadow: var(--shadow-1);
+    white-space: pre-wrap; overflow-wrap: anywhere;
+    font-size: var(--fs-body); line-height: var(--lh-body);
+  }
+  .msg.in { align-self: flex-start; background: var(--bubble-in); }
+  .msg.out { align-self: flex-end; background: var(--bubble-out); color: var(--on-out); }
+  .msg.first { margin-top: var(--sp-2); }
+  .msg.in.first { border-top-left-radius: 0; }
+  .msg.out.first { border-top-right-radius: 0; }
+  /* a text the phone add-on saw and the dashboard does not have */
+  .msg.phone { outline: 1px dashed color-mix(in srgb, currentColor 45%, transparent); outline-offset: -1px; }
+  .msg.first::before {
+    content: ""; position: absolute; top: 0; width: 0; height: 0;
+    border-style: solid; border-width: 0 var(--sp-2) var(--sp-3) 0;
+  }
+  .msg.in.first::before { left: calc(-1 * var(--sp-2)); border-color: transparent var(--bubble-in) transparent transparent; }
+  .msg.out.first::before { right: calc(-1 * var(--sp-2)); border-width: var(--sp-3) var(--sp-2) 0 0; border-color: var(--bubble-out) transparent transparent transparent; }
+  .msg .from { display: block; font-size: var(--fs-label); font-weight: var(--fw-semibold); line-height: var(--lh-tight); margin-bottom: var(--sp-05); }
+  .msg.in .from { color: var(--muted); }
+  .msg.out .from { color: var(--bubble-out-meta); }
+  .msg .media { display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--muted); font-style: italic; }
+  .msg.out .media { color: inherit; opacity: .85; }
+  .msg .media svg.icon { width: var(--icon-sm); height: var(--icon-sm); }
+  .msg .time {
+    float: right; margin: var(--sp-2) 0 calc(-1 * var(--sp-05)) var(--sp-3);
+    font-size: var(--fs-caption); line-height: 1; color: var(--faint); white-space: nowrap;
+  }
+  .msg.out .time { color: inherit; opacity: .7; }
+  .msg a { color: inherit; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); }
+  .msg .unpaste {
+    margin-left: var(--sp-2); padding: 0; border: 0; background: transparent;
+    color: inherit; opacity: .7; font-size: var(--fs-caption); font-weight: var(--fw-semibold);
+    text-decoration: underline; text-underline-offset: 2px;
+  }
+  .msg .unpaste:hover, .msg .unpaste:focus-visible { opacity: 1; }
+
+  /* ---- the editor sheet ------------------------------------------------------------ */
+
+  /* The message box is an editor: it has an outline at rest, so it reads as something to type in. */
+  .sheet {
+    background: var(--sheet); border-radius: var(--r-md); box-shadow: var(--shadow-1);
+    border: 1px solid var(--line-strong);
+    transition: border-color var(--dur-fast) ease;
+  }
+  .sheet:focus-within { border-color: var(--accent); }
+  .field { position: relative; }
+  .backdrop, .draft {
+    display: block; width: 100%;
+    margin: 0; border: 0;
+    padding: var(--sp-3) var(--sp-4) var(--sp-2);
+    font: inherit; font-size: var(--fs-body); line-height: var(--lh-edit); letter-spacing: normal;
+    white-space: pre-wrap; overflow-wrap: break-word; word-break: normal;
+    overflow-y: hidden;
+    tab-size: 4;
+  }
+  .field.is-scrolling .backdrop, .field.is-scrolling .draft { overflow-y: scroll; }
+  .backdrop {
+    position: absolute; inset: 0; z-index: 0;
+    color: transparent; pointer-events: none; user-select: none;
+    scrollbar-color: transparent transparent;
+  }
+  .backdrop mark { color: transparent; border-radius: var(--r-xs); }
+  .backdrop mark.blank { background: var(--amber-soft); box-shadow: 0 0 0 1px color-mix(in srgb, var(--amber) 35%, transparent); }
+  .backdrop mark.bad { background: var(--red-soft); box-shadow: 0 1px 0 0 var(--red); }
+  .draft {
+    position: relative; z-index: 1;
+    min-height: var(--editor-min); max-height: var(--editor-max); resize: none;
+    background: transparent; color: var(--text); caret-color: var(--accent); cursor: text;
+  }
+  .draft::placeholder { color: var(--faint); opacity: 1; }
+  .draft:focus-visible { outline: none; }
+  .draft.arriving { animation: arrive var(--dur-base) var(--ease-out); }
+  .sheet-foot {
+    display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-1);
+    padding: var(--sp-1) var(--sp-2) var(--sp-2) var(--sp-2);
+  }
+  .sheet-foot .grow { flex: 1; }
+  .count { margin-right: var(--sp-2); font-size: var(--fs-caption); color: var(--faint); white-space: nowrap; }
+
+  /* The lines above the editor: what the checks found, in the tone of what they found. */
+  .advice { display: grid; gap: var(--sp-1); }
+  .advice:empty { display: none; }
+  .tip {
+    display: flex; align-items: flex-start; gap: var(--sp-2); flex-wrap: wrap;
+    padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm);
+    font-size: var(--fs-label); line-height: var(--lh-body);
+  }
+  .tip svg.icon { width: var(--icon-sm); height: var(--icon-sm); margin-top: var(--sp-05); }
+  .tip-text { flex: 1; min-width: 12rem; }
+  .tip.fail { background: var(--red-soft); color: var(--red); font-weight: var(--fw-medium); }
+  .tip.blank { background: var(--amber-soft); color: var(--amber); font-weight: var(--fw-medium); align-items: center; }
+  .tip.blank svg.icon { margin-top: 0; }
+  .tip.input { background: var(--blue-soft); color: var(--blue); }
+  .tip.warn { background: transparent; color: var(--faint); padding-block: 0; }
+  .tip.ok { background: transparent; color: var(--accent-text); padding: 0 var(--sp-05); font-weight: var(--fw-medium); }
+  .tip-why { flex-basis: 100%; font-weight: var(--fw-medium); }
+
+  /* A quiet panel in place of the editor: nothing to write, opted out, dismissed, or a problem. */
+  .quiet {
+    display: flex; align-items: center; gap: var(--sp-3) var(--sp-4); flex-wrap: wrap;
+    background: var(--sheet); border-radius: var(--r-md); box-shadow: var(--shadow-1);
+    padding: var(--sp-3) var(--sp-4); color: var(--muted); font-size: var(--fs-ui);
+  }
+  .quiet p { flex: 1; min-width: 14rem; }
+  .quiet.bad p { color: var(--red); }
+
+  /* While a suggestion is being written: three shimmering lines. */
+  .writing { display: grid; gap: var(--sp-2); padding: var(--sp-4); }
+  .writing i {
+    display: block; height: var(--sp-3); border-radius: var(--r-xs);
+    background: linear-gradient(90deg, var(--line) 0%, var(--line-strong) 50%, var(--line) 100%) 0 0 / 200% 100%;
+    animation: shimmer 1.2s linear infinite;
+  }
+  .writing i:nth-child(1) { width: 38%; }
+  .writing i:nth-child(2) { width: 92%; }
+  .writing i:nth-child(3) { width: 64%; }
+
+  /* ---- the toast ----------------------------------------------------------------- */
+
+  .toast {
+    position: fixed; left: 50%; top: var(--sp-4); z-index: var(--z-toast);
+    translate: -50% calc(-1 * var(--sp-3)); opacity: 0; pointer-events: none;
+    background: var(--toast-bg); color: var(--toast-ink);
+    padding: var(--sp-3) var(--sp-4); border-radius: var(--r-pill); box-shadow: var(--shadow-2);
+    font-size: var(--fs-ui); font-weight: var(--fw-semibold); max-width: min(var(--measure-prose), 90vw); text-align: center;
+    transition: opacity var(--dur-fast) var(--ease-out), translate var(--dur-fast) var(--ease-out);
+  }
+  .toast.is-on { opacity: 1; translate: -50% 0; }
+  .toast.is-on.has-action { pointer-events: auto; }
+  .toast-btn {
+    margin-left: var(--sp-3); padding: var(--sp-05) var(--sp-1); border: 0; border-radius: var(--r-xs);
+    background: transparent; color: inherit; font: inherit; font-weight: var(--fw-black);
+    text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+  }
+
+  /* ---- hover, only where there is a real pointer ---------------------------------- */
+
+  @media (hover: hover) and (pointer: fine) {
+    .row:hover { background: var(--side-hover); }
+    .row[aria-current="true"]:hover { background: var(--side-on); }
+    .icon-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); }
+    .filter:hover:not(.is-on) { background: var(--side-on); color: var(--text); }
+    .btn:hover:not(:disabled):not(.primary) { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
+    .btn.primary:hover:not(:disabled):not(.wait) { background: var(--accent-press); }
+    .btn.primary.wait:hover:not(:disabled) { background: var(--side-hover); }
+    .blank-btn:hover { background: var(--side-hover); }
+  }
+}

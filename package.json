@@ -18,6 +18,7 @@
     "report": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/report.js",
     "demo": "node --disable-warning=ExperimentalWarning demo/start.js",
     "check-private": "node --disable-warning=ExperimentalWarning scripts/check-private.js",
+    "check-css": "node scripts/check-css-budget.js",
     "test": "node --disable-warning=ExperimentalWarning --test \"test/*.test.js\""
   }
 }
