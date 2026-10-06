@@ -49,11 +49,15 @@ test('every conversation is listed, newest first, and an old thread with a new m
   const window = await get('/api/items?section=dashboard&tab=waiting&hours=72');
   assert.deepEqual([keysOf(window), window.hours], [['c:12'], 72], 'a window is still there for whoever asks for one');
 
+  const old = all.items.find((r) => r.key === 'c:11');
+  assert.deepEqual([old.unread, all.unread.dashboard], [0, 1], 'a month-old unanswered text is listed, not flagged as new');
+
   // The old thread gets a new message.
   msg(11, 'IN', 'Any update?', now - 10 * MIN);
   conv(11, 1, '+61491570101', 'Priya Raman', now - 10 * MIN);
   const again = await get('/api/items?section=dashboard&tab=waiting');
   assert.deepEqual(keysOf(again), ['c:11', 'c:12'], 'it comes to the top');
+  assert.ok(again.items[0].unread >= 1, 'and is new again');
 });
 
 test('a number without a record of its own takes the name the dashboard knows for it from an earlier enquiry', async () => {
@@ -119,4 +123,30 @@ test('the signature reader: what counts as a signed name and what does not', () 
   assert.equal(signedName(thread(['Thanks, Liam', 'Thanks, Sarah'])), '', 'two names: none');
   assert.equal(signedName([{ who: 'us', text: 'Hi, Alex here from the yard' }]), '', 'our own texts never name the customer');
   assert.equal(signedName([]), '');
+});
+
+test('the list comes twenty at a time, "Load older conversations" brings twenty more, and a search looks through every row', async () => {
+  const LASTS = ['Field', 'Stone', 'River', 'Hill', 'Wood', 'Lake', 'Marsh', 'Glen', 'Vale', 'Brook'];
+  for (let i = 21; i <= 50; i++) {
+    lead(i, i, 'Harper', LASTS[i % 10], `04915701${String(i).padStart(2, '0')}`);
+    conv(i, i, `+614915701${String(i).padStart(2, '0')}`, `Harper ${LASTS[i % 10]}`, now - i * HOUR);
+    msg(i, 'IN', i === 37 ? 'Do you have a Delica with a fridge?' : `Is the car ${i} still available?`, now - i * HOUR);
+  }
+  const first = await get('/api/items?section=dashboard&tab=waiting');
+  assert.equal(first.items.length, 20, 'twenty rows to start with');
+  assert.ok(first.total > 20, 'and the total says there are more');
+  const more = await get('/api/items?section=dashboard&tab=waiting&limit=40');
+  assert.equal(more.items.length, Math.min(40, more.total));
+  assert.deepEqual(more.items.slice(0, 20).map((r) => r.key), first.items.map((r) => r.key), 'the first twenty stay the same, newest first');
+  const everything = await get('/api/items?section=dashboard&tab=waiting&limit=1000');
+  assert.equal(everything.items.length, everything.total);
+
+  const byWord = await get('/api/items?section=dashboard&tab=waiting&q=fridge');
+  assert.deepEqual([byWord.total, byWord.items.map((r) => r.key)], [1, ['c:37']], 'a word from a message, wherever the row is');
+  const byDigits = await get('/api/items?section=dashboard&tab=waiting&q=' + encodeURIComponent('5701 45'));
+  assert.deepEqual(byDigits.items.map((r) => r.key), ['c:45'], 'digits of the number in any spacing');
+  const byName = await get('/api/items?section=dashboard&tab=waiting&q=harper');
+  assert.deepEqual([byName.total, byName.items.length], [30, 20], 'many matches still come twenty at a time');
+  const none = await get('/api/items?section=dashboard&tab=waiting&q=zzzz');
+  assert.deepEqual([none.total, none.items], [0, []]);
 });

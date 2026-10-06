@@ -39,6 +39,7 @@ export const COPY = {
 
   'thread.loadOlder': 'Load older messages',
   'thread.older': '{n} more',
+  'list.more': '{n} more',
 
   'row.you': 'You: ',
   'row.photo': 'Photo',

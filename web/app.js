@@ -45,6 +45,9 @@ const state = {
   listLoading: true,     // the first list of a section is on its way: grey shapes stand in for the rows
   listError: false,      // the last list request failed: Wheelman is not responding
   listTick: 0,           // bumped when rows were changed in place, so the list column repaints
+  listSize: 20,          // how many rows the list is showing: twenty, then twenty more per "Load older conversations"
+  listTotal: 0,          // how many rows the list on screen has in all (or, with a search, how many match)
+  listLoadingMore: false,
   older: null,           // { key, entries, earlierAt }: messages brought in with "Load older messages" for the open conversation
 };
 
@@ -1159,6 +1162,7 @@ async function dismissItem(item) {
     const i = rows.findIndex((r) => r.key === item.key);
     const next = rows[i + 1] || rows[i - 1] || null;
     state.list = state.list.filter((r) => r.key !== item.key);
+    state.listTotal = Math.max(0, state.listTotal - 1);
     state.counts.waiting = Math.max(0, state.counts.waiting - (item.state === 'awaiting' ? 1 : 0));
     if (item.state === 'awaiting' && state.sections[state.section]) state.sections[state.section] -= 1;
     repaint();
@@ -1241,9 +1245,11 @@ async function refreshStatus() {
 async function refreshList() {
   const seq = ++state.listSeq;
   try {
-    const data = await api(`/api/items?section=${state.section}&tab=${state.tab}`);
+    const q = state.q.trim();
+    const data = await api(`/api/items?section=${state.section}&tab=${state.tab}&limit=${state.listSize}${q ? `&q=${encodeURIComponent(q)}` : ''}`);
     if (seq !== state.listSeq) return false; // a newer request has replaced this one
     state.list = data.items;
+    state.listTotal = data.total ?? data.items.length;
     state.everything = data.everything || [];
     state.counts = data.counts;
     if (data.sections) state.sections = data.sections;
@@ -1301,6 +1307,8 @@ async function showSection(section) {
   state.q = '';
   state.selected = null; state.detail = null; state.rewriteOpen = false; state.betterOpen = false; state.copied = null; state.message = ''; state.pasteOpen = false;
   state.list = [];
+  state.listSize = 20;
+  state.listTotal = 0;
   state.listLoading = true;
   state.listError = false;
   state.counts = { waiting: state.sections[section] || 0, quiet: 0, other: 0 };
@@ -1326,12 +1334,25 @@ async function syncNow(button) {
   finally { button.disabled = false; button.classList.remove('is-busy'); }
 }
 
+/** "Load older conversations": twenty more rows, kept through the refreshes until the list is left. */
+async function loadMore() {
+  if (state.listLoadingMore) return;
+  state.listSize += 20;
+  state.listLoadingMore = true;
+  repaint();
+  try { await refreshList(); } finally { state.listLoadingMore = false; repaint(); }
+}
+
+// The search box asks the server for the matches among every row, a moment after the typing stops.
+let searchTimer = null;
+
 mountTopBar($('#topbar'), store, { sync: syncNow });
 mountListColumn($('#side'), store, {
   open,
   showSection,
-  setTab: async (tab) => { if (state.tab === tab) return; state.tab = tab; repaint(); await refreshList(); },
-  setSearch: (q) => { state.q = q; repaint(); },
+  setTab: async (tab) => { if (state.tab === tab) return; state.tab = tab; state.listSize = 20; repaint(); await refreshList(); },
+  setSearch: (q) => { state.q = q; state.listSize = 20; repaint(); clearTimeout(searchTimer); searchTimer = setTimeout(refreshList, 250); },
+  loadMore,
 });
 
 document.addEventListener('keydown', (e) => {

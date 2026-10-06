@@ -171,6 +171,10 @@
   .row-preview { flex: 1; min-width: 0; color: var(--faint); font-size: var(--fs-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row-preview .you { color: var(--muted); }
 
+  /* Under the last row: "Load older conversations", with how many are left beside it. */
+  .list-more { display: flex; justify-content: center; padding: var(--sp-3) var(--sp-4) var(--sp-4); }
+  .list-more .count { color: var(--faint); font-weight: var(--fw-medium); }
+
   .list-empty { padding: var(--sp-10) var(--sp-6); text-align: center; color: var(--faint); font-size: var(--fs-ui); }
   .list-empty strong { display: block; color: var(--text); font-size: var(--fs-title); font-weight: var(--fw-semibold); margin-bottom: var(--sp-1); }
 

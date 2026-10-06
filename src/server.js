@@ -12,6 +12,7 @@ import { draftFor } from './drafter.js';
 import { availability } from './normalize.js';
 import { firstNameOf, isPlaceholderName } from './redact.js';
 import { signedName } from './signature.js';
+import { rowMatches } from '../web/lib/search.js';
 import { oldRowsStamp, messageMedia } from './db.js';
 import { logLine } from './log.js';
 import { businessFactsForPrompt, loadBusinessFacts } from './knowledge.js';
@@ -85,6 +86,7 @@ function displayName(item) {
 // The newest messages a conversation opens with; "Load older messages" brings the rest, this many at a time.
 const THREAD_LIMIT = 20;
 const LIST_LIMIT = 1000;
+const LIST_PAGE = 20; // rows the list opens with; "Load older conversations" adds this many each time
 
 function draftOf(item) {
   const draft = latestDraft(item.itemKey, item.anchorKey);
@@ -129,8 +131,9 @@ function summary(item) {
     waitingSince: item.lastInboundAt,
     lastAt: lastShown.at,
     unanswered: item.state === 'awaiting' ? item.pending.length : 0,
-    // The number badge: messages that arrived since the user last opened this conversation.
-    unread: item.state === 'awaiting' && !isSeen(item.itemKey, item.anchorKey) ? item.pending.length : 0,
+    // The number badge: messages that arrived since the user last opened this conversation. Only
+    // recent ones count as new; an unanswered text from months ago is listed, not flagged.
+    unread: item.state === 'awaiting' && !isSeen(item.itemKey, item.anchorKey) && (item.lastInboundAt || 0) >= Date.now() - RECENT_HOURS * 3600e3 ? item.pending.length : 0,
     preview: { who: lastShown.who, text: lastShown.text || lastShown.event || (lastShown.media ? 'Photo' : ''), media: lastShown.media || null },
     flag: flagLevel(draft),
     car: item.vehicles[0]?.title || item.marketplace?.listingTitle || (item.imports ? wantedFrom(item).car : ''),
@@ -406,7 +409,12 @@ async function api(req, res, url) {
     // Auction orders are few, and one can be on any of the three lists: all of them are sent, so
     // a search finds an order wherever it is.
     const everything = section === 'auction' ? [...here.waiting, ...here.quiet, ...here.other] : undefined;
-    return send(res, 200, { items: here[tab], everything, counts: { waiting: here.waiting.length, quiet: here.quiet.length, other: here.other.length }, sections, unread, section, hours: Number.isFinite(hours) ? hours : null });
+    // Twenty rows at a time (the page asks for more with "Load older conversations"); a search
+    // looks through every row of the list, or every order, and sends the matches.
+    const limit = Math.max(1, Math.min(LIST_LIMIT, Number(url.searchParams.get('limit')) || LIST_PAGE));
+    const q = String(url.searchParams.get('q') || '').trim().slice(0, 200);
+    const rows = q ? (everything || here[tab]).filter((r) => rowMatches(r, q)) : here[tab];
+    return send(res, 200, { items: rows.slice(0, limit), total: rows.length, everything, counts: { waiting: here.waiting.length, quiet: here.quiet.length, other: here.other.length }, sections, unread, section, hours: Number.isFinite(hours) ? hours : null, q });
   }
 
   if (req.method === 'POST' && p === '/api/sync') {
