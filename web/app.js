@@ -25,7 +25,6 @@ const state = {
   pasteOpen: false,      // Auction: the box for pasting what the customer wrote is open
   listSeq: 0,            // guards against a slow list response landing in the wrong section
   tab: 'waiting',
-  hours: 72,
   q: '',
   list: [],
   everything: [],        // Auction: the rows of all three lists, so a search finds an order wherever it is
@@ -1195,7 +1194,7 @@ async function refreshStatus() {
 async function refreshList() {
   const seq = ++state.listSeq;
   try {
-    const data = await api(`/api/items?section=${state.section}&tab=${state.tab}&hours=${state.hours}`);
+    const data = await api(`/api/items?section=${state.section}&tab=${state.tab}`);
     if (seq !== state.listSeq) return false; // a newer request has replaced this one
     state.list = data.items;
     state.everything = data.everything || [];
@@ -1284,7 +1283,6 @@ mountListColumn($('#side'), store, {
   showSection,
   setTab: async (tab) => { if (state.tab === tab) return; state.tab = tab; repaint(); await refreshList(); },
   setSearch: (q) => { state.q = q; repaint(); },
-  setHours: (hours) => { state.hours = hours; refreshList(); },
 });
 
 document.addEventListener('keydown', (e) => {

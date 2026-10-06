@@ -63,11 +63,6 @@ export const COPY = {
   'list.notResponding.body': 'Check that it is still running in its black window, then reload this page.',
   'list.loading': 'Loading conversations',
 
-  'footer.showing': 'Showing the',
-  'footer.hours.24': 'last 24 hours',
-  'footer.hours.72': 'last 3 days',
-  'footer.hours.168': 'last 7 days',
-  'footer.hours.336': 'last 14 days',
   'footer.orders': '{orders} read from the dashboard: {waiting} to do, {quiet} in progress, {other} finished.',
   'footer.orders.title': "Every order on the dashboard's auction page is read on each check. To do: a message is due, or the customer wrote. In progress: under way, nothing due. Finished: completed, cancelled or refunded (kept for 60 days). Search looks through all of them.",
 

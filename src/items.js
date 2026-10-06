@@ -1,13 +1,13 @@
 // Builds the list of "work items": customers who have said something and are waiting for a reply.
 
-import { openDb, getLead, getLeadByConversation, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor } from './db.js';
+import { openDb, getLead, getLeadByConversation, getLeadByPhone, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor } from './db.js';
 import { orderKey, orderMarks, orderStatus, orderRow, occasionFor, MESSAGES } from './orders.js';
 import { sameMessage, windowFor } from './phone.js';
 import { phoneKeys } from './normalize.js';
 import { readInquiry, isSilentInquiry, isReaction, isAcknowledgement, isOptOut, menuReply, sameText, squash, resolveStock, stockFromUrl, findUrls, unwrapRelay } from './text.js';
 import { classify, labelFor } from './situations.js';
 import { importContext } from './imports.js';
-import { firstNameOf } from './redact.js';
+import { firstNameOf, isPlaceholderName } from './redact.js';
 import { config } from './config.js';
 import { dealFor } from './deal.js';
 import { namesStaff } from './voice.js';
@@ -360,6 +360,17 @@ export function buildItem({ conversationId = null, leadId = null }) {
       stocks: [], inquiries: [], statusHistory: [], nameOnly: true,
     };
   }
+  // A number with no record of its own may be a customer the dashboard knows by name from an
+  // earlier enquiry: the name comes along, the earlier enquiry's cars and status do not.
+  if (!lead && conversation?.phone) {
+    const known = getLeadByPhone(conversation.phone, { isName: (s) => !isPlaceholderName(s) });
+    if (known) {
+      lead = {
+        id: null, first_name: known.first_name, last_name: known.last_name || '', phone: conversation.phone, email: known.email || '',
+        status: '', platform: '', source: '', state: '', stocks: [], inquiries: [], statusHistory: [], nameOnly: true,
+      };
+    }
+  }
 
   const timeline = buildTimeline(lead, convId);
   if (!timeline.length) return null;
@@ -591,10 +602,15 @@ export function itemFromKey(key, opts = {}) {
   return buildItem(m[1] === 'c' ? { conversationId: id } : { leadId: id });
 }
 
-/** Customers with recent activity, newest first. source: 'dashboard' or 'marketplace'. */
-export function listItems({ maxAgeHours = config.draftMaxAgeHours, states = ['awaiting'], limit = 200, source = 'dashboard' } = {}) {
+/**
+ * Customers, newest first. source: 'dashboard' or 'marketplace'. maxAgeHours limits the list to
+ * conversations with activity that recent; Infinity lists every conversation ever stored.
+ * olderThanHours leaves out the recent ones instead, so the two halves can be built and kept apart.
+ */
+export function listItems({ maxAgeHours = config.draftMaxAgeHours, olderThanHours = 0, states = ['awaiting'], limit = 200, source = 'dashboard' } = {}) {
   const db = openDb();
-  const cutoff = Date.now() - maxAgeHours * 60 * MIN;
+  const cutoff = Number.isFinite(maxAgeHours) ? Date.now() - maxAgeHours * 60 * MIN : 0;
+  const before = olderThanHours > 0 ? Date.now() - olderThanHours * 60 * MIN : Number.MAX_SAFE_INTEGER;
   const items = [];
   const keep = (item) => {
     if (!item) return;
@@ -605,23 +621,23 @@ export function listItems({ maxAgeHours = config.draftMaxAgeHours, states = ['aw
   const newest = (a, b) => (b.lastInboundAt || b.lastActivityAt) - (a.lastInboundAt || a.lastActivityAt);
 
   if (source === 'marketplace') {
-    for (const r of db.prepare('SELECT id FROM mp_conversations WHERE last_message_at >= ? ORDER BY last_message_at DESC').all(cutoff)) keep(buildMarketplaceItem(r.id));
+    for (const r of db.prepare('SELECT id FROM mp_conversations WHERE last_message_at >= ? AND last_message_at < ? ORDER BY last_message_at DESC').all(cutoff, before)) keep(buildMarketplaceItem(r.id));
     // Chats the engine has handed to a person come first.
     items.sort((a, b) => (Number(b.marketplace.needsPerson) - Number(a.marketplace.needsPerson)) || newest(a, b));
     return items.slice(0, limit);
   }
 
   const keys = new Map();
-  for (const c of db.prepare('SELECT id FROM conversations WHERE latest_at >= ? ORDER BY latest_at DESC').all(cutoff)) {
+  for (const c of db.prepare('SELECT id FROM conversations WHERE latest_at >= ? AND latest_at < ? ORDER BY latest_at DESC').all(cutoff, before)) {
     keys.set(`c:${c.id}`, { conversationId: c.id });
   }
-  for (const l of db.prepare('SELECT id, conversation_id FROM leads WHERE lead_at >= ? OR updated_at >= ? ORDER BY updated_at DESC').all(cutoff, cutoff)) {
+  for (const l of db.prepare('SELECT id, conversation_id FROM leads WHERE (lead_at >= ? OR updated_at >= ?) AND lead_at < ? AND updated_at < ? ORDER BY updated_at DESC').all(cutoff, cutoff, before, before)) {
     const key = l.conversation_id ? `c:${l.conversation_id}` : `l:${l.id}`;
     if (!keys.has(key)) keys.set(key, l.conversation_id ? { conversationId: l.conversation_id, leadId: l.id } : { leadId: l.id });
   }
   // Numbers seen on the phone that the dashboard has nothing for.
   if (config.phone.switchedOn) {
-    for (const t of listPhoneThreads({ cutoff })) if (!t.conversation_id && !t.lead_id) keys.set(`ph:${t.id}`, { phoneThreadId: t.id });
+    for (const t of listPhoneThreads({ cutoff })) if (!t.conversation_id && !t.lead_id && t.latest_at < before) keys.set(`ph:${t.id}`, { phoneThreadId: t.id });
   }
   for (const ref of keys.values()) keep(ref.phoneThreadId ? buildPhoneItem(ref.phoneThreadId) : buildItem(ref));
   items.sort(newest);

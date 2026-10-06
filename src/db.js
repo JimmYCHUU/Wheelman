@@ -215,6 +215,15 @@ function ensureColumn(d, table, column, type) {
 }
 
 let db = null;
+const statements = new Map();
+
+/** A prepared statement, kept for reuse: preparing them afresh was a quarter of the time a list build took. */
+function stmt(sql) {
+  const d = openDb();
+  let s = statements.get(sql);
+  if (!s) { s = d.prepare(sql); statements.set(sql, s); }
+  return s;
+}
 
 export function openDb(file = config.dbPath) {
   if (db) return db;
@@ -258,6 +267,7 @@ function migrate(d) {
 }
 
 export function closeDb() {
+  statements.clear();
   if (db) { db.close(); db = null; salt = null; }
 }
 
@@ -266,16 +276,36 @@ export function closeDb() {
  * once and reused until it moves, instead of being rebuilt on every refresh.
  */
 export function dataStamp() {
-  return openDb().prepare('SELECT total_changes() AS n').get().n;
+  return stmt('SELECT total_changes() AS n').get().n;
+}
+
+/**
+ * A stamp that moves only when something an older conversation's row depends on has changed: the
+ * conversations, leads and messages themselves, suggestions and their status, dismissals, read
+ * marks, phone threads, Marketplace chats. The sync rewriting every vehicle, the phone add-on's
+ * heartbeat and the autosave of an edit do not move it, so the rows older than a fortnight are
+ * not rebuilt for them.
+ */
+export function oldRowsStamp() {
+  return stmt(`SELECT
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(latest_at), 0) || ':' || IFNULL(SUM(lead_id), 0) FROM conversations) || '/' ||
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(updated_at), 0) FROM leads) || '/' ||
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(id), 0) FROM messages) || '/' ||
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(id), 0) || ':' || IFNULL(MAX(sent_at), 0) || ':' || IFNULL(SUM(LENGTH(status)), 0) FROM drafts) || '/' ||
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(rowid), 0) || ':' || IFNULL(MAX(at), 0) FROM dismissed) || '/' ||
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(at), 0) FROM seen) || '/' ||
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(changed_at), 0) || ':' || IFNULL(SUM(conversation_id), 0) FROM phone_threads) || '/' ||
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(last_message_at), 0) FROM mp_conversations) || '/' ||
+      (SELECT COUNT(*) FROM mp_messages) AS stamp`).get().stamp;
 }
 
 export function getMeta(key, fallback = null) {
-  const row = openDb().prepare('SELECT value FROM meta WHERE key = ?').get(key);
+  const row = stmt('SELECT value FROM meta WHERE key = ?').get(key);
   return row ? JSON.parse(row.value) : fallback;
 }
 
 export function setMeta(key, value) {
-  openDb().prepare('INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+  stmt('INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
     .run(key, JSON.stringify(value));
 }
 
@@ -295,7 +325,7 @@ export function transaction(fn) {
 // ---- upserts -------------------------------------------------------------
 
 export function upsertLead(l) {
-  openDb().prepare(`
+  stmt(`
     INSERT INTO leads(id, conversation_id, first_name, last_name, phone, email, source, status, platform, state, lead_at, updated_at, stocks_json, inquiries_json, status_history_json)
     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
@@ -309,7 +339,7 @@ export function upsertLead(l) {
 }
 
 export function upsertConversation(c) {
-  openDb().prepare(`
+  stmt(`
     INSERT INTO conversations(id, phone, channel, status, lead_id, customer_name, latest_direction, latest_at, latest_body, lead_platform, lead_status, lead_email)
     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
@@ -413,22 +443,22 @@ export function markOrdersGone(listedIds, now = Date.now()) {
 }
 
 export function getOrder(id) {
-  return parseOrder(openDb().prepare('SELECT * FROM auction_orders WHERE id = ?').get(Number(id)));
+  return parseOrder(stmt('SELECT * FROM auction_orders WHERE id = ?').get(Number(id)));
 }
 
 /** Every order still on the dashboard, newest first. Ended orders stay for 60 days. */
 export function listOrders({ now = Date.now() } = {}) {
-  return openDb().prepare('SELECT * FROM auction_orders WHERE gone_at IS NULL ORDER BY created_at DESC').all()
+  return stmt('SELECT * FROM auction_orders WHERE gone_at IS NULL ORDER BY created_at DESC').all()
     .map(parseOrder)
     .filter((o) => !o.closed || now - (o.marks[`stage:${o.closed}`] || o.cancelledAt || o.createdAt || 0) < 60 * DAY_MS);
 }
 
 export function orderNotes(orderId) {
-  return openDb().prepare('SELECT note_id, at, channel, body FROM order_notes WHERE order_id = ? ORDER BY at').all(Number(orderId));
+  return stmt('SELECT note_id, at, channel, body FROM order_notes WHERE order_id = ? ORDER BY at').all(Number(orderId));
 }
 
 export function setOrderWatch(id, watch, now = Date.now()) {
-  openDb().prepare('UPDATE auction_orders SET watch_json = ?, watched_at = ? WHERE id = ?').run(watch ? JSON.stringify(watch) : null, now, Number(id));
+  stmt('UPDATE auction_orders SET watch_json = ?, watched_at = ? WHERE id = ?').run(watch ? JSON.stringify(watch) : null, now, Number(id));
 }
 
 /**
@@ -448,24 +478,24 @@ export function getAuctionOrder(leadId, phone = '') {
 
 /** A message the owner pasted into an order. Returns its id. */
 export function addOrderMessage(orderId, direction, text, at = Date.now()) {
-  const info = openDb().prepare('INSERT INTO order_messages(order_id, direction, text, at) VALUES(?, ?, ?, ?)').run(Number(orderId), direction === 'out' ? 'out' : 'in', String(text), at);
+  const info = stmt('INSERT INTO order_messages(order_id, direction, text, at) VALUES(?, ?, ?, ?)').run(Number(orderId), direction === 'out' ? 'out' : 'in', String(text), at);
   return Number(info.lastInsertRowid);
 }
 
 /** Takes a wrong paste out of the order. It is kept, marked as removed. */
 export function removeOrderMessage(orderId, id, now = Date.now()) {
-  openDb().prepare('UPDATE order_messages SET removed_at = ? WHERE id = ? AND order_id = ?').run(now, Number(id), Number(orderId));
+  stmt('UPDATE order_messages SET removed_at = ? WHERE id = ? AND order_id = ?').run(now, Number(id), Number(orderId));
 }
 
 /** Undoes "copied" for one message of an auction order: it was not sent after all. */
 export function uncopy(itemKey, anchorKey) {
-  openDb().prepare("UPDATE drafts SET copied_at = NULL WHERE item_key = ? AND anchor_key = ? AND item_key LIKE 'ao:%'").run(itemKey, anchorKey);
+  stmt("UPDATE drafts SET copied_at = NULL WHERE item_key = ? AND anchor_key = ? AND item_key LIKE 'ao:%'").run(itemKey, anchorKey);
 }
 
 /** Phone number (last nine digits) to the newest lead with that number, for matching orders that name no lead. */
 export function leadsByPhone() {
   const out = new Map();
-  for (const r of openDb().prepare("SELECT id, phone, conversation_id FROM leads WHERE phone IS NOT NULL AND phone != '' ORDER BY updated_at").all()) {
+  for (const r of stmt("SELECT id, phone, conversation_id FROM leads WHERE phone IS NOT NULL AND phone != '' ORDER BY updated_at").all()) {
     for (const part of String(r.phone).split(/[|,/]/)) {
       const k = part.replace(/\D/g, '').slice(-9);
       if (k.length === 9) out.set(k, { leadId: r.id, conversationId: r.conversation_id ?? null });
@@ -477,13 +507,13 @@ export function leadsByPhone() {
 /** The SMS conversation with a phone number (last nine digits), if the dashboard has one. */
 export function conversationForPhone(key) {
   if (String(key || '').length !== 9) return null;
-  const r = openDb().prepare('SELECT id FROM conversations WHERE phone LIKE ? ORDER BY latest_at DESC LIMIT 1').get(`%${key}`);
+  const r = stmt('SELECT id FROM conversations WHERE phone LIKE ? ORDER BY latest_at DESC LIMIT 1').get(`%${key}`);
   return r ? r.id : null;
 }
 
 /** Stores the digest from normalizeSale. The buyer's phone and email are scrambled here. */
 export function upsertSale(s) {
-  openDb().prepare(`
+  stmt(`
     INSERT INTO sales(vehicle_id, sale_id, stock_no, stage, sold_at, paid, phone_hash, email_hash, updated_at)
     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(vehicle_id) DO UPDATE SET
@@ -494,7 +524,7 @@ export function upsertSale(s) {
 }
 
 export function deleteSale(vehicleId) {
-  openDb().prepare('DELETE FROM sales WHERE vehicle_id = ?').run(vehicleId);
+  stmt('DELETE FROM sales WHERE vehicle_id = ?').run(vehicleId);
 }
 
 /** Sales whose buyer matches any of these phone keys or emails, newest first. */
@@ -513,11 +543,11 @@ export function salesFor({ phones = [], emails = [] } = {}) {
 }
 
 export function saleForVehicle(vehicleId) {
-  return openDb().prepare('SELECT * FROM sales WHERE vehicle_id = ?').get(vehicleId) || null;
+  return stmt('SELECT * FROM sales WHERE vehicle_id = ?').get(vehicleId) || null;
 }
 
 export function getVehicleById(id) {
-  const r = openDb().prepare('SELECT data_json FROM vehicles WHERE id = ?').get(id);
+  const r = stmt('SELECT data_json FROM vehicles WHERE id = ?').get(id);
   return r ? JSON.parse(r.data_json) : null;
 }
 
@@ -546,7 +576,7 @@ export function rekeyLeadItems() {
 }
 
 export function upsertMessage(m) {
-  openDb().prepare(`
+  stmt(`
     INSERT INTO messages(id, conversation_id, direction, body, sent_by, status, media_type, at, imported_at)
     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
@@ -556,7 +586,7 @@ export function upsertMessage(m) {
 }
 
 export function upsertVehicle(v) {
-  openDb().prepare(`
+  stmt(`
     INSERT INTO vehicles(id, stock_no, year, make, model, model_code, status, sold_status, stock_in, data_json, updated_at)
     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
@@ -570,7 +600,7 @@ export function upsertVehicle(v) {
 
 /** Saves the summary of one chat. Leaves its messages and its change fingerprint alone. */
 export function upsertMpConversation(c) {
-  openDb().prepare(`
+  stmt(`
     INSERT INTO mp_conversations(id, account, buyer_name, stock_id, last_direction, last_message_at, archived, data_json)
     VALUES(?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
@@ -590,17 +620,17 @@ export function replaceMpMessages(conversationId, messages, sig) {
 }
 
 export function getMpConversation(id) {
-  const r = openDb().prepare('SELECT * FROM mp_conversations WHERE id = ?').get(id);
+  const r = stmt('SELECT * FROM mp_conversations WHERE id = ?').get(id);
   return r ? { ...r, data: JSON.parse(r.data_json || '{}') } : null;
 }
 
 export function getMpMessages(conversationId) {
-  return openDb().prepare('SELECT * FROM mp_messages WHERE conversation_id = ? ORDER BY seq ASC, id ASC').all(conversationId);
+  return stmt('SELECT * FROM mp_messages WHERE conversation_id = ? ORDER BY seq ASC, id ASC').all(conversationId);
 }
 
 /** Marketplace suggestions written in the last 24 hours, for the section allowance. */
 export function mpDraftsLastDay(now = Date.now()) {
-  return openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key LIKE 'mp:%' AND status = 'ready' AND created_at >= ?").get(now - 24 * 3600 * 1000).n;
+  return stmt("SELECT COUNT(*) AS n FROM drafts WHERE item_key LIKE 'mp:%' AND status = 'ready' AND created_at >= ?").get(now - 24 * 3600 * 1000).n;
 }
 
 // ---- reads ---------------------------------------------------------------
@@ -608,43 +638,56 @@ export function mpDraftsLastDay(now = Date.now()) {
 const parseLead = (r) => r && ({ ...r, stocks: JSON.parse(r.stocks_json || '[]'), inquiries: JSON.parse(r.inquiries_json || '[]'), statusHistory: JSON.parse(r.status_history_json || '[]') });
 
 export function getLead(id) {
-  return parseLead(openDb().prepare('SELECT * FROM leads WHERE id = ?').get(id));
+  return parseLead(stmt('SELECT * FROM leads WHERE id = ?').get(id));
 }
 
 export function getLeadByConversation(conversationId) {
-  return parseLead(openDb().prepare('SELECT * FROM leads WHERE conversation_id = ? ORDER BY updated_at DESC LIMIT 1').get(conversationId));
+  return parseLead(stmt('SELECT * FROM leads WHERE conversation_id = ? ORDER BY updated_at DESC LIMIT 1').get(conversationId));
+}
+
+/**
+ * The newest lead that carries a name for this phone number (last nine digits), whichever
+ * conversation it belongs to. A number the dashboard has texted without a record may still be a
+ * customer it knows by name from an earlier enquiry.
+ */
+export function getLeadByPhone(phone, { isName = (s) => !!s } = {}) {
+  const key = String(phone || '').replace(/\D/g, '').slice(-9);
+  if (key.length !== 9) return null;
+  const rows = stmt("SELECT * FROM leads WHERE phone LIKE ? AND first_name IS NOT NULL AND first_name != '' ORDER BY updated_at DESC LIMIT 5").all(`%${key}%`);
+  const r = rows.find((l) => isName(`${l.first_name || ''} ${l.last_name || ''}`.trim()));
+  return r ? parseLead(r) : null;
 }
 
 export function getConversation(id) {
-  return openDb().prepare('SELECT * FROM conversations WHERE id = ?').get(id);
+  return stmt('SELECT * FROM conversations WHERE id = ?').get(id);
 }
 
 export function getMessages(conversationId) {
-  return openDb().prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY at ASC, id ASC').all(conversationId);
+  return stmt('SELECT * FROM messages WHERE conversation_id = ? ORDER BY at ASC, id ASC').all(conversationId);
 }
 
 export function getVehicleByStock(stockNo) {
   // Stock numbers with a letter are written both ways ("T07", "t07"), so each spelling is tried.
   const s = String(stockNo);
-  const find = openDb().prepare('SELECT data_json FROM vehicles WHERE stock_no = ? ORDER BY updated_at DESC, id DESC LIMIT 1');
+  const find = stmt('SELECT data_json FROM vehicles WHERE stock_no = ? ORDER BY updated_at DESC, id DESC LIMIT 1');
   const spellings = /[A-Za-z]/.test(s) ? [...new Set([s, s.toUpperCase(), s.toLowerCase()])] : [s];
   for (const x of spellings) { const r = find.get(x); if (r) return JSON.parse(r.data_json); }
   return null;
 }
 
 export function allVehicles() {
-  return openDb().prepare('SELECT data_json FROM vehicles').all().map((r) => JSON.parse(r.data_json));
+  return stmt('SELECT data_json FROM vehicles').all().map((r) => JSON.parse(r.data_json));
 }
 
 export function countRows(table) {
   if (!/^[a-z_]+$/.test(table)) throw new Error('bad table name');
-  return openDb().prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n;
+  return stmt(`SELECT COUNT(*) AS n FROM ${table}`).get().n;
 }
 
 // ---- drafts --------------------------------------------------------------
 
 export function insertDraft(d) {
-  const info = openDb().prepare(`
+  const info = stmt(`
     INSERT INTO drafts(item_key, anchor_key, situation, reply, needs_human_json, facts_used_json, checks_json, provider, model, status, instruction, error, created_at, context_json)
     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(d.itemKey, d.anchorKey, d.situation || null, d.reply || null, JSON.stringify(d.needsHuman || []),
@@ -663,60 +706,60 @@ const parseDraft = (r) => r && ({
 });
 
 export function latestDraft(itemKey, anchorKey) {
-  return parseDraft(openDb().prepare('SELECT * FROM drafts WHERE item_key = ? AND anchor_key = ? ORDER BY id DESC LIMIT 1').get(itemKey, anchorKey));
+  return parseDraft(stmt('SELECT * FROM drafts WHERE item_key = ? AND anchor_key = ? ORDER BY id DESC LIMIT 1').get(itemKey, anchorKey));
 }
 
 export function getDraft(id) {
-  return parseDraft(openDb().prepare('SELECT * FROM drafts WHERE id = ?').get(id));
+  return parseDraft(stmt('SELECT * FROM drafts WHERE id = ?').get(id));
 }
 
 export function draftsAwaitingOutcome() {
-  return openDb().prepare("SELECT * FROM drafts WHERE status = 'ready' AND sent_text IS NULL AND (item_key LIKE 'c:%' OR item_key LIKE 'l:%') ORDER BY id DESC LIMIT 500").all().map(parseDraft);
+  return stmt("SELECT * FROM drafts WHERE status = 'ready' AND sent_text IS NULL AND (item_key LIKE 'c:%' OR item_key LIKE 'l:%') ORDER BY id DESC LIMIT 500").all().map(parseDraft);
 }
 
 export function recordOutcome(id, { sentText, sentBy, sentAt, similarity }) {
-  openDb().prepare("UPDATE drafts SET sent_text = ?, sent_by = ?, sent_at = ?, similarity = ?, status = 'answered' WHERE id = ?")
+  stmt("UPDATE drafts SET sent_text = ?, sent_by = ?, sent_at = ?, similarity = ?, status = 'answered' WHERE id = ?")
     .run(sentText, sentBy, sentAt, similarity, id);
 }
 
 /** The customer wrote again before anyone replied, so this suggestion answered a message that has moved on. */
 export function markSuperseded(id) {
-  openDb().prepare("UPDATE drafts SET status = 'superseded' WHERE id = ?").run(id);
+  stmt("UPDATE drafts SET status = 'superseded' WHERE id = ?").run(id);
 }
 
 /** Every Wheelman suggestion written for one conversation, for telling its own text from staff writing. */
 export function draftTextsFor(itemKey) {
-  return openDb().prepare("SELECT reply, copied_text FROM drafts WHERE item_key = ? AND reply IS NOT NULL AND reply != ''").all(itemKey);
+  return stmt("SELECT reply, copied_text FROM drafts WHERE item_key = ? AND reply IS NOT NULL AND reply != ''").all(itemKey);
 }
 
 export function setDraftRating(id, rating) {
-  openDb().prepare('UPDATE drafts SET rating = ? WHERE id = ?').run(rating, id);
+  stmt('UPDATE drafts SET rating = ? WHERE id = ?').run(rating, id);
 }
 
 export function dismiss(itemKey, anchorKey) {
-  openDb().prepare('INSERT OR REPLACE INTO dismissed(item_key, anchor_key, at) VALUES(?, ?, ?)').run(itemKey, anchorKey, Date.now());
+  stmt('INSERT OR REPLACE INTO dismissed(item_key, anchor_key, at) VALUES(?, ?, ?)').run(itemKey, anchorKey, Date.now());
 }
 
 export function isDismissed(itemKey, anchorKey) {
-  return !!openDb().prepare('SELECT 1 FROM dismissed WHERE item_key = ? AND anchor_key = ?').get(itemKey, anchorKey);
+  return !!stmt('SELECT 1 FROM dismissed WHERE item_key = ? AND anchor_key = ?').get(itemKey, anchorKey);
 }
 
 /** The user opened this conversation: its messages up to this point have been read. */
 export function markSeen(itemKey, anchorKey) {
-  openDb().prepare('INSERT OR REPLACE INTO seen(item_key, anchor_key, at) VALUES(?, ?, ?)').run(itemKey, anchorKey, Date.now());
+  stmt('INSERT OR REPLACE INTO seen(item_key, anchor_key, at) VALUES(?, ?, ?)').run(itemKey, anchorKey, Date.now());
 }
 
 export function isSeen(itemKey, anchorKey) {
-  return !!openDb().prepare('SELECT 1 FROM seen WHERE item_key = ? AND anchor_key = ?').get(itemKey, anchorKey);
+  return !!stmt('SELECT 1 FROM seen WHERE item_key = ? AND anchor_key = ?').get(itemKey, anchorKey);
 }
 
 /** Undoes Dismiss: the conversation goes back to Waiting. */
 export function undismiss(itemKey) {
-  openDb().prepare('DELETE FROM dismissed WHERE item_key = ?').run(itemKey);
+  stmt('DELETE FROM dismissed WHERE item_key = ?').run(itemKey);
 }
 
 export function recordCopied(id, text) {
-  openDb().prepare('UPDATE drafts SET copied_text = ?, copied_at = ? WHERE id = ?').run(text, Date.now(), id);
+  stmt('UPDATE drafts SET copied_text = ?, copied_at = ? WHERE id = ?').run(text, Date.now(), id);
 }
 
 /**
@@ -724,12 +767,12 @@ export function recordCopied(id, text) {
  * `null` means the box holds the suggestion as it was written. An empty text means it was cleared.
  */
 export function recordEdit(id, text) {
-  openDb().prepare('UPDATE drafts SET edited_text = ?, edited_at = ? WHERE id = ?').run(text, text === null ? null : Date.now(), id);
+  stmt('UPDATE drafts SET edited_text = ?, edited_at = ? WHERE id = ?').run(text, text === null ? null : Date.now(), id);
 }
 
 /** Notes that Copy was pressed, without keeping the text. Used for Marketplace suggestions. */
 export function recordCopiedTime(id) {
-  openDb().prepare('UPDATE drafts SET copied_at = ? WHERE id = ?').run(Date.now(), id);
+  stmt('UPDATE drafts SET copied_at = ? WHERE id = ?').run(Date.now(), id);
 }
 
 // ---- learning ------------------------------------------------------------
@@ -737,7 +780,7 @@ export function recordCopiedTime(id) {
 export function upsertLearned(l) {
   // Last line of defence: only dashboard conversations (c:) and leads (l:) may teach Wheelman.
   if (!/^[cl]:\d+$/.test(String(l.itemKey || ''))) throw new Error('Refused: only dashboard conversations can be learned from.');
-  openDb().prepare(`
+  stmt(`
     INSERT INTO learned(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, final_text, source, changed, similarity, at)
     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(draft_id) DO UPDATE SET
@@ -749,69 +792,69 @@ export function upsertLearned(l) {
 }
 
 export function deleteLearned(draftId) {
-  openDb().prepare('DELETE FROM learned WHERE draft_id = ?').run(draftId);
+  stmt('DELETE FROM learned WHERE draft_id = ?').run(draftId);
 }
 
 /** One lesson per customer message: forget what other suggestions for the same message taught. */
 export function deleteLearnedForAnchor(itemKey, anchorKey, exceptDraftId) {
-  openDb().prepare('DELETE FROM learned WHERE draft_id != ? AND draft_id IN (SELECT id FROM drafts WHERE item_key = ? AND anchor_key = ?)')
+  stmt('DELETE FROM learned WHERE draft_id != ? AND draft_id IN (SELECT id FROM drafts WHERE item_key = ? AND anchor_key = ?)')
     .run(exceptDraftId, itemKey, anchorKey);
 }
 
 /** True when another suggestion already taught exactly this reply. */
 export function learnedTextExists(finalText, exceptDraftId) {
-  return !!openDb().prepare('SELECT 1 FROM learned WHERE final_text = ? AND draft_id != ?').get(finalText, exceptDraftId);
+  return !!stmt('SELECT 1 FROM learned WHERE final_text = ? AND draft_id != ?').get(finalText, exceptDraftId);
 }
 
 export function allLearned(limit = 600) {
-  return openDb().prepare('SELECT * FROM learned ORDER BY at DESC LIMIT ?').all(limit)
+  return stmt('SELECT * FROM learned ORDER BY at DESC LIMIT ?').all(limit)
     .map((r) => ({ ...r, situations: JSON.parse(r.situations_json || '[]') }));
 }
 
 export function learnedStats() {
-  const r = openDb().prepare("SELECT COUNT(*) AS total, SUM(changed) AS changed, SUM(CASE WHEN source = 'sent' THEN 1 ELSE 0 END) AS sent, SUM(CASE WHEN source = 'approved' THEN 1 ELSE 0 END) AS approved, MAX(at) AS latest FROM learned").get();
-  const notes = openDb().prepare('SELECT COUNT(*) AS n FROM advice').get().n;
+  const r = stmt("SELECT COUNT(*) AS total, SUM(changed) AS changed, SUM(CASE WHEN source = 'sent' THEN 1 ELSE 0 END) AS sent, SUM(CASE WHEN source = 'approved' THEN 1 ELSE 0 END) AS approved, MAX(at) AS latest FROM learned").get();
+  const notes = stmt('SELECT COUNT(*) AS n FROM advice').get().n;
   return { total: r.total || 0, changed: r.changed || 0, sent: r.sent || 0, approved: r.approved || 0, notes, latest: r.latest || null };
 }
 
 export function getLearned(draftId) {
-  return openDb().prepare('SELECT * FROM learned WHERE draft_id = ?').get(draftId) || null;
+  return stmt('SELECT * FROM learned WHERE draft_id = ?').get(draftId) || null;
 }
 
 /** A note from the owner on what a suggestion should have done differently. Dashboard conversations only. */
 export function insertAdvice(a) {
   if (!/^[cl]:\d+$/.test(String(a.itemKey || ''))) throw new Error('Refused: only dashboard conversations can be learned from.');
   // One note per suggestion: saying it again replaces what was said before.
-  if (a.draftId !== null && a.draftId !== undefined) openDb().prepare('DELETE FROM advice WHERE draft_id = ?').run(a.draftId);
-  return Number(openDb().prepare('INSERT INTO advice(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, note, lessons_json, at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)')
+  if (a.draftId !== null && a.draftId !== undefined) stmt('DELETE FROM advice WHERE draft_id = ?').run(a.draftId);
+  return Number(stmt('INSERT INTO advice(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, note, lessons_json, at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .run(a.draftId ?? null, a.itemKey, JSON.stringify(a.situations || []), a.firstReply ? 1 : 0, a.customerText || '', a.draftText || '', a.note, a.lessons ? JSON.stringify(a.lessons) : null, a.at || Date.now()).lastInsertRowid);
 }
 
 /** The lessons taken from a note: what Wheelman actually keeps of it. */
 export function setAdviceLessons(id, lessons) {
-  openDb().prepare('UPDATE advice SET lessons_json = ? WHERE id = ?').run(JSON.stringify(lessons || []), id);
+  stmt('UPDATE advice SET lessons_json = ? WHERE id = ?').run(JSON.stringify(lessons || []), id);
 }
 
 export function allAdvice(limit = 300) {
-  return openDb().prepare('SELECT * FROM advice ORDER BY at DESC, id DESC LIMIT ?').all(limit)
+  return stmt('SELECT * FROM advice ORDER BY at DESC, id DESC LIMIT ?').all(limit)
     .map((r) => ({ ...r, situations: JSON.parse(r.situations_json || '[]'), lessons: r.lessons_json ? JSON.parse(r.lessons_json) : null }));
 }
 
 export function deleteAdvice(id) {
-  openDb().prepare('DELETE FROM advice WHERE id = ?').run(id);
+  stmt('DELETE FROM advice WHERE id = ?').run(id);
 }
 
 // ---- AI usage counter ----------------------------------------------------
 
 export function usageToday(day) {
-  const rows = openDb().prepare('SELECT provider, count FROM llm_usage WHERE day = ?').all(day);
+  const rows = stmt('SELECT provider, count FROM llm_usage WHERE day = ?').all(day);
   const out = { total: 0 };
   for (const r of rows) { out[r.provider] = r.count; out.total += r.count; }
   return out;
 }
 
 export function addUsage(day, provider) {
-  openDb().prepare(`
+  stmt(`
     INSERT INTO llm_usage(day, provider, count) VALUES(?, ?, 1)
     ON CONFLICT(day, provider) DO UPDATE SET count = count + 1
   `).run(day, provider);
@@ -847,24 +890,24 @@ export function upsertPhoneThread(t, now = Date.now()) {
 
 /** The same words came again, later: the conversation's latest message moved on. */
 export function bumpPhoneThread(id, latestAt, now = Date.now()) {
-  openDb().prepare('UPDATE phone_threads SET latest_at = ?, changed_at = ? WHERE id = ?').run(latestAt, now, id);
+  stmt('UPDATE phone_threads SET latest_at = ?, changed_at = ? WHERE id = ?').run(latestAt, now, id);
 }
 
 export function getPhoneThread(id) {
-  return openDb().prepare('SELECT * FROM phone_threads WHERE id = ?').get(id) || null;
+  return stmt('SELECT * FROM phone_threads WHERE id = ?').get(id) || null;
 }
 
 /** Conversations on the phone with a message since the cutoff, newest first. */
 export function listPhoneThreads({ cutoff = 0 } = {}) {
-  return openDb().prepare('SELECT * FROM phone_threads WHERE latest_at >= ? ORDER BY latest_at DESC').all(cutoff);
+  return stmt('SELECT * FROM phone_threads WHERE latest_at >= ? ORDER BY latest_at DESC').all(cutoff);
 }
 
 export function getPhoneMessages(threadId) {
-  return openDb().prepare('SELECT * FROM phone_messages WHERE thread_id = ? ORDER BY at ASC, id ASC').all(threadId);
+  return stmt('SELECT * FROM phone_messages WHERE thread_id = ? ORDER BY at ASC, id ASC').all(threadId);
 }
 
 export function recentPhoneMessages(threadId, limit = 20) {
-  return openDb().prepare('SELECT * FROM phone_messages WHERE thread_id = ? ORDER BY at DESC, id DESC LIMIT ?').all(threadId, limit);
+  return stmt('SELECT * FROM phone_messages WHERE thread_id = ? ORDER BY at DESC, id DESC LIMIT ?').all(threadId, limit);
 }
 
 /** The texts seen on the phone for a dashboard conversation: by its number (last nine digits), or because the thread was matched to it. */
@@ -875,7 +918,7 @@ export function phoneMessagesFor({ keys = [], conversationId = null } = {}) {
   const args = [];
   if (conversationId) { where.push('t.conversation_id = ?'); args.push(conversationId); }
   if (ks.length) { where.push(`(t.phone_key != '' AND t.phone_key IN (${ks.map(() => '?').join(', ')}))`); args.push(...ks); }
-  return openDb().prepare(`
+  return stmt(`
     SELECT m.*, t.name AS thread_name, t.kind AS thread_kind
       FROM phone_messages m JOIN phone_threads t ON t.id = m.thread_id
      WHERE ${where.join(' OR ')}
@@ -883,20 +926,20 @@ export function phoneMessagesFor({ keys = [], conversationId = null } = {}) {
 }
 
 export function addPhoneMessage(threadId, m) {
-  const r = openDb().prepare('INSERT INTO phone_messages(thread_id, direction, text, media, truncated, at, precision, seen_at, source) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)')
+  const r = stmt('INSERT INTO phone_messages(thread_id, direction, text, media, truncated, at, precision, seen_at, source) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .run(threadId, m.direction, m.text || '', m.media || null, m.truncated ? 1 : 0, m.at, m.precision, m.seenAt, m.source || 'list');
   return Number(r.lastInsertRowid);
 }
 
 export function updatePhoneMessage(id, { text, truncated }) {
-  openDb().prepare('UPDATE phone_messages SET text = ?, truncated = ? WHERE id = ?').run(text, truncated ? 1 : 0, id);
+  stmt('UPDATE phone_messages SET text = ?, truncated = ? WHERE id = ?').run(text, truncated ? 1 : 0, id);
 }
 
 /** The newest dashboard conversation under exactly this customer name: a saved contact shows its name on the phone, not its number. */
 export function conversationByCustomerName(name) {
   const n = String(name || '').trim();
   if (!n) return null;
-  const r = openDb().prepare('SELECT id FROM conversations WHERE customer_name = ? COLLATE NOCASE ORDER BY latest_at DESC LIMIT 1').get(n);
+  const r = stmt('SELECT id FROM conversations WHERE customer_name = ? COLLATE NOCASE ORDER BY latest_at DESC LIMIT 1').get(n);
   return r ? r.id : null;
 }
 

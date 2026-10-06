@@ -10,7 +10,7 @@ import { Notice } from '../components/notice.js';
 import { Row } from '../components/row.js';
 import { EmptyState } from '../components/empty.js';
 import { Skeleton } from '../components/skeleton.js';
-import { SECTIONS, SECTION_IDS, TAB_STATE, ORDER_LIST, HOURS } from '../sections/registry.js';
+import { SECTIONS, SECTION_IDS, TAB_STATE, ORDER_LIST } from '../sections/registry.js';
 import { newCount } from '../lib/counts.js';
 
 /** The rows a search leaves, from the list on screen (or, in Auction, from every list). */
@@ -59,7 +59,7 @@ export function noticesFor(s, section) {
 }
 
 /**
- * mountListColumn(root, store, { open, showSection, setTab, setSearch, setHours })
+ * mountListColumn(root, store, { open, showSection, setTab, setSearch })
  * Builds the column once and repaints each part when what it shows has changed.
  */
 export function mountListColumn(root, store, actions) {
@@ -72,9 +72,9 @@ export function mountListColumn(root, store, actions) {
   const search = h('input', { id: 'q', type: 'search', placeholder: SECTIONS[state.section].search.placeholder, autocomplete: 'off', spellcheck: 'false', oninput: (e) => actions.setSearch(e.target.value) });
   const filters = Segmented({ items: [], value: state.tab, onChange: (id) => actions.setTab(id), label: 'Which conversations to show', kind: 'chips' });
   const nav = h('nav', { id: 'chats', class: 'chats', 'aria-label': 'Conversation list' });
-  const ordersLine = h('p', { id: 'orders-line', class: 'learned', hidden: true });
-  const hours = h('select', { id: 'hours', onchange: (e) => actions.setHours(Number(e.target.value)) }, HOURS.map((hrs) => h('option', { value: String(hrs), selected: hrs === state.hours || null, text: t(`footer.hours.${hrs}`) })));
-  const hoursLabel = h('label', {}, h('span', { text: t('footer.showing') }), hours);
+  // Every conversation is listed, newest first; the footer only speaks in Auction, where it says how many orders were read.
+  const ordersLine = h('p', { id: 'orders-line', class: 'learned' });
+  const foot = h('footer', { class: 'side-foot', hidden: true }, ordersLine);
 
   root.replaceChildren(
     sections,
@@ -82,7 +82,7 @@ export function mountListColumn(root, store, actions) {
     h('label', { class: 'search' }, h('span', { class: 'search-icon' }, icon('search')), h('span', { class: 'visually-hidden', text: t('action.search') }), search),
     filters,
     nav,
-    h('footer', { class: 'side-foot' }, ordersLine, hoursLabel));
+    foot);
 
   // Arrow keys move through the list, as in any messaging app. One row is in the tab order at a time.
   nav.addEventListener('keydown', (e) => {
@@ -148,17 +148,14 @@ export function mountListColumn(root, store, actions) {
     if (focusedKey) { const again = nav.querySelector(`.row[data-key="${CSS.escape(focusedKey)}"]`); if (again) { again.tabIndex = 0; again.focus({ preventScroll: true }); } }
   });
 
-  // The footer: the time window, or in Auction how many orders were read.
-  store.select((s) => ({ section: s.section, waiting: s.counts.waiting, quiet: s.counts.quiet, other: s.counts.other, hours: s.hours, tick: s.listTick }), ({ section, waiting, quiet, other, hours: hrs }) => {
-    const auction = section === 'auction';
-    hoursLabel.hidden = auction;
+  // The footer: in Auction, how many orders were read.
+  store.select((s) => ({ section: s.section, waiting: s.counts.waiting, quiet: s.counts.quiet, other: s.counts.other, tick: s.listTick }), ({ section, waiting, quiet, other }) => {
     const orders = waiting + quiet + other;
-    ordersLine.hidden = !auction || !orders;
-    if (auction && orders) {
+    foot.hidden = section !== 'auction' || !orders;
+    if (!foot.hidden) {
       ordersLine.textContent = t('footer.orders', { orders: `${orders} ${orders === 1 ? 'order' : 'orders'}`, waiting, quiet, other });
       ordersLine.title = t('footer.orders.title');
     }
-    if (Number(hours.value) !== hrs) hours.value = String(hrs);
   });
 
   return { search, nav };
