@@ -340,6 +340,8 @@ function renderStatus() {
   const box = $('#status');
   box.replaceChildren();
   if (!s) { box.append(h('span', { class: 'dot' }), 'The agent is not responding'); return; }
+  // The demo: invented data against stand-in services. The ribbon makes a screenshot of it unmistakable.
+  $('#demo-ribbon').hidden = !s.demo;
   // The line describes whichever section is on screen.
   const chat = inMarketplace() && s.marketplace?.enabled;
   const last = chat ? s.marketplace.lastSync : s.lastSync;
@@ -538,7 +540,7 @@ function renderCounts() {
     f.hidden = !label;
     $('.t', f).textContent = label;
   }
-  document.title = total ? `(${total}) Wheelman` : 'Wheelman';
+  document.title = `${total ? `(${total}) ` : ''}Wheelman${state.status?.demo ? ' demo' : ''}`;
 }
 
 // ---- open conversation -----------------------------------------------------------

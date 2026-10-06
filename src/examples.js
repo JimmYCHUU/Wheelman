@@ -1,7 +1,6 @@
 // Picks the real past replies most useful as style examples for a given enquiry.
 
 import fs from 'node:fs';
-import path from 'node:path';
 import { config } from './config.js';
 
 let bank = null;
@@ -11,7 +10,7 @@ const STOP = new Set('a an the and or but if of to in on at for from with by is 
 const bag = (s) => new Set(String(s || '').toLowerCase().replace(/https?:\/\/\S+/g, ' ').replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w)));
 
 export function loadExamples() {
-  const file = path.join(config.voiceDir, 'examples.json');
+  const file = config.examplesPath;
   if (!fs.existsSync(file)) return [];
   const mtime = fs.statSync(file).mtimeMs;
   if (bank && mtime === bankMtime) return bank;

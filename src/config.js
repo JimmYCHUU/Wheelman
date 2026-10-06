@@ -90,6 +90,11 @@ export const config = {
     staleMinutes: num(env.PHONE_STALE_MINUTES, 10),
   },
 
+  // The demo (demo/start.js): invented data against stand-in services. The page shows a ribbon.
+  demo: /^(1|true|yes)$/i.test((env.WHEELMAN_DEMO || '').trim()),
+  // The example bank of genuine replies. The demo keeps its own copy under data/demo.
+  examplesPath: env.EXAMPLES_PATH || path.join(root, 'voice', 'examples.json'),
+
   port: num(env.PORT, 3210),
   syncMinutes: num(env.SYNC_MINUTES, 3),
   draftMaxAgeHours: num(env.DRAFT_MAX_AGE_HOURS, 72),

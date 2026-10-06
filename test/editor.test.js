@@ -3,36 +3,20 @@
 // A stand-in AI service on this computer plays the model; the page's own routes are called.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import http from 'node:http';
+import { applyTestEnv } from './support/env.js';
+import { startStandins, aiBehaviour } from './support/standins.js';
 
-process.env.DB_PATH = ':memory:';
-process.env.SIGN_OFF = 'Regards,\\nTeam Carbarn';
-process.env.GEMINI_API_KEY = 'test-key';
-process.env.OPENROUTER_API_KEY = '';
-process.env.SECONDS_BETWEEN_DRAFTS = '0';
-process.env.DAILY_DRAFT_LIMIT = '200';
-process.env.MARKETPLACE_ENABLED = '0';
-process.env.VOICE_PEOPLE_FILE = 'voice/people.example.json';
-process.env.PORT = '0';
+applyTestEnv({ DAILY_DRAFT_LIMIT: '200' });
 
 const now = Date.now();
 const MIN = 60e3, HOUR = 3600e3;
-let ai, app, base, db, items, promptModule, worker;
-let script = [];
+let standins, app, base, db, items, promptModule, worker;
+const ai = aiBehaviour({ behave: () => ({ reply: 'No worries.', needs_human: [], facts_used: [], hold: false }) });
 
 before(async () => {
-  ai = http.createServer((req, res) => {
-    let body = '';
-    req.on('data', (c) => { body += c; });
-    req.on('end', () => {
-      const next = script.shift() || { reply: 'No worries.', needs_human: [], facts_used: [], hold: false };
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(next) }, finish_reason: 'stop' }] }));
-    });
-  });
-  await new Promise((r) => ai.listen(0, '127.0.0.1', r));
+  standins = await startStandins({ ai });
   const { config } = await import('../src/config.js');
-  config.llm.gemini.url = `http://127.0.0.1:${ai.address().port}/chat`;
+  config.llm.gemini.url = `${standins.base}/chat`;
   config.port = 0;
   db = await import('../src/db.js');
   items = await import('../src/items.js');
@@ -42,7 +26,7 @@ before(async () => {
   base = `http://127.0.0.1:${app.address().port}`;
 });
 
-after(async () => { for (const s of [app, ai]) await new Promise((r) => { s.close(r); s.closeAllConnections?.(); }); });
+after(async () => { await new Promise((r) => { app.close(r); app.closeAllConnections?.(); }); await standins.close(); });
 
 let mid = 1;
 /** A customer in the middle of a conversation, so the reply is plain lines with no address block. */
@@ -61,7 +45,7 @@ const draftOf = async (key) => (await get(`/api/items/${key}`)).item.draft;
 const rowOf = async (key) => (await get('/api/items?tab=waiting')).items.find((r) => r.key === key);
 /** Has Wheelman write a suggestion with the given text. */
 async function suggest(key, reply, needsHuman = []) {
-  script = [{ reply, needs_human: needsHuman, facts_used: [], hold: false }];
+  ai.script = [{ reply, needs_human: needsHuman, facts_used: [], hold: false }];
   const out = await post(`/api/items/${key}/draft`, { instruction: '' });
   assert.equal(out.ok, true, out.error);
   return out.item.draft;

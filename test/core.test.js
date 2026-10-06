@@ -1,9 +1,9 @@
 // Offline tests. All names, numbers and messages here are invented.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { applyTestEnv } from './support/env.js';
 
-process.env.SIGN_OFF = 'Regards,\\nTeam Carbarn';
-process.env.VOICE_PEOPLE_FILE = 'voice/people.example.json'; // invented names, the same on every computer
+applyTestEnv(); // invented names and keys, the same on every computer
 
 const { parseDashboardTime, formatSydney } = await import('../src/time.js');
 const { redact, restore, firstNameOf, leftoverPlaceholders } = await import('../src/redact.js');

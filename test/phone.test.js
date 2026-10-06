@@ -4,37 +4,21 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { applyTestEnv } from './support/env.js';
+import { startStandins, aiBehaviour } from './support/standins.js';
 
-process.env.DB_PATH = ':memory:';
-process.env.SIGN_OFF = 'Regards,\\nTeam Carbarn';
-process.env.GEMINI_API_KEY = 'test-key';
-process.env.OPENROUTER_API_KEY = '';
-process.env.GEMINI_MODEL = 'model-a';
-process.env.GEMINI_FALLBACK_MODELS = '';
-process.env.SECONDS_BETWEEN_DRAFTS = '0';
-process.env.DAILY_DRAFT_LIMIT = '500';
-process.env.MARKETPLACE_ENABLED = '0';
-process.env.VOICE_PEOPLE_FILE = 'voice/people.example.json';
-process.env.PORT = '0';
-process.env.PHONE_ADDON = '1';
+applyTestEnv();
 
 const MIN = 60e3;
 const HOUR = 3600e3;
 const ADDON = `chrome-extension://${'a'.repeat(32)}`;
-let ai, app, base, config, db, items, phone, worker, parse, learn, voicebank, drafter, normalize;
+let standins, app, base, config, db, items, phone, worker, parse, learn, voicebank, drafter, normalize;
+const ai = aiBehaviour({ behave: () => ({ reply: 'Hi {{NAME}},\nYes, it is still available. Would you like to come and see it?', needs_human: [], facts_used: [], hold: false }) });
 
 before(async () => {
-  ai = http.createServer((req, res) => {
-    let body = '';
-    req.on('data', (c) => { body += c; });
-    req.on('end', () => {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ reply: 'Hi {{NAME}},\nYes, it is still available. Would you like to come and see it?', needs_human: [], facts_used: [], hold: false }) }, finish_reason: 'stop' }] }));
-    });
-  });
-  await new Promise((r) => ai.listen(0, '127.0.0.1', r));
+  standins = await startStandins({ ai });
   ({ config } = await import('../src/config.js'));
-  config.llm.gemini.url = `http://127.0.0.1:${ai.address().port}/chat`;
+  config.llm.gemini.url = `${standins.base}/chat`;
   config.port = 0;
   db = await import('../src/db.js');
   items = await import('../src/items.js');
@@ -49,7 +33,7 @@ before(async () => {
   base = `http://127.0.0.1:${app.address().port}`;
 });
 
-after(async () => { for (const s of [app, ai]) await new Promise((r) => { s.close(r); s.closeAllConnections?.(); }); });
+after(async () => { await new Promise((r) => { app.close(r); app.closeAllConnections?.(); }); await standins.close(); });
 
 // A POST with whatever origin and headers the test wants (fetch would not let a test set them).
 function rawPost(path, body, { origin = ADDON, header = '1', type = 'application/json' } = {}) {

@@ -4,50 +4,30 @@
 // auction feed and the AI.
 import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
+import { applyTestEnv } from './support/env.js';
+import { startStandins, aiBehaviour } from './support/standins.js';
+import { pointConfigAt } from './support/wire.js';
 
-process.env.DB_PATH = ':memory:';
-process.env.SIGN_OFF = 'Regards,\\nTeam Carbarn';
-process.env.GEMINI_API_KEY = 'test-key';
-process.env.OPENROUTER_API_KEY = '';
-process.env.GEMINI_MODEL = 'model-a';
-process.env.GEMINI_FALLBACK_MODELS = '';
-process.env.SECONDS_BETWEEN_DRAFTS = '0';
-process.env.DAILY_DRAFT_LIMIT = '500';
-process.env.MARKETPLACE_ENABLED = '0';
-process.env.DASHBOARD_USERNAME = 'tester';
-process.env.DASHBOARD_PASSWORD = ['stand', 'in', 'only'].join('-'); // invented: the stand-in accepts anything
-process.env.VOICE_PEOPLE_FILE = 'voice/people.example.json';
-process.env.PORT = '0';
+applyTestEnv();
 
 const now = Date.now();
 const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
 const at = (agoMs) => new Date(now - agoMs).toISOString();
 const sessionFile = path.join(os.tmpdir(), `wheelman-orders-session-${process.pid}.json`);
-const calls = [];
-let aiScript = [];
-let server, app, base, db, sync, items, orders, messages, worker, time, checks;
+const model = aiBehaviour(); // what the AI answers, in order, is queued on model.script
+let standins, calls, app, base, db, sync, items, orders, messages, worker, time, checks;
 let TOMORROW;
 
-// ---- the stand-in auction feed -----------------------------------------------------------------
-// [id, year, grade, km, days from today, website's suggested bid, landed at that bid]
-const LOTS = [['1992541', 2015, '3.5', 121000, 1, 253590, 10506], ['2006629', 2015, '4', 73000, 1, 455820, 12742], ['2005010', 2013, 'R', 110000, 2, 217210, 10104]];
-const lotRow = ([id, year, grade, km, days, bench, landed]) => ({
-  id, title: `${year} SUBARU SUBARU XV`, make: 'SUBARU', model: 'SUBARU XV', modelCode: 'GPE', year, auctionDate: time.sydneyDay(now + days * DAY), auctionHouse: 'MIRIVE Saitama',
-  odometerKm: km, auctionGrade: grade, transmission: 'Automatic', fuelType: 'Hybrid', ssotBenchmarkBidYen: String(bench),
-  priceEstimate: { bidYen: String(bench), calculationStatus: 'ok', estimatedLandedAud: landed, manualReviewRequired: false, lctRiskWarning: false, thresholdWarnings: [] },
-  eligibility: { make: 'Subaru', model: 'XV Hybrid', modelCode: 'GPE', status: 'ELIGIBLE' }, bidSubmissionStatus: 'ready',
-});
-const lotDetail = (row) => ({ listingStatus: 'LIVE', vehicle: { ...lotRow(row), variant: 'HYBRID 2.0I EYESIGHT', engineCc: 2000, driveType: '4WD', seatingCapacity: 5, colour: 'WINE' } });
+// ---- the stand-in auction feed (test/support/standins.js), fed from here ---------------------------
+// Three cars of one model: [id, make, model, model code, variant, year, grade, km, days from today, website's suggested bid, landed at that bid]
+const XV = ['Subaru', 'XV Hybrid', 'GPE', 'HYBRID 2.0I EYESIGHT'];
+const LOTS = [['1992541', ...XV, 2015, '3.5', 121000, 1, 253590, 10506], ['2006629', ...XV, 2015, '4', 73000, 1, 455820, 12742], ['2005010', ...XV, 2013, 'R', 110000, 2, 217210, 10104]];
+// What similar cars sold for, the same list for every lot: [grade, km, yen].
 const SOLD = [['3.5', 120000, 401000], ['3.5', 122000, 388000], ['3.5', 117000, 178000], ['4', 127000, 205000]];
-const estimate = (bid) => {
-  const a = Math.round(bid * 0.009138);
-  return { bidYen: String(bid), estimatedLandedAud: a + 8212, calculationStatus: 'ok', manualReviewRequired: false, lctRiskWarning: false, thresholdWarnings: [],
-    breakdown: { bidAudEstimate: a, japanAgentFee: 822, carbarnAgentFee: 1500, shippingLogisticsDutyAndImportCharges: 3400, compliancePackage: 1540, gst: 950, lct: null } };
-};
+const SOLD_BY_LOT = Object.fromEntries(LOTS.map((l) => [l[0], SOLD]));
 
 // ---- the stand-in dashboard: one order at every stage --------------------------------------------
 const person = (first, last, phone) => ({ id: 1, firstName: first, lastName: last, mobileNumber: phone, email: `${first.toLowerCase()}@example.com`, drivingLicenseNumber: 'LIC998877', dateOfBirth: '1988-02-03', address: '9 Gum Tree Lane', city: 'Taree' });
@@ -97,45 +77,11 @@ before(async () => {
   time = await import('../src/time.js');
   TOMORROW = time.sydneyDay(now + DAY);
   dashboardOrders = ORDERS();
-  server = http.createServer((req, res) => {
-    let body = '';
-    req.on('data', (c) => { body += c; });
-    req.on('end', () => {
-      const url = new URL(req.url, 'http://x');
-      const p = url.pathname;
-      calls.push({ method: req.method, path: p, query: Object.fromEntries(url.searchParams), body });
-      const json = (status, data, headers = {}) => { res.writeHead(status, { 'content-type': 'application/json', ...headers }); res.end(JSON.stringify(data)); };
-      if (p === '/chat') {
-        const next = aiScript.shift() || { reply: 'Hi {{NAME}},\nNo worries.', needs_human: [], facts_used: [], hold: false };
-        return json(200, { choices: [{ message: { content: JSON.stringify(next) }, finish_reason: 'stop' }] });
-      }
-      if (p === '/carbarnau/auth/v1/api/user/signin') return json(200, { username: 'tester' }, { 'set-cookie': 'carbarn_session=stand-in; Path=/' });
-      if (p === '/carbarnau/api/v1/sales/auction') {
-        // Two orders a page, to show that every page is read.
-        const page = Number(url.searchParams.get('page')) || 0, size = 5;
-        return json(200, { content: dashboardOrders.slice(page * size, page * size + size), page: { size, number: page, totalElements: dashboardOrders.length, totalPages: Math.ceil(dashboardOrders.length / size) } });
-      }
-      if (p === '/auc/api/public/auction-vehicles') {
-        const rows = /subaru/i.test(url.searchParams.get('make') || '') ? LOTS.map(lotRow) : [];
-        return json(200, { vehicles: Number(url.searchParams.get('page')) === 0 ? rows : [], total: rows.length });
-      }
-      let m = p.match(/^\/auc\/api\/public\/auction-vehicles\/(\d+)$/);
-      if (m) { const row = LOTS.find((l) => l[0] === m[1]); return row ? json(200, lotDetail(row)) : json(404, { error: 'Not Found' }); }
-      m = p.match(/^\/auc\/api\/public\/auction-vehicles\/(\d+)\/sold-comparables$/);
-      if (m) return json(200, { sampleCount: SOLD.length, matchLevel: 'EXACT_VARIANT', benchmarkYen: 293000, comparables: SOLD.map(([grade, odometerKm, soldPriceYen]) => ({ year: 2015, odometerKm, grade, variant: 'X', soldPriceYen })) });
-      m = p.match(/^\/auc\/api\/public\/auction-vehicles\/(\d+)\/price-estimate$/);
-      if (m && req.method === 'POST') return json(200, estimate(JSON.parse(body).bidYen));
-      return json(404, { error: 'Not Found' });
-    });
-  });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const stand = `http://127.0.0.1:${server.address().port}`;
+  // The stand-in reads the orders on every request, so a test can change the list between reads.
+  standins = await startStandins({ world: { now, lots: LOTS, sold: SOLD_BY_LOT, get orders() { return dashboardOrders; } }, ai: model });
+  calls = standins.calls;
   const { config } = await import('../src/config.js');
-  config.llm.gemini.url = `${stand}/chat`;
-  config.dashboard.baseUrl = stand;
-  config.auction.baseUrl = stand;
-  config.sessionPath = sessionFile; // never the real session file
-  config.port = 0;
+  pointConfigAt(config, standins, { sessionPath: sessionFile, port: 0 }); // never the real session file
   db = await import('../src/db.js');
   sync = await import('../src/sync.js');
   items = await import('../src/items.js');
@@ -147,8 +93,8 @@ before(async () => {
   base = `http://127.0.0.1:${app.address().port}`;
 });
 
-after(async () => { fs.rmSync(sessionFile, { force: true }); for (const s of [app, server]) await new Promise((r) => { s.close(r); s.closeAllConnections?.(); }); });
-beforeEach(() => { calls.length = 0; aiScript = []; });
+after(async () => { fs.rmSync(sessionFile, { force: true }); await new Promise((r) => { app.close(r); app.closeAllConnections?.(); }); await standins.close(); });
+beforeEach(() => { calls.length = 0; model.script = []; });
 
 const ai = () => calls.filter((c) => c.path === '/chat');
 const feed = () => calls.filter((c) => c.path.startsWith('/auc/'));
@@ -161,7 +107,8 @@ const compose = async (id, type, said = '') => messages.composeMessage(db.getOrd
 // ---- reading the orders ---------------------------------------------------------------------------
 
 test('every auction order is read as one list, and nothing private or of ours is kept', async () => {
-  const out = await sync.syncAuctionOrders({ now });
+  // Five orders a page, to show that every page is read.
+  const out = await sync.syncAuctionOrders({ now, size: 5 });
   assert.deepEqual(out, { auctionOrders: 9, auctionOrdersChanged: 8 }, 'the one cancelled long ago is not kept');
   const asked = calls.filter((c) => c.path === '/carbarnau/api/v1/sales/auction');
   assert.deepEqual(asked.map((c) => [c.method, c.query.page, c.query.leadId]), [['GET', '0', undefined], ['GET', '1', undefined]], 'every page, with no lead named');
@@ -483,7 +430,7 @@ test('another message can be picked, and what you add fills it in through the pa
 // ---- a reply to what the customer wrote on WhatsApp ----------------------------------------------
 
 test('a pasted customer message gets a reply that knows the order, and no name, number or amount reaches the AI', async () => {
-  aiScript = [{ reply: 'Hi {{NAME}},\nThe balance still to pay on your Hiace is {{DUE}} AUD, and your deposit of {{DEPOSIT_PAID}} has been received.\nWe will confirm the shipping date [DATE?].', needs_human: [{ marker: '[DATE?]', reason: 'A person must confirm the shipping date.' }], facts_used: [], hold: false }];
+  model.script = [{ reply: 'Hi {{NAME}},\nThe balance still to pay on your Hiace is {{DUE}} AUD, and your deposit of {{DEPOSIT_PAID}} has been received.\nWe will confirm the shipping date [DATE?].', needs_human: [{ marker: '[DATE?]', reason: 'A person must confirm the shipping date.' }], facts_used: [], hold: false }];
   const out = await post('/api/items/ao:504/paste', { text: '[2:14 pm, 05/10/2026] Pia Halvorsen: Hi, how much do I still owe? I paid $1,650 already. My number is 0491 570 504\n[2:15 pm, 05/10/2026] Pia Halvorsen: and when does it ship?' });
   assert.equal(out.ok, true, out.error);
   assert.equal(ai().length, 1, 'one AI request');
@@ -508,7 +455,7 @@ test('a pasted customer message gets a reply that knows the order, and no name, 
   assert.ok(!/STANDARD FIRST REPLY|=== INSPECTION ===/.test(asked[1].content));
 
   // A marker the AI made up is caught: it must not reach a customer.
-  aiScript = [1, 2].map(() => ({ reply: 'Hi {{NAME}},\nYour balance is {{BALANCE_OWING}}.', needs_human: [], facts_used: [], hold: false }));
+  model.script = [1, 2].map(() => ({ reply: 'Hi {{NAME}},\nYour balance is {{BALANCE_OWING}}.', needs_human: [], facts_used: [], hold: false }));
   const bad = await post('/api/items/ao:504/draft', {});
   assert.ok(bad.item.draft.checks.some((c) => c.level === 'fail' && c.code === 'placeholder' && c.tokens.includes('{{BALANCE_OWING}}')));
 });
@@ -529,7 +476,7 @@ test('a message we sent by hand can be added, a wrong paste removed, and a reply
   assert.equal((await post('/api/items/c:1/paste', { text: 'x' })).status, 404, 'only an auction order takes a paste');
 
   // A reply that is copied is answered: the order goes back to what is due for its stage.
-  aiScript = [{ reply: 'Hi {{NAME}},\nNot yet. We will let you know as soon as a suitable one comes up.', needs_human: [], facts_used: [], hold: false }];
+  model.script = [{ reply: 'Hi {{NAME}},\nNot yet. We will let you know as soon as a suitable one comes up.', needs_human: [], facts_used: [], hold: false }];
   const asked = await post('/api/items/ao:502/paste', { text: 'Any luck finding one yet?' });
   await post(`/api/drafts/${asked.item.draft.id}/copied`, { text: asked.item.draft.reply });
   const after = (await get('/api/items/ao:502')).item;

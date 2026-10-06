@@ -2,39 +2,24 @@
 // when the customer says they live far away. All data is invented.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import http from 'node:http';
+import { applyTestEnv } from './support/env.js';
+import { startStandins, aiBehaviour } from './support/standins.js';
 
-process.env.DB_PATH = ':memory:';
-process.env.SIGN_OFF = 'Regards,\\nTeam Carbarn';
-process.env.GEMINI_API_KEY = 'test-key';
-process.env.OPENROUTER_API_KEY = '';
-process.env.SECONDS_BETWEEN_DRAFTS = '0';
-process.env.DAILY_DRAFT_LIMIT = '50';
-process.env.MARKETPLACE_ENABLED = '0';
+applyTestEnv({ DAILY_DRAFT_LIMIT: '50' });
 
 const PAGE = 'https://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159';
 const ONSITE = `${PAGE}#inspection=onsite`;
 const ONLINE = `${PAGE}#inspection=online`;
 
-let server;
-const seen = [];
-let script = [];
+let standins;
+const ai = aiBehaviour();
+const seen = ai.seen;
 const now = Date.now();
 
 before(async () => {
-  server = http.createServer((req, res) => {
-    let body = '';
-    req.on('data', (c) => { body += c; });
-    req.on('end', () => {
-      seen.push(JSON.parse(body));
-      const next = script.shift() || { reply: 'Hi {{NAME}},\nNo worries.', needs_human: [], facts_used: [], hold: false };
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(next) }, finish_reason: 'stop' }] }));
-    });
-  });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  standins = await startStandins({ ai });
   const { config } = await import('../src/config.js');
-  config.llm.gemini.url = `http://127.0.0.1:${server.address().port}/chat`;
+  config.llm.gemini.url = `${standins.base}/chat`;
 
   const { upsertLead, upsertConversation, upsertMessage, upsertVehicle } = await import('../src/db.js');
   const { normalizeVehicle } = await import('../src/normalize.js');
@@ -54,13 +39,13 @@ before(async () => {
   customer(5, 'Max', 'NSW', '1159', 'How many seats does it have?');
 });
 
-after(() => new Promise((r) => { server.close(r); server.closeAllConnections?.(); }));
+after(() => standins.close());
 
 const item = async (conversationId) => (await import('../src/items.js')).buildItem({ conversationId });
 const draft = async (conversationId, reply) => {
   const { draftFor } = await import('../src/drafter.js');
   seen.length = 0;
-  script = [{ reply, needs_human: [], facts_used: [], hold: false }];
+  ai.script = [{ reply, needs_human: [], facts_used: [], hold: false }];
   const d = await draftFor(await item(conversationId), { save: false, now });
   return { d, asked: seen[0].messages[1].content };
 };
@@ -118,7 +103,7 @@ test('a record in another state is only a hint: both links are offered and the r
 test('a customer who said they are far away, but is given the in-person link, is pointed out', async () => {
   const { draftFor } = await import('../src/drafter.js');
   const wrong = { reply: `Hi {{NAME}},\nYou can book an inspection here:\n${ONSITE}`, needs_human: [], facts_used: [], hold: false };
-  script = [wrong, wrong]; // the AI makes the same mistake on its second attempt
+  ai.script = [wrong, wrong]; // the AI makes the same mistake on its second attempt
   const d = await draftFor(await item(102), { save: false, now });
   // The in-person link was not supplied for this customer, so it is not accepted at all.
   assert.ok(d.checks.some((c) => c.code === 'link' && c.level === 'fail'), JSON.stringify(d.checks));

@@ -96,8 +96,8 @@ export function buildVoiceBank({ write = true } = {}) {
 
   if (!write) return { count: unique.length, examples: unique, skipped };
 
-  fs.mkdirSync(config.voiceDir, { recursive: true });
-  fs.writeFileSync(path.join(config.voiceDir, 'examples.json'), JSON.stringify({ builtAt: new Date().toISOString(), count: unique.length, examples: unique }, null, 1));
+  fs.mkdirSync(path.dirname(config.examplesPath), { recursive: true });
+  fs.writeFileSync(config.examplesPath, JSON.stringify({ builtAt: new Date().toISOString(), count: unique.length, examples: unique }, null, 1));
   setMeta('voice_bank_built_at', Date.now());
 
   const tally = (f) => unique.reduce((o, e) => { const k = f(e); o[k] = (o[k] || 0) + 1; return o; }, {});
@@ -115,7 +115,7 @@ export function buildVoiceBank({ write = true } = {}) {
 
 /** Rebuild at most once a day. Returns the stats when it rebuilt, otherwise null. */
 export function refreshVoiceBankIfStale(maxAgeMs = DAY) {
-  const file = path.join(config.voiceDir, 'examples.json');
+  const file = config.examplesPath;
   const last = getMeta('voice_bank_built_at', 0);
   if (fs.existsSync(file) && Date.now() - last < maxAgeMs) return null;
   return buildVoiceBank();

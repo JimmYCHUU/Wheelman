@@ -7,20 +7,13 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
+import { applyTestEnv } from './support/env.js';
 
-process.env.DB_PATH = ':memory:';
-process.env.SIGN_OFF = 'Regards,\\nTeam Carbarn';
-process.env.GEMINI_API_KEY = 'test-key';
-process.env.OPENROUTER_API_KEY = '';
-process.env.GEMINI_MODEL = 'model-a';
-process.env.GEMINI_FALLBACK_MODELS = '';
-process.env.SECONDS_BETWEEN_DRAFTS = '0';
-process.env.DAILY_DRAFT_LIMIT = '500';
-process.env.MARKETPLACE_ENABLED = '0';
-process.env.DASHBOARD_USERNAME = 'tester';
-process.env.DASHBOARD_PASSWORD = ['stand', 'in', 'only'].join('-'); // invented: the stand-in accepts anything
-process.env.VOICE_PEOPLE_FILE = 'voice/people.example.json';
+applyTestEnv();
 
+// This file keeps its own stand-in feed: its lots carry fixed auction dates and its calculator
+// gives the website's real answers for two bids, which the shared stand-in (test/support/
+// standins.js) cannot reproduce.
 const now = Date.now();
 const MIN = 60e3, HOUR = 3600e3;
 const sessionFile = path.join(os.tmpdir(), `wheelman-imports-session-${process.pid}.json`);

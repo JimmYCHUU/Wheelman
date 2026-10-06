@@ -3,17 +3,12 @@
 import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { applyTestEnv } from './support/env.js';
 
-process.env.DB_PATH = ':memory:';
-process.env.GEMINI_API_KEY = 'test-key';
-process.env.OPENROUTER_API_KEY = '';
-process.env.GEMINI_MODEL = 'model-a';
-process.env.GEMINI_FALLBACK_MODELS = 'model-b,model-c';
-process.env.SECONDS_BETWEEN_DRAFTS = '0';
-process.env.DAILY_DRAFT_LIMIT = '500';
-process.env.MARKETPLACE_ENABLED = '0';
-process.env.VOICE_PEOPLE_FILE = 'voice/people.example.json';
+applyTestEnv({ GEMINI_FALLBACK_MODELS: 'model-b,model-c' });
 
+// This file keeps its own stand-in AI: each model answers in its own way, with the services'
+// exact refusal bodies, which the shared stand-in (test/support/standins.js) does not play.
 const now = Date.now();
 const MIN = 60e3;
 let server, llm, db, items, drafter, worker;

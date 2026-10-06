@@ -2,40 +2,23 @@
 // bad reply are judged. All data is invented. A stand-in AI service on this computer plays the model.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import http from 'node:http';
+import { applyTestEnv } from './support/env.js';
+import { startStandins, aiBehaviour } from './support/standins.js';
 
-process.env.DB_PATH = ':memory:';
-process.env.SIGN_OFF = 'Regards,\\nTeam Carbarn';
-process.env.GEMINI_API_KEY = 'test-key';
-process.env.OPENROUTER_API_KEY = '';
-process.env.SECONDS_BETWEEN_DRAFTS = '0';
-process.env.DAILY_DRAFT_LIMIT = '200';
-process.env.MARKETPLACE_ENABLED = '0';
-process.env.VOICE_PEOPLE_FILE = 'voice/people.example.json';
-process.env.PORT = '0';
+applyTestEnv({ DAILY_DRAFT_LIMIT: '200' });
 
 const now = Date.now();
 const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
 const stamp = (agoMs) => new Date(now - agoMs).toISOString().slice(0, 19); // the dashboard writes times with no zone
 
-let server, db, items, drafter, promptModule, sync, appServer;
-const seen = [];
-let script = [];
+let standins, db, items, drafter, promptModule, sync, appServer;
+const ai = aiBehaviour();
+const seen = ai.seen;
 
 before(async () => {
-  server = http.createServer((req, res) => {
-    let body = '';
-    req.on('data', (c) => { body += c; });
-    req.on('end', () => {
-      seen.push(JSON.parse(body));
-      const next = script.shift() || { reply: 'Hi {{NAME}},\nNo worries.', needs_human: [], facts_used: [], hold: false };
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(next) }, finish_reason: 'stop' }] }));
-    });
-  });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  standins = await startStandins({ ai });
   const { config } = await import('../src/config.js');
-  config.llm.gemini.url = `http://127.0.0.1:${server.address().port}/chat`;
+  config.llm.gemini.url = `${standins.base}/chat`;
   db = await import('../src/db.js');
   items = await import('../src/items.js');
   drafter = await import('../src/drafter.js');
@@ -61,7 +44,7 @@ before(async () => {
   ]);
 });
 
-after(() => new Promise((r) => { appServer?.close(); appServer?.closeAllConnections?.(); server.close(r); server.closeAllConnections?.(); }));
+after(async () => { appServer?.close(); appServer?.closeAllConnections?.(); await standins.close(); });
 
 let mid = 1;
 const lead = (id, conv, first, phone, extra = {}) => db.upsertLead({ id, conversationId: conv, firstName: first, lastName: 'Test', phone, email: '', source: 'carsales', status: 'FOLLOW_UP', platform: 'CARSALES', state: 'NSW', leadAt: now - 2 * HOUR, updatedAt: now - HOUR, stocks: [], inquiries: [], statusHistory: [], ...extra });
@@ -71,7 +54,7 @@ const item = (id) => items.buildItem({ conversationId: id });
 const ask = (id) => promptModule.buildPrompt(item(id), { now }).user;
 const draft = async (id, ...replies) => {
   seen.length = 0;
-  script = replies.map((reply) => ({ reply, needs_human: /\[CHECK\?\]/.test(reply) ? [{ marker: '[CHECK?]', reason: 'A person must find it.' }] : /\[DATE\?\]/.test(reply) ? [{ marker: '[DATE?]', reason: 'A person must confirm the date.' }] : [], facts_used: [], hold: false }));
+  ai.script =replies.map((reply) => ({ reply, needs_human: /\[CHECK\?\]/.test(reply) ? [{ marker: '[CHECK?]', reason: 'A person must find it.' }] : /\[DATE\?\]/.test(reply) ? [{ marker: '[DATE?]', reason: 'A person must confirm the date.' }] : [], facts_used: [], hold: false }));
   const d = await drafter.draftFor(item(id), { save: false, now });
   return { d, sent: JSON.stringify(seen[0]), asked: seen[0].messages[1].content, attempts: seen.length };
 };
@@ -418,7 +401,7 @@ test('a buyer, a reply later in a conversation and a holding reply do not get th
   conv(224, 11, 'Abel Test', '+61421000005');
   msg(224, 'IN', 'I want a refund, this is unacceptable.', 5 * MIN);
   seen.length = 0;
-  script = [{ reply: 'Hi {{NAME}},\nSorry to hear that. We will look into this and come back to you shortly.', needs_human: [], facts_used: [], hold: true }];
+  ai.script =[{ reply: 'Hi {{NAME}},\nSorry to hear that. We will look into this and come back to you shortly.', needs_human: [], facts_used: [], hold: true }];
   const held = await drafter.draftFor(item(224), { save: false, now });
   assert.ok(held.reply.endsWith('Regards,\nTeam Carbarn'), held.reply);
 });
@@ -429,7 +412,7 @@ test('the standard block is never learned, only the lines a person changed above
   conv(225, 12, 'Bea Test', '+61421000006');
   msg(225, 'IN', 'Does the Noah have a reversing camera?', 5 * MIN);
   seen.length = 0;
-  script = [{ reply: 'Hi {{NAME}},\nWe will check whether the Noah has a reversing camera [CHECK?].', needs_human: [{ marker: '[CHECK?]', reason: 'not in the records' }], facts_used: [], hold: false }];
+  ai.script =[{ reply: 'Hi {{NAME}},\nWe will check whether the Noah has a reversing camera [CHECK?].', needs_human: [{ marker: '[CHECK?]', reason: 'not in the records' }], facts_used: [], hold: false }];
   const d = await drafter.draftFor(item(225), { now });
   assert.ok(d.reply.includes('📍'));
 
@@ -452,7 +435,7 @@ const sydney = async (hhmm, daysAgo = 1) => {
 };
 const draftAt = async (id, at, instruction, ...replies) => {
   seen.length = 0;
-  script = replies.map((reply) => ({ reply, needs_human: /\[(CHECK|DATE)\?\]/.test(reply) ? [{ marker: reply.match(/\[(CHECK|DATE)\?\]/)[0], reason: 'A person must confirm.' }] : [], facts_used: [], hold: false }));
+  ai.script =replies.map((reply) => ({ reply, needs_human: /\[(CHECK|DATE)\?\]/.test(reply) ? [{ marker: reply.match(/\[(CHECK|DATE)\?\]/)[0], reason: 'A person must confirm.' }] : [], facts_used: [], hold: false }));
   const d = await drafter.draftFor(item(id), { save: false, now: at, instruction });
   return { d, asked: seen[0].messages[1].content, retry: seen[1]?.messages[1].content || '', attempts: seen.length };
 };
@@ -742,7 +725,7 @@ test('"Good reply" makes a suggestion the model for similar messages; taking it 
   conv(241, 28, 'Sia Test', '+61421000022');
   msg(241, 'IN', 'How many seats does the Noah have?', 5 * MIN);
   seen.length = 0;
-  script = [{ reply: 'Hi {{NAME}},\nThe Noah has 5 seats.', needs_human: [], facts_used: [], hold: false }];
+  ai.script =[{ reply: 'Hi {{NAME}},\nThe Noah has 5 seats.', needs_human: [], facts_used: [], hold: false }];
   const d = await drafter.draftFor(item(241), { now });
   assert.ok(d.reply.includes('📍'), 'a new enquiry: the suggestion ends with the block');
 
@@ -784,7 +767,7 @@ test('"Could be better" is coaching: a lesson is taken from it, and the lesson, 
 
   // Two AI requests follow: one to take the lesson from the note, one to write the reply again.
   seen.length = 0;
-  script = [
+  ai.script =[
     { lessons: [lesson, { scope: 'nonsense', when: 'any reply', do: 'Keep staff arrangements to ourselves.', internal: true }] },
     { reply: 'Hi {{NAME}},\nThe Noah has 5 seats, and we have seven and eight seat people movers as well. You are welcome to come and see them.', needs_human: [], facts_used: [], hold: false },
   ];
@@ -829,7 +812,7 @@ test('"Could be better" is coaching: a lesson is taken from it, and the lesson, 
   // A rewrite that pastes the owner's words is sent back.
   const pasted = 'Hi {{NAME}},\nShe already knows it is a people mover, so we have other seating layouts.';
   seen.length = 0;
-  script = [pasted, pasted].map((reply) => ({ reply, needs_human: [], facts_used: [], hold: false }));
+  ai.script =[pasted, pasted].map((reply) => ({ reply, needs_human: [], facts_used: [], hold: false }));
   const copied = await drafter.draftFor(item(241), { save: false, now, coaching: { note, draft: d.reply } });
   assert.equal(seen.length, 2);
   assert.ok(fails(copied).includes('coaching-copied'), JSON.stringify(copied.checks));
@@ -846,7 +829,7 @@ test('"Could be better" is coaching: a lesson is taken from it, and the lesson, 
   db.insertAdvice({ draftId: null, itemKey: 'c:246', situations: ['price_negotiation'], firstReply: true, customerText: 'Is the price on the Noah negotiable at all?', draftText: 'Hi {{NAME}},\nThe price is [PRICE?].', note: 'Invite them to inspect first, we talk price in person.' });
   assert.match(ask(243), /A coaching note on a similar message, in the owner's own words\. Take the lesson from it; do not quote it\.\n  You had written: Hi \{\{NAME\}\}, \/ The price is \[PRICE\?\]\.\n  The note: Invite them to inspect first/);
   seen.length = 0;
-  script = [{ lessons: [{ scope: 'price_negotiation', when: 'a customer asks for a better price', do: 'Invite them to inspect the car first; price is discussed in person.', internal: false }] }];
+  ai.script =[{ lessons: [{ scope: 'price_negotiation', when: 'a customer asks for a better price', do: 'Invite them to inspect the car first; price is discussed in person.', internal: false }] }];
   assert.equal(await learn.distilPending(), 1);
   const after = ask(243);
   assert.match(after, /- When a customer asks for a better price: Invite them to inspect the car first; price is discussed in person\./);

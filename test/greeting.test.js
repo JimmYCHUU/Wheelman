@@ -2,36 +2,23 @@
 // All data is invented. A stand-in AI service on this computer plays the model.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import http from 'node:http';
+import { applyTestEnv } from './support/env.js';
+import { startStandins, aiBehaviour } from './support/standins.js';
 
-process.env.DB_PATH = ':memory:';
-process.env.SIGN_OFF = 'Regards,\\nTeam Carbarn';
-process.env.GEMINI_API_KEY = 'test-key';
-process.env.OPENROUTER_API_KEY = '';
-process.env.SECONDS_BETWEEN_DRAFTS = '0';
-process.env.DAILY_DRAFT_LIMIT = '50';
-process.env.MARKETPLACE_ENABLED = '0';
+applyTestEnv({ DAILY_DRAFT_LIMIT: '50' });
 
-let server;
-const seen = [];
+let standins;
 // The model keeps greeting every time, as it tends to. The app must tidy that up itself.
 const reply = { reply: 'Hi {{NAME}},\n\nYes, Saturday at 10 am works.', needs_human: [], facts_used: [], hold: false };
+const ai = aiBehaviour({ behave: () => reply });
+const seen = ai.seen;
 const now = Date.now();
 const MIN = 60e3, HOUR = 3600e3;
 
 before(async () => {
-  server = http.createServer((req, res) => {
-    let body = '';
-    req.on('data', (c) => { body += c; });
-    req.on('end', () => {
-      seen.push(JSON.parse(body));
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(reply) }, finish_reason: 'stop' }] }));
-    });
-  });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  standins = await startStandins({ ai });
   const { config } = await import('../src/config.js');
-  config.llm.gemini.url = `http://127.0.0.1:${server.address().port}/chat`;
+  config.llm.gemini.url = `${standins.base}/chat`;
 
   const { upsertLead, upsertConversation, upsertMessage } = await import('../src/db.js');
   let mid = 1;
@@ -48,7 +35,7 @@ before(async () => {
   customer(3, 'Ana', [['IN', 'Is it available?', 50 * HOUR], ['OUT', 'Hi Ana,\nYes, it is available.\n\nRegards,\nTeam Carbarn', 49 * HOUR], ['IN', 'Can I come on Saturday at 10 am?', 2 * MIN]]);
 });
 
-after(() => new Promise((r) => { server.close(r); server.closeAllConnections?.(); }));
+after(() => standins.close());
 
 const draft = async (conversationId) => {
   const { buildItem } = await import('../src/items.js');
