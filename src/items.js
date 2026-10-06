@@ -570,8 +570,11 @@ export function buildPhoneItem(id, { now = Date.now() } = {}) {
   if ((t.kind === 'shortcode' || t.kind === 'alpha') && item.state === 'awaiting') {
     item.state = 'other';
     item.note = 'A short code or a sender name rather than a phone number: a notice, not a customer.';
-    item.autoDraft = false;
   }
+  // Only on the phone: a saved contact there is as likely a supplier or a colleague as a customer,
+  // and the free AI requests are kept for people known to be customers. "Write it now" works.
+  if (item.autoDraft) item.autoReason = 'This conversation is only on the phone, with no customer record on the dashboard, so nothing was written automatically. If it is a customer, choose Write it now.';
+  item.autoDraft = false;
   item.phoneOnly = true;
   item.imports = null;
   return item;

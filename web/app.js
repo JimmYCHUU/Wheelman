@@ -355,10 +355,17 @@ function renderStatus() {
   else if (last) text = `${place} not reached`;
   else text = `${place} not checked yet`;
   box.append(`${text} · ${s.ai.usedToday} of ${s.ai.limit} AI requests used today`);
-  // The phone add-on, once it has reported at all. (Before then there is nothing to say.)
+  // The phone add-on gets a line of its own in the footer, once it has reported at all. (Before
+  // then there is nothing to say.) The status line stays one line, so it is never cut short.
   const ph = s.phone;
-  if (!chat && ph?.on && ph.lastReportAt) {
-    box.append(ph.stale ? ` · The phone add-on has not reported since ${clock(ph.lastReportAt)}` : ` · Phone add-on heard ${ago(ph.lastReportAt)}`);
+  const phoneLine = $('#phone-line');
+  const phoneOn = !chat && !inAuction() && !!(ph?.on && ph.lastReportAt);
+  phoneLine.hidden = !phoneOn;
+  if (phoneOn) {
+    phoneLine.textContent = ph.stale
+      ? `The phone add-on has not reported since ${clock(ph.lastReportAt)}`
+      : `Phone add-on heard ${ago(ph.lastReportAt)} · ${plural(ph.threads || 0, 'conversation')} on the phone`;
+    phoneLine.title = 'The add-on in your browser reads the list in the Google Messages tab every 30 seconds and hands the latest text of each conversation to Wheelman. Texts the dashboard missed are shown as seen on the phone.';
   }
   // The better models are kept for dashboard customers; Marketplace chats use the rest.
   const models = s.ai.providers.map((p) => `${p.model}${p.marketplace === false ? ' (dashboard customers only)' : ''}${p.usedUpUntil ? ` (today's free allowance used up, back about ${clock(p.usedUpUntil)})` : p.restingMinutes ? ' (busy)' : ''}`).join('\n');
