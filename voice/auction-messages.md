@@ -27,7 +27,7 @@
 #   {sender}         the name on the last line (FIRST_REPLY_SENDER in the .env file)
 #
 # The first ten parts are written from messages your team has really sent. The parts marked
-# FIRST DRAFT are mine, written without an example: please correct them.
+# FIRST DRAFT were written without an example: please correct them.
 
 # Short pieces of wording Wheelman chooses between:
 @missed: we missed it by a small margin. The vehicle sold for {sold_for}

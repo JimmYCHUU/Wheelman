@@ -1,8 +1,11 @@
-# How Carbarn works
+# How Carbarn works (example)
+
+This is the example file committed with the project. The real one, `how-carbarn-works.md` beside
+it, stays on the dealer's computer and is never committed; it names the dealer's partners and
+describes its actual practice. When the real file is missing (a fresh clone, the demo, the
+automated checks) Wheelman reads this one.
 
 Wheelman reads everything below the line on every suggestion, so it can answer like someone who works here.
-It was written on 1 October 2026 from a study of 664 customer conversations (June to September 2026),
-316 sales records and the website. Where practice changed over time, the most recent practice is used.
 Edit it freely in plain sentences. Prices that vary from deal to deal are deliberately left out:
 Wheelman leaves those to you.
 
@@ -14,9 +17,9 @@ Wheelman leaves those to you.
 2. Going ahead. The customer sends a photo of their driver licence and their email address, plus the delivery address if the car is being delivered. We email a tax invoice, usually the same day. We cannot issue an invoice without the licence and email.
 3. Deposit. The customer pays the $1,000 holding deposit by bank transfer to the account shown on the invoice and sends a screenshot of the payment. We confirm it and email an updated invoice.
 4. Registration and preparation. Vehicles are kept unregistered and are registered after the deposit is paid, first in our company name. The customer is asked which plate style they want at this point. We then complete the roadworthy inspection (blue slip), service and detail, and anything agreed as part of the deal, which is written on the invoice under conditions of sale. A car that is already in the yard is usually ready within 1 to 3 days. It takes longer when repairs, parts or an engineering certificate are needed. Never promise a ready date unless our staff have already given one in the conversation.
-5. Insurance. Once the car is registered we send the registration number and VIN so the buyer can arrange insurance. Insurance is the buyer's responsibility. Insurers that cover Japanese imports include Shannons, Enthusiast and NRMA; the buyer may need to enter the make and model by hand.
+5. Insurance. Once the car is registered we send the registration number and VIN so the buyer can arrange insurance. Insurance is the buyer's responsibility. Several insurers cover Japanese imports; the buyer may need to enter the make and model by hand.
 6. Balance. The balance is paid before the vehicle is handed over, by bank transfer in advance or at pickup. For a finance purchase the lender pays us directly, and we refund the holding deposit after settlement.
-7. Handover. The buyer collects from Lidcombe and should call or text shortly before arriving, or we deliver. Delivery outside Greater Sydney is by car carrier (PrixCar or CEVA), booked once the balance has cleared, and we pass on the tracking details.
+7. Handover. The buyer collects from Lidcombe and should call or text shortly before arriving, or we deliver. Delivery outside Greater Sydney is by car carrier, booked once the balance has cleared, and we pass on the tracking details.
 8. Paperwork. The buyer receives the final invoice, the signed Motor Dealer Form 5 sales contract, the warranty documents and the export certificate. We lodge the notice of disposal with Service NSW. The buyer then transfers the registration into their own name with Service NSW, and pays the stamp duty and transfer fee at that point.
 
 ## Things customers often ask
@@ -29,7 +32,7 @@ Wheelman leaves those to you.
 - Japanese screens. The instrument cluster and dash language cannot be changed to English. The head unit can be replaced with an English unit that has Apple CarPlay and Android Auto; a person quotes the cost. The built-in navigation map is for Japan.
 - Plates. Standard plates are included. Black and white plates are an optional extra that a person quotes.
 - Buyers from other states. We register vehicles in NSW only. An interstate buyer can drive home on the NSW registration with the Form 5 sales contract and then transfer the registration in their own state.
-- Finance. Applications made on the website go to our finance partner, Credit One, who contact the customer directly. They will ask for the driver licence (front and back) and recent payslips. Customers are welcome to use their own lender; we send the invoice to the lender. We do not offer instalment plans or arrange novated leases.
+- Finance. Applications made on the website go to our finance partner, who contact the customer directly. They will ask for the driver licence (front and back) and recent payslips. Customers are welcome to use their own lender; we send the invoice to the lender. We do not offer instalment plans or arrange novated leases.
 - Trade-ins that we decline. We do not accept vehicles that have been written off. We do not swap cars directly or buy cars outright.
 - Odometer proof. The export certificate and auction sheet are the proof of kilometres. We can send photos of both.
 - Faults after purchase. Ask the customer to bring the vehicle in so our mechanic can check it. Anything about refunds, repair costs or how long a repair will take is for a person.

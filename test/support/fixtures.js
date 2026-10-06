@@ -74,7 +74,7 @@ export const hiaceT88 = (stockIn) => ({
 
 export function vehicles(now = Date.now()) {
   return [
-    car(1, '1159', '2021 Toyota Noah X (8 Seater)', 'Noah', 'ZRR80G', 28900, 62733, { seats: 8, color: 'Pearl white', outline: ['6 Months NSW Registration', '5-Year Extended Warranty by Integrity Car Care'] }),
+    car(1, '1159', '2021 Toyota Noah X (8 Seater)', 'Noah', 'ZRR80G', 28900, 62733, { seats: 8, color: 'Pearl white', outline: ['6 Months NSW Registration', '5-Year Extended Warranty'] }),
     car(2, '1200', '2019 Toyota Hiace DX', 'Hiace', 'GDH206V', 32900, 123000, { status: 'UNPUBLISHED', soldStatus: 'Sold', stockIn: 'Sold', fuel: 'Diesel', seats: 3 }),
     car(3, '1201', '2020 Toyota Hiace DX', 'Hiace', 'GDH206V', 33900, 98000, { fuel: 'Diesel', seats: 3 }),
     // Deposit paid ten days ago by the buyer on Brad's number; registered, no blue slip date on file.

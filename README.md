@@ -362,8 +362,10 @@ the `=` with no spaces and no quote marks, save, then start Wheelman.
 | `GEMINI_API_KEY` | The free Gemini key |
 | `OPENROUTER_API_KEY` | Optional backup key |
 | `MARKETPLACE_URL` | The address of the Marketplace inbox. Leave empty to keep that section off |
+| `DASHBOARD_ORIGIN` | The address of the dashboard's own website, sent as the origin of each read. Leave empty to use the data service's address |
+| `BUSINESS_PHONES` | Any other phone numbers of ours that may appear in a text, comma-separated. Optional |
 
-The two addresses are not written in the code on purpose. Then copy
+None of these addresses is written in the code on purpose. Then copy
 `voice/people.example.json` to `voice/people.json` and put in the real names and logins of the
 two people whose voice Wheelman learns, and the first names of other staff.
 
@@ -717,8 +719,8 @@ Wheelman only states facts it has been given.
 | Source | File or place | How it stays current |
 |---|---|---|
 | Stock: price, kilometres, availability, inclusions | The dashboard | Read every few minutes |
-| Business facts: deposit, warranty, delivery, payment | `knowledge/business-facts.md` | You edit it |
-| How Carbarn works: the steps of a sale, common questions | `knowledge/how-carbarn-works.md` | You edit it |
+| Business facts: deposit, warranty, delivery, payment | `knowledge/business-facts.md` (private; `business-facts.example.md` is what is published) | You edit it |
+| How Carbarn works: the steps of a sale, common questions | `knowledge/how-carbarn-works.md` (private; an example file is published) | You edit it |
 | The website: policy pages, guides, blog, import pages | `knowledge/website/` | `npm run fetch-website -- --all` |
 | Cars in the coming Japan auctions, what similar cars sold for, and what one would cost landed | The website's live auction | Read at the moment an offer is written, and hourly for orders still searching |
 | Auction orders: the stage, what was asked for, the car, what is charged and paid | The dashboard | Read every few minutes |
@@ -732,9 +734,12 @@ needed. The evidence behind each answer is kept in `knowledge/business-facts-evi
 local file Wheelman never reads. Topics still without an answer are listed in the black window
 at start-up.
 
-The facts were researched on 1 October 2026 from 7,138 customer messages, 316 sales records,
-the dashboard's delivery zones and stock, and the website. `how-carbarn-works.md` was written
-from a study of 664 conversations.
+The facts were researched on 1 October 2026 from the dashboard's customer messages, sales
+records, delivery zones and stock, and from the website. `how-carbarn-works.md` was written
+from a study of the same conversations. Both files hold the dealer's own fees, terms and
+partners, so they stay on this computer: the repository carries an example of each, with
+invented figures, which Wheelman reads whenever the real file is missing (a fresh clone, the
+demo, the automated checks).
 
 ## How Wheelman learns
 
@@ -904,11 +909,12 @@ computer. Git never sees any of it.
 
 | Folder | Content |
 |---|---|
-| `.env` | Dashboard address and login, the Marketplace inbox address, and the AI keys |
+| `.env` | Dashboard addresses and login, the Marketplace inbox address, our other phone numbers, and the AI keys |
 | `voice\people.json` | The real names and logins of the two voices, and other staff names |
 | `PLAN.md`, `knowledge\business-facts-evidence.md` | Internal planning notes, and the evidence behind each business fact |
 | `data\app.db` | Leads, conversations, messages, stock, the stage of each sale, the auction orders and what you pasted into them, Marketplace chats, the texts the phone add-on saw, every suggestion with its checks and what you typed over it, what was learned, what was dismissed and read |
 | `Auction.txt` | Real messages the team sent to auction customers, kept as the source for the wording |
+| `knowledge\business-facts.md`, `knowledge\how-carbarn-works.md` | The real business facts and operations guide: fees, terms, partners, practice. Example files with invented figures are published in their place |
 | `data\wheelman.log` | What went wrong and when: technical messages only, no customer details |
 | `data\raw\` | The history first copied from the dashboard |
 | `data\analysis\` | The cleaned samples behind the voice and the business facts |
@@ -1084,9 +1090,8 @@ wheelman/
 ## Status
 
 In daily use since 1 October 2026. The dashboard side runs live on a real login. The
-Marketplace section has been read live (122 chats in the first fortnight's window) and its
-first suggestions written; reading was checked to change nothing on the engine. All 23
-business facts are confirmed. Each of the day's changes (greeting once a day, inspection
+Marketplace section has been read live and its first suggestions written; reading was checked
+to change nothing on the engine. Every business fact is confirmed. Each of the day's changes (greeting once a day, inspection
 links, dismiss with undo, unread counts) was checked on a throwaway copy with invented
 customers and on the automated tests, not yet over a full working day.
 
@@ -1111,8 +1116,8 @@ automated tests and in a browser on a throwaway copy with invented customers.
 5 October 2026, later: the Auction section was added, and the suggested bid now comes from
 what similar cars sold for. Checked on the automated tests, in a browser on a throwaway copy
 with invented orders, and by one read-only pass over the real orders on a private copy of the
-database (31 orders read, 9 with a message due, each written with no AI and nothing left
-unfilled). Not yet used over a working day.
+database (every order read, each due message written with no AI and nothing left unfilled).
+Not yet used over a working day.
 
 6 October 2026: the phone add-on was added after a customer's text reached the business phone
 but not the dashboard. Checked on the automated tests (ten new ones, on invented numbers). The

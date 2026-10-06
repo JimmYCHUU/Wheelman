@@ -1,4 +1,9 @@
-# Carbarn business facts
+# Business facts (example)
+
+This is the example file committed with the project. The real one, `business-facts.md` beside it,
+stays on the dealer's computer and is never committed; it holds the dealer's actual fees, terms
+and partners. When the real file is missing (a fresh clone, the demo, the automated checks)
+Wheelman reads this one. The figures and partner names below are examples, not Carbarn's terms.
 
 Wheelman reads this file every time it writes a suggestion. You can edit it in any text editor.
 Changes take effect on the next suggestion; nothing needs restarting.
@@ -11,16 +16,12 @@ Each topic has a **Status** line. There are three values:
 
 Keep the `## Topic`, `Status:` and `Answer:` lines exactly in that form. Everything after `Answer:` up to the
 next `##` heading is the answer. A line starting with `Found:` is a note for you; Wheelman never sees it.
-The evidence behind each answer is kept in `business-facts-evidence.md`, a file that stays on this computer.
-
-Researched on 1 October 2026 from: 7,138 customer messages, 316 sales records (112 since June 2026),
-the delivery zones and stock records in the dashboard, and the website. Read-only; nothing was changed.
 
 ---
 
 ## Who we are
 Status: CONFIRMED
-Answer: Carbarn is the trading name of AYANUK PTY LTD, a licensed NSW motor dealer (licence MD056471, ABN 99 155 559 970). We sell used vehicles, mostly imported from Japan: hybrids, people movers, Hiace vans, 4WDs, campervans and motorhomes. We own every car we sell. Payments are made out to AYANUK PTY LTD.
+Answer: Carbarn is a licensed NSW motor dealer (licence MD204917, ABN 11 222 333 444). We sell used vehicles, mostly imported from Japan: hybrids, people movers, Hiace vans, 4WDs, campervans and motorhomes. We own every car we sell.
 
 ## Contact details
 Status: CONFIRMED
@@ -68,11 +69,11 @@ Answer: The 3-month dealer warranty applies where it is listed in the vehicle fa
 
 ## Extended warranty
 Status: CONFIRMED
-Answer: The 5-year extended warranty is provided by Integrity Car Care and applies Australia-wide. It covers mechanical and electrical components and the hybrid battery, up to $5,000 per claim. Only vehicles 25 years old or newer are eligible. It includes 1 year of 24/7 roadside assistance. Whether it is included with a particular car is listed in the vehicle facts under "Included". Full details: https://www.carbarn.com.au/warranty
+Answer: The 5-year extended warranty is provided by our warranty partner and applies Australia-wide. It covers mechanical and electrical components and the hybrid battery, up to $5,000 per claim. Only vehicles 25 years old or newer are eligible. It includes 1 year of 24/7 roadside assistance. Whether it is included with a particular car is listed in the vehicle facts under "Included". Full details: https://www.carbarn.com.au/warranty
 
 ## Extended warranty cost when it is not included
 Status: CONFIRMED
-Answer: For an eligible vehicle from our stock that does not include it, the 5-year extended warranty can be added for $1,300. For a vehicle imported to order, it is $1,500. Vehicles more than 25 years old are not eligible.
+Answer: For an eligible vehicle from our stock that does not include it, the 5-year extended warranty can be added for $1,200. For a vehicle imported to order, it is $1,400. Vehicles more than 25 years old are not eligible.
 
 ## Delivery
 Status: CONFIRMED
@@ -88,7 +89,7 @@ Answer: Finance is arranged through third-party lenders. Customers apply through
 
 ## Payment
 Status: CONFIRMED
-Answer: We accept bank transfer, card and cash. Bank transfer is preferred. American Express carries a 3% surcharge. Full cleared payment is required before handover. To prepare an invoice we need the customer's driver licence details and email address. Never include bank account details in a reply; they are sent on the invoice.
+Answer: We accept bank transfer, card and cash. Bank transfer is preferred. Some cards carry a surcharge, which a person confirms: leave [CHECK?]. Full cleared payment is required before handover. To prepare an invoice we need the customer's driver licence details and email address. Never include bank account details in a reply; they are sent on the invoice.
 
 ## Documents for imported vehicles
 Status: CONFIRMED
@@ -104,7 +105,7 @@ Answer: Importing to order starts with a refundable deposit, which covers our in
 
 ## Optional extras
 Status: CONFIRMED
-Answer: We can arrange these extras on request. Black and white number plates: $180. A head unit with Apple CarPlay, Android Auto and a reverse camera: from $400. A spare key: $250. For 12 months registration, or any other extra, a person confirms the cost: leave [CHECK?].
+Answer: We can arrange these extras on request. Black and white number plates: $199. A head unit with Apple CarPlay, Android Auto and a reverse camera: from $450. A spare key: $220. For 12 months registration, or any other extra, a person confirms the cost: leave [CHECK?].
 
 ## Availability wording
 Status: CONFIRMED

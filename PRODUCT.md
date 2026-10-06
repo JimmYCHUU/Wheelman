@@ -26,7 +26,7 @@ The suggestions are written in the blended voice of the dealership's two lead sa
 
 - Runs on the owner’s computer at http://localhost:3210, next to the Carbarn dashboard in another browser tab.
 - The loop: see who is waiting, read what they wrote, read the suggestion, fix any blank, copy, paste into the dashboard, send.
-- Roughly 30 to 50 customer messages a day need a reply.
+- Dozens of customer messages a day need a reply.
 - Customers write by SMS and through car portals (Carsales, Autotrader) and the Carbarn website. Buyers also write on Facebook Marketplace, across several seller accounts, where the content engine’s own auto-reply answers many chats first.
 - Carbarn is a used-car dealer in Lidcombe, Sydney, selling mostly vehicles imported from Japan.
 

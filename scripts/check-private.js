@@ -12,7 +12,7 @@ import { config } from '../src/config.js';
 const root = config.root;
 const read = (file) => { try { return fs.readFileSync(path.join(root, file), 'utf8'); } catch { return ''; } };
 
-const SECRET = /USERNAME|PASSWORD|KEY|TOKEN|SECRET|URL/;
+const SECRET = /USERNAME|PASSWORD|KEY|TOKEN|SECRET|URL|ORIGIN|PHONES/;
 const settings = read('.env').split('\n').map((l) => l.trim().match(/^([A-Z_]+)=(.*)$/)).filter(Boolean)
   .map((m) => [m[1], m[2].trim()]).filter(([k, v]) => SECRET.test(k) && v.length >= 3);
 const session = (() => { try { return Object.values(JSON.parse(read('data/.session.json'))).map(String).filter((v) => v.length >= 8); } catch { return []; } })();
@@ -27,6 +27,9 @@ const names = (() => {
     else if (x && typeof x === 'object') for (const [k, v] of Object.entries(x)) walk(v, k);
   };
   try { walk(JSON.parse(read('voice/people.json'))); } catch { /* no local people file: nothing to compare */ }
+  // Words that must never appear, given from outside (a comma-separated list), so a check run where
+  // there is no people file, such as in CI, can still look for them without them being in the repo.
+  for (const w of String(process.env.PRIVATE_WORDS || '').split(',').map((s) => s.trim().toLowerCase()).filter((s) => s.length >= 4)) out.add(w);
   return [...out];
 })();
 
@@ -36,7 +39,7 @@ const SHAPES = [
   ['a GitHub token', /gh[pousr]_[0-9A-Za-z]{30,}/],
   ['a password written out', /password\s*[:=]\s*['"][^'"\s]{4,}['"]/i],
 ];
-const PRIVATE_FILE = /(^|\/)\.env$|^data\/|(^|\/)people\.json$|(^|\/)examples\.json$|^PLAN\.md$|^Auction\.txt$|evidence|\.session|^\.playwright-mcp\/|^eval\/out\/|^knowledge\/website\//;
+const PRIVATE_FILE = /(^|\/)\.env$|^data\/|(^|\/)people\.json$|(^|\/)examples\.json$|^PLAN\.md$|^Auction\.txt$|evidence|\.session|^\.playwright-mcp\/|^eval\/out\/|^knowledge\/website\/|^knowledge\/(business-facts|how-carbarn-works)\.md$/;
 
 const files = execSync('git ls-files --cached --others --exclude-standard', { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).split('\n').filter(Boolean);
 const problems = [];
