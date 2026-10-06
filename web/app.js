@@ -96,6 +96,7 @@ const state = {
   hours: 72,
   q: '',
   list: [],
+  everything: [],        // Auction: the rows of all three lists, so a search finds an order wherever it is
   counts: { waiting: 0, quiet: 0, other: 0 },
   selected: null,
   detail: null,
@@ -395,11 +396,17 @@ function renderNotices() {
 
 // ---- conversation list ---------------------------------------------------------
 
+// Which list an auction order is on, from its state.
+const ORDER_LIST = { awaiting: 'To do', answered: 'In progress', closed: 'Finished' };
+const TAB_STATE = { waiting: 'awaiting', quiet: 'answered', other: 'closed' };
+
 function visibleRows() {
   const q = state.q.trim().toLowerCase();
   if (!q) return state.list;
   const digits = q.replace(/\D/g, '');
-  return state.list.filter((r) =>
+  // In the Auction section a search looks through every order, not only the list on screen.
+  const rows = inAuction() && state.everything.length ? state.everything : state.list;
+  return rows.filter((r) =>
     [r.name, r.preview.text, r.car, r.situation, r.account, r.due, r.orderNo].some((f) => String(f || '').toLowerCase().includes(q))
     || (digits.length >= 3 && String(r.phone || '').replace(/\D/g, '').includes(digits)));
 }
@@ -412,7 +419,7 @@ function renderList() {
 
   if (!rows.length) {
     const empty = state.q.trim()
-      ? ['Nothing matches', 'Try a name, part of a phone number, or a word from the message.']
+      ? (inAuction() ? ['No order matches', 'Every order on the dashboard was searched: To do, In progress and Finished. Try a name, a car or an order number.'] : ['Nothing matches', 'Try a name, part of a phone number, or a word from the message.'])
       : inAuction()
         ? { waiting: ['Nothing to do', 'Auction orders that need a message appear here with the message ready to check.'],
             quiet: ['Nothing here', 'Orders that are under way with no message due.'],
@@ -455,6 +462,8 @@ function renderList() {
         (chat || order) && r.car ? h('span', { class: 'row-car', text: r.car }) : null,
         h('span', { class: 'row-bottom' },
           h('span', { class: 'row-preview' },
+            // Found by a search on another list: the row says which one it is on.
+            order && r.state !== TAB_STATE[state.tab] ? h('span', { class: 'row-tag', text: ORDER_LIST[r.state] || '' }) : null,
             setAside ? h('span', { class: 'row-tag', text: 'Dismissed' }) : flagWords ? h('span', { class: `row-flag ${flagClass}`, text: `${flagWords}: ` }) : null,
             !order && r.preview.who === 'us' ? h('span', { class: 'you', text: 'You: ' }) : null, previewText),
           unread ? h('span', { class: 'badge' }, String(unread), h('span', { class: 'visually-hidden', text: unread === 1 ? ' unread message' : ' unread messages' })) : null)));
@@ -492,6 +501,15 @@ function renderCounts() {
   }
   // Every order is listed, however old: the "last 3 days" choice is for conversations only.
   $('.side-foot label').hidden = inAuction();
+  // In its place: how many orders were read, so it can be checked against the dashboard's own page.
+  const line = $('#orders-line');
+  const c = state.counts;
+  const orders = c.waiting + c.quiet + c.other;
+  line.hidden = !inAuction() || !orders;
+  if (inAuction() && orders) {
+    line.textContent = `${plural(orders, 'order')} read from the dashboard: ${c.waiting} to do, ${c.quiet} in progress, ${c.other} finished.`;
+    line.title = 'Every order on the dashboard\'s auction page is read on each check. To do: a message is due, or the customer wrote. In progress: under way, nothing due. Finished: completed, cancelled or refunded (kept for 60 days). Search looks through all of them.';
+  }
   // The three lists are named for the section on screen.
   for (const [i, tab] of ['waiting', 'quiet', 'other'].entries()) {
     const f = $(`.filter[data-tab="${tab}"]`);
@@ -693,7 +711,8 @@ function renderThread(item, els, { toBottom = false } = {}) {
 // A blank is any short label in capitals with a question mark, in square brackets: [PRICE?], [SOLD PRICE?].
 // The same pattern is used in src/checks.js and src/learn.js.
 const BLANK = /\[([A-Z][A-Z0-9 &'/-]{1,30})\?\]/g;
-const BLANK_NAME = { PRICE: 'the price', 'TRADE-IN VALUE': 'the trade-in value', 'DELIVERY COST': 'the delivery cost', DATE: 'the date', CHECK: 'something to confirm', 'DEPOSIT LINK': 'the deposit link', SHIP: "the ship's name", 'WHICH CAR': 'which car' };
+const BLANK_NAME = { PRICE: 'the price', 'TRADE-IN VALUE': 'the trade-in value', 'DELIVERY COST': 'the delivery cost', DATE: 'the date', CHECK: 'something to confirm', 'DEPOSIT LINK': 'the deposit link', SHIP: "the ship's name", 'WHICH CAR': 'which car',
+  'WHICH AUCTION': 'which auction', KM: 'the kilometres', GRADE: 'the auction grade', 'HOW MANY': 'how many' };
 const blankName = (kind) => BLANK_NAME[kind] || `the ${kind.toLowerCase()}`;
 
 function blanksIn(text) {
@@ -1474,6 +1493,7 @@ async function refreshList() {
     const data = await api(`/api/items?section=${state.section}&tab=${state.tab}&hours=${state.hours}`);
     if (seq !== state.listSeq) return false; // a newer request has replaced this one
     state.list = data.items;
+    state.everything = data.everything || [];
     state.counts = data.counts;
     if (data.sections) state.sections = data.sections;
     if (data.unread) state.unread = data.unread;

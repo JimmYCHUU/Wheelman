@@ -60,6 +60,8 @@ The suggestions are written in the blended voice of the dealership's two lead sa
 - The suggested auction bid is the average of the three closest sold cars on the website’s "Japan auction sold prices" list (same grade first, then nearest kilometres), rounded up to the next ¥50,000. It is never below the website’s own suggested bid: when similar cars sold for less, that bid is rounded up instead. (User’s choices, 5 Oct 2026: "Never bid below".)
 - The dashboard’s "quiet" mark on an order is ignored. A follow-up marked as due is a reason to write. (User’s instruction, 5 Oct 2026.)
 - Nothing is learned from the Auction section for now: its wording is corrected in its file.
+- An auction message is always written. What Wheelman cannot look up becomes a blank for the owner to fill in, never a refusal. (User’s instruction, 5 Oct 2026: "Just make the templates … I'll fill them".)
+- In the Auction section the search looks through all three lists, and the foot of the list says how many orders were read from the dashboard. (After the owner could not find an order that was under In progress, 5 Oct 2026.)
 - The live auction is read without a login. The one request to the website’s cost calculator carries only a bid amount and changes nothing.
 - The details panel shows what an import customer asked us to find, in place of a car from stock.
 - The message box is an editor. The owner can change the suggestion or clear it and write his own; what he types is saved as he types and survives a reload. A changed reply teaches Wheelman when it is copied, approved with "Good reply", or seen sent. (User’s instruction, 5 Oct 2026: "I want that to be realtime editor, where I can edit message, clear suggestions if not needed. And it will learn from my edits".)

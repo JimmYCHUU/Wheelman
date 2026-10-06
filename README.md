@@ -1,7 +1,7 @@
 # Wheelman 🛞
 
 ![Node.js 24](https://img.shields.io/badge/node-24-339933)
-![Tests](https://img.shields.io/badge/tests-203%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-204%20passing-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-lightgrey)
 ![Free AI models](https://img.shields.io/badge/AI-free%20models%20only-blue)
 ![Never sends](https://img.shields.io/badge/sending-never%2C%20copy%20only-orange)
@@ -527,6 +527,11 @@ message to that customer written and waiting.
 | **In progress** | Orders that are under way with nothing due |
 | **Finished** | Completed, cancelled and refunded orders. Ended orders are kept for 60 days |
 
+The bottom of the list says how many orders were read from the dashboard and how many are
+on each list, so it can be checked against the dashboard's own page. **Search looks through
+all three lists at once**: an order found on another list carries a small tag saying which.
+An order with nothing due is under In progress, not To do.
+
 Each row shows the customer, the car they want or the car secured, what is due, and the
 stage in plain words: Looking for a car · Bid placed, result due · Car secured · Shipping and
 compliance · On the way to Australia · Arrived, compliance under way · Completed.
@@ -560,6 +565,13 @@ What only a person knows is a highlighted blank.
 | Refund update | The order is refunded | The date |
 | Progress update | A follow-up is due on the dashboard and nothing is owing | The next step |
 
+- **A message is always written.** When Wheelman cannot look something up (no car of that
+  model in the website's coming auctions, nothing in our stock, the auction not answering),
+  the message is written anyway with blanks for you: `[WHICH AUCTION?]`, `[YEAR?]`, `[KM?]`,
+  `[GRADE?]`, `[PHOTO LINK?]`, `[BID?]`, `[LANDED PRICE?]`. A note above it says why. This is
+  also how to offer a car found outside the website's list: type
+  `2021, 14,200 km, grade 4, tomorrow, bid 1.15m, landed 20400` and the link to its photos
+  into **Add what you know** and the blanks are filled in one go.
 - A message about a step is only suggested while the step is recent (7 days; 14 for a
   completed or refunded order), so nobody is congratulated three weeks late.
 - **Which message?** lists every message for the order's stage. Pick another and it is
@@ -825,7 +837,8 @@ Git never sees any of it.
 | An auction message says "The wording for ... is missing" | A part was deleted or renamed in `voice/auction-messages.md` | Put the line `===== name =====` back as it was |
 | A word in curly brackets, such as `{due}`, is marked red in an auction message | A slip in the wording file: Wheelman does not know that word | Check the spelling against the list at the top of the file |
 | An order shows no message although one should be due | The step happened more than a week ago, or the message was copied or dismissed | Pick it under **Which message?**, or press **Put back in To do** |
-| "No ... is in the coming auctions right now" | The website lists none of that model in the next few auction days | Nothing. It is looked at again within the hour |
+| A note says "No ... is in the website's coming auctions right now" and the car is blanks | The website lists none of that model in the next few auction days | Fill the blanks in, or type the car into **Add what you know**. The auction is looked at again within the hour |
+| An order cannot be found in the Auction section | It is on another list: one with nothing due is under **In progress** | Type the name, car or order number into the search box. It looks through all three lists |
 | "Port 3210 is already in use" | Wheelman is already running in another window | Use that window, or close it |
 | "running scripts is disabled on this system" | Windows PowerShell blocks `npm` | Use the double-click file, or type `npm.cmd` |
 | The page says Wheelman is not responding | The black window was closed | Double-click **Start Wheelman.cmd** again |
@@ -838,7 +851,7 @@ Git never sees any of it.
 npm.cmd test
 ```
 
-203 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
+204 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
 a stand-in auction feed on this computer: who counts as waiting and who does not, stock numbers matched to the right
 car however a portal writes them (a year in front, a portal code, upper or lower case), that
 no customer detail and no cost figure reaches the AI request, an invented price
@@ -884,7 +897,8 @@ an order matched to its lead by phone number; the message due at every stage, an
 step that is old; every message written word for word with no AI request and nothing left
 unfilled; blanks filled from what is typed, and only from what is plainly said; the bid from
 the three closest sold cars, never below the website's suggested bid, and the notes when a
-car misses the order; our own stock offered after a lost bid; Copy counting as done,
+car misses the order; a message always written, with blanks for what cannot be looked up
+and one typed line filling them; our own stock offered after a lost bid; Copy counting as done,
 the next message coming up, and Put back; a pasted WhatsApp message producing one AI request
 with no name, number or amount in it and the figures back in the reply; a marker the AI
 made up caught; nothing learned from the section; and an older database upgrading cleanly.

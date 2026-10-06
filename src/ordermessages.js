@@ -71,10 +71,24 @@ export function factsIn(text) {
     stockNo: (t.match(/\bstock\s*(?:no\.?|number|#)?\s*([A-Za-z]?\d{2,6})\b/i) || [])[1] || '',
     lotId: lotIdFromUrl(t) || (t.match(/\blot\s*(?:no\.?|number|#)?\s*(\d{6,9})\b/i) || [])[1] || '',
     next: ((t.match(/\bnext(?:\s+step)?\s*(?:is|:|-)\s*([^\n]+)/i) || [])[1] || '').trim().replace(/[.\s]+$/, ''),
+    // A car described by hand, for one that is not on the website's auction list:
+    // "2021, 14,200 km, grade 4, tomorrow, bid 1.15m, landed 20400, https://photos…"
+    year: Number((t.match(/\b(?:model )?year\s*:?\s*(19[89]\d|20[0-3]\d)\b/i) || t.match(/\b(19[89]\d|20[0-3]\d)\s+model\b/i) || t.match(/^\s*(19[89]\d|20[0-3]\d)\s*(?:,|\s+[A-Za-z])/) || [])[1]) || 0,
+    km: toAmount((t.match(/(\d{1,3}(?:,\d{3})+|\d{4,6})\s*(?:km|kms|klms?|kilomet\w+)\b/i) || [])[1] || ''),
+    grade: ((t.match(/\bgrade\s*:?\s*(\d(?:\.5)?|[RS]A?)(?![\w.])/i) || [])[1] || '').toUpperCase(),
+    photoLink: ((String(text || '').match(/https?:\/\/[^\s<>"']+/g) || []).find((u) => !/carbarn\.com\.au\/(live-auction|customer-links)/i.test(u)) || '').replace(/[.,;:!?)]+$/, ''),
+    when: /\btomorrow\b/i.test(t) ? "in tomorrow's auction" : /\btoday\b/i.test(t) ? "in today's auction" : (date('auction(?: date| day)?') ? `at auction on ${date('auction(?: date| day)?')}` : ''),
+    targetYen: amount('target(?: bid)?'),
   };
   // "sold for 1.31m" must not also be read as our bid.
   if (out.ourBidYen && out.ourBidYen === out.soldYen && !/\bbid\b/i.test(t)) out.ourBidYen = 0;
   const said = [];
+  if (out.year) said.push(`year ${out.year}`);
+  if (out.km) said.push(`${out.km.toLocaleString('en-AU')} km`);
+  if (out.grade) said.push(`grade ${out.grade}`);
+  if (out.when) said.push(out.when.replace(/^(in|at) /, ''));
+  if (out.photoLink) said.push('a link to its photos');
+  if (out.targetYen) said.push(`target bid ${yen(out.targetYen)}`);
   if (out.ourBidYen) said.push(`our bid ${yen(out.ourBidYen)}`);
   if (out.passedIn) said.push('it was passed in');
   if (out.soldYen) said.push(`sold for ${yen(out.soldYen)}`);
@@ -202,7 +216,7 @@ const stageLines = (o, stage) => o.money.lines.filter((l) => l.stage === stage &
  */
 export async function composeMessage(o, type, { told = factsIn(''), now = Date.now() } = {}) {
   const t = template(FILE);
-  const part = t?.sections?.[type];
+  let part = t?.sections?.[type];
   if (!part) throw new NotNow(`The wording for "${MESSAGES[type] || type}" is missing from the file voice/${FILE}.`);
   const w = o.wanted || {};
   const carWanted = wantedCar(w) || 'vehicle';
@@ -214,6 +228,7 @@ export async function composeMessage(o, type, { told = factsIn(''), now = Date.n
   const notes = [];
   let review = false;
   let tail = '';
+  let byHand = ''; // why a car could not be looked up, when the message was written for the owner to fill in
   const v = {
     sender: config.firstReplySender,
     car_wanted: carWanted,
@@ -233,20 +248,24 @@ export async function composeMessage(o, type, { told = factsIn(''), now = Date.n
   if (type === 'first_estimate') {
     const years = w.yearFrom && w.yearTo && w.yearFrom !== w.yearTo ? `${w.yearFrom} to ${w.yearTo} model` : w.yearFrom ? (w.yearTo === w.yearFrom ? `${w.yearFrom} model` : `${w.yearFrom} model or newer`) : '';
     v.wanted_lines = [[carWanted, w.variant, w.modelCode ? `(${w.modelCode})` : ''].filter(Boolean).join(' '), years, w.budgetAud ? `Landed budget about ${money(w.budgetAud)}` : ''].filter(Boolean).join('\n');
-    v.if_target = w.targetBidYen > 0;
-    v.target_bid = w.targetBidYen ? yen(w.targetBidYen) : null;
-    v.if_estimate = false; v.total = null; v.cost_lines = null;
-    if (w.targetBidYen) {
+    // The figures are worked out when they can be, and left as blanks to fill in when they cannot.
+    const target = told.targetYen || w.targetBidYen || 0;
+    Object.assign(v, { if_target: true, target_bid: target ? yen(target) : '[TARGET BID?]', if_estimate: true, total: told.landedAud ? money(told.landedAud) : '[LANDED TOTAL?]', if_breakdown: false, cost_lines: null });
+    if (!target) notes.push('There is no target bid on the order, so the bid and the landed total are left as blanks. Type "target" and an amount into Add what you know to have the total worked out.');
+    else if (!told.landedAud) {
       // The calculator works on a real auction car, so a similar one in the coming auctions is used.
-      const lots = (await searchLots({ make: w.make, model: w.model })).filter((l) => l.eligible && l.ready);
-      const basis = chooseLot(lots, wantedOf(o)) || lots[0] || null;
-      const estimate = basis ? await estimateFor(basis.id, w.targetBidYen) : null;
+      let basis = null, estimate = null;
+      try {
+        const lots = (await searchLots({ make: w.make, model: w.model })).filter((l) => l.eligible && l.ready);
+        basis = chooseLot(lots, wantedOf(o)) || lots[0] || null;
+        estimate = basis ? await estimateFor(basis.id, target) : null;
+      } catch { /* the live auction could not be read: the total stays a blank */ }
       if (estimate) {
-        Object.assign(v, { if_estimate: true, total: money(estimate.totalAud), cost_lines: costLines(estimate) });
+        Object.assign(v, { total: money(estimate.totalAud), if_breakdown: true, cost_lines: costLines(estimate) });
         review = review || estimate.needsReview;
-        facts.push(`Landed estimate at ${yen(w.targetBidYen)} from the website's calculator, worked out on a similar car in the coming auctions (${basis.title})`);
-      } else notes.push(`No landed estimate is given: no ${carWanted} is in the coming auctions for the calculator to work on.`);
-    } else notes.push('There is no target bid on the order, so no estimate is given.');
+        facts.push(`Landed estimate at ${yen(target)} from the website's calculator, worked out on a similar car in the coming auctions (${basis.title})`);
+      } else notes.push(`The landed total is left as a blank: no ${carWanted} is in the website's coming auctions for the calculator to work on.`);
+    }
   }
 
   if (type === 'lot_closed') {
@@ -255,37 +274,72 @@ export async function composeMessage(o, type, { told = factsIn(''), now = Date.n
   }
 
   if (type === 'lots_coming') {
-    const lots = (await searchLots({ make: w.make, model: w.model })).filter((l) => l.ready && l.auctionDate);
+    let lots = [];
+    try { lots = (await searchLots({ make: w.make, model: w.model })).filter((l) => l.ready && l.auctionDate); } catch { /* written with a blank for the day */ }
     const days = [...new Set(lots.map((l) => l.auctionDate.slice(0, 10)))].sort();
-    if (!days.length) throw new NotNow(`No ${carWanted} is in the coming auctions right now, so there is nothing to point to.`);
-    const n = lots.filter((l) => l.auctionDate.slice(0, 10) === days[0]).length;
-    Object.assign(v, { lot_count: n >= 3 ? 'several' : n === 2 ? 'two' : 'one', auction_when: auctionWhen(days[0], now), model_url: modelPageUrl(w, days[0]) || '[LINK?]' });
-    facts.push(`${n} ${carWanted} at auction on ${days[0]}, read from the live auction`);
+    if (days.length) {
+      const n = lots.filter((l) => l.auctionDate.slice(0, 10) === days[0]).length;
+      Object.assign(v, { lot_count: n >= 3 ? 'several' : n === 2 ? 'two' : 'one', auction_when: auctionWhen(days[0], now), model_url: modelPageUrl(w, days[0]) || '[LINK?]' });
+      facts.push(`${n} ${carWanted} at auction on ${days[0]}, read from the live auction`);
+    } else {
+      Object.assign(v, { lot_count: 'several', auction_when: told.when || 'in [WHICH AUCTION?]', model_url: told.photoLink || modelPageUrl(w) || '[LINK?]' });
+      notes.push(`No ${carWanted} is in the website's coming auctions right now, so the day is left as a blank. Check it before sending.`);
+    }
   }
 
   if (type === 'lot_offer' || type === 'lot_short') {
-    const { lot, searched } = await lotFor(o, told, now);
-    if (!lot) throw new NotNow(searched ? `${searched} ${carWanted} are in the coming auctions, but none fits what they asked for.` : `No ${carWanted} is in the coming auctions right now.`);
+    // The car is read from the live auction when it is there. When it is not (the model is not on
+    // the website's list, nothing suits, or the auction cannot be read), the message is still
+    // written, with blanks for the owner to fill in: the team also offers cars found elsewhere.
+    let lot = null, searched = null, unread = false;
+    try { ({ lot, searched } = await lotFor(o, told, now)); } catch { unread = true; }
     const wanted = wantedOf(o);
-    Object.assign(v, {
-      lot_name: [lot.year || '', lot.make, lot.model].filter(Boolean).join(' '), lot_title: lot.title, lot_km: km(lot.km), lot_url: lot.url,
-      auction_when: auctionWhen(lot.auctionDate, now), km_limit: wanted.maxKm ? ` under ${km(wanted.maxKm)}` : '',
-    });
-    facts.push(`Auction car ${lot.id}: ${lot.title}, ${km(lot.km)}, grade ${lot.grade || 'not given'}${lot.auctionDate ? `, auction on ${lot.auctionDate.slice(0, 10)}` : ''}`);
-    notes.push(...shortfalls(lot, o));
-    if (type === 'lot_offer') {
-      const pick = told.ourBidYen ? null : suggestedBid(lot, await soldComparables(lot.id).catch(() => null));
-      const bidYen = told.ourBidYen || pick.bidYen;
-      const estimate = bidYen ? await estimateFor(lot.id, bidYen) : null;
-      if (!estimate) throw new NotNow('The cost calculator gave no figure for this car, so the offer cannot be written. Try again in a few minutes.');
-      tail = offerBlock(lot, estimate, 'suggested', { websiteBidYen: lot.benchmarkYen, depositPaid: o.depositState !== 'NONE' });
-      review = review || estimate.needsReview;
-      facts.push(`The website's suggested bid ${yen(lot.benchmarkYen)}; bid used ${yen(bidYen)} (${pick ? 'ours' : 'yours'})`);
-      if (pick) facts.push(bidBasisLine(pick));
-      // A bid the owner typed in is his to choose, but he is told when the customer will see a higher one.
-      if (!pick && lot.benchmarkYen > bidYen) notes.push(`The bid you gave (${yen(bidYen)}) is below the suggested bid the customer will see on the car's page (${yen(lot.benchmarkYen)}).`);
-      facts.push(`Estimated landed and complied ${money(estimate.totalAud)} from the website's calculator`);
-      notes.push(`The bid and costs were read from the live auction at ${formatSydney(now).split(', ').pop()}. They move with the exchange rate: press Refresh figures if this is sent much later.`);
+    v.km_limit = wanted.maxKm ? ` under ${km(wanted.maxKm)}` : '';
+    let estimate = null, pick = null, bidYen = told.ourBidYen || 0;
+    if (lot) {
+      facts.push(`Auction car ${lot.id}: ${lot.title}, ${km(lot.km)}, grade ${lot.grade || 'not given'}${lot.auctionDate ? `, auction on ${lot.auctionDate.slice(0, 10)}` : ''}`);
+      notes.push(...shortfalls(lot, o));
+      if (type === 'lot_offer') {
+        try {
+          pick = told.ourBidYen ? null : suggestedBid(lot, await soldComparables(lot.id).catch(() => null));
+          bidYen = told.ourBidYen || pick.bidYen;
+          estimate = bidYen ? await estimateFor(lot.id, bidYen) : null;
+        } catch { estimate = null; }
+      }
+    }
+    if (lot && (type === 'lot_short' || estimate)) {
+      Object.assign(v, { lot_name: [lot.year || '', lot.make, lot.model].filter(Boolean).join(' '), lot_title: lot.title, lot_km: km(lot.km), lot_url: lot.url, auction_when: auctionWhen(lot.auctionDate, now) });
+      if (type === 'lot_offer') {
+        tail = offerBlock(lot, estimate, 'suggested', { websiteBidYen: lot.benchmarkYen, depositPaid: o.depositState !== 'NONE' });
+        review = review || estimate.needsReview;
+        facts.push(`The website's suggested bid ${yen(lot.benchmarkYen)}; bid used ${yen(bidYen)} (${pick ? 'ours' : 'yours'})`);
+        if (pick) facts.push(bidBasisLine(pick));
+        // A bid the owner typed in is his to choose, but he is told when the customer will see a higher one.
+        if (!pick && lot.benchmarkYen > bidYen) notes.push(`The bid you gave (${yen(bidYen)}) is below the suggested bid the customer will see on the car's page (${yen(lot.benchmarkYen)}).`);
+        facts.push(`Estimated landed and complied ${money(estimate.totalAud)} from the website's calculator`);
+        notes.push(`The bid and costs were read from the live auction at ${formatSydney(now).split(', ').pop()}. They move with the exchange rate: press Refresh figures if this is sent much later.`);
+      }
+    } else {
+      const year = lot?.year || told.year || 0;
+      const model = lot ? [lot.make, lot.model].filter(Boolean).join(' ') : carWanted;
+      const when = lot?.auctionDate ? auctionWhen(lot.auctionDate, now) : told.when || 'in [WHICH AUCTION?]';
+      const kms = lot?.km ? km(lot.km) : told.km ? km(told.km) : '[KM?]';
+      if (type === 'lot_short') {
+        Object.assign(v, { lot_title: `${year || '[YEAR?]'} ${model}`, lot_km: kms, lot_url: lot?.url || told.photoLink || '[LINK?]', auction_when: when });
+      } else {
+        part = t.sections.lot_offer_manual;
+        if (!part) throw new NotNow(`The wording for a car filled in by hand ("lot_offer_manual") is missing from the file voice/${FILE}.`);
+        Object.assign(v, {
+          lot_name: model, auction_when: when, year: year ? String(year) : '[YEAR?]', lot_km: kms, grade: lot?.grade || told.grade || '[GRADE?]',
+          photo_link: lot?.url || told.photoLink || '[PHOTO LINK?]', bid: bidYen ? yen(bidYen) : '[BID?]', landed: told.landedAud ? money(told.landedAud) : '[LANDED PRICE?]',
+          if_deposit: o.depositState === 'NONE',
+        });
+        if (pick) facts.push(bidBasisLine(pick));
+      }
+      byHand = unread ? 'The live auction could not be read just now.'
+        : lot ? 'The cost calculator gave no figure for this car.'
+          : searched ? `${searched} ${carWanted} are in the website's coming auctions, but none fits what is on the order. To use one of them, paste its live-auction link into Add what you know.`
+            : `No ${carWanted} is in the website's coming auctions right now.`;
     }
   }
 
@@ -297,15 +351,25 @@ export async function composeMessage(o, type, { told = factsIn(''), now = Date.n
     v.outcome = told.passedIn ? t.snippets.passed_in || 'it was passed in'
       : fill(t.snippets[told.soldYen ? 'missed' : 'outcome_unknown'] || 'the vehicle sold for {sold_for}', { sold_for: told.soldYen ? yen(told.soldYen) : '[SOLD PRICE?]' });
     if (type === 'bid_lost_stock') {
-      const cars = stockMatches(o);
-      if (!cars.length) throw new NotNow(`No ${carWanted} is in our own stock in Japan or on the way. Choose "${MESSAGES.bid_lost}" instead.`);
-      Object.assign(v, {
-        stock_count: cars.length === 1 ? `one ${carWanted}` : `${cars.length === 2 ? 'two' : cars.length} ${carWanted} vehicles`,
-        stock_match: cars.length === 1 ? 'matches' : 'match',
-        arriving: fill(t.snippets.arriving || '', { arrival_date: told.arrival || '[ARRIVAL DATE?]' }).replace(/^They are/, cars.length === 1 ? 'It is' : 'They are'),
-        alternatives: cars.map((c, i) => fill(t.snippets.alternative || '{n}. {title}', { n: i + 1, title: c.title || carTitle(c), grade: c.auctionGrade || 'not recorded', km: km(c.odometer), url: c.status === 'PUBLISHED' && c.url ? c.url : '' }).trim()).join('\n\n'),
-      });
-      facts.push(`From our stock list: ${cars.map((c) => `stock ${c.stockNo}`).join(', ')}`);
+      // The cars: one named by its stock number, else the ones of that model in Japan or on the way.
+      const named = told.stockNo ? getVehicleByStock(told.stockNo) : null;
+      if (told.stockNo && !named) notes.push(`Stock ${told.stockNo} is not in the stock list.`);
+      const cars = named ? [named] : stockMatches(o);
+      const arriving = (one) => fill(t.snippets.arriving || '', { arrival_date: told.arrival || '[ARRIVAL DATE?]' }).replace(/^They are/, one ? 'It is' : 'They are');
+      const entry = (values) => fill(t.snippets.alternative || '{n}. {title}', values).trim();
+      if (cars.length) {
+        Object.assign(v, {
+          stock_count: cars.length === 1 ? `one ${carWanted}` : `${cars.length === 2 ? 'two' : cars.length} ${carWanted} vehicles`,
+          stock_match: cars.length === 1 ? 'matches' : 'match',
+          arriving: arriving(cars.length === 1),
+          alternatives: cars.map((c, i) => entry({ n: i + 1, title: c.title || carTitle(c), grade: c.auctionGrade || 'not recorded', km: km(c.odometer), url: c.status === 'PUBLISHED' && c.url ? c.url : '' })).join('\n\n'),
+        });
+        facts.push(`From our stock list: ${cars.map((c) => `stock ${c.stockNo}`).join(', ')}`);
+      } else {
+        // None found: the message is still written, with the car left as blanks.
+        Object.assign(v, { stock_count: `one ${carWanted}`, stock_match: 'matches', arriving: arriving(true), alternatives: entry({ n: 1, title: '[WHICH CAR?]', grade: '[GRADE?]', km: '[KM?]', url: told.photoLink || '[PHOTO LINK?]' }) });
+        notes.push(`No ${carWanted} was found in our own stock in Japan or on the way, so the car is left as blanks. Type "stock" and its number into Add what you know to put one in.`);
+      }
     }
   }
 
@@ -349,6 +413,11 @@ export async function composeMessage(o, type, { told = factsIn(''), now = Date.n
   if (o.money.lines.length || paid) facts.push(`From the order: ${[asked ? `deposit asked ${money(asked)}` : '', paid ? `deposit paid ${money(paid)}` : '', o.money.total ? `charged ${money(o.money.total)}` : '', o.money.paid ? `paid ${money(o.money.paid)}` : '', o.money.due > 0 ? `still due ${money(o.money.due)}` : ''].filter(Boolean).join(', ')}`);
 
   const text = [fillParts(part, v), tail].filter(Boolean).join('\n\n');
+  // A car that could not be looked up: say why, and whether anything is still to fill in.
+  if (byHand) {
+    const left = blanksIn(text).some((b) => b !== '[DEPOSIT LINK?]');
+    notes.push(`${byHand} ${left ? 'What could not be looked up is left as blanks for you to fill in.' : 'The car is as you typed it: nothing about it was checked against the auction.'}`);
+  }
   return { text, facts, notes, review };
 }
 
