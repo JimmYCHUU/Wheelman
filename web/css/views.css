@@ -134,8 +134,13 @@
     display: flex; flex-direction: column; gap: var(--sp-05);
   }
   .thread > :first-child { margin-top: auto; }
-  /* "Load older messages" sits at the top of the thread, a quiet outline button with the count beside it. */
-  .load-older { align-self: center; margin-bottom: var(--sp-3); }
+  /* "Load older messages" stays pinned to the top edge of the thread while there is history to
+     bring in, so it is seen the moment a long conversation opens, not only after scrolling up. */
+  .load-older {
+    position: sticky; top: 0; z-index: var(--z-float);
+    align-self: center; margin-bottom: var(--sp-3);
+    background: var(--sheet); box-shadow: var(--shadow-1);
+  }
   .load-older .count { color: var(--faint); font-weight: var(--fw-medium); }
 
   /* placeholder when nothing is open */
