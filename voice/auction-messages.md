@@ -12,6 +12,8 @@
 #                 what you know into "Add what you know" (for example: we bid 1.2m, sold for 1.31m)
 #   A paragraph whose fact does not apply is left out. For example the deposit paragraph is left
 #   out once a deposit has been paid.
+#   A message is always written. What Wheelman cannot find out (no such car in the website's
+#   coming auctions, say) becomes a blank for you to fill in, never a refusal.
 #
 # Facts used in more than one message:
 #   {car_wanted}     the car they asked for, such as "Subaru XV Hybrid"
@@ -41,7 +43,9 @@
 
 ===== first_estimate =====
 # A new order with no deposit yet. The estimate is worked out by the website's calculator at
-# their target bid. With no target bid on the order, those paragraphs are left out.
+# their target bid. When there is no target bid on the order, or no car of that model is in the
+# coming auctions for the calculator to work on, the figures are left as blanks for you, and
+# the breakdown is left out.
 Hi {{NAME}},
 
 Thank you for your {car_wanted} enquiry.
@@ -50,14 +54,14 @@ We have noted your preferred vehicle details:
 
 {wanted_lines}
 
-{if_target}Target auction bid: approx. {target_bid} JPY
+Target auction bid: approx. {target_bid} JPY
 
-{if_estimate}Based on this target bid, the estimated landed and complied total is:
+Based on this target bid, the estimated landed and complied total is:
 
-{if_estimate}Estimated Landed Total: {total} AUD
+Estimated Landed Total: {total} AUD
 GST & duties included.
 
-{if_estimate}The estimate includes:
+{if_breakdown}The estimate includes:
 
 {cost_lines}
 
@@ -122,8 +126,36 @@ Hi {{NAME}},
 
 We found this {lot_name} {auction_when}.
 
+===== lot_offer_manual =====
+# The same message when the car is not on the website's auction list (or nothing there suits):
+# everything Wheelman cannot look up is a blank for you. Type what you know into "Add what you
+# know" to fill them in one go, for example:
+#   2021, 14,200 km, grade 4, tomorrow, bid 1.15m, landed 20400, https://photos.app.goo.gl/…
+#   {if_deposit}  keeps its paragraph only while the customer has not paid a deposit
+Hi {{NAME}},
+
+We found one {lot_name} {auction_when}.
+
+Year: {year}
+Odometer: {lot_km}
+Auction Grade: {grade}
+
+You can see the photos here:
+{photo_link}
+
+We can suggest to bid on this vehicle {bid}.
+If we win this auction, the total landed price will be {landed}.
+
+{if_deposit}If you would like to proceed, you can start by placing the deposit using the link below:
+[DEPOSIT LINK?]
+
+Would you like us to bid on this car? Please let us know your thoughts.
+
+Regards,
+{sender}
+
 ===== lot_short =====
-# The short way of offering a car.
+# The short way of offering a car. A car that is not on the website's list is left as blanks.
 Hi {{NAME}},
 
 There is one {auction_when}: {lot_title}

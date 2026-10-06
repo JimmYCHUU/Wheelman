@@ -260,11 +260,15 @@ test('the Auction section lists orders under To do, In progress and Finished', a
   assert.deepEqual([row.name, row.car, row.stage, row.due, row.section, row.orderNo], ['Pia Halvorsen', '2021 Toyota Hiace DX', 'Car secured', 'Send: car secured', 'auction', 'AS-504']);
   assert.equal(todo.items.find((r) => r.key === 'ao:503').car, '2015 Subaru XV Hybrid', 'the auction car is named as the customer knows it');
   assert.deepEqual((await list('other')).items.map((r) => [r.key, r.stage]), [['ao:507', 'Cancelled']]);
+  // Whichever list is on screen, every order is sent too, so a search finds one wherever it is.
+  assert.deepEqual(todo.everything.map((r) => r.key).sort(), ['ao:501', 'ao:502', 'ao:503', 'ao:504', 'ao:505', 'ao:506', 'ao:507', 'ao:508']);
+  assert.deepEqual((await list('other')).everything.length, 8);
 
   // The Dashboard section is unaffected, and reports the auction count beside its own.
   const dash = await get('/api/items?tab=waiting');
   assert.equal(dash.section, 'dashboard');
   assert.equal(dash.sections.auction, 6);
+  assert.equal(dash.everything, undefined);
   assert.equal((await get('/api/items/ao:99999')).error, 'That conversation was not found.');
 });
 
@@ -561,6 +565,63 @@ test('with nothing to choose a car by, none is picked: the customer is pointed t
   await messages.watchOrder(db.getOrder(513), now);
   assert.equal(db.getOrder(513).watch.lot.id, '2005010', 'only the one within reach of a 150,000 yen bid');
   db.openDb().prepare('UPDATE auction_orders SET gone_at = ? WHERE id IN (512, 513)').run(now);
+});
+
+test('a message is always written: what cannot be looked up becomes a blank, never a refusal', async () => {
+  // Order 502 wants a Honda N-Box. The stand-in auction has none, and neither has our stock.
+  const offer = await messages.draftOrderMessage(item(502, { message: 'lot_offer' }), { type: 'lot_offer', now });
+  assert.equal(offer.status, 'ready', offer.error);
+  assert.equal(offer.reply, 'Hi Remy,\n\n'
+    + 'We found one Honda N-Box in [WHICH AUCTION?].\n\n'
+    + 'Year: [YEAR?]\nOdometer: [KM?]\nAuction Grade: [GRADE?]\n\n'
+    + 'You can see the photos here:\n[PHOTO LINK?]\n\n'
+    + 'We can suggest to bid on this vehicle [BID?].\nIf we win this auction, the total landed price will be [LANDED PRICE?].\n\n'
+    + 'Would you like us to bid on this car? Please let us know your thoughts.\n\n'
+    + 'Regards,\nTeam Carbarn');
+  assert.deepEqual(offer.checks.find((c) => c.level === 'input').tokens, ['[WHICH AUCTION?]', '[YEAR?]', '[KM?]', '[GRADE?]', '[PHOTO LINK?]', '[BID?]', '[LANDED PRICE?]']);
+  assert.ok(offer.checks.some((c) => c.level === 'warn' && c.message === "No Honda N-Box is in the website's coming auctions right now. What could not be looked up is left as blanks for you to fill in."));
+
+  // Typed in one line, the blanks are filled.
+  const typed = await messages.draftOrderMessage(item(502, { message: 'lot_offer' }), { type: 'lot_offer', facts: '2021, 14,200 km, grade 4, tomorrow, bid 1.15m, landed 20400, https://photos.example/album-7.', now });
+  assert.ok(typed.reply.includes("We found one Honda N-Box in tomorrow's auction.\n\nYear: 2021\nOdometer: 14,200 km\nAuction Grade: 4\n\nYou can see the photos here:\nhttps://photos.example/album-7\n\n"
+    + 'We can suggest to bid on this vehicle ¥1,150,000.\nIf we win this auction, the total landed price will be $20,400.'), typed.reply);
+  assert.deepEqual(typed.checks.filter((c) => c.level === 'input'), []);
+  assert.ok(typed.checks.some((c) => c.message === "No Honda N-Box is in the website's coming auctions right now. The car is as you typed it: nothing about it was checked against the auction."));
+  assert.ok(typed.factsUsed.includes('From what you typed: year 2021; 14,200 km; grade 4; tomorrow\'s auction; a link to its photos; our bid ¥1,150,000; landed price $20,400'), typed.factsUsed.join(' | '));
+  // While no deposit is paid, the deposit paragraph is there too.
+  sync.storeAuctionOrders([raw(515, 'Yan', { reqMake: 'Honda', reqModel: 'N-Box', reqModelCode: 'JF3' })], { complete: false, now });
+  assert.ok((await compose(515, 'lot_offer')).text.includes('If you would like to proceed, you can start by placing the deposit using the link below:\n[DEPOSIT LINK?]'));
+  db.openDb().prepare('UPDATE auction_orders SET gone_at = ? WHERE id = 515').run(now);
+
+  // The other messages that look something up behave the same way.
+  const short = await compose(502, 'lot_short');
+  assert.ok(short.text.includes('There is one in [WHICH AUCTION?]: [YEAR?] Honda N-Box\n[KM?] driven\n[LINK?]'), short.text);
+  const coming = await compose(502, 'lots_coming');
+  assert.ok(coming.text.includes('We have several Honda N-Box vehicles coming up in [WHICH AUCTION?] that match your requirements.\nYou can place your bid through our Live Auction platform:\nhttps://www.carbarn.com.au/live-auction/honda/n-box/jf3'), coming.text);
+  const stock = await compose(502, 'bid_lost_stock', 'we bid 900000, passed in');
+  assert.ok(stock.text.includes('However, we currently have one Honda N-Box available in Japan that matches your requirements. It is expected to arrive by [ARRIVAL DATE?].\n\n1. [WHICH CAR?]\nGrade: [GRADE?]\nOdo: [KM?]\n[PHOTO LINK?]'), stock.text);
+  // A stock number typed in puts that car into it.
+  assert.ok((await compose(502, 'bid_lost_stock', 'stock T91')).text.includes('1. 2016 Subaru XV Hybrid 2.0i-L\nGrade: 4\nOdo: 80,000 km'));
+
+  // The first message with no target bid on the order: the two figures are blanks, and a target typed in works them out.
+  sync.storeAuctionOrders([raw(514, 'Xan', { targetBidJpy: null })], { complete: false, now });
+  const bare = await compose(514, 'first_estimate');
+  assert.ok(bare.text.includes('Target auction bid: approx. [TARGET BID?] JPY\n\nBased on this target bid, the estimated landed and complied total is:\n\nEstimated Landed Total: [LANDED TOTAL?] AUD\nGST & duties included.\n\nThe refundable auction deposit'), bare.text);
+  const worked = await compose(514, 'first_estimate', 'target 226000');
+  assert.ok(worked.text.includes('Target auction bid: approx. ¥226,000 JPY') && worked.text.includes('Estimated Landed Total: $10,277 AUD') && worked.text.includes('The estimate includes:\n\n- Auction price: $2,065 AUD'), worked.text);
+
+  // The live auction cannot be reached at all: still written, and the note says why.
+  const { config } = await import('../src/config.js');
+  const kept = config.auction.baseUrl;
+  config.auction.baseUrl = 'http://127.0.0.1:9';
+  try {
+    const down = await messages.draftOrderMessage(item(514, { message: 'lot_offer' }), { type: 'lot_offer', now });
+    assert.equal(down.status, 'ready', down.error);
+    assert.ok(down.reply.includes('We found one Subaru XV Hybrid in [WHICH AUCTION?].'));
+    assert.ok(down.checks.some((c) => /^The live auction could not be read just now\. What could not be looked up is left as blanks/.test(c.message)));
+  } finally { config.auction.baseUrl = kept; }
+  db.openDb().prepare('UPDATE auction_orders SET gone_at = ? WHERE id = 514').run(now);
+  assert.equal(ai().length, 0);
 });
 
 test('makes and models typed in capitals are written as a person would, and short codes are left alone', async () => {
