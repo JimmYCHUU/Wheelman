@@ -4,25 +4,25 @@ import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import fs from 'node:fs';
+import { applyTestEnv } from './support/env.js';
+import { startStandins, aiBehaviour } from './support/standins.js';
 
-process.env.DB_PATH = ':memory:';
-process.env.SIGN_OFF = 'Regards,\\nTeam Carbarn';
-process.env.GEMINI_API_KEY = 'test-key';
-process.env.OPENROUTER_API_KEY = '';
-process.env.SECONDS_BETWEEN_DRAFTS = '0';
-process.env.DAILY_DRAFT_LIMIT = '50';
-process.env.DASHBOARD_USERNAME = '';
-process.env.DASHBOARD_PASSWORD = '';
-process.env.MARKETPLACE_ENABLED = '1';
-process.env.PORT = '0';
+// The dashboard login is left blank: Marketplace must not need it. The model names are the app's
+// own defaults, because these tests check which model each kind of customer is given.
+applyTestEnv({
+  DAILY_DRAFT_LIMIT: '50', DASHBOARD_USERNAME: '', DASHBOARD_PASSWORD: '', MARKETPLACE_ENABLED: '1',
+  GEMINI_MODEL: 'gemini-3.8-flash', GEMINI_FALLBACK_MODELS: 'gemini-3.7-flash,gemini-3.5-flash,gemini-3.5-flash-lite',
+});
 
 const now = Date.now();
 const iso = (minsAgo) => new Date(now - minsAgo * 60e3).toISOString();
 
-// ---- the stand-in content engine -------------------------------------------------
+// ---- the stand-in content engine and AI (test/support/standins.js), fed from here ----
 
-const engineSeen = [];   // every request the engine received: { method, path }
 const chats = new Map(); // id -> { row, messages }
+const ai = aiBehaviour({ behave: () => ({ reply: 'Yes, it is still available.', needs_human: [], facts_used: [], hold: false }) });
+const aiSeen = ai.seen;         // every request the AI received, parsed
+const usedUpModels = ai.usedUp; // models that answer "today's free allowance is used up"
 
 const row = (id, buyer, minsAgo, extra = {}) => ({
   id, device: 'dev-1', device_name: 'Yard phone 1', device_timezone: 'Australia/Sydney',
@@ -56,56 +56,16 @@ function seed() {
   chats.set(505, { row: row(505, 'Eli Brown', 50, { archived: true }), messages: [message(9, 'in', 'phone', 'Is it available?', 50)] });
 }
 
-function engine(req, res) {
-  const url = new URL(req.url, 'http://x');
-  engineSeen.push({ method: req.method, path: url.pathname });
-  const json = (status, body) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
-  if (req.method !== 'GET') return json(405, { error: 'no' });
-  if (url.pathname === '/inbox/devices') { res.writeHead(302, { location: '/inbox/conversations' }); return res.end(); }
-  if (url.pathname === '/inbox/conversations') {
-    const all = [...chats.values()].map((c) => c.row).sort((a, b) => Date.parse(b.last_message_at) - Date.parse(a.last_message_at));
-    const offset = Number(url.searchParams.get('offset')) || 0;
-    const limit = Number(url.searchParams.get('limit')) || 50;
-    return json(200, { conversations: all.slice(offset, offset + limit), total: all.length, limit, offset });
-  }
-  const m = url.pathname.match(/^\/inbox\/conversations\/(\d+)$/);
-  if (m && chats.has(Number(m[1]))) {
-    const c = chats.get(Number(m[1]));
-    return json(200, { conversation: c.row, messages: c.messages, phone: '0400 999 888', will_send_via: 'device' });
-  }
-  return json(404, { error: 'not found' });
-}
-
-// ---- the stand-in AI service -------------------------------------------------------
-
-const aiSeen = [];
-let script = [];
-const usedUpModels = new Set(); // models that answer "today's free allowance is used up"
-function ai(req, res) {
-  let body = '';
-  req.on('data', (c) => { body += c; });
-  req.on('end', () => {
-    aiSeen.push(JSON.parse(body));
-    if (usedUpModels.has(aiSeen.at(-1).model)) {
-      res.writeHead(429, { 'content-type': 'application/json' });
-      return res.end(JSON.stringify([{ error: { code: 429, message: 'You exceeded your current quota.\nPlease retry in 17h45m56.7s.', details: [{ violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }] }, { retryDelay: '63956s' }] } }]));
-    }
-    const next = script.shift() || { reply: 'Yes, it is still available.', needs_human: [], facts_used: [], hold: false };
-    res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(next) }, finish_reason: 'stop' }] }));
-  });
-}
-
-let engineServer, aiServer, appServer, config;
+let standins, engineSeen, appServer, config;
 const listen = (handler) => new Promise((resolve) => { const s = http.createServer(handler); s.listen(0, '127.0.0.1', () => resolve(s)); });
 
 before(async () => {
   seed();
-  engineServer = await listen(engine);
-  aiServer = await listen(ai);
+  standins = await startStandins({ world: { now, chats }, ai });
+  engineSeen = standins.engineSeen; // every request the engine received: { method, path }
   ({ config } = await import('../src/config.js'));
-  config.marketplace.url = `http://127.0.0.1:${engineServer.address().port}/inbox`;
-  config.llm.gemini.url = `http://127.0.0.1:${aiServer.address().port}/chat`;
+  config.marketplace.url = `${standins.engineBase}/inbox`;
+  config.llm.gemini.url = `${standins.base}/chat`;
 
   const { upsertVehicle } = await import('../src/db.js');
   const { normalizeVehicle } = await import('../src/normalize.js');
@@ -113,7 +73,8 @@ before(async () => {
 });
 
 after(async () => {
-  for (const s of [engineServer, aiServer, appServer]) if (s) await new Promise((r) => { s.close(r); s.closeAllConnections?.(); });
+  if (appServer) await new Promise((r) => { appServer.close(r); appServer.closeAllConnections?.(); });
+  await standins.close();
 });
 
 const load = async () => ({
@@ -211,7 +172,7 @@ test('the car is matched from the listing, and the auto-reply is labelled', asyn
 test('the buyer\'s name and number never reach the AI service, and the reply is a short chat line', async () => {
   const { items, drafter } = await load();
   aiSeen.length = 0;
-  script = [{ reply: 'Hi {{NAME}},\n\nYes, it is still available. Would you like to come and see it?\n\nRegards,\nTeam Carbarn', needs_human: [], facts_used: ['Available now'], hold: false }];
+  ai.script = [{ reply: 'Hi {{NAME}},\n\nYes, it is still available. Would you like to come and see it?\n\nRegards,\nTeam Carbarn', needs_human: [], facts_used: ['Available now'], hold: false }];
   const d = await drafter.draftFor(items.itemFromKey('mp:501'));
   const sent = JSON.stringify(aiSeen[0]);
   for (const secret of ['Liam', 'Carter', '0400 999 888', '0400999888', 'buyer@example.com', 'thread-secret', 'Yard phone 1'])
@@ -234,7 +195,7 @@ test('a price that only the auto-reply or the engine\'s notes mention is not acc
   const item = items.itemFromKey('mp:504');
   assert.equal(item.state, 'awaiting');
   aiSeen.length = 0;
-  script = [
+  ai.script = [
     { reply: 'As mentioned, it is $25,000 drive away.', needs_human: [], facts_used: [], hold: false },
     { reply: 'We can meet your budget of $20,000.', needs_human: [], facts_used: [], hold: false },
   ];
@@ -245,7 +206,7 @@ test('a price that only the auto-reply or the engine\'s notes mention is not acc
   assert.ok(d.checks.some((c) => c.level === 'fail' && c.code === 'customer-figure'), JSON.stringify(d.checks));
 
   // The advertised price from the dashboard is fine.
-  script = [{ reply: 'It is $28,900. The best we can do is [PRICE?].', needs_human: [{ marker: '[PRICE?]', reason: 'A person decides discounts.' }], facts_used: [], hold: false }];
+  ai.script = [{ reply: 'It is $28,900. The best we can do is [PRICE?].', needs_human: [{ marker: '[PRICE?]', reason: 'A person decides discounts.' }], facts_used: [], hold: false }];
   const ok = await drafter.draftFor(item, { save: false });
   assert.ok(!ok.checks.some((c) => c.level === 'fail'), JSON.stringify(ok.checks));
 });
@@ -255,7 +216,7 @@ test('a long Marketplace reply is flagged, and a price difference with the Faceb
   chats.get(504).row.car.price = '$27,900';
   chats.get(504).row.last_message_at = iso(9);
   await sync.syncMarketplace();
-  script = [{ reply: 'Yes it is available. ' + 'We are open every day and you are welcome to come and see it any time that suits you. '.repeat(3), needs_human: [], facts_used: [], hold: false }];
+  ai.script = [{ reply: 'Yes it is available. ' + 'We are open every day and you are welcome to come and see it any time that suits you. '.repeat(3), needs_human: [], facts_used: [], hold: false }];
   const d = await drafter.draftFor(items.itemFromKey('mp:504'), { save: false });
   assert.ok(d.checks.some((c) => c.code === 'long' && /Marketplace chat/.test(c.message)), JSON.stringify(d.checks));
   const note = d.checks.find((c) => c.code === 'listing-price');
@@ -414,7 +375,7 @@ test('Marketplace has its own allowance, and dashboard customers are drafted fir
 
   // With the Marketplace allowance used up, only the dashboard customer gets a suggestion.
   config.marketplace.dailyDrafts = db.mpDraftsLastDay();
-  aiSeen.length = 0; script = [];
+  aiSeen.length = 0; ai.script = [];
   assert.equal(await worker.draftWaiting(), 1);
   assert.ok(db.openDb().prepare("SELECT 1 FROM drafts WHERE item_key = 'c:901' AND status = 'ready'").get());
   assert.equal(db.openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key = 'mp:503'").get().n, 0);
@@ -445,7 +406,7 @@ test('when the engine cannot be reached, the dashboard side carries on and the s
   db.upsertMessage({ id: 7002, conversationId: 901, direction: 'OUT', body: 'Yes, it is available.', sentBy: 'Dana', status: 'SENT', mediaType: null, at: t - 300e3, importedAt: t - 300e3 });
   db.upsertMessage({ id: 7003, conversationId: 901, direction: 'IN', body: 'Great, can I come on Sunday?', sentBy: null, status: 'SENT', mediaType: null, at: t - 200e3, importedAt: t - 200e3 });
   db.upsertConversation({ id: 901, phone: '+61400111222', channel: 'SMS', status: 'OPEN', leadId: 801, customerName: 'Priya Raman', latestDirection: 'IN', latestAt: t - 200e3, latestBody: 'x' });
-  script = [];
+  ai.script = [];
   assert.equal(await worker.draftWaiting(), 1, 'the dashboard customer is still drafted');
 
   const status = worker.statusReport();
@@ -459,7 +420,7 @@ test('when the small model has used up its day, only Marketplace waits: dashboar
   const { worker, db, sync } = await load();
   const llm = await import('../src/llm.js');
   const t = Date.now();
-  config.marketplace.url = `http://127.0.0.1:${engineServer.address().port}/inbox`;
+  config.marketplace.url = `${standins.engineBase}/inbox`;
   chats.set(506, { row: row(506, 'Zoe Hart', 3), messages: [message(60, 'in', 'phone', 'Is the Noah still for sale?', 3)] });
   await sync.syncMarketplace();
   db.upsertLead({ id: 802, conversationId: 902, firstName: 'Omar', lastName: 'Haddad', phone: '0400111333', email: '', source: 'carsales', status: 'NEW', platform: 'CARSALES', state: 'NSW', leadAt: t - 3600e3, updatedAt: t - 300e3, stocks: ['1159'], inquiries: [] });
@@ -468,7 +429,7 @@ test('when the small model has used up its day, only Marketplace waits: dashboar
 
   llm.resetModelState();
   usedUpModels.add('gemini-3.5-flash-lite');
-  aiSeen.length = 0; script = [];
+  aiSeen.length = 0; ai.script = [];
   const real = globalThis.setTimeout;
   globalThis.setTimeout = (f, ms, ...a) => real(f, Math.min(ms, 5), ...a); // no real waiting between tries
   try {

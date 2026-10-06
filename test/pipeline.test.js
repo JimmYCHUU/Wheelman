@@ -3,16 +3,12 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { applyTestEnv } from './support/env.js';
 
-process.env.DB_PATH = ':memory:';
-process.env.SIGN_OFF = 'Regards,\\nTeam Carbarn';
-process.env.GEMINI_API_KEY = 'test-key';
-process.env.OPENROUTER_API_KEY = '';
-process.env.SECONDS_BETWEEN_DRAFTS = '0';
-process.env.DAILY_DRAFT_LIMIT = '50';
-process.env.VOICE_PEOPLE_FILE = 'voice/people.example.json';
-process.env.MARKETPLACE_ENABLED = '0'; // the Marketplace section has its own test file
+applyTestEnv({ DAILY_DRAFT_LIMIT: '50' }); // the Marketplace section has its own test file
 
+// This file keeps its own stand-in AI: it checks the Authorization header on each request, which
+// the shared stand-in (test/support/standins.js) does not record.
 let server;
 const seen = [];       // what the stand-in AI service received
 let script = [];       // replies it will give, in order

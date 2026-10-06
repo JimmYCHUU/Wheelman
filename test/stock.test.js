@@ -2,10 +2,9 @@
 // lead to the same car. All data is invented.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { applyTestEnv } from './support/env.js';
 
-process.env.DB_PATH = ':memory:';
-process.env.MARKETPLACE_ENABLED = '0';
-process.env.VOICE_PEOPLE_FILE = 'voice/people.example.json';
+applyTestEnv();
 
 const db = await import('../src/db.js');
 const sync = await import('../src/sync.js');

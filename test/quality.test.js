@@ -2,11 +2,9 @@
 // No AI service is needed: suggestions are inserted directly.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { applyTestEnv } from './support/env.js';
 
-process.env.DB_PATH = ':memory:';
-process.env.SIGN_OFF = 'Regards,\\nTeam Carbarn';
-process.env.MARKETPLACE_ENABLED = '0';
-process.env.VOICE_PEOPLE_FILE = 'voice/people.example.json';
+applyTestEnv();
 
 const db = await import('../src/db.js');
 const items = await import('../src/items.js');

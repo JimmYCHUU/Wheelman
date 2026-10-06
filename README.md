@@ -330,6 +330,16 @@ file, then **Send to > Desktop (create shortcut)**.
 No exe and no installer on purpose: Wheelman has no packages to install. Node.js is all it
 needs.
 
+### Try it first: the demo
+
+Double-click **Start Wheelman demo.cmd**, or run `npm run demo`. It opens at
+http://localhost:3211 on an invented world: made-up customers, cars, Marketplace chats, auction
+orders and phone texts, with the suggested replies already written. The dashboard, the
+Marketplace engine, the live-auction feed and the AI are all stand-ins on this computer (the
+same ones the tests use), so it needs no `.env` file and nothing it does can reach the
+internet. A ribbon on the page says it is the demo. Its files live under `data\demo`, wiped on
+every start. It runs beside the real Wheelman, which keeps port 3210.
+
 ### What you need first
 
 | | |
@@ -875,6 +885,8 @@ one-off US$10 credit purchase raises that to 1,000.
 |---|---|
 | Double-click `Start Wheelman.cmd` | Runs Wheelman and opens the page |
 | `npm start` | The same, from a terminal |
+| Double-click `Start Wheelman demo.cmd` | The demo: invented data, stand-in services, port 3211 |
+| `npm run demo` | The same, from a terminal. `node demo/start.js --check` starts it, reads the page once and exits |
 | `npm run check-login` | Tests the dashboard login |
 | `npm run check-model` | Tests the AI keys and shows which models answer |
 | `npm run replay` | Compares suggestions with real past replies. `-- 60` for 60 cases, `-- --buyers` or `-- --first` for one kind |
@@ -1009,7 +1021,9 @@ example bank.
 ```
 wheelman/
 ├── Start Wheelman.cmd                 one click: start and open the page
+├── Start Wheelman demo.cmd            one click: the demo, on invented data
 ├── .env.example                       settings; copy to .env
+├── demo/                              start.js runs the invented world; ai-script.js writes its replies without an AI
 ├── PRODUCT.md · DESIGN.md             who the page is for, and how it looks
 ├── extension/                         the phone add-on for Chrome or Edge, loaded unpacked once:
 │                                      manifest · background · reader · parse · popup
@@ -1063,6 +1077,8 @@ wheelman/
 └── test/                              core · pipeline · greeting · inspection · marketplace
                                        quality · scenarios · stock · models · imports · editor
                                        orders · orders-upgrade · phone
+    └── support/                       the invented world (fixtures), the stand-in services, the
+                                       shared environment; the demo runs on these too
 ```
 
 ## Status
@@ -1103,6 +1119,12 @@ but not the dashboard. Checked on the automated tests (ten new ones, on invented
 names it looks for on the Google Messages list come from how that page is known to be built
 and have not yet been checked against the live tab: the add-on reports how many conversations
 it could read, and the page says if that is none. Not yet used over a working day.
+
+6 October 2026, later: a demo mode. `npm run demo` runs Wheelman on an invented world against
+stand-in services, with the replies already written, so the page can be shown and tried with
+no login and no real customer anywhere near it. The stand-ins and the invented world moved into
+`test/support/`, where the tests use them too. A health route (`/api/health`) was added for the
+demo's own check and for anything that needs to know Wheelman is alive.
 
 ### Open questions for Carbarn
 

@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { applyTestEnv } from './support/env.js';
 
 const file = path.join(os.tmpdir(), `wheelman-upgrade-${process.pid}.db`);
 for (const f of ['', '-shm', '-wal']) fs.rmSync(file + f, { force: true });
@@ -23,7 +24,7 @@ old.exec(`
 `);
 old.close();
 
-process.env.DB_PATH = file;
+applyTestEnv({ DB_PATH: file });
 const db = await import('../src/db.js');
 
 after(() => { db.closeDb(); for (const f of ['', '-shm', '-wal']) fs.rmSync(file + f, { force: true }); });

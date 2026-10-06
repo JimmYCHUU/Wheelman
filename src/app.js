@@ -16,7 +16,7 @@ console.log('\nWheelman, the Carbarn reply assistant');
 console.log('------------------------------------');
 console.log(`Stored locally: ${countRows('leads')} leads, ${countRows('conversations')} conversations, ${countRows('vehicles')} vehicles`);
 
-if (!fs.existsSync(path.join(config.voiceDir, 'examples.json'))) {
+if (!fs.existsSync(config.examplesPath)) {
   console.log('\nNote: the example bank has not been built yet. Run "npm run build-voice" once.');
 }
 

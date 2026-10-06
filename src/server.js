@@ -21,6 +21,7 @@ import { learnedStats } from './db.js';
 import { validateReport, storePhoneReport } from './phone.js';
 
 const TYPES = { '.woff2': 'font/woff2', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
+const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(config.root, 'package.json'), 'utf8')).version || ''; } catch { return ''; } })();
 
 function send(res, status, body, type = 'application/json; charset=utf-8') {
   const data = typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body);
@@ -300,7 +301,16 @@ async function api(req, res, url) {
 
   if (req.method === 'GET' && p === '/api/status') {
     const facts = businessFactsForPrompt();
-    return send(res, 200, { ...worker.statusReport(), learned: learnedStats(), facts: { ...facts.counts, unanswered: facts.unanswered, toConfirm: loadBusinessFacts().filter((t) => t.status === 'working').map((t) => t.title) } });
+    return send(res, 200, { ...worker.statusReport(), demo: config.demo, learned: learnedStats(), facts: { ...facts.counts, unanswered: facts.unanswered, toConfirm: loadBusinessFacts().filter((t) => t.status === 'working').map((t) => t.title) } });
+  }
+
+  // Is Wheelman alive and able to read its database? For a watchdog, the demo check and a person.
+  if (req.method === 'GET' && p === '/api/health') {
+    let db = 'ok';
+    try { dataStamp(); } catch (e) { db = e.message; }
+    const s = worker.statusReport();
+    const ok = db === 'ok';
+    return send(res, ok ? 200 : 503, { ok, version: VERSION, demo: config.demo, startedAt: worker.state.startedAt, uptimeSeconds: Math.round((Date.now() - worker.state.startedAt) / 1000), db, lastSyncOk: !!(s.lastSync && s.lastSync.ok), lastSyncAt: s.lastSync?.at || null });
   }
 
   // The phone add-on reports what the Google Messages list shows. See allowed() for who may call this.
