@@ -7,7 +7,18 @@ import { availability } from './normalize.js';
 
 // ---- business facts ------------------------------------------------------
 
-export function loadBusinessFacts(file = path.join(config.knowledgeDir, 'business-facts.md')) {
+/**
+ * The dealer's own file when it is there; otherwise the example committed with the project. The
+ * real business facts and the operations guide hold fees, terms and partners, so they stay on the
+ * dealer's computer and are never committed; a fresh clone, the demo and the automated checks
+ * run on the examples.
+ */
+export function knowledgeFile(name) {
+  const real = path.join(config.knowledgeDir, `${name}.md`);
+  return fs.existsSync(real) ? real : path.join(config.knowledgeDir, `${name}.example.md`);
+}
+
+export function loadBusinessFacts(file = knowledgeFile('business-facts')) {
   const raw = fs.readFileSync(file, 'utf8').replace(/\r/g, '');
   const topics = [];
   for (const block of raw.split(/\n## /).slice(1)) {
@@ -42,7 +53,7 @@ export function businessFactsForPrompt() {
 // ---- how Carbarn works ----------------------------------------------------
 
 /** The operations guide: everything below the first "---" line of knowledge/how-carbarn-works.md. */
-export function operationsGuide(file = path.join(config.knowledgeDir, 'how-carbarn-works.md')) {
+export function operationsGuide(file = knowledgeFile('how-carbarn-works')) {
   if (!fs.existsSync(file)) return '';
   const raw = fs.readFileSync(file, 'utf8').replace(/\r/g, '');
   const cut = raw.indexOf('\n---');

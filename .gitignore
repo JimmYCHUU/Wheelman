@@ -16,6 +16,10 @@ voice/people.json
 # Internal notes: planning, and the evidence behind the business facts
 PLAN.md
 knowledge/business-facts-evidence.md
+# The real business facts and operations guide: fees, terms, partners and practice. The committed
+# .example.md files beside them are what a fresh clone, the demo and the checks run on.
+knowledge/business-facts.md
+knowledge/how-carbarn-works.md
 
 # Real messages sent to auction customers, kept as the source for voice/auction-messages.md
 Auction.txt

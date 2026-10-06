@@ -7,8 +7,10 @@ export const NAME_TOKEN = '{{NAME}}';
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// Carbarn's own public details are not customer data and must survive redaction.
-const OWN_PHONE_DIGITS = ['0423840130', '61423840130', '0401110680'];
+// Carbarn's own details are not customer data and must survive redaction. The public number is in
+// the settings; any other number of ours comes from BUSINESS_PHONES in .env, never from the code.
+const ownDigits = (p) => { const d = String(p || '').replace(/\D/g, ''); return d.startsWith('61') ? [d, `0${d.slice(2)}`] : [d, `61${d.replace(/^0/, '')}`]; };
+const OWN_PHONE_DIGITS = [...new Set([config.site.phone, ...config.site.otherPhones].flatMap(ownDigits).filter((d) => d.length >= 9))];
 const OWN_EMAILS = ['info@carbarn.com.au'];
 const OWN_ADDRESS = /frances\s+st(reet)?/i;
 

@@ -21,7 +21,9 @@ export const config = {
   dashboard: {
     // The address of the dashboard's data service. Set in .env; it is not written in the code.
     baseUrl: (env.DASHBOARD_API_URL || '').trim().replace(/\/+$/, ''),
-    origin: 'https://dashboard.carbarn.com.au',
+    // The dashboard's own web address, sent as the origin of each read. Set in .env; when it is
+    // not, the data service's own address is used.
+    origin: (env.DASHBOARD_ORIGIN || '').trim().replace(/\/+$/, '') || (() => { try { return new URL((env.DASHBOARD_API_URL || '').trim()).origin; } catch { return ''; } })(),
     platform: 'carbarnau',
     // Import and auction enquiries are kept on a list of their own on the dashboard.
     importsPlatform: 'IMPORTS',
@@ -45,6 +47,9 @@ export const config = {
     baseUrl: 'https://www.carbarn.com.au',
     mapsUrl: 'https://maps.app.goo.gl/EQfdkTE7FYDF4DTT8',
     phone: '0423 840 130',
+    // Other numbers of ours that may appear in a text (a staff mobile, say). They are not customer
+    // details and are left as they are when a text goes to the AI. Set in .env; never in the code.
+    otherPhones: list(env.BUSINESS_PHONES || ''),
   },
 
   llm: {
