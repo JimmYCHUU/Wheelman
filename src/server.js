@@ -303,7 +303,10 @@ async function api(req, res, url) {
       sections[s] = rows ? rows.waiting.length : null;
       unread[s] = rows ? rows.unread : null;
     }
-    return send(res, 200, { items: here[tab], counts: { waiting: here.waiting.length, quiet: here.quiet.length, other: here.other.length }, sections, unread, section, hours });
+    // Auction orders are few, and one can be on any of the three lists: all of them are sent, so
+    // a search finds an order wherever it is.
+    const everything = section === 'auction' ? [...here.waiting, ...here.quiet, ...here.other] : undefined;
+    return send(res, 200, { items: here[tab], everything, counts: { waiting: here.waiting.length, quiet: here.quiet.length, other: here.other.length }, sections, unread, section, hours });
   }
 
   if (req.method === 'POST' && p === '/api/sync') {
