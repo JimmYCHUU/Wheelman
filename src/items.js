@@ -95,6 +95,12 @@ function addPhoneEntries(entries, rows) {
  * Full timeline for one customer: portal enquiries plus texts, oldest first.
  * phone: false leaves out what was seen on the phone (the example bank never sees it).
  */
+/** How many photo addresses a message carries; the page asks for each by its index. */
+function countMedia(json) {
+  if (!json) return 0;
+  try { const l = JSON.parse(json); return Array.isArray(l) ? l.filter((u) => typeof u === 'string').length : 0; } catch { return 0; }
+}
+
 export function buildTimeline(lead, conversationId, { now = Date.now(), phone = true } = {}) {
   // Failed texts are dropped before copies are, so a failed text never hides its successful retry.
   const messages = conversationId ? dedupeMessages(getMessages(conversationId).filter((m) => reachedCustomer(m, now))) : [];
@@ -112,6 +118,7 @@ export function buildTimeline(lead, conversationId, { now = Date.now(), phone = 
       text: body,
       event: about ? `Sent through a car portal about: ${about}.` : '',
       media: m.media_type ? (/(image|jpe?g|png)/i.test(m.media_type) ? 'photo' : 'attachment') : null,
+      photos: countMedia(m.media_urls_json),
       at: m.at || m.imported_at || 0,
       importedAt: m.imported_at || null,
       by: m.sent_by || null,
@@ -169,6 +176,17 @@ export function isAutomatedNotice(pending) {
   const text = pending.map((e) => e.text).join('\n');
   // Only wording a person would not type, because a real customer must never be filed away by mistake.
   return /(\b\d{4,8} is your\b|\byour (login|verification|security|access) code\b|code to log ?in|one[\s-]time (code|password|passcode)|\botp\b|missed call service|click\/tap to hear|call \d{3} to opt out|you have (a |\d+ )?(new )?(missed calls?|voice ?mails?|voice messages?))/i.test(text);
+}
+
+/**
+ * A sender on the ignore list (IGNORED_SENDERS): a contact saved on the phone under a label such
+ * as "Not customer" or "OTP", a finance company, a courier. Matched on the name without spaces
+ * or case, so "Credit One", "creditone" and "Rob CreditOne" all count.
+ */
+export function isIgnoredSender(name) {
+  const flat = String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!flat) return false;
+  return config.ignoredSenders.some((s) => { const w = String(s).toLowerCase().replace(/[^a-z0-9]/g, ''); return w && flat.includes(w); });
 }
 
 /** Texts from suppliers, couriers and marketers arrive on the same phone. They have no lead record. */
@@ -385,6 +403,12 @@ export function buildItem({ conversationId = null, leadId = null }) {
     phone: conversation?.phone || lead?.phone || '',
   }, timeline);
 
+  // A sender on the ignore list is kept, never listed.
+  if (isIgnoredSender(conversation?.customer_name) || isIgnoredSender(`${lead?.first_name || ''} ${lead?.last_name || ''}`)) {
+    item.state = 'other';
+    item.note = 'A sender on the ignore list (IGNORED_SENDERS in the .env file), not a customer.';
+  }
+
   // An import or auction enquiry: what they asked us to find travels with the item.
   item.imports = importContext(lead);
   if (item.imports && !item.deal && !item.situation.all.includes('import_sourcing')) {
@@ -568,8 +592,9 @@ export function buildPhoneItem(id, { now = Date.now() } = {}) {
   if (t.lead_id) return buildItem({ leadId: t.lead_id });
   const timeline = getPhoneMessages(t.id).map(phoneEntry).filter((e) => e.text || e.media);
   if (!timeline.length) return null;
+  const ignored = isIgnoredSender(t.name);
   let lead = null;
-  if (t.kind === 'contact') {
+  if (t.kind === 'contact' && !ignored) {
     const [first, ...rest] = String(t.name).trim().split(/\s+/);
     lead = { id: null, first_name: first, last_name: rest.join(' '), phone: '', email: '', status: '', platform: '', source: '', state: '', stocks: [], inquiries: [], statusHistory: [], nameOnly: true };
   }
@@ -578,7 +603,10 @@ export function buildPhoneItem(id, { now = Date.now() } = {}) {
     itemKey: `ph:${t.id}`, channel: 'sms', lead, hasLeadRecord: false,
     conversation: { phone, customer_name: t.kind === 'contact' ? t.name : '' }, conversationId: null, phone,
   }, timeline, { now });
-  if ((t.kind === 'shortcode' || t.kind === 'alpha') && item.state === 'awaiting') {
+  if (ignored) {
+    item.state = 'other';
+    item.note = 'A sender on the ignore list (IGNORED_SENDERS in the .env file), not a customer.';
+  } else if ((t.kind === 'shortcode' || t.kind === 'alpha') && item.state === 'awaiting') {
     item.state = 'other';
     item.note = 'A short code or a sender name rather than a phone number: a notice, not a customer.';
   }

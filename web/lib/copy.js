@@ -37,6 +37,9 @@ export const COPY = {
   'tag.dismissed': 'Dismissed',
   'tag.phoneOnly': 'Phone only',
 
+  'thread.loadOlder': 'Load older messages',
+  'thread.older': '{n} more',
+
   'row.you': 'You: ',
   'row.photo': 'Photo',
   'row.unread': '{n, one: unread message, other: unread messages}',

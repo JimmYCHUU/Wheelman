@@ -9,10 +9,11 @@ export const SECTIONS = {
     noun: ['customer', 'customers'],
     person: 'Customer',
     unknown: 'Unknown number',
+    // Senders that are not customers (codes, couriers, the ignore list) are never listed.
     tabs: [
       { id: 'waiting', label: 'Waiting', counted: true },
       { id: 'quiet', label: 'No reply needed' },
-      { id: 'other', label: 'Not customers' },
+      null,
     ],
     search: { placeholder: 'Search name, number or message', phone: true },
     place: 'the dashboard',

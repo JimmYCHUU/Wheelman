@@ -701,6 +701,7 @@ the top of `extension/reader.js`.
 | `PHONE_ADDON` | Set to `0` to stop taking the add-on's reports | `1` |
 | `PHONE_ADDON_ID` | The add-on's id as `chrome://extensions` shows it, so no other add-on is listened to | Empty: any add-on on this computer |
 | `PHONE_STALE_MINUTES` | After this long without a report, the page says the add-on has gone quiet | `10` |
+| `IGNORED_SENDERS` | Senders that are never customers and are never listed: a contact saved on the phone under a label, a finance company, a courier. Comma-separated; spaces and case are ignored | `Not customer, OTP, Delivery Service, Autotrader, CreditOne` |
 
 ## What Wheelman knows
 
@@ -1119,6 +1120,14 @@ it could read, and the page says if that is none. Not yet used over a working da
 shared by every test, so no test carries its own copy. A health route (`/api/health`) was added
 for anything that needs to know Wheelman is alive. A demo mode built on the same stand-ins was
 tried and removed the same day: the real page is the one to look at.
+
+6 October 2026, evening: the list shows every conversation ever stored, newest first, with no
+time window. A number with no record takes the name an earlier enquiry gave it, or the name the
+customer signed in a text (shown only; never given to the AI). A conversation opens on its newest
+twenty messages, with "Load older messages" at the top for the rest. Photos in texts are shown
+in the bubble, fetched once from the address the dashboard holds and kept under `data/media`.
+Senders on the ignore list (`IGNORED_SENDERS`) are never listed, and the "Not customers" list is
+gone with them.
 
 ### Open questions for Carbarn
 

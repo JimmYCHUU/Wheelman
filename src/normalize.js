@@ -100,9 +100,18 @@ export function normalizeMessage(raw) {
     sentBy: raw.sentBy ?? null,
     status: clean(raw.status),
     mediaType: raw.mediaType ?? (raw.mediaUrls ? 'media' : null),
+    // Where the photos are: the dashboard gives the addresses as a JSON list inside a string.
+    mediaUrls: mediaUrlsOf(raw.mediaUrls),
     at,
     importedAt: parseDashboardTime(raw.createdAt),
   };
+}
+
+function mediaUrlsOf(v) {
+  if (!v) return [];
+  let list = v;
+  if (typeof v === 'string') { try { list = JSON.parse(v); } catch { list = v.split(',').map((s) => s.trim()); } }
+  return (Array.isArray(list) ? list : [list]).filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u));
 }
 
 const slug = (s) => clean(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');

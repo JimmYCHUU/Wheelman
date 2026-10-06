@@ -245,6 +245,7 @@ export function openDb(file = config.dbPath) {
   ensureColumn(db, 'conversations', 'lead_platform', 'TEXT');
   ensureColumn(db, 'conversations', 'lead_status', 'TEXT');
   ensureColumn(db, 'conversations', 'lead_email', 'TEXT');
+  ensureColumn(db, 'messages', 'media_urls_json', 'TEXT');
   migrate(db);
   return db;
 }
@@ -263,6 +264,16 @@ function migrate(d) {
        WHERE status = 'answered' AND (item_key LIKE 'c:%' OR item_key LIKE 'l:%');
     `);
     mark('learning_reset_v2');
+  }
+
+  // Photo addresses were not stored before. Conversations with a photo are fetched again once, so
+  // the pictures can be shown.
+  if (!done('media_urls_backfill_v1')) {
+    d.exec(`
+      UPDATE conversations SET messages_synced_at = NULL
+       WHERE id IN (SELECT DISTINCT conversation_id FROM messages WHERE media_type IS NOT NULL AND media_urls_json IS NULL);
+    `);
+    mark('media_urls_backfill_v1');
   }
 }
 
@@ -577,12 +588,19 @@ export function rekeyLeadItems() {
 
 export function upsertMessage(m) {
   stmt(`
-    INSERT INTO messages(id, conversation_id, direction, body, sent_by, status, media_type, at, imported_at)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO messages(id, conversation_id, direction, body, sent_by, status, media_type, media_urls_json, at, imported_at)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       body = excluded.body, sent_by = excluded.sent_by, status = excluded.status, media_type = excluded.media_type,
+      media_urls_json = COALESCE(excluded.media_urls_json, messages.media_urls_json),
       at = excluded.at, imported_at = excluded.imported_at
-  `).run(m.id, m.conversationId, m.direction, m.body, m.sentBy, m.status, m.mediaType, m.at, m.importedAt);
+  `).run(m.id, m.conversationId, m.direction, m.body, m.sentBy, m.status, m.mediaType, m.mediaUrls?.length ? JSON.stringify(m.mediaUrls) : null, m.at, m.importedAt);
+}
+
+/** The photo addresses stored with a message, as the dashboard gave them. */
+export function messageMedia(id) {
+  const r = stmt('SELECT media_urls_json FROM messages WHERE id = ?').get(Number(id));
+  try { return r?.media_urls_json ? JSON.parse(r.media_urls_json).filter((u) => typeof u === 'string') : []; } catch { return []; }
 }
 
 export function upsertVehicle(v) {
