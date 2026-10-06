@@ -355,6 +355,11 @@ function renderStatus() {
   else if (last) text = `${place} not reached`;
   else text = `${place} not checked yet`;
   box.append(`${text} · ${s.ai.usedToday} of ${s.ai.limit} AI requests used today`);
+  // The phone add-on, once it has reported at all. (Before then there is nothing to say.)
+  const ph = s.phone;
+  if (!chat && ph?.on && ph.lastReportAt) {
+    box.append(ph.stale ? ` · The phone add-on has not reported since ${clock(ph.lastReportAt)}` : ` · Phone add-on heard ${ago(ph.lastReportAt)}`);
+  }
   // The better models are kept for dashboard customers; Marketplace chats use the rest.
   const models = s.ai.providers.map((p) => `${p.model}${p.marketplace === false ? ' (dashboard customers only)' : ''}${p.usedUpUntil ? ` (today's free allowance used up, back about ${clock(p.usedUpUntil)})` : p.restingMinutes ? ' (busy)' : ''}`).join('\n');
   if (models) box.title = `AI models, tried in order:\n${models}`;
@@ -392,6 +397,13 @@ function renderNotices() {
   }
   if (s.lastDraftError) box.append(notice('is-bad', 'alert', 'A suggestion could not be written', h('p', { text: s.lastDraftError.message })));
   if (s.paused) box.append(notice('is-warn', 'info', 'Suggestions are paused', h('p', { text: 'Every free AI model has used up its allowance for today. Suggestions resume by themselves.' })));
+  // The phone add-on: only in the Dashboard section, and only once it has reported at all.
+  const ph = s.phone;
+  if (!inMarketplace() && ph?.on && ph.lastReportAt) {
+    if (ph.stale) box.append(notice('is-warn', 'info', `The phone add-on has not reported since ${clock(ph.lastReportAt)}`, h('p', { text: 'Wheelman keeps working from the dashboard. Check that Chrome is open with the Messages tab in it.' })));
+    else if (ph.signedOut) box.append(notice('is-warn', 'info', 'Messages for web is signed out', h('p', { text: 'Open the Messages tab in Chrome and sign in again. Until then, texts the dashboard misses are not caught.' })));
+    else if (ph.listUnreadable) box.append(notice('is-warn', 'info', 'The phone add-on could not read the Messages list', h('p', { text: 'The Messages page may have changed. In the add-on, use Copy page details so the reader can be fixed.' })));
+  }
 }
 
 // ---- conversation list ---------------------------------------------------------
@@ -464,6 +476,8 @@ function renderList() {
           h('span', { class: 'row-preview' },
             // Found by a search on another list: the row says which one it is on.
             order && r.state !== TAB_STATE[state.tab] ? h('span', { class: 'row-tag', text: ORDER_LIST[r.state] || '' }) : null,
+            // Seen on the phone only: the dashboard has nothing for this number.
+            r.phoneOnly ? h('span', { class: 'row-tag', text: 'Phone only' }) : null,
             setAside ? h('span', { class: 'row-tag', text: 'Dismissed' }) : flagWords ? h('span', { class: `row-flag ${flagClass}`, text: `${flagWords}: ` }) : null,
             !order && r.preview.who === 'us' ? h('span', { class: 'you', text: 'You: ' }) : null, previewText),
           unread ? h('span', { class: 'badge' }, String(unread), h('span', { class: 'visually-hidden', text: unread === 1 ? ' unread message' : ' unread messages' })) : null)));
@@ -673,9 +687,10 @@ function renderThread(item, els, { toBottom = false } = {}) {
     }
 
     const side = e.who === 'us' ? 'out' : 'in';
-    const by = side === 'out' ? sender(e.by) : viaLabel(e.via);
+    // A text the phone add-on saw and the dashboard does not have says so, whichever way it went.
+    const by = e.phone ? (side === 'out' ? 'Sent from the phone, not on the dashboard' : 'Seen on the phone, not on the dashboard') : side === 'out' ? sender(e.by) : viaLabel(e.via);
     const first = side !== lastSide || by !== lastBy;
-    const bubble = h('div', { class: `msg ${side} ${first ? 'first' : ''}`.trim() },
+    const bubble = h('div', { class: `msg ${side} ${first ? 'first' : ''} ${e.phone ? 'phone' : ''}`.replace(/\s+/g, ' ').trim() },
       h('span', { class: 'visually-hidden', text: side === 'out' ? `We wrote, ${by}: ` : 'Customer wrote: ' }),
       first && by ? h('span', { class: 'from', 'aria-hidden': side === 'out' ? 'true' : null, text: by }) : null,
       e.media ? h('span', { class: 'media' }, icon('image'), e.media === 'photo' ? 'Photo' : 'Attachment', e.text ? '\n' : '') : null,

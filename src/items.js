@@ -1,7 +1,9 @@
 // Builds the list of "work items": customers who have said something and are waiting for a reply.
 
-import { openDb, getLead, getLeadByConversation, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes } from './db.js';
+import { openDb, getLead, getLeadByConversation, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor } from './db.js';
 import { orderKey, orderMarks, orderStatus, orderRow, occasionFor, MESSAGES } from './orders.js';
+import { sameMessage, windowFor } from './phone.js';
+import { phoneKeys } from './normalize.js';
 import { readInquiry, isSilentInquiry, isReaction, isAcknowledgement, isOptOut, menuReply, sameText, squash, resolveStock, stockFromUrl, findUrls, unwrapRelay } from './text.js';
 import { classify, labelFor } from './situations.js';
 import { importContext } from './imports.js';
@@ -53,8 +55,47 @@ function reachedCustomer(m, now) {
   return true;
 }
 
-/** Full timeline for one customer: portal enquiries plus texts, oldest first. */
-export function buildTimeline(lead, conversationId, { now = Date.now() } = {}) {
+/** A text seen on the phone, as a timeline entry. Key pm:<id>. */
+function phoneEntry(r) {
+  return {
+    who: r.direction === 'IN' ? 'customer' : 'us',
+    via: 'SMS (phone)',
+    text: String(r.text || '').trim(),
+    event: '',
+    media: r.media || null,
+    at: r.at,
+    by: null,
+    key: `pm:${r.id}`,
+    // Not on the dashboard. The page says so, and nothing is ever learned from it.
+    phoneOnly: true,
+    approx: r.precision === 'day' || r.precision === 'unknown',
+  };
+}
+
+/**
+ * Adds the texts the phone add-on saw for this number. One the dashboard also has is left out: the
+ * dashboard's copy stays, with its exact time. When the phone saw it first, the dashboard's entry
+ * takes the phone entry's key, so a suggestion written for it stays attached.
+ */
+function addPhoneEntries(entries, rows) {
+  for (const r of rows) {
+    const e = phoneEntry(r);
+    if (!e.text && !e.media) continue;
+    const mine = { direction: r.direction, text: e.text, media: e.media, at: r.at, truncated: !!r.truncated };
+    const twin = entries.find((x) => x.via === 'SMS' && sameMessage({ direction: x.who === 'customer' ? 'IN' : 'OUT', text: x.text, media: x.media, at: x.at }, mine, windowFor(r.precision)));
+    if (twin) {
+      if (/^m:/.test(twin.key) && r.seen_at && twin.importedAt && r.seen_at < twin.importedAt) twin.key = e.key;
+      continue;
+    }
+    entries.push(e);
+  }
+}
+
+/**
+ * Full timeline for one customer: portal enquiries plus texts, oldest first.
+ * phone: false leaves out what was seen on the phone (the example bank never sees it).
+ */
+export function buildTimeline(lead, conversationId, { now = Date.now(), phone = true } = {}) {
   // Failed texts are dropped before copies are, so a failed text never hides its successful retry.
   const messages = conversationId ? dedupeMessages(getMessages(conversationId).filter((m) => reachedCustomer(m, now))) : [];
   const entries = [];
@@ -72,9 +113,16 @@ export function buildTimeline(lead, conversationId, { now = Date.now() } = {}) {
       event: about ? `Sent through a car portal about: ${about}.` : '',
       media: m.media_type ? (/(image|jpe?g|png)/i.test(m.media_type) ? 'photo' : 'attachment') : null,
       at: m.at || m.imported_at || 0,
+      importedAt: m.imported_at || null,
       by: m.sent_by || null,
       key: `m:${m.id}`,
     });
+  }
+
+  if (phone && config.phone.switchedOn) {
+    const conversation = conversationId ? getConversation(conversationId) : null;
+    const keys = phoneKeys(conversation?.phone, lead?.phone);
+    if (keys.length || conversationId) addPhoneEntries(entries, phoneMessagesFor({ keys, conversationId }));
   }
 
   const inbound = entries.filter((e) => e.who === 'customer');
@@ -494,13 +542,49 @@ export function buildOrderItem(id, { message = '', now = Date.now() } = {}) {
   };
 }
 
-/** Finds an item by its key: c:<conversation>, l:<lead>, mp:<Marketplace chat> or ao:<auction order>. */
+// ---- conversations seen only on the phone ----------------------------------------
+
+/**
+ * A conversation the phone add-on saw and the dashboard has no record of. Key: ph:<thread>. Once
+ * the dashboard has the number, the same key leads to the dashboard's item instead. It is built
+ * through finishItem like any text conversation; with no customer record nothing is written for it
+ * unasked, as for any unknown number. A short code or a sender id is a notice, not a customer.
+ */
+export function buildPhoneItem(id, { now = Date.now() } = {}) {
+  const t = getPhoneThread(Number(id));
+  if (!t || !config.phone.switchedOn) return null;
+  if (t.conversation_id) return buildItem({ conversationId: t.conversation_id });
+  if (t.lead_id) return buildItem({ leadId: t.lead_id });
+  const timeline = getPhoneMessages(t.id).map(phoneEntry).filter((e) => e.text || e.media);
+  if (!timeline.length) return null;
+  let lead = null;
+  if (t.kind === 'contact') {
+    const [first, ...rest] = String(t.name).trim().split(/\s+/);
+    lead = { id: null, first_name: first, last_name: rest.join(' '), phone: '', email: '', status: '', platform: '', source: '', state: '', stocks: [], inquiries: [], statusHistory: [], nameOnly: true };
+  }
+  const phone = t.kind === 'number' ? t.name : '';
+  const item = finishItem({
+    itemKey: `ph:${t.id}`, channel: 'sms', lead, hasLeadRecord: false,
+    conversation: { phone, customer_name: t.kind === 'contact' ? t.name : '' }, conversationId: null, phone,
+  }, timeline, { now });
+  if ((t.kind === 'shortcode' || t.kind === 'alpha') && item.state === 'awaiting') {
+    item.state = 'other';
+    item.note = 'A short code or a sender name rather than a phone number: a notice, not a customer.';
+    item.autoDraft = false;
+  }
+  item.phoneOnly = true;
+  item.imports = null;
+  return item;
+}
+
+/** Finds an item by its key: c:<conversation>, l:<lead>, mp:<Marketplace chat>, ao:<auction order> or ph:<phone conversation>. */
 export function itemFromKey(key, opts = {}) {
-  const m = String(key || '').match(/^(c|l|mp|ao):(\d+)$/);
+  const m = String(key || '').match(/^(c|l|mp|ao|ph):(\d+)$/);
   if (!m) return null;
   const id = Number(m[2]);
   if (m[1] === 'mp') return buildMarketplaceItem(id);
   if (m[1] === 'ao') return buildOrderItem(id, opts);
+  if (m[1] === 'ph') return buildPhoneItem(id);
   return buildItem(m[1] === 'c' ? { conversationId: id } : { leadId: id });
 }
 
@@ -532,7 +616,11 @@ export function listItems({ maxAgeHours = config.draftMaxAgeHours, states = ['aw
     const key = l.conversation_id ? `c:${l.conversation_id}` : `l:${l.id}`;
     if (!keys.has(key)) keys.set(key, l.conversation_id ? { conversationId: l.conversation_id, leadId: l.id } : { leadId: l.id });
   }
-  for (const ref of keys.values()) keep(buildItem(ref));
+  // Numbers seen on the phone that the dashboard has nothing for.
+  if (config.phone.switchedOn) {
+    for (const t of listPhoneThreads({ cutoff })) if (!t.conversation_id && !t.lead_id) keys.set(`ph:${t.id}`, { phoneThreadId: t.id });
+  }
+  for (const ref of keys.values()) keep(ref.phoneThreadId ? buildPhoneItem(ref.phoneThreadId) : buildItem(ref));
   items.sort(newest);
   return items.slice(0, limit);
 }

@@ -418,6 +418,8 @@ svg.icon { width: 1.25rem; height: 1.25rem; flex: none; display: block; }
 .msg.first { margin-top: 0.5rem; }
 .msg.in.first { border-top-left-radius: 0; }
 .msg.out.first { border-top-right-radius: 0; }
+/* a text the phone add-on saw and the dashboard does not have */
+.msg.phone { outline: 1px dashed color-mix(in srgb, currentColor 45%, transparent); outline-offset: -1px; }
 .msg.first::before {
   content: ""; position: absolute; top: 0; width: 0; height: 0;
   border-style: solid; border-width: 0 0.5rem 0.625rem 0;

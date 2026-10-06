@@ -36,6 +36,7 @@ purpose.
 - [The page](#the-page)
 - [The Marketplace section](#the-marketplace-section)
 - [The Auction section](#the-auction-section)
+- [The phone add-on](#the-phone-add-on)
 - [What Wheelman knows](#what-wheelman-knows)
 - [How Wheelman learns](#how-wheelman-learns)
 - [Rules as Carbarn confirmed them](#rules-as-carbarn-confirmed-them)
@@ -289,7 +290,9 @@ Enforced in code, not by convention.
   POST, because that is how the website's own page asks. It carries the bid amount and
   nothing else, places no bid and stores nothing. Any other address or method is refused
   before a request is made. Reading does not mark anything as read, and never triggers the
-  dashboard's own drafts or the engine's auto-reply.
+  dashboard's own drafts or the engine's auto-reply. The phone add-on reads the list in the
+  Messages tab of your own browser: it opens nothing, clicks nothing and marks nothing read,
+  and it never types or sends.
 - **RULE-2 Customer details stay here.** Names, phone numbers, emails, rego plates, VINs,
   street addresses and bank details are removed on this computer before any text goes to an
   AI service. The first name is put back afterwards.
@@ -298,8 +301,10 @@ Enforced in code, not by convention.
   decide becomes a blank: `[PRICE?]`, `[TRADE-IN VALUE?]`, `[DELIVERY COST?]`, `[DATE?]`,
   `[CHECK?]`. The same goes for a time that has passed, a day nobody mentioned, a dated
   promise nobody on our side made, and a place the customer never said.
-- **RULE-4 Marketplace never teaches.** Learning accepts dashboard conversations only. It is
-  refused in three places: the learning code, the copy route and the database helper.
+- **RULE-4 Marketplace and the phone never teach.** Learning accepts dashboard conversations
+  only. It is refused in three places: the learning code, the copy route and the database
+  helper. A reply typed on the phone counts as the reply but teaches nothing, and the example
+  bank never sees it.
 - **RULE-5 No costs, no sale amounts.** Purchase cost, shipping cost and margin are never
   stored and never sent anywhere. From a sale record Wheelman keeps the stage and the date,
   and whether a deposit or the full amount is recorded. It keeps no amount and no buyer name,
@@ -362,6 +367,9 @@ npm.cmd run fetch-website -- --all
 In Windows PowerShell, type `npm.cmd` wherever these instructions say `npm`. Plain `npm` is
 blocked by a Windows security setting and shows "running scripts is disabled on this system".
 In Command Prompt, plain `npm` works.
+
+To catch texts that reach the business phone but not the dashboard, load the browser add-on
+once: see [The phone add-on](#the-phone-add-on).
 
 ### Check it worked
 
@@ -620,6 +628,75 @@ that knows their order. This is the one place the section asks an AI, on the bet
 - The live auction is looked at for each order that is still searching, at most once an hour.
 - Nothing is learned from this section. The wording is corrected in its file.
 
+## The phone add-on
+
+The dashboard gets its texts through a Pushbullet link to the business phone, and now and then
+one does not arrive. The phone is also paired to Google Messages for web, which shows them all.
+A small add-on for Chrome or Edge, in the `extension` folder, reads the list of conversations
+in that tab and hands what it sees to Wheelman on this computer. Nothing else changes: Wheelman
+still reads the dashboard as before, and the add-on fills the gaps.
+
+What it does, and does not do:
+
+- It reads the **latest message of each conversation** from the list, every 30 seconds while
+  the browser is open. It never opens a conversation, never clicks, never types and never
+  sends, so nothing is marked read on the phone. If a customer sends three texts within half
+  a minute, only the last is caught; the dashboard usually has the rest.
+- It talks to Wheelman only, at `127.0.0.1:3210`, and to nothing else. Wheelman takes its
+  reports on one route, from a browser add-on only, with the add-on's own header, so no web
+  page can post anything there. `PHONE_ADDON_ID` in `.env` can pin it to one add-on.
+- The texts stay on this computer, in their own tables, apart from the dashboard's. They are
+  never learned from and never used for the example bank. A text that gets a suggestion goes
+  through the same removal of names and numbers as any other before an AI sees it.
+
+What you see:
+
+- A conversation the dashboard has, with a text it missed: the text appears in the thread
+  labelled **Seen on the phone, not on the dashboard**, the conversation goes to Waiting, and
+  a reply is suggested as usual. A text the dashboard also has is shown once, as the
+  dashboard's copy.
+- A number the dashboard has never seen: a row tagged **Phone only**, Waiting when the
+  customer wrote last. Nothing is written for it unasked (there is no customer record), as
+  for any unknown number; **Write it now** works. Once the dashboard has the number, the row
+  moves under the dashboard's conversation with its suggestion and marks.
+- Login codes, couriers and short codes land under **Not customers**, as now.
+- A reply someone typed on the phone itself shows as ours, labelled **Sent from the phone,
+  not on the dashboard**. After a quarter of an hour with no dashboard copy it counts as the
+  reply, but it teaches nothing.
+- The status line says when the add-on last reported. If the browser or the tab is closed, a
+  notice says the add-on has not reported since when, and Wheelman keeps working from the
+  dashboard. When the browser is back, each conversation's latest text is caught up.
+- A saved contact shows its name on the phone, not its number. Wheelman then matches the
+  exact name on the dashboard; failing that, it is a Phone only row under that name.
+- Texts already on the list when the add-on is installed get a rough time ("Yesterday",
+  "Mon"). Everything seen from then on is timed to the minute.
+
+Installing it, once:
+
+1. In Chrome, open `chrome://extensions` (in Edge, `edge://extensions`), switch on
+   **Developer mode** at the top right, press **Load unpacked** and choose the `extension`
+   folder inside the Wheelman folder.
+2. Click the puzzle-piece icon in the toolbar and pin **Wheelman phone reader**.
+3. Open https://messages.google.com/web in that browser and sign in if it asks. Leave the tab
+   open: the add-on pins it, and opens it again at the next start.
+4. In Chrome's settings, under Performance, add `messages.google.com` to **Always keep these
+   sites active**, so the tab is not put to sleep.
+5. Click the add-on's icon. It should say "Connected to Wheelman". **Read now** reads at once.
+
+Chrome shows a "Disable developer mode extensions" bubble at each start; press **Cancel**. It
+is the price of an add-on that is not in the store. The add-on's icon says in plain words when
+something is wrong: the tab is not open, the browser put it to sleep, Wheelman is not running,
+or Messages for web is signed out. Google changes its page now and then; if the list can no
+longer be read, the icon says so, and **Copy page details** copies the shape of the page (its
+element names, no words) to fix the reader with. The names it looks for are in one table at
+the top of `extension/reader.js`.
+
+| Setting in `.env` | What it does | Default |
+|---|---|---|
+| `PHONE_ADDON` | Set to `0` to stop taking the add-on's reports | `1` |
+| `PHONE_ADDON_ID` | The add-on's id as `chrome://extensions` shows it, so no other add-on is listened to | Empty: any add-on on this computer |
+| `PHONE_STALE_MINUTES` | After this long without a report, the page says the add-on has gone quiet | `10` |
+
 ## What Wheelman knows
 
 Wheelman only states facts it has been given.
@@ -633,6 +710,7 @@ Wheelman only states facts it has been given.
 | Cars in the coming Japan auctions, what similar cars sold for, and what one would cost landed | The website's live auction | Read at the moment an offer is written, and hourly for orders still searching |
 | Auction orders: the stage, what was asked for, the car, what is charged and paid | The dashboard | Read every few minutes |
 | The wording of messages to auction customers | `voice/auction-messages.md`, `voice/auction-offer.md` | You edit them |
+| Texts that reached the business phone but not the dashboard | The phone add-on, reading Google Messages for web in your browser | Every 30 seconds while the browser is open |
 
 In `knowledge/business-facts.md` each topic is marked `CONFIRMED` (stated freely), `WORKING`
 (in use, please check) or `NEEDS ANSWER` (Wheelman says nothing and leaves a blank). Write the
@@ -780,6 +858,10 @@ one-off US$10 credit purchase raises that to 1,000.
   their address, licence, date of birth or deposit link. None of it goes to an AI.
 - A customer's own payment link that appears in a text is removed before the text goes to an
   AI, like a phone number.
+- From the phone, Wheelman stores the name or number as the Messages list shows it, the
+  latest text of each conversation and its time. Nothing more: no photos, no other contact
+  details. The texts are never learned from, and go through the same removal of details as
+  any other before an AI sees one.
 - `.env` holds the dashboard password and the AI keys. Git never sees it.
 - The folders that hold real customer details are listed under
   [Where your files live](#where-your-files-live). Git never sees those either.
@@ -802,15 +884,15 @@ one-off US$10 credit purchase raises that to 1,000.
 
 ## Where your files live
 
-Everything Wheelman reads from the dashboard and the content engine stays on this computer.
-Git never sees any of it.
+Everything Wheelman reads from the dashboard, the content engine and the phone stays on this
+computer. Git never sees any of it.
 
 | Folder | Content |
 |---|---|
 | `.env` | Dashboard address and login, the Marketplace inbox address, and the AI keys |
 | `voice\people.json` | The real names and logins of the two voices, and other staff names |
 | `PLAN.md`, `knowledge\business-facts-evidence.md` | Internal planning notes, and the evidence behind each business fact |
-| `data\app.db` | Leads, conversations, messages, stock, the stage of each sale, the auction orders and what you pasted into them, Marketplace chats, every suggestion with its checks and what you typed over it, what was learned, what was dismissed and read |
+| `data\app.db` | Leads, conversations, messages, stock, the stage of each sale, the auction orders and what you pasted into them, Marketplace chats, the texts the phone add-on saw, every suggestion with its checks and what you typed over it, what was learned, what was dismissed and read |
 | `Auction.txt` | Real messages the team sent to auction customers, kept as the source for the wording |
 | `data\wheelman.log` | What went wrong and when: technical messages only, no customer details |
 | `data\raw\` | The history first copied from the dashboard |
@@ -839,6 +921,10 @@ Git never sees any of it.
 | An order shows no message although one should be due | The step happened more than a week ago, or the message was copied or dismissed | Pick it under **Which message?**, or press **Put back in To do** |
 | A note says "No ... is in the website's coming auctions right now" and the car is blanks | The website lists none of that model in the next few auction days | Fill the blanks in, or type the car into **Add what you know**. The auction is looked at again within the hour |
 | An order cannot be found in the Auction section | It is on another list: one with nothing due is under **In progress** | Type the name, car or order number into the search box. It looks through all three lists |
+| "The phone add-on has not reported since …" | Chrome is closed, the Messages tab is closed, or the browser put it to sleep | Open Chrome with the Messages tab in it. The add-on's icon gives the reason |
+| "Messages for web is signed out" | Google signs a computer out after weeks without use | Open the Messages tab and sign in again (whoever has the phone taps the matching emoji) |
+| "The phone add-on could not read the Messages list" | Google changed its page | Click the add-on's icon, press **Copy page details**, and keep what it copied for fixing the table at the top of `extension/reader.js` |
+| The add-on's icon says "Wheelman is not running" | The black window is closed | Double-click **Start Wheelman.cmd** |
 | "Port 3210 is already in use" | Wheelman is already running in another window | Use that window, or close it |
 | "running scripts is disabled on this system" | Windows PowerShell blocks `npm` | Use the double-click file, or type `npm.cmd` |
 | The page says Wheelman is not responding | The black window was closed | Double-click **Start Wheelman.cmd** again |
@@ -851,7 +937,7 @@ Git never sees any of it.
 npm.cmd test
 ```
 
-204 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
+214 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
 a stand-in auction feed on this computer: who counts as waiting and who does not, stock numbers matched to the right
 car however a portal writes them (a year in front, a portal code, upper or lower case), that
 no customer detail and no cost figure reaches the AI request, an invented price
@@ -902,6 +988,17 @@ and one typed line filling them; our own stock offered after a lost bid; Copy co
 the next message coming up, and Put back; a pasted WhatsApp message producing one AI request
 with no name, number or amount in it and the figures back in the reply; a marker the AI
 made up caught; nothing learned from the section; and an older database upgrading cleanly.
+The phone add-on: the short times and lines on the Messages list read into moments and
+texts, and the add-on's idea of a phone number agreeing with Wheelman's; a report taken only
+from an add-on, on its own route, with its header, and refused everywhere else; the same list
+again storing nothing, a new text timed to when it was seen, a text cut short growing when
+the list shows more of it, and the same words sent again hours later kept as a new text; a
+text the dashboard also has shown once, one it missed shown, marked and answered, and the
+dashboard's copy taking over the key when the phone saw the text first; Phone only rows for
+unknown numbers, codes and sender ids set aside, a saved contact matched by its name; a Phone
+only conversation moving under the dashboard's key with its suggestion and marks; and a reply
+typed on the phone counting as sent after a grace period, teaching nothing and kept out of the
+example bank.
 
 ## Project layout
 
@@ -910,6 +1007,8 @@ wheelman/
 ├── Start Wheelman.cmd                 one click: start and open the page
 ├── .env.example                       settings; copy to .env
 ├── PRODUCT.md · DESIGN.md             who the page is for, and how it looks
+├── extension/                         the phone add-on for Chrome or Edge, loaded unpacked once:
+│                                      manifest · background · reader · parse · popup
 ├── knowledge/
 │   ├── business-facts.md              what Wheelman may state, topic by topic
 │   ├── how-carbarn-works.md           the steps of a sale and the usual answers
@@ -931,6 +1030,7 @@ wheelman/
 │   ├── orders.js                      auction orders: the stage in plain words, which message is due
 │   ├── ordermessages.js               the messages for an order, from the wording file; replies to pasted messages
 │   ├── templates.js                   reads the wording files and fills them in
+│   ├── phone.js                       the phone add-on's reports: checked, kept, matched by number
 │   ├── sync.js · normalize.js         what is read, and what is kept of it
 │   ├── items.js                       who is waiting: one shape for a lead and a Marketplace chat
 │   ├── situations.js · text.js        what a message is about, by keyword rules
@@ -958,7 +1058,7 @@ wheelman/
 │                                      check-private
 └── test/                              core · pipeline · greeting · inspection · marketplace
                                        quality · scenarios · stock · models · imports · editor
-                                       orders · orders-upgrade
+                                       orders · orders-upgrade · phone
 ```
 
 ## Status
@@ -993,6 +1093,12 @@ what similar cars sold for. Checked on the automated tests, in a browser on a th
 with invented orders, and by one read-only pass over the real orders on a private copy of the
 database (31 orders read, 9 with a message due, each written with no AI and nothing left
 unfilled). Not yet used over a working day.
+
+6 October 2026: the phone add-on was added after a customer's text reached the business phone
+but not the dashboard. Checked on the automated tests (ten new ones, on invented numbers). The
+names it looks for on the Google Messages list come from how that page is known to be built
+and have not yet been checked against the live tab: the add-on reports how many conversations
+it could read, and the page says if that is none. Not yet used over a working day.
 
 ### Open questions for Carbarn
 

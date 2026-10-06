@@ -6,7 +6,7 @@ import { syncAll, syncMarketplace } from './sync.js';
 import { listItems, itemFromKey, buildOrderItem } from './items.js';
 import { prepareOrders } from './ordermessages.js';
 import { draftFor } from './drafter.js';
-import { latestDraft, isDismissed, draftsAwaitingOutcome, recordOutcome, markSuperseded, setMeta, getMeta, openDb, mpDraftsLastDay } from './db.js';
+import { latestDraft, isDismissed, draftsAwaitingOutcome, recordOutcome, markSuperseded, setMeta, getMeta, openDb, mpDraftsLastDay, rekeyPhoneThreads } from './db.js';
 import { providers, usage, modelStatus, lastModel } from './llm.js';
 import { learnFrom, canLearnFrom, comparable, distilPending } from './learn.js';
 import { refreshVoiceBankIfStale } from './voicebank.js';
@@ -24,7 +24,19 @@ export const state = {
   mpHoldUntil: 0,       // Marketplace only: its own models are busy or used up; the dashboard carries on
   mpSyncing: false,
   mpSync: null,         // Marketplace: { at, ok, message, result }
+  phone: null,          // the phone add-on's last report: { at, threads, stored, signedOut, found, hidden }
 };
+
+const PHONE_NOTE_GAP_MS = 5 * 60 * 1000;
+
+/** Notes a report from the phone add-on. Written to the database only now and then, so the half-minute reports leave it alone. */
+export function notePhoneReport(r) {
+  const at = Date.now();
+  const before = state.phone;
+  state.phone = { at, threads: r.threads || 0, stored: r.stored || 0, signedOut: !!r.signedOut, found: r.found || null, hidden: !!r.hidden, lastStoredAt: r.stored ? at : before?.lastStoredAt || null };
+  const persisted = getMeta('phone_last_report', null);
+  if (r.stored || !persisted || at - (persisted.at || 0) >= PHONE_NOTE_GAP_MS) setMeta('phone_last_report', state.phone);
+}
 
 const RETRY_FAILED_AFTER_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 3; // in any hour, for one customer message
@@ -122,6 +134,13 @@ export function updateOutcomes() {
     }
     const sentText = burst.map((e) => e.text).join('\n');
     const sent = burst[0];
+    // A reply seen only on the phone: the dashboard's copy may still be on its way, so wait a
+    // while. If it never comes, the reply counts as sent but teaches nothing (the phone never does).
+    if (sent.phoneOnly) {
+      if (Date.now() - (sent.at || 0) < 15 * 60 * 1000) continue;
+      for (const d of drafts) { recordOutcome(d.id, { sentText, sentBy: 'phone', sentAt: sent.at, similarity: similarity(comparable(d.reply), comparable(sentText)) }); n++; }
+      continue;
+    }
     for (const d of drafts) {
       recordOutcome(d.id, { sentText, sentBy: sent.by || 'phone', sentAt: sent.at, similarity: similarity(comparable(d.reply), comparable(sentText)) });
       n++;
@@ -190,6 +209,8 @@ export async function draftWaiting({ max = 25 } = {}) {
 
 export async function cycle() {
   await Promise.all([runSync(), runMarketplaceSync()]);
+  // A number seen only on the phone may now have a dashboard conversation: its marks move across.
+  if (config.phone.switchedOn) { try { rekeyPhoneThreads(); } catch (e) { logLine('phone', `Matching phone conversations failed: ${e.message}`); } }
   try { updateOutcomes(); } catch (e) { state.lastDraftError = { at: Date.now(), message: 'Comparing sent replies failed: ' + e.message }; logLine('outcomes', `${e.message} | ${String(e.stack || '').split('\n').slice(1, 4).join(' ')}`); }
   // Once a day, relearn our salespeople's genuine replies from the latest dashboard conversations.
   try { refreshVoiceBankIfStale(); } catch { /* keep the existing bank */ }
@@ -210,6 +231,24 @@ export function start() {
   tick();
 }
 export function stop() { if (timer) clearTimeout(timer); }
+
+/** The phone add-on, for the page and for the add-on's own popup. */
+function phoneStatus() {
+  const on = config.phone.switchedOn;
+  const last = state.phone || (on ? getMeta('phone_last_report', null) : null);
+  const at = last?.at || null;
+  return {
+    on,
+    lastReportAt: at,
+    lastStoredAt: last?.lastStoredAt || null,
+    threads: last?.threads || 0,
+    signedOut: !!last?.signedOut,
+    // It has reported before, but not for a while: the browser or the tab is probably closed.
+    stale: on && !!at && Date.now() - at > config.phone.staleMinutes * 60 * 1000,
+    // The tab is open but the list could not be read: the page has probably changed.
+    listUnreadable: !!(last?.found && last.found.listItems === 0 && !last.signedOut),
+  };
+}
 
 export function statusReport() {
   const u = providers().length ? usage() : { total: 0, limit: config.llm.dailyLimit, remaining: config.llm.dailyLimit };
@@ -235,6 +274,7 @@ export function statusReport() {
       draftsLastDay: mpDraftsLastDay(),
       dailyDrafts: config.marketplace.dailyDrafts,
     },
+    phone: phoneStatus(),
     outcomes: { answered: stats.answered || 0, sentAlmostUnchanged: stats.close || 0, sentWithEdits: stats.edited || 0, averageMatch: stats.average ? Math.round(stats.average * 100) : null },
   };
 }

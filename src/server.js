@@ -18,6 +18,7 @@ import { displayNameFor } from './people.js';
 import { reservedByAnother } from './deal.js';
 import { wantedFrom } from './imports.js';
 import { learnedStats } from './db.js';
+import { validateReport, storePhoneReport } from './phone.js';
 
 const TYPES = { '.woff2': 'font/woff2', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 
@@ -33,23 +34,33 @@ function send(res, status, body, type = 'application/json; charset=utf-8') {
   res.end(data);
 }
 
-function readBody(req) {
+function readBody(req, limit = 100000) {
   return new Promise((resolve, reject) => {
     let size = 0; const parts = [];
-    req.on('data', (c) => { size += c.length; if (size > 100000) { reject(new Error('too large')); req.destroy(); } else parts.push(c); });
+    req.on('data', (c) => { size += c.length; if (size > limit) { reject(new Error('too large')); req.destroy(); } else parts.push(c); });
     req.on('end', () => { try { resolve(parts.length ? JSON.parse(Buffer.concat(parts).toString('utf8')) : {}); } catch { reject(new Error('bad json')); } });
     req.on('error', reject);
   });
 }
 
-/** Only this computer's own browser page may use the app. */
-function allowed(req) {
+/**
+ * Only this computer's own browser page may use the app. The one exception is the phone add-on
+ * (extension/), which reports from a browser add-on's own origin: it is let in on its own route
+ * only, with its own header (an ordinary web page cannot add one without a preflight request, which
+ * this server never answers), and only when PHONE_ADDON_ID, if set, names it.
+ */
+function allowed(req, pathname = '') {
   const host = String(req.headers.host || '');
   if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host)) return false;
   if (req.method !== 'GET') {
     const origin = String(req.headers.origin || '');
+    const json = /application\/json/i.test(String(req.headers['content-type'] || ''));
+    if (/^\/api\/phone\//.test(pathname) && /^chrome-extension:\/\/[a-p]{32}$/.test(origin)) {
+      if (config.phone.addonId && origin !== `chrome-extension://${config.phone.addonId}`) return false;
+      return req.headers['x-wheelman-phone'] === '1' && json;
+    }
     if (origin && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return false;
-    if (!/application\/json/i.test(String(req.headers['content-type'] || ''))) return false;
+    if (!json) return false;
   }
   return true;
 }
@@ -97,6 +108,8 @@ function summary(item) {
     replyComing: !!item.marketplace?.replyComing,
     anchor: item.anchorKey,
     state: item.state,
+    // Seen only on the phone: the dashboard has no conversation for this number.
+    phoneOnly: !!item.phoneOnly,
     dismissed: isDismissed(item.itemKey, item.anchorKey),
     name: displayName(item),
     phone: item.phone,
@@ -191,6 +204,8 @@ const threadOf = (item, shown) => {
   return shown.map((e) => ({
     key: e.key, who: e.who, internal: !!e.internal, text: e.text || '', event: e.event || '', media: e.media || null,
     by: displayNameFor(e.by) || '', auto: !!e.auto, via: e.via || '', at: e.at, unanswered: item.state === 'awaiting' && pendingKeys.has(e.key),
+    // Seen on the phone and not on the dashboard.
+    phone: !!e.phoneOnly,
   }));
 };
 
@@ -238,7 +253,7 @@ function present(item) {
 
 const SECTIONS = ['dashboard', 'marketplace', 'auction'];
 const sectionOn = (s) => (s === 'marketplace' ? config.marketplace.enabled : true);
-const KEY = '((?:c|l|mp|ao):\\d+)';
+const KEY = '((?:c|l|mp|ao|ph):\\d+)';
 const itemRoute = (tail = '') => new RegExp(`^/api/items/${KEY}${tail}$`);
 
 const listCache = new Map();
@@ -287,6 +302,18 @@ async function api(req, res, url) {
     const facts = businessFactsForPrompt();
     return send(res, 200, { ...worker.statusReport(), learned: learnedStats(), facts: { ...facts.counts, unanswered: facts.unanswered, toConfirm: loadBusinessFacts().filter((t) => t.status === 'working').map((t) => t.title) } });
   }
+
+  // The phone add-on reports what the Google Messages list shows. See allowed() for who may call this.
+  if (req.method === 'POST' && p === '/api/phone/messages') {
+    if (!config.phone.switchedOn) return send(res, 403, { error: 'The phone add-on is switched off (PHONE_ADDON=0 in the .env file).' });
+    let report;
+    try { report = validateReport(await readBody(req, 400000)); } catch (e) { return send(res, 400, { error: e.message === 'too large' ? 'The report is too large.' : e.message === 'bad json' ? 'The report could not be read.' : e.message }); }
+    const out = storePhoneReport(report);
+    worker.notePhoneReport({ ...out, signedOut: report.signedOut, found: report.found, hidden: report.hidden });
+    return send(res, 200, { ok: true, ...out, serverTime: Date.now() });
+  }
+
+  if (req.method === 'GET' && p === '/api/phone/status') return send(res, 200, worker.statusReport().phone);
 
   if (req.method === 'GET' && p === '/api/items') {
     const tab = ['waiting', 'quiet', 'other'].includes(url.searchParams.get('tab')) ? url.searchParams.get('tab') : 'waiting';
@@ -461,8 +488,8 @@ function serveStatic(res, url) {
 export function startServer() {
   const server = http.createServer(async (req, res) => {
     try {
-      if (!allowed(req)) return send(res, 403, { error: 'This page can only be used from this computer.' });
-      const url = new URL(req.url, `http://${req.headers.host}`);
+      const url = new URL(req.url, 'http://127.0.0.1');
+      if (!allowed(req, url.pathname)) return send(res, 403, { error: 'This page can only be used from this computer.' });
       if (url.pathname.startsWith('/api/')) return await api(req, res, url);
       if (req.method !== 'GET') return send(res, 405, { error: 'Not allowed' });
       return serveStatic(res, url);

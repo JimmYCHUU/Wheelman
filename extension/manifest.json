@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Wheelman phone reader",
+  "version": "0.1",
+  "description": "Reads the Google Messages for web tab in this browser and hands new texts to Wheelman on this computer. It never sends, types or opens anything.",
+  "permissions": ["alarms", "storage", "tabs"],
+  "host_permissions": ["http://127.0.0.1:3210/*", "https://messages.google.com/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    { "matches": ["https://messages.google.com/web/*"], "js": ["reader.js"], "run_at": "document_idle" }
+  ],
+  "web_accessible_resources": [
+    { "resources": ["parse.js"], "matches": ["https://messages.google.com/*"] }
+  ],
+  "action": { "default_popup": "popup.html", "default_title": "Wheelman phone reader" }
+}
