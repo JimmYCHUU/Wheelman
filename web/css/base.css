@@ -54,6 +54,6 @@
   @keyframes arrive { from { opacity: 0; filter: blur(2px); } to { opacity: 1; filter: none; } }
   @keyframes shimmer { to { background-position: -200% 0; } }
   @media (prefers-reduced-motion: reduce) {
-    .dot.busy, .icon-btn.is-busy svg.icon, .draft.arriving, .writing i { animation: none; }
+    .dot.busy, .icon-btn.is-busy svg.icon, .draft.arriving, .writing i, .skeleton-line { animation: none; }
   }
 }

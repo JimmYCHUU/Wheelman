@@ -4,84 +4,16 @@
 // Customer text is always inserted as text, never as HTML.
 
 import { blankMatcher } from './lib/blank.js';
-
-const $ = (sel, root = document) => root.querySelector(sel);
-
-function h(tag, attrs = {}, ...children) {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (v === null || v === undefined || v === false) continue;
-    if (k === 'class') el.className = v;
-    else if (k === 'text') el.textContent = v;
-    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
-    else el.setAttribute(k, v === true ? '' : v);
-  }
-  for (const c of children.flat(Infinity)) {
-    if (c === null || c === undefined || c === false) continue;
-    el.append(c.nodeType ? c : document.createTextNode(String(c)));
-  }
-  return el;
-}
-
-/** Like append, but skips empty values and accepts lists. The browser's own append would print 'null'. */
-function put(parent, ...children) {
-  for (const c of children.flat(Infinity)) {
-    if (c === null || c === undefined || c === false || c === '') continue;
-    parent.append(c.nodeType ? c : document.createTextNode(String(c)));
-  }
-  return parent;
-}
-
-// ---- icons: one drawn set, 24px grid, 1.75 stroke ------------------------------
-
-const SVG = 'http://www.w3.org/2000/svg';
-const ICONS = {
-  refresh: [['path', { d: 'M21 12a9 9 0 1 1-2.64-6.36' }], ['path', { d: 'M21 3v6h-6' }]],
-  search: [['circle', { cx: 11, cy: 11, r: 7 }], ['path', { d: 'm21 21-4.3-4.3' }]],
-  copy: [['rect', { x: 9, y: 9, width: 12, height: 12, rx: 2 }], ['path', { d: 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1' }]],
-  check: [['path', { d: 'M20 6 9 17l-5-5' }]],
-  alert: [['path', { d: 'M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z' }], ['path', { d: 'M12 9v4' }], ['path', { d: 'M12 17h.01' }]],
-  info: [['circle', { cx: 12, cy: 12, r: 10 }], ['path', { d: 'M12 16v-4' }], ['path', { d: 'M12 8h.01' }]],
-  x: [['path', { d: 'M18 6 6 18' }], ['path', { d: 'm6 6 12 12' }]],
-  pencil: [['path', { d: 'M12 20h9' }], ['path', { d: 'M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z' }]],
-  back: [['path', { d: 'M19 12H5' }], ['path', { d: 'm12 19-7-7 7-7' }]],
-  image: [['rect', { x: 3, y: 3, width: 18, height: 18, rx: 2 }], ['circle', { cx: 8.5, cy: 8.5, r: 1.5 }], ['path', { d: 'm21 15-5-5L5 21' }]],
-  user: [['path', { d: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' }], ['circle', { cx: 12, cy: 7, r: 4 }]],
-  external: [['path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }], ['path', { d: 'M15 3h6v6' }], ['path', { d: 'M10 14 21 3' }]],
-  chat: [['path', { d: 'M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z' }]],
-  phone: [['rect', { x: 6, y: 2, width: 12, height: 20, rx: 2.5 }], ['path', { d: 'M11 18h2' }]],
-  stop: [['circle', { cx: 12, cy: 12, r: 10 }], ['path', { d: 'm4.93 4.93 14.14 14.14' }]],
-  down: [['path', { d: 'm6 9 6 6 6-6' }]],
-};
-
-/** The Wheelman mark: a white steering wheel on a disc in the brand colour, drawn once in assets/brand.svg. */
-function wheelMark() {
-  const svg = document.createElementNS(SVG, 'svg');
-  svg.setAttribute('class', 'mark');
-  svg.setAttribute('aria-hidden', 'true');
-  const use = document.createElementNS(SVG, 'use');
-  use.setAttribute('href', 'assets/brand.svg#mark');
-  svg.append(use);
-  return svg;
-}
-
-function icon(name) {
-  const svg = document.createElementNS(SVG, 'svg');
-  svg.setAttribute('class', 'icon');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '1.75');
-  svg.setAttribute('stroke-linecap', 'round');
-  svg.setAttribute('stroke-linejoin', 'round');
-  svg.setAttribute('aria-hidden', 'true');
-  for (const [tag, attrs] of ICONS[name] || []) {
-    const n = document.createElementNS(SVG, tag);
-    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
-    svg.append(n);
-  }
-  return svg;
-}
+import { $, h, put } from './lib/h.js';
+import { icon, mark as wheelMark } from './lib/icons.js';
+import { clock, dayKey, dayLabel, ago, money, plural } from './lib/format.js';
+import { createStore } from './lib/store.js';
+import { t, listOf } from './lib/copy.js';
+import { SECTIONS as REGISTRY, sectionOf } from './sections/registry.js';
+import { newCount } from './lib/counts.js';
+import { Avatar } from './components/avatar.js';
+import { mountTopBar } from './views/TopBar.js';
+import { mountListColumn, visibleRows } from './views/ListColumn.js';
 
 // ---- state -------------------------------------------------------------------
 
@@ -111,20 +43,18 @@ const state = {
   threadSig: '',
   composerSig: '',
   stuck: true,           // the thread follows its newest message until the user scrolls up
+  listLoading: true,     // the first list of a section is on its way: grey shapes stand in for the rows
+  listError: false,      // the last list request failed: Wheelman is not responding
+  listTick: 0,           // bumped when rows were changed in place, so the list column repaints
 };
+
+const store = createStore(state);
+/** The older parts of the page change the state directly, then call this so the top bar and the list column repaint. */
+function repaint() { state.listTick++; store.notify(); }
 
 const narrow = () => window.matchMedia('(max-width: 860px)').matches;
 const inMarketplace = () => state.section === 'marketplace';
 const inAuction = () => state.section === 'auction';
-const SECTIONS = ['dashboard', 'marketplace', 'auction'];
-const sectionOf = (key) => (String(key).startsWith('mp:') ? 'marketplace' : String(key).startsWith('ao:') ? 'auction' : 'dashboard');
-// The three lists of a section, in plain words. Auction orders are not conversations waiting for
-// a reply, so their lists are named for what there is to do.
-const TABS = {
-  dashboard: ['Waiting', 'No reply needed', 'Not customers'],
-  marketplace: ['Waiting', 'No reply needed', ''],
-  auction: ['To do', 'In progress', 'Finished'],
-};
 
 // ---- small helpers -----------------------------------------------------------
 
@@ -233,55 +163,8 @@ function replaceText(ta, text) {
   if (!done || ta.value !== text) { ta.value = text; ta.dispatchEvent(new Event('input', { bubbles: true })); }
 }
 
-const TZ = 'Australia/Sydney';
-const fmtTime = new Intl.DateTimeFormat('en-AU', { timeZone: TZ, hour: 'numeric', minute: '2-digit', hour12: true });
-const fmtDay = new Intl.DateTimeFormat('en-AU', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' });
-const fmtShort = new Intl.DateTimeFormat('en-AU', { timeZone: TZ, day: 'numeric', month: 'short' });
-const fmtWeekday = new Intl.DateTimeFormat('en-AU', { timeZone: TZ, weekday: 'long' });
-const fmtKey = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
-
-const clock = (ms) => (ms ? fmtTime.format(new Date(ms)).replace(' ', ' ') : '');
-const dayKey = (ms) => fmtKey.format(new Date(ms));
-function daysAgo(ms) {
-  const a = Date.parse(dayKey(Date.now()) + 'T00:00:00Z');
-  const b = Date.parse(dayKey(ms) + 'T00:00:00Z');
-  return Math.round((a - b) / 86400000);
-}
-function dayLabel(ms) {
-  const d = daysAgo(ms);
-  if (d === 0) return 'Today';
-  if (d === 1) return 'Yesterday';
-  return fmtDay.format(new Date(ms));
-}
-function listTime(ms) {
-  if (!ms) return '';
-  const d = daysAgo(ms);
-  if (d === 0) return clock(ms);
-  if (d === 1) return 'Yesterday';
-  if (d < 7) return fmtWeekday.format(new Date(ms));
-  return fmtShort.format(new Date(ms));
-}
-function ago(ms) {
-  const m = Math.max(0, Math.round((Date.now() - ms) / 60000));
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m} min ago`;
-  const hrs = Math.round(m / 60);
-  if (hrs < 48) return `${hrs} h ago`;
-  return `${Math.round(hrs / 24)} days ago`;
-}
-
-const money = (n) => (n === null || n === undefined || n === '' ? '' : '$' + Number(n).toLocaleString('en-AU'));
-const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
-
-function avatar(name, extra = '') {
-  const clean = String(name || '').trim();
-  if (!clean) return h('span', { class: `avatar ${extra}`.trim(), 'aria-hidden': 'true' }, icon('user'));
-  const parts = clean.split(/\s+/);
-  const initials = (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
-  let hash = 0;
-  for (const ch of clean.toLowerCase()) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-  return h('span', { class: `avatar h${hash % 8} ${extra}`.trim(), 'aria-hidden': 'true', text: initials });
-}
+/** The avatar component under its older name: 'small' and 'large' are the sizes the older views ask for. */
+const avatar = (name, extra = '') => Avatar({ name, size: extra === 'small' ? 'sm' : extra === 'large' ? 'lg' : 'md' });
 
 function sender(by) {
   if (!by) return 'Sent from the phone';
@@ -333,230 +216,31 @@ function linked(text) {
   return out;
 }
 
-// ---- status and notices --------------------------------------------------------
-
-function renderStatus() {
-  const s = state.status;
-  const box = $('#status');
-  box.replaceChildren();
-  if (!s) { box.append(h('span', { class: 'dot' }), 'The agent is not responding'); return; }
-  // The demo: invented data against stand-in services. The ribbon makes a screenshot of it unmistakable.
-  $('#demo-ribbon').hidden = !s.demo;
-  // The line describes whichever section is on screen.
-  const chat = inMarketplace() && s.marketplace?.enabled;
-  const last = chat ? s.marketplace.lastSync : s.lastSync;
-  const syncing = chat ? s.marketplace.syncing : s.syncing;
-  const place = chat ? 'Marketplace' : 'Dashboard';
-  const busy = syncing || s.drafting;
-  const ok = !!(last && last.ok);
-  box.append(h('span', { class: `dot ${busy ? 'busy' : ok ? 'ok' : last ? 'bad' : ''}` }));
-  let text;
-  if (syncing) text = chat ? 'Checking Marketplace' : 'Checking the dashboard';
-  else if (s.drafting) text = 'Writing suggestions';
-  else if (ok) text = `${place} checked ${ago(last.at)}`;
-  else if (last) text = `${place} not reached`;
-  else text = `${place} not checked yet`;
-  box.append(`${text} · ${s.ai.usedToday} of ${s.ai.limit} AI requests used today`);
-  // The phone add-on gets a line of its own in the footer, once it has reported at all. (Before
-  // then there is nothing to say.) The status line stays one line, so it is never cut short.
-  const ph = s.phone;
-  const phoneLine = $('#phone-line');
-  const phoneOn = !chat && !inAuction() && !!(ph?.on && ph.lastReportAt);
-  phoneLine.hidden = !phoneOn;
-  if (phoneOn) {
-    phoneLine.textContent = ph.stale
-      ? `The phone add-on has not reported since ${clock(ph.lastReportAt)}`
-      : `Phone add-on heard ${ago(ph.lastReportAt)} · ${plural(ph.threads || 0, 'conversation')} on the phone`;
-    phoneLine.title = 'The add-on in your browser reads the list in the Google Messages tab every 30 seconds and hands the latest text of each conversation to Wheelman. Texts the dashboard missed are shown as seen on the phone.';
-  }
-  // The better models are kept for dashboard customers; Marketplace chats use the rest.
-  const models = s.ai.providers.map((p) => `${p.model}${p.marketplace === false ? ' (dashboard customers only)' : ''}${p.usedUpUntil ? ` (today's free allowance used up, back about ${clock(p.usedUpUntil)})` : p.restingMinutes ? ' (busy)' : ''}`).join('\n');
-  if (models) box.title = `AI models, tried in order:\n${models}`;
-
-  // What Wheelman has learned from replies that were really used.
-  const learned = $('#learned');
-  const n = (s.learned?.total || 0) + (s.learned?.notes || 0);
-  learned.hidden = !n;
-  if (n) {
-    const bits = [s.learned.changed ? `${plural(s.learned.changed, 'reply', 'replies')} you changed` : '', s.learned.approved ? `${s.learned.approved} you approved` : '', s.learned.notes ? plural(s.learned.notes, 'note') : ''].filter(Boolean);
-    learned.textContent = `Learned from ${bits.length > 1 ? bits.slice(0, -1).join(', ') + ' and ' + bits[bits.length - 1] : bits[0]}`;
-    learned.title = 'Wheelman learns from the replies you change before sending, the ones you mark Good reply, and what you write under Could be better. Only dashboard conversations are used.';
-  }
-}
-
-function notice(kind, iconName, title, ...body) {
-  return h('div', { class: `notice ${kind}` }, icon(iconName), h('div', {}, h('strong', { text: title }), body));
-}
-
-function renderNotices() {
-  const s = state.status;
-  const box = $('#notices');
-  box.replaceChildren();
-  if (!s) return;
-  if (s.missing.length) {
-    box.append(notice('is-bad', 'alert', 'Setup is not finished',
-      h('p', {}, 'Open the file ', h('code', { text: '.env' }), ', fill in what is listed here, then restart the agent.'),
-      h('ul', {}, s.missing.map((m) => h('li', { text: m })))));
-  }
-  if (s.lastSync && !s.lastSync.ok && !s.missing.some((m) => /dashboard/.test(m))) {
-    box.append(notice('is-bad', 'alert', 'The dashboard could not be reached', h('p', { text: s.lastSync.message })));
-  }
-  if (inMarketplace() && s.marketplace?.enabled && s.marketplace.lastSync && !s.marketplace.lastSync.ok) {
-    box.append(notice('is-bad', 'alert', 'The Marketplace inbox could not be reached', h('p', { text: `${s.marketplace.lastSync.message} The Dashboard section is not affected.` })));
-  }
-  if (s.lastDraftError) box.append(notice('is-bad', 'alert', 'A suggestion could not be written', h('p', { text: s.lastDraftError.message })));
-  if (s.paused) box.append(notice('is-warn', 'info', 'Suggestions are paused', h('p', { text: 'Every free AI model has used up its allowance for today. Suggestions resume by themselves.' })));
-  // The phone add-on: only in the Dashboard section, and only once it has reported at all.
-  const ph = s.phone;
-  if (!inMarketplace() && ph?.on && ph.lastReportAt) {
-    if (ph.stale) box.append(notice('is-warn', 'info', `The phone add-on has not reported since ${clock(ph.lastReportAt)}`, h('p', { text: 'Wheelman keeps working from the dashboard. Check that Chrome is open with the Messages tab in it.' })));
-    else if (ph.signedOut) box.append(notice('is-warn', 'info', 'Messages for web is signed out', h('p', { text: 'Open the Messages tab in Chrome and sign in again. Until then, texts the dashboard misses are not caught.' })));
-    else if (ph.listUnreadable) box.append(notice('is-warn', 'info', 'The phone add-on could not read the Messages list', h('p', { text: 'The Messages page may have changed. In the add-on, use Copy page details so the reader can be fixed.' })));
-  }
-}
-
-// ---- conversation list ---------------------------------------------------------
-
-// Which list an auction order is on, from its state.
-const ORDER_LIST = { awaiting: 'To do', answered: 'In progress', closed: 'Finished' };
-const TAB_STATE = { waiting: 'awaiting', quiet: 'answered', other: 'closed' };
-
-function visibleRows() {
-  const q = state.q.trim().toLowerCase();
-  if (!q) return state.list;
-  const digits = q.replace(/\D/g, '');
-  // In the Auction section a search looks through every order, not only the list on screen.
-  const rows = inAuction() && state.everything.length ? state.everything : state.list;
-  return rows.filter((r) =>
-    [r.name, r.preview.text, r.car, r.situation, r.account, r.due, r.orderNo].some((f) => String(f || '').toLowerCase().includes(q))
-    || (digits.length >= 3 && String(r.phone || '').replace(/\D/g, '').includes(digits)));
-}
-
-function renderList() {
-  const nav = $('#chats');
-  const focusedKey = document.activeElement?.closest?.('.row')?.dataset.key || null;
-  const rows = visibleRows();
-  nav.replaceChildren();
-
-  if (!rows.length) {
-    const empty = state.q.trim()
-      ? (inAuction() ? ['No order matches', 'Every order on the dashboard was searched: To do, In progress and Finished. Try a name, a car or an order number.'] : ['Nothing matches', 'Try a name, part of a phone number, or a word from the message.'])
-      : inAuction()
-        ? { waiting: ['Nothing to do', 'Auction orders that need a message appear here with the message ready to check.'],
-            quiet: ['Nothing here', 'Orders that are under way with no message due.'],
-            other: ['Nothing here', 'Orders that are completed, cancelled or refunded.'] }[state.tab]
-      : inMarketplace()
-        ? { waiting: ['Nobody is waiting', 'Marketplace chats where the buyer wrote last appear here with a reply ready to check.'],
-            quiet: ['Nothing here', 'Buyers who only said thanks, archived chats, and chats you dismissed.'],
-            other: ['Nothing here', ''] }[state.tab]
-        : { waiting: ['Nobody is waiting', 'New customer messages appear here with a reply ready to check.'],
-            quiet: ['Nothing here', 'Customers who only said thanks, opted out, or are no longer looking, and conversations you dismissed.'],
-            other: ['Nothing here', 'Texts from suppliers, couriers and marketers.'] }[state.tab];
-    nav.append(h('div', { class: 'list-empty' }, h('strong', { text: empty[0] }), empty[1]));
-    return;
-  }
-
-  for (const r of rows) {
-    const chat = r.section === 'marketplace';
-    const order = r.section === 'auction';
-    const title = r.name || r.phone || (chat ? 'Marketplace buyer' : order ? 'Auction customer' : 'Unknown number');
-    const setAside = r.dismissed && r.state === 'awaiting';
-    // The open conversation is being read, so it never shows a number.
-    // A dismissed conversation has been dealt with, so it shows no number either.
-    const unread = r.key === state.selected || setAside ? 0 : r.unread || 0;
-    // An order's row says what is due, then where the order has got to (or their message, when they wrote).
-    const flagWords = order ? r.due : setAside ? 'Dismissed' : r.flag === 'fail' ? 'Check the reply' : r.flag === 'input' ? 'Blank to fill' : r.needsPerson && r.unanswered ? 'Needs a person' : '';
-    const flagClass = r.flag === 'fail' ? 'fail' : 'input';
-    const previewText = order ? (r.dueKind === 'reply' ? r.preview.text : r.stage) : r.preview.media && !r.preview.text ? 'Photo' : r.preview.text;
-    const row = h('button', {
-      class: `row ${unread ? 'has-unanswered' : ''}`.trim(),
-      type: 'button',
-      'data-key': r.key,
-      'aria-current': r.key === state.selected ? 'true' : null,
-      onclick: () => open(r.key),
-    },
-      avatar(r.name),
-      h('span', { class: 'row-main' },
-        h('span', { class: 'row-top' },
-          h('span', { class: 'row-name', text: title }),
-          h('span', { class: 'row-time', text: listTime(r.lastAt) })),
-        (chat || order) && r.car ? h('span', { class: 'row-car', text: r.car }) : null,
-        h('span', { class: 'row-bottom' },
-          h('span', { class: 'row-preview' },
-            // Found by a search on another list: the row says which one it is on.
-            order && r.state !== TAB_STATE[state.tab] ? h('span', { class: 'row-tag', text: ORDER_LIST[r.state] || '' }) : null,
-            // Seen on the phone only: the dashboard has nothing for this number.
-            r.phoneOnly ? h('span', { class: 'row-tag', text: 'Phone only' }) : null,
-            setAside ? h('span', { class: 'row-tag', text: 'Dismissed' }) : flagWords ? h('span', { class: `row-flag ${flagClass}`, text: `${flagWords}: ` }) : null,
-            !order && r.preview.who === 'us' ? h('span', { class: 'you', text: 'You: ' }) : null, previewText),
-          unread ? h('span', { class: 'badge' }, String(unread), h('span', { class: 'visually-hidden', text: unread === 1 ? ' unread message' : ' unread messages' })) : null)));
-    nav.append(row);
-  }
-  if (focusedKey) nav.querySelector(`.row[data-key="${CSS.escape(focusedKey)}"]`)?.focus({ preventScroll: true });
-}
-
-/**
- * How many waiting conversations in a section have new messages that have not been looked at.
- * The conversation on screen is being read, so it is never counted.
- */
-function newCount(section) {
-  const open = section === state.section && state.list.some((r) => r.key === state.selected && r.unread) ? 1 : 0;
-  return Math.max(0, (state.unread[section] || 0) - open);
-}
-
-/** The numbers on the page mean "new, not looked at yet". They go away once the conversation is opened. */
-function renderCounts() {
-  const here = newCount(state.section);
-  $('#count-waiting').textContent = here ? String(here) : '';
-  $('#count-quiet').textContent = '';
-  $('#count-other').textContent = '';
-  const s = state.sections;
-  const on = (k) => k === 'dashboard' || (s[k] !== null && s[k] !== undefined);
-  $('#sections').hidden = !SECTIONS.some((k) => k !== 'dashboard' && on(k));
-  let total = 0;
-  for (const k of SECTIONS) {
-    const badge = $(`#section-${k}`);
-    badge.closest('.section').hidden = !on(k);
-    const n = on(k) ? newCount(k) : 0;
-    total += n;
-    badge.hidden = !n;
-    badge.replaceChildren(String(n), h('span', { class: 'visually-hidden', text: k === 'auction' ? (n === 1 ? ' order with something new' : ' orders with something new') : n === 1 ? ' conversation with new messages' : ' conversations with new messages' }));
-  }
-  // Every order is listed, however old: the "last 3 days" choice is for conversations only.
-  $('.side-foot label').hidden = inAuction();
-  // In its place: how many orders were read, so it can be checked against the dashboard's own page.
-  const line = $('#orders-line');
-  const c = state.counts;
-  const orders = c.waiting + c.quiet + c.other;
-  line.hidden = !inAuction() || !orders;
-  if (inAuction() && orders) {
-    line.textContent = `${plural(orders, 'order')} read from the dashboard: ${c.waiting} to do, ${c.quiet} in progress, ${c.other} finished.`;
-    line.title = 'Every order on the dashboard\'s auction page is read on each check. To do: a message is due, or the customer wrote. In progress: under way, nothing due. Finished: completed, cancelled or refunded (kept for 60 days). Search looks through all of them.';
-  }
-  // The three lists are named for the section on screen.
-  for (const [i, tab] of ['waiting', 'quiet', 'other'].entries()) {
-    const f = $(`.filter[data-tab="${tab}"]`);
-    const label = TABS[state.section][i];
-    f.hidden = !label;
-    $('.t', f).textContent = label;
-  }
-  document.title = `${total ? `(${total}) ` : ''}Wheelman${state.status?.demo ? ' demo' : ''}`;
-}
-
 // ---- open conversation -----------------------------------------------------------
 
+/** Nothing open: what to do, in three steps, and what Wheelman has learned from replies that were really used. */
 function renderWelcome() {
   const chat = $('#chat');
+  const sec = REGISTRY[state.section];
+  const n = state.counts.waiting;
+  const noun = n === 1 ? sec.noun[0] : sec.noun[1];
+  const learned = state.status?.learned || {};
+  const bits = [
+    learned.changed ? t('learned.changed', { n: learned.changed }) : '',
+    learned.approved ? t('learned.approved', { n: learned.approved }) : '',
+    learned.notes ? t('learned.notes', { n: learned.notes }) : '',
+  ].filter(Boolean);
   chat.replaceChildren(h('div', { class: 'welcome' },
     h('div', { class: 'welcome-mark' }, wheelMark()),
     h('h2', { text: inAuction()
-      ? (state.counts.waiting ? `${plural(state.counts.waiting, 'order')} with something to do` : 'No auction order needs a message right now')
-      : state.counts.waiting ? `${plural(state.counts.waiting, inMarketplace() ? 'buyer' : 'customer')} waiting for a reply` : 'Nobody is waiting right now' }),
+      ? (n ? t('welcome.todo', { n, noun }) : t('welcome.noOrder'))
+      : n ? t('welcome.waiting', { n, noun }) : t('welcome.nobody') }),
     h('ol', {},
-      h('li', {}, h('span', {}, h('b', { text: inAuction() ? 'Pick an order' : inMarketplace() ? 'Pick a buyer' : 'Pick a customer' }), ' from the list.')),
-      h('li', {}, h('span', {}, h('b', { text: inAuction() ? 'Check the message' : 'Check the reply' }), ' waiting in the message box. Fill in anything highlighted.')),
-      h('li', {}, h('span', {}, h('b', { text: 'Copy it' }), inAuction() ? ' and paste it into WhatsApp.' : inMarketplace() ? ' and paste it into the Marketplace chat.' : ' and send it from the dashboard.'))),
-    h('p', { text: 'Nothing is ever sent to a customer from this page.' })));
+      h('li', {}, h('span', {}, h('b', { text: sec.welcome.pick }), ' ', t('welcome.fromList'))),
+      h('li', {}, h('span', {}, h('b', { text: sec.welcome.check }), ' ', t('welcome.checkIt'))),
+      h('li', {}, h('span', {}, h('b', { text: t('welcome.copy') }), ' ', sec.welcome.paste))),
+    h('p', { text: t('welcome.neverSent') }),
+    bits.length ? h('p', { text: t('welcome.learned', { bits: listOf(bits) }), title: t('welcome.learned.title') }) : null));
   state.threadSig = '';
   state.composerSig = '';
 }
@@ -611,7 +295,7 @@ function renderHead(item, els) {
   const sub = writing ? 'writing a suggestion…'
     : order ? [where, `Order ${order.orderNo}`, order.prefers ? `prefers ${order.prefers}` : ''].filter(Boolean).join(' · ')
       : [where, item.situation && item.situation !== 'General enquiry' ? `Asking about: ${item.situation.toLowerCase()}` : ''].filter(Boolean).join(' · ');
-  const others = newCount(state.section);
+  const others = newCount(state, state.section);
   els.head.replaceChildren(
     h('button', { class: 'back', type: 'button', 'aria-label': others ? `Back to conversations. ${plural(others, 'conversation')} with new messages.` : 'Back to conversations', onclick: closeChat },
       icon('back'), others ? h('span', { class: 'badge', 'aria-hidden': 'true', text: String(others) }) : null),
@@ -1317,8 +1001,7 @@ function markRead(item) {
   // One fewer conversation with new messages: the numbers on the chip, the switch and the browser tab drop.
   const section = sectionOf(item.key);
   if (item.state === 'awaiting' && !item.dismissed && state.unread[section]) state.unread[section] -= 1;
-  renderList();
-  renderCounts();
+  repaint();
   api(`/api/items/${item.key}/seen`, { body: {} }).catch(() => {});
 }
 
@@ -1331,8 +1014,7 @@ async function open(key) {
   state.message = '';
   state.pasteOpen = false;
   $('#app').dataset.view = 'chat';
-  renderList();
-  renderCounts();
+  repaint();
   try {
     const { item } = await api(`/api/items/${key}`);
     if (state.selected !== key) return;
@@ -1427,16 +1109,16 @@ async function removePaste(item, id) {
 async function dismissItem(item) {
   try {
     await api(`/api/items/${item.key}/dismiss`, { body: {} });
-    const rows = visibleRows();
+    const rows = visibleRows(state);
     const i = rows.findIndex((r) => r.key === item.key);
     const next = rows[i + 1] || rows[i - 1] || null;
     state.list = state.list.filter((r) => r.key !== item.key);
     state.counts.waiting = Math.max(0, state.counts.waiting - (item.state === 'awaiting' ? 1 : 0));
     if (item.state === 'awaiting' && state.sections[state.section]) state.sections[state.section] -= 1;
-    renderCounts();
+    repaint();
     toast(item.order ? 'Dismissed. The order is kept under In progress.' : 'Dismissed. It is kept under No reply needed.', { label: 'Undo', run: () => restoreItem(item.key, true) });
     if (next && !narrow()) { state.selected = null; state.detail = null; await open(next.key); }
-    else { state.selected = null; state.detail = null; renderList(); renderChat(); $('#app').dataset.view = 'list'; }
+    else { state.selected = null; state.detail = null; repaint(); renderChat(); $('#app').dataset.view = 'list'; }
     refreshList();
   } catch (e) { toast(e.message); }
 }
@@ -1507,8 +1189,7 @@ async function improve(item, note) {
 
 async function refreshStatus() {
   try { state.status = await api('/api/status'); } catch { state.status = null; }
-  renderStatus();
-  renderNotices();
+  store.notify();
 }
 
 async function refreshList() {
@@ -1521,13 +1202,16 @@ async function refreshList() {
     state.counts = data.counts;
     if (data.sections) state.sections = data.sections;
     if (data.unread) state.unread = data.unread;
-    renderCounts();
-    renderList();
+    state.listLoading = false;
+    state.listError = false;
+    repaint();
     if (!state.detail && !state.selected) renderWelcome();
     return true;
   } catch {
     if (seq !== state.listSeq) return false;
-    $('#chats').replaceChildren(h('div', { class: 'list-empty' }, h('strong', { text: 'The agent is not responding' }), 'Check that it is still running in its terminal window, then reload this page.'));
+    state.listLoading = false;
+    state.listError = true;
+    repaint();
     return false;
   }
 }
@@ -1561,63 +1245,46 @@ async function refreshAll() {
 
 // ---- wiring ----------------------------------------------------------------------
 
-$('#brand-mark').append(wheelMark());
-$('#search-icon').append(icon('search'));
-$('#sync').append(icon('refresh'));
-
-for (const f of document.querySelectorAll('.filter')) {
-  f.addEventListener('click', async () => {
-    if (state.tab === f.dataset.tab) return;
-    state.tab = f.dataset.tab;
-    for (const t of document.querySelectorAll('.filter')) { t.classList.toggle('is-on', t === f); t.setAttribute('aria-pressed', t === f ? 'true' : 'false'); }
-    await refreshList();
-  });
-}
-
 /** Switches between the Dashboard, Marketplace and Auction sections. Each starts on its first list with nothing open. */
 async function showSection(section) {
   if (state.section === section) return;
   state.section = section;
   state.tab = 'waiting';
   state.q = '';
-  $('#q').value = '';
-  $('#q').placeholder = section === 'marketplace' ? 'Search name, car or message' : section === 'auction' ? 'Search name, car or order number' : 'Search name, number or message';
   state.selected = null; state.detail = null; state.rewriteOpen = false; state.betterOpen = false; state.copied = null; state.message = ''; state.pasteOpen = false;
   state.list = [];
+  state.listLoading = true;
+  state.listError = false;
   state.counts = { waiting: state.sections[section] || 0, quiet: 0, other: 0 };
-  for (const b of document.querySelectorAll('.section')) { const on = b.dataset.section === section; b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
-  for (const f of document.querySelectorAll('.filter')) { const on = f.dataset.tab === 'waiting'; f.classList.toggle('is-on', on); f.setAttribute('aria-pressed', on ? 'true' : 'false'); }
   $('#app').dataset.view = 'list';
-  $('#chats').replaceChildren();
-  renderStatus(); renderNotices(); renderCounts(); renderChat();
+  repaint();
+  renderChat();
   const ok = await refreshList();
   if (ok && state.section === section && !narrow() && state.list.length && !state.selected) await open(state.list[0].key);
 }
-for (const b of document.querySelectorAll('.section')) b.addEventListener('click', () => showSection(b.dataset.section));
 
-$('#q').addEventListener('input', (e) => { state.q = e.target.value; renderList(); });
-$('#hours').addEventListener('change', (e) => { state.hours = Number(e.target.value); refreshList(); });
-
-$('#sync').addEventListener('click', async () => {
-  const b = $('#sync');
-  b.disabled = true; b.classList.add('is-busy');
+/** Check now: one check of the section's source, then the list and the open conversation again. */
+async function syncNow(button) {
+  button.disabled = true; button.classList.add('is-busy');
   try {
     state.status = await api('/api/sync', { body: {} });
-    renderStatus(); renderNotices();
+    store.notify();
     await refreshList(); await refreshDetail();
     const last = inMarketplace() ? state.status.marketplace?.lastSync : state.status.lastSync;
-    toast(last?.ok ? (inMarketplace() ? 'Marketplace checked' : 'Dashboard checked') : inMarketplace() ? 'The Marketplace inbox could not be reached' : 'The dashboard could not be reached');
+    toast(last?.ok
+      ? t('toast.checked', { placeShort: REGISTRY[state.section].placeShort })
+      : t('toast.notReached', { place: inMarketplace() ? 'The Marketplace inbox' : 'The dashboard' }));
   } catch (e) { toast(e.message); }
-  finally { b.disabled = false; b.classList.remove('is-busy'); }
-});
+  finally { button.disabled = false; button.classList.remove('is-busy'); }
+}
 
-// Arrow keys move through the list, as in any messaging app. No motion on keyboard moves.
-$('#chats').addEventListener('keydown', (e) => {
-  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-  const rows = [...document.querySelectorAll('#chats .row')];
-  const i = rows.indexOf(document.activeElement);
-  const next = rows[e.key === 'ArrowDown' ? Math.min(rows.length - 1, i + 1) : Math.max(0, i - 1)];
-  if (next) { e.preventDefault(); next.focus(); }
+mountTopBar($('#topbar'), store, { sync: syncNow });
+mountListColumn($('#side'), store, {
+  open,
+  showSection,
+  setTab: async (tab) => { if (state.tab === tab) return; state.tab = tab; repaint(); await refreshList(); },
+  setSearch: (q) => { state.q = q; repaint(); },
+  setHours: (hours) => { state.hours = hours; refreshList(); },
 });
 
 document.addEventListener('keydown', (e) => {
@@ -1636,5 +1303,4 @@ document.addEventListener('keydown', (e) => {
   if (ok && !narrow() && state.list.length) await open(state.list[0].key);
   else renderChat();
   setInterval(refreshAll, 20000);
-  setInterval(renderStatus, 30000);
 })();

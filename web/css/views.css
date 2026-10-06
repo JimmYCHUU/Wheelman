@@ -5,13 +5,38 @@
   /* ---- frame ------------------------------------------------------------------------ */
 
   .app {
-    height: 100dvh;
+    height: calc(100dvh - var(--bar-h));
     display: grid;
     grid-template-columns: minmax(var(--col-list-min), var(--col-list-max)) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
   }
   .app.has-info { grid-template-columns: minmax(var(--col-list-min), var(--col-list-max)) minmax(0, 1fr) var(--col-details); }
   .side, .chat, .info { min-width: 0; min-height: 0; }
+
+  /* ---- top bar ----------------------------------------------------------------------- */
+
+  /* The brand, Wheelman's state in words with the whole width to say it, and Check now. */
+  .topbar {
+    height: var(--bar-h);
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--sp-4);
+    padding: 0 var(--sp-3) 0 var(--sp-4);
+    background: var(--side); border-bottom: 1px solid var(--line);
+  }
+  .topbar-brand { display: flex; align-items: center; gap: var(--sp-3); }
+  .brand-mark { width: var(--ctl-md); height: var(--ctl-md); flex: none; display: block; }
+  .brand-words { display: grid; line-height: 1; }
+  .topbar-brand h1 {
+    font-family: var(--wordmark); font-size: var(--fs-wordmark); font-weight: var(--fw-black); letter-spacing: 0.01em;
+    text-transform: uppercase; color: var(--brand); line-height: 1;
+  }
+  .brand-by { margin-top: var(--sp-1); font-size: var(--fs-caption); font-weight: var(--fw-semibold); color: var(--faint); letter-spacing: 0.01em; }
+  .demo-tag { margin-left: var(--sp-2); }
+  .topbar-status {
+    min-width: 0; display: flex; align-items: center; gap: var(--sp-2);
+    color: var(--faint); font-size: var(--fs-label); line-height: var(--lh-tight);
+  }
+  .status-text { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  .topbar-actions { display: flex; align-items: center; gap: var(--sp-1); }
 
   /* ---- list column ----------------------------------------------------------------- */
 
@@ -20,33 +45,13 @@
     background: var(--side);
     border-right: 1px solid var(--line);
   }
-  .side-head, .sync-line, .search, .filters, .side-foot { flex: none; }
-
-  .side-head {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: var(--sp-4) var(--sp-3) var(--sp-1) var(--sp-4);
-  }
-  .brand { display: flex; align-items: center; gap: var(--sp-3); }
-  .brand-mark { width: var(--ctl-md); height: var(--ctl-md); flex: none; display: block; }
-  .brand-words { display: grid; line-height: 1; }
-  .brand h1 {
-    font-family: var(--wordmark); font-size: var(--fs-wordmark); font-weight: var(--fw-black); letter-spacing: 0.01em;
-    text-transform: uppercase; color: var(--brand); line-height: 1;
-  }
-  .brand-by { margin-top: var(--sp-1); font-size: var(--fs-caption); font-weight: var(--fw-semibold); color: var(--faint); letter-spacing: 0.01em; }
-
-  .sync-line {
-    display: flex; align-items: center; gap: var(--sp-2);
-    padding: 0 var(--sp-4) var(--sp-3);
-    color: var(--faint); font-size: var(--fs-label);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
+  .sections, .notices, .search, .filters, .side-foot { flex: none; }
 
   /* section switch: Dashboard | Marketplace | Auction. One list at a time. A section that is
      switched off is hidden, and the others share the width. */
   .sections {
-    flex: none; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--sp-05);
-    margin: var(--sp-2) var(--sp-3) var(--sp-3); padding: var(--sp-05);
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--sp-05);
+    margin: var(--sp-3) var(--sp-3) var(--sp-2); padding: var(--sp-05);
     border-radius: var(--r-md); background: var(--panel);
   }
   .section {
@@ -242,6 +247,8 @@
   }
 
   @media (max-width: 860px) {
+    .topbar { gap: var(--sp-3); padding-left: var(--sp-3); }
+    .brand-by { display: none; }
     .app, .app.has-info { grid-template-columns: minmax(0, 1fr); }
     .app[data-view="list"] .chat { display: none; }
     .app[data-view="chat"] .side { display: none; }
