@@ -30,7 +30,8 @@ export function buildVoiceBank({ write = true } = {}) {
 
   for (const conv of conversations) {
     const lead = (conv.lead_id && getLead(conv.lead_id)) || getLeadByConversation(conv.id) || null;
-    const timeline = buildTimeline(lead, conv.id).filter((e) => !e.internal);
+    // Without what the phone add-on saw: a reply typed on the phone is never an example.
+    const timeline = buildTimeline(lead, conv.id, { phone: false }).filter((e) => !e.internal);
     // Suggestions Wheelman wrote for this conversation. A text that matches one was written by
     // Wheelman and sent by a person: it must not come back as an example of how the team writes.
     const own = draftTextsFor(`c:${conv.id}`).flatMap((d) => [d.reply, d.copied_text]).filter(Boolean).map(comparable).filter((t) => wordCount(t) >= 4);

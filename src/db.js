@@ -176,6 +176,34 @@ CREATE TABLE IF NOT EXISTS order_messages (
   removed_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS order_messages_order ON order_messages(order_id, at);
+
+-- Texts seen on the business phone through the browser add-on (extension/), which reads the list
+-- of conversations in Google Messages for web. Kept apart from the dashboard tables: nothing here
+-- is ever learned from or used for the example bank.
+CREATE TABLE IF NOT EXISTS phone_threads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  key TEXT NOT NULL UNIQUE,            -- 'ref:<the page's own conversation id>' or 'name:<the name, lower-cased>'
+  ref TEXT, name TEXT NOT NULL,        -- the name or number as the list shows it
+  phone_key TEXT NOT NULL DEFAULT '',  -- last nine digits; '' for a saved contact, a short code or a sender id
+  kind TEXT NOT NULL,                  -- number, shortcode, alpha (a sender id such as AUSPOST), contact (a saved name)
+  conversation_id INTEGER, lead_id INTEGER,  -- the dashboard's records for the same number, matched again on every report
+  latest_direction TEXT, latest_at INTEGER, latest_text TEXT, latest_sig TEXT,
+  first_seen_at INTEGER, last_seen_at INTEGER, changed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS phone_threads_phone ON phone_threads(phone_key);
+CREATE INDEX IF NOT EXISTS phone_threads_conv ON phone_threads(conversation_id);
+CREATE INDEX IF NOT EXISTS phone_threads_latest ON phone_threads(latest_at);
+
+CREATE TABLE IF NOT EXISTS phone_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  thread_id INTEGER NOT NULL,
+  direction TEXT NOT NULL,             -- 'IN' or 'OUT', as in messages
+  text TEXT, media TEXT,
+  truncated INTEGER NOT NULL DEFAULT 0, -- the list cut the text short
+  at INTEGER NOT NULL, precision TEXT NOT NULL,  -- how well the time is known: exact, minute, hour, day or unknown
+  seen_at INTEGER NOT NULL, source TEXT NOT NULL -- when the add-on first saw it; 'list'
+);
+CREATE INDEX IF NOT EXISTS phone_messages_thread ON phone_messages(thread_id, at);
 CREATE INDEX IF NOT EXISTS sales_phone ON sales(phone_hash);
 CREATE INDEX IF NOT EXISTS sales_email ON sales(email_hash);
 `;
@@ -787,4 +815,114 @@ export function addUsage(day, provider) {
     INSERT INTO llm_usage(day, provider, count) VALUES(?, ?, 1)
     ON CONFLICT(day, provider) DO UPDATE SET count = count + 1
   `).run(day, provider);
+}
+
+// ---- the phone (the browser add-on) -------------------------------------------
+
+/**
+ * Saves one conversation as the Messages list shows it. Returns whether its latest message is new
+ * since the last report. Writes only when something changed (or a few minutes have passed), so the
+ * add-on's half-minute reports do not move dataStamp() and rebuild the page's lists for nothing.
+ */
+export function upsertPhoneThread(t, now = Date.now()) {
+  const d = openDb();
+  const row = d.prepare('SELECT * FROM phone_threads WHERE key = ?').get(t.key);
+  if (!row) {
+    const r = d.prepare(`
+      INSERT INTO phone_threads(key, ref, name, phone_key, kind, conversation_id, lead_id, latest_direction, latest_at, latest_text, latest_sig, first_seen_at, last_seen_at, changed_at)
+      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(t.key, t.ref || null, t.name, t.phoneKey || '', t.kind, t.conversationId ?? null, t.leadId ?? null, t.latestDirection, t.latestAt, t.latestText || '', t.latestSig, now, now, now);
+    return { id: Number(r.lastInsertRowid), isNew: true, changed: true, latestAt: null };
+  }
+  const changed = row.latest_sig !== t.latestSig;
+  if (changed) d.prepare('UPDATE phone_threads SET latest_direction = ?, latest_at = ?, latest_text = ?, latest_sig = ?, changed_at = ? WHERE id = ?').run(t.latestDirection, t.latestAt, t.latestText || '', t.latestSig, now, row.id);
+  const links = (row.conversation_id ?? null) !== (t.conversationId ?? null) || (row.lead_id ?? null) !== (t.leadId ?? null)
+    || row.name !== t.name || row.phone_key !== (t.phoneKey || '') || row.kind !== t.kind || (t.ref && row.ref !== t.ref);
+  if (changed || links || now - (row.last_seen_at || 0) >= 5 * 60 * 1000) {
+    d.prepare('UPDATE phone_threads SET ref = COALESCE(?, ref), name = ?, phone_key = ?, kind = ?, conversation_id = ?, lead_id = ?, last_seen_at = ? WHERE id = ?')
+      .run(t.ref || null, t.name, t.phoneKey || '', t.kind, t.conversationId ?? null, t.leadId ?? null, now, row.id);
+  }
+  return { id: row.id, isNew: false, changed, latestAt: row.latest_at };
+}
+
+/** The same words came again, later: the conversation's latest message moved on. */
+export function bumpPhoneThread(id, latestAt, now = Date.now()) {
+  openDb().prepare('UPDATE phone_threads SET latest_at = ?, changed_at = ? WHERE id = ?').run(latestAt, now, id);
+}
+
+export function getPhoneThread(id) {
+  return openDb().prepare('SELECT * FROM phone_threads WHERE id = ?').get(id) || null;
+}
+
+/** Conversations on the phone with a message since the cutoff, newest first. */
+export function listPhoneThreads({ cutoff = 0 } = {}) {
+  return openDb().prepare('SELECT * FROM phone_threads WHERE latest_at >= ? ORDER BY latest_at DESC').all(cutoff);
+}
+
+export function getPhoneMessages(threadId) {
+  return openDb().prepare('SELECT * FROM phone_messages WHERE thread_id = ? ORDER BY at ASC, id ASC').all(threadId);
+}
+
+export function recentPhoneMessages(threadId, limit = 20) {
+  return openDb().prepare('SELECT * FROM phone_messages WHERE thread_id = ? ORDER BY at DESC, id DESC LIMIT ?').all(threadId, limit);
+}
+
+/** The texts seen on the phone for a dashboard conversation: by its number (last nine digits), or because the thread was matched to it. */
+export function phoneMessagesFor({ keys = [], conversationId = null } = {}) {
+  const ks = [...new Set(keys.filter((k) => String(k || '').length === 9))];
+  if (!ks.length && !conversationId) return [];
+  const where = [];
+  const args = [];
+  if (conversationId) { where.push('t.conversation_id = ?'); args.push(conversationId); }
+  if (ks.length) { where.push(`(t.phone_key != '' AND t.phone_key IN (${ks.map(() => '?').join(', ')}))`); args.push(...ks); }
+  return openDb().prepare(`
+    SELECT m.*, t.name AS thread_name, t.kind AS thread_kind
+      FROM phone_messages m JOIN phone_threads t ON t.id = m.thread_id
+     WHERE ${where.join(' OR ')}
+     ORDER BY m.at ASC, m.id ASC`).all(...args);
+}
+
+export function addPhoneMessage(threadId, m) {
+  const r = openDb().prepare('INSERT INTO phone_messages(thread_id, direction, text, media, truncated, at, precision, seen_at, source) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(threadId, m.direction, m.text || '', m.media || null, m.truncated ? 1 : 0, m.at, m.precision, m.seenAt, m.source || 'list');
+  return Number(r.lastInsertRowid);
+}
+
+export function updatePhoneMessage(id, { text, truncated }) {
+  openDb().prepare('UPDATE phone_messages SET text = ?, truncated = ? WHERE id = ?').run(text, truncated ? 1 : 0, id);
+}
+
+/** The newest dashboard conversation under exactly this customer name: a saved contact shows its name on the phone, not its number. */
+export function conversationByCustomerName(name) {
+  const n = String(name || '').trim();
+  if (!n) return null;
+  const r = openDb().prepare('SELECT id FROM conversations WHERE customer_name = ? COLLATE NOCASE ORDER BY latest_at DESC LIMIT 1').get(n);
+  return r ? r.id : null;
+}
+
+/**
+ * A conversation seen only on the phone is listed as "ph:<thread>". Once the dashboard has the same
+ * number it is listed under the dashboard's key, and its suggestions, dismissals and read marks move
+ * with it (as rekeyLeadItems does for leads). Nothing learned is involved: the phone never teaches.
+ */
+export function rekeyPhoneThreads() {
+  const d = openDb();
+  // A number the dashboard has since caught up with is linked first.
+  for (const t of d.prepare("SELECT id, phone_key FROM phone_threads WHERE conversation_id IS NULL AND phone_key != ''").all()) {
+    const c = d.prepare('SELECT id FROM conversations WHERE phone LIKE ? ORDER BY latest_at DESC LIMIT 1').get(`%${t.phone_key}`);
+    if (c) d.prepare('UPDATE phone_threads SET conversation_id = ? WHERE id = ?').run(c.id, t.id);
+  }
+  const rows = d.prepare(`
+    SELECT DISTINCT k.item_key AS old, COALESCE('c:' || t.conversation_id, 'l:' || t.lead_id) AS new
+      FROM (SELECT item_key FROM drafts WHERE item_key LIKE 'ph:%'
+            UNION SELECT item_key FROM dismissed WHERE item_key LIKE 'ph:%'
+            UNION SELECT item_key FROM seen WHERE item_key LIKE 'ph:%') k
+      JOIN phone_threads t ON t.id = CAST(substr(k.item_key, 4) AS INTEGER)
+     WHERE t.conversation_id IS NOT NULL OR t.lead_id IS NOT NULL`).all();
+  for (const r of rows) {
+    d.prepare('UPDATE drafts SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
+    d.prepare('UPDATE OR REPLACE dismissed SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
+    d.prepare('UPDATE OR REPLACE seen SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
+  }
+  return rows.length;
 }

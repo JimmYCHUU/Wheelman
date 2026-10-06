@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <title>Wheelman phone reader</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <h1>Wheelman phone reader</h1>
+  <p id="state" class="state">Checking…</p>
+  <p id="detail" class="detail"></p>
+  <div class="buttons">
+    <button id="read" type="button">Read now</button>
+    <button id="open" type="button" hidden>Open the Messages tab</button>
+    <button id="shape" type="button" class="quiet" title="Copies the shape of the Messages page (element names only, no words) for fixing the reader when Google changes the page">Copy page details</button>
+  </div>
+  <p class="foot">Reads the list of conversations in the Messages tab. Never opens, types or sends anything.</p>
+  <script src="popup.js"></script>
+</body>
+</html>

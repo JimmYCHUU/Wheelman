@@ -79,6 +79,17 @@ export const config = {
     windowDays: 14,
   },
 
+  // Texts seen on the business phone, reported by the browser add-on (extension/) that reads
+  // Google Messages for web. Reports are accepted only from an add-on in a browser on this
+  // computer (see allowed() in server.js). PHONE_ADDON=0 switches the intake off.
+  phone: {
+    switchedOn: !/^(0|false|no|off)$/i.test((env.PHONE_ADDON ?? '1').trim()),
+    // Optional: the add-on's id (chrome://extensions shows it), so no other add-on is listened to.
+    addonId: (env.PHONE_ADDON_ID || '').trim().toLowerCase(),
+    // After this many minutes without a report the page says the add-on has gone quiet.
+    staleMinutes: num(env.PHONE_STALE_MINUTES, 10),
+  },
+
   port: num(env.PORT, 3210),
   syncMinutes: num(env.SYNC_MINUTES, 3),
   draftMaxAgeHours: num(env.DRAFT_MAX_AGE_HOURS, 72),
