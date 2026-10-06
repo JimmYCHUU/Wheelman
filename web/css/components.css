@@ -52,15 +52,18 @@
   .filter.is-on { background: var(--accent-soft); color: var(--accent-text); font-weight: var(--fw-semibold); }
   .filter .n:not(:empty) { margin-left: var(--sp-1); font-weight: var(--fw-semibold); }
 
-  /* The one small tag: "Dismissed", "Phone only", "In progress", in front of a preview. */
-  .row-tag {
-    display: inline-block; margin-right: var(--sp-2); padding: 0 var(--sp-2); border-radius: var(--r-xs);
+  /* The one small tag: "Dismissed", "Phone only", "Check the reply", "In progress". Its tone says how
+     much it matters; its words say what it is. */
+  .tag {
+    display: inline-flex; align-items: center; flex: none; padding: 0 var(--sp-2); border-radius: var(--r-xs);
     background: var(--panel); color: var(--muted);
-    font-size: var(--fs-caption); font-weight: var(--fw-semibold); line-height: var(--lh-edit);
+    font-size: var(--fs-caption); font-weight: var(--fw-semibold); line-height: var(--lh-edit); white-space: nowrap;
   }
-  .row-flag { font-weight: var(--fw-semibold); }
-  .row-flag.fail { color: var(--red); }
-  .row-flag.input { color: var(--amber); }
+  .tag.warning { background: var(--amber-soft); color: var(--amber); }
+  .tag.danger { background: var(--red-soft); color: var(--red); }
+  .tag.info { background: var(--blue-soft); color: var(--blue); }
+  .tag.success { background: var(--accent-soft); color: var(--accent-text); }
+  .row-preview .tag { margin-right: var(--sp-2); vertical-align: text-bottom; }
 
   .badge {
     flex: none; min-width: var(--icon); height: var(--icon); padding: 0 var(--sp-2); border-radius: var(--r-pill);
@@ -95,28 +98,22 @@
 
   /* ---- notices ----------------------------------------------------------------- */
 
-  .notices { flex: none; display: grid; gap: 1px; max-height: 40%; overflow-y: auto; }
+  /* A notice is for a problem that needs action now: rounded, in the tone of the problem. */
+  .notices { display: grid; gap: var(--sp-2); padding: 0 var(--sp-3) var(--sp-2); max-height: 40%; overflow-y: auto; }
   .notices:empty { display: none; }
   .notice {
     display: grid; grid-template-columns: var(--icon) 1fr; gap: var(--sp-3);
-    padding: var(--sp-3) var(--sp-4);
+    padding: var(--sp-3) var(--sp-4); border-radius: var(--r-md);
     background: var(--amber-soft); color: var(--amber);
     font-size: var(--fs-label); line-height: var(--lh-body);
   }
   .notice.is-warn { background: var(--amber-soft); color: var(--amber); }
   .notice.is-bad { background: var(--red-soft); color: var(--red); }
+  .notice.is-info { background: var(--blue-soft); color: var(--blue); }
   .notice strong { display: block; font-weight: var(--fw-semibold); }
-  .notice code { font-family: var(--mono); font-size: var(--fs-caption); }
   .notice ul { margin-top: var(--sp-1); display: grid; gap: var(--sp-05); }
   .notice p { margin-top: var(--sp-05); }
-
-  /* ---- the demo ribbon ------------------------------------------------------- */
-
-  .demo-ribbon {
-    margin: var(--sp-1) var(--sp-4) var(--sp-2); padding: var(--sp-1) var(--sp-3); border-radius: var(--r-xs);
-    background: var(--amber-soft); color: var(--amber);
-    font-size: var(--fs-caption); font-weight: var(--fw-semibold); letter-spacing: 0.02em; text-align: center;
-  }
+  .notice .link-btn { margin-top: var(--sp-2); color: inherit; }
 
   /* ---- fields ------------------------------------------------------------------ */
 
@@ -176,6 +173,27 @@
 
   .list-empty { padding: var(--sp-10) var(--sp-6); text-align: center; color: var(--faint); font-size: var(--fs-ui); }
   .list-empty strong { display: block; color: var(--text); font-size: var(--fs-title); font-weight: var(--fw-semibold); margin-bottom: var(--sp-1); }
+
+  /* ---- skeletons: grey shapes where content is on its way --------------------------- */
+
+  .skeleton.rows { display: grid; }
+  .skeleton.lines { display: grid; gap: var(--sp-2); padding: var(--sp-4); }
+  .skeleton-row {
+    min-height: var(--row-h);
+    display: grid; grid-template-columns: var(--avatar-md) minmax(0, 1fr); gap: var(--sp-3); align-items: center;
+    padding: var(--sp-2) var(--sp-4) var(--sp-2) var(--sp-3);
+  }
+  .skeleton-row > span { display: grid; gap: var(--sp-2); }
+  .skeleton-avatar { display: block; width: var(--avatar-md); height: var(--avatar-md); border-radius: var(--r-full); background: var(--line); }
+  .skeleton-line {
+    display: block; height: var(--sp-3); border-radius: var(--r-xs);
+    background: linear-gradient(90deg, var(--line) 0%, var(--line-strong) 50%, var(--line) 100%) 0 0 / 200% 100%;
+    animation: shimmer 1.2s linear infinite;
+  }
+  .skeleton-line.w40 { width: 40%; }
+  .skeleton-line.w60 { width: 60%; }
+  .skeleton-line.w70 { width: 70%; }
+  .skeleton-line.w90 { width: 90%; }
 
   /* ---- the thread: pills and bubbles --------------------------------------------- */
 
