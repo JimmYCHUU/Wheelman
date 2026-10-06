@@ -242,7 +242,8 @@ test('a number the dashboard has never seen is listed as Phone only; codes and s
   assert.equal(of('AUSPOST').state, 'other');
   assert.match(of('AUSPOST').note, /short code or a sender name/);
   const dave = of('Dave Plumber');
-  assert.deepEqual([dave.state, dave.autoDraft, dave.lead.first_name, dave.hasLeadRecord], ['awaiting', true, 'Dave', false], 'a saved contact has a name, so a suggestion is written unasked');
+  assert.deepEqual([dave.state, dave.autoDraft, dave.lead.first_name, dave.hasLeadRecord], ['awaiting', false, 'Dave', false], 'a saved contact is waiting under its name, but nothing is written for it unasked either');
+  assert.match(dave.autoReason, /only on the phone/);
   assert.equal(learn.canLearnFrom(dave.itemKey), false);
 
   // On the page: a Phone only row, and the conversation opens.

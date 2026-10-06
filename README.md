@@ -663,11 +663,14 @@ What you see:
 - A reply someone typed on the phone itself shows as ours, labelled **Sent from the phone,
   not on the dashboard**. After a quarter of an hour with no dashboard copy it counts as the
   reply, but it teaches nothing.
-- The status line says when the add-on last reported. If the browser or the tab is closed, a
-  notice says the add-on has not reported since when, and Wheelman keeps working from the
-  dashboard. When the browser is back, each conversation's latest text is caught up.
+- A line at the foot of the list says when the add-on last reported and how many
+  conversations are on the phone. If the browser or the tab is closed, a notice says the
+  add-on has not reported since when, and Wheelman keeps working from the dashboard. When the
+  browser is back, each conversation's latest text is caught up.
 - A saved contact shows its name on the phone, not its number. Wheelman then matches the
-  exact name on the dashboard; failing that, it is a Phone only row under that name.
+  exact name on the dashboard; failing that, it is a Phone only row under that name. A
+  contact saved on the business phone is as likely a supplier or a colleague as a customer,
+  so nothing is written for it unasked either.
 - Texts already on the list when the add-on is installed get a rough time ("Yesterday",
   "Mon"). Everything seen from then on is timed to the minute.
 
@@ -995,8 +998,9 @@ again storing nothing, a new text timed to when it was seen, a text cut short gr
 the list shows more of it, and the same words sent again hours later kept as a new text; a
 text the dashboard also has shown once, one it missed shown, marked and answered, and the
 dashboard's copy taking over the key when the phone saw the text first; Phone only rows for
-unknown numbers, codes and sender ids set aside, a saved contact matched by its name; a Phone
-only conversation moving under the dashboard's key with its suggestion and marks; and a reply
+unknown numbers with nothing written unasked, codes and sender ids set aside, a saved contact
+matched by its name; a Phone only conversation moving under the dashboard's key with its
+suggestion and marks; and a reply
 typed on the phone counting as sent after a grace period, teaching nothing and kept out of the
 example bank.
 
