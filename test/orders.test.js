@@ -198,7 +198,7 @@ test('the Auction section lists orders under To do, In progress and Finished', a
   const todo = await list('waiting');
   assert.equal(todo.section, 'auction');
   assert.deepEqual(todo.items.map((r) => r.key).sort(), ['ao:501', 'ao:502', 'ao:503', 'ao:504', 'ao:506', 'ao:508']);
-  assert.deepEqual(todo.counts, { waiting: 6, quiet: 1, other: 1 });
+  assert.deepEqual(todo.counts, { all: 7, waiting: 6, quiet: 1, other: 1 });
   assert.equal(todo.sections.auction, 6);
   assert.equal(todo.unread.auction, 6);
   assert.deepEqual((await list('quiet')).items.map((r) => [r.key, r.stage, r.due]), [['ao:505', 'Shipping and compliance', '']], 'under way, nothing due');

@@ -9,10 +9,11 @@ export const SECTIONS = {
     noun: ['customer', 'customers'],
     person: 'Customer',
     unknown: 'Unknown number',
-    // Senders that are not customers (codes, couriers, the ignore list) are never listed.
+    // "All" is every conversation, newest message first whoever wrote it; "Waiting" those that need a
+    // reply. Senders that are not customers (codes, couriers, the ignore list) are never listed.
     tabs: [
+      { id: 'all', label: 'All' },
       { id: 'waiting', label: 'Waiting', counted: true },
-      { id: 'quiet', label: 'No reply needed' },
       null,
     ],
     search: { placeholder: 'Search name, number or message', phone: true },
@@ -20,6 +21,7 @@ export const SECTIONS = {
     placeShort: 'Dashboard',
     phone: true,
     empty: {
+      all: ['No conversations yet', 'Conversations appear here as they come in, newest first.'],
       waiting: ['Nobody is waiting', 'New customer messages appear here with a reply ready to check.'],
       quiet: ['Nothing here', 'Customers who only said thanks, opted out, or are no longer looking, and conversations you dismissed.'],
       other: ['Nothing here', 'Texts from suppliers, couriers and marketers.'],
@@ -39,8 +41,8 @@ export const SECTIONS = {
     person: 'Buyer',
     unknown: 'Marketplace buyer',
     tabs: [
+      { id: 'all', label: 'All' },
       { id: 'waiting', label: 'Waiting', counted: true },
-      { id: 'quiet', label: 'No reply needed' },
       null,
     ],
     search: { placeholder: 'Search name, car or message', phone: false },
@@ -48,6 +50,7 @@ export const SECTIONS = {
     placeShort: 'Marketplace',
     phone: false,
     empty: {
+      all: ['No chats yet', 'Marketplace chats appear here as they come in, newest first.'],
       waiting: ['Nobody is waiting', 'Marketplace chats where the buyer wrote last appear here with a reply ready to check.'],
       quiet: ['Nothing here', 'Buyers who only said thanks, archived chats, and chats you dismissed.'],
       other: ['Nothing here', ''],

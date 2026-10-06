@@ -294,11 +294,13 @@ const itemRoute = (tail = '') => new RegExp(`^/api/items/${KEY}${tail}$`);
 
 const listCache = new Map();
 const olderCache = new Map();
-const ALL_STATES = ['awaiting', 'ack', 'closed', 'optout', 'other'];
+const ALL_STATES = ['awaiting', 'answered', 'ack', 'closed', 'optout', 'other'];
 // Conversations with activity in the last fortnight are rebuilt whenever anything is written;
 // older ones only when something a row depends on has changed (see oldRowsStamp).
 const RECENT_HOURS = 14 * 24;
 const newest = (x, y) => (y.lastInboundAt || y.lastActivityAt) - (x.lastInboundAt || x.lastActivityAt);
+// The "All" list: by the newest message whichever side wrote it, as in any messaging app.
+const byLastMessage = (a, b) => (b.lastAt || 0) - (a.lastAt || 0);
 
 /** The conversations older than a fortnight, kept until something that shows on their rows changes. */
 function olderRows(section, hours) {
@@ -350,9 +352,14 @@ function sectionRows(section, hours = Infinity) {
     value = {
       waiting: awaiting.filter((i) => !setAside.includes(i)).map(summary),
       quiet: [...setAside, ...quiet].sort(newest).map(summary),
+      // Conversations we replied to last: not waiting, not set aside, simply going on.
+      answered: all.filter((i) => i.state === 'answered').slice(0, LIST_LIMIT).map(summary),
       other: section === 'dashboard' ? all.filter((i) => i.state === 'other').slice(0, LIST_LIMIT).map(summary) : [],
     };
   }
+  // Every conversation in one list, newest message first, whoever wrote it. A reply does not move
+  // a conversation away; it only takes it out of Waiting. Dismissed ones stay, marked.
+  value.all = [...value.waiting, ...value.quiet, ...(value.answered || [])].sort(byLastMessage);
   value.unread = value.waiting.filter((r) => r.unread).length;
   // Building the rows can itself write (a first-time match key), which moves the stamp.
   listCache.set(key, { stamp: `${dataStamp()}${minute}`, value });
@@ -390,7 +397,7 @@ async function api(req, res, url) {
   if (req.method === 'GET' && p === '/api/phone/status') return send(res, 200, worker.statusReport().phone);
 
   if (req.method === 'GET' && p === '/api/items') {
-    const tab = ['waiting', 'quiet', 'other'].includes(url.searchParams.get('tab')) ? url.searchParams.get('tab') : 'waiting';
+    const tab = ['all', 'waiting', 'quiet', 'other'].includes(url.searchParams.get('tab')) ? url.searchParams.get('tab') : 'waiting';
     // Every conversation unless a window is asked for (hours=72 keeps the list to the last three days).
     const askedHours = Number(url.searchParams.get('hours'));
     const hours = askedHours > 0 ? askedHours : Infinity;
@@ -414,7 +421,7 @@ async function api(req, res, url) {
     const limit = Math.max(1, Math.min(LIST_LIMIT, Number(url.searchParams.get('limit')) || LIST_PAGE));
     const q = String(url.searchParams.get('q') || '').trim().slice(0, 200);
     const rows = q ? (everything || here[tab]).filter((r) => rowMatches(r, q)) : here[tab];
-    return send(res, 200, { items: rows.slice(0, limit), total: rows.length, everything, counts: { waiting: here.waiting.length, quiet: here.quiet.length, other: here.other.length }, sections, unread, section, hours: Number.isFinite(hours) ? hours : null, q });
+    return send(res, 200, { items: rows.slice(0, limit), total: rows.length, everything, counts: { all: here.all.length, waiting: here.waiting.length, quiet: here.quiet.length, other: here.other.length }, sections, unread, section, hours: Number.isFinite(hours) ? hours : null, q });
   }
 
   if (req.method === 'POST' && p === '/api/sync') {
