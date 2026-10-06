@@ -11,6 +11,8 @@ import { draftOrderMessage } from './ordermessages.js';
 import { draftFor } from './drafter.js';
 import { availability } from './normalize.js';
 import { firstNameOf, isPlaceholderName } from './redact.js';
+import { signedName } from './signature.js';
+import { oldRowsStamp } from './db.js';
 import { businessFactsForPrompt, loadBusinessFacts } from './knowledge.js';
 import * as worker from './worker.js';
 import { onCopied, onRated, onApproved, onAdvice, onEdited } from './learn.js';
@@ -66,14 +68,20 @@ function allowed(req, pathname = '') {
   return true;
 }
 
+/**
+ * The name the page shows for a conversation: the record's name, else the name the customer
+ * signed in a text (a label for the reader only; the AI never sees it), else nothing, and the
+ * row shows the number.
+ */
 function displayName(item) {
   const l = item.lead;
   const full = [l?.first_name, l?.last_name].filter(Boolean).join(' ').trim() || item.conversation?.customer_name || '';
-  return full && !isPlaceholderName(full) ? full : '';
+  if (full && !isPlaceholderName(full)) return full;
+  return signedName(item.timeline);
 }
 
 const THREAD_LIMIT = 80;
-const LIST_LIMIT = 200;
+const LIST_LIMIT = 1000;
 
 function draftOf(item) {
   const draft = latestDraft(item.itemKey, item.anchorKey);
@@ -258,16 +266,37 @@ const KEY = '((?:c|l|mp|ao|ph):\\d+)';
 const itemRoute = (tail = '') => new RegExp(`^/api/items/${KEY}${tail}$`);
 
 const listCache = new Map();
+const olderCache = new Map();
+const ALL_STATES = ['awaiting', 'ack', 'closed', 'optout', 'other'];
+// Conversations with activity in the last fortnight are rebuilt whenever anything is written;
+// older ones only when something a row depends on has changed (see oldRowsStamp).
+const RECENT_HOURS = 14 * 24;
+const newest = (x, y) => (y.lastInboundAt || y.lastActivityAt) - (x.lastInboundAt || x.lastActivityAt);
+
+/** The conversations older than a fortnight, kept until something that shows on their rows changes. */
+function olderRows(section, hours) {
+  const key = `${section}|${hours}`;
+  const stamp = oldRowsStamp();
+  const hit = olderCache.get(key);
+  if (hit && hit.stamp === stamp) return hit.value;
+  const value = listItems({ states: ALL_STATES, maxAgeHours: hours, olderThanHours: RECENT_HOURS, source: section, limit: Infinity });
+  olderCache.set(key, { stamp: oldRowsStamp(), value });
+  while (olderCache.size > 4) olderCache.delete(olderCache.keys().next().value);
+  return value;
+}
 
 /**
- * The rows of one section, by tab. Built once and reused until something in the database is
- * written, or a minute has passed (some rules depend on the time of day). The page asks every
- * twenty seconds; without this every conversation was rebuilt three or four times each time.
+ * The rows of one section, by tab. Every conversation ever stored is listed (hours = Infinity),
+ * newest first, so an old thread with a new message comes to the top, as in any messaging app.
+ * Built once and reused until something in the database is written; the auction lists also
+ * once a minute, because what is due depends on the time of day. The page asks every twenty
+ * seconds; without this every conversation was rebuilt three or four times each time.
  *
  * A dismissed conversation is not lost: it moves to the second tab, where it can be put back.
  */
-function sectionRows(section, hours) {
-  const stamp = `${dataStamp()}|${Math.floor(Date.now() / 60000)}`;
+function sectionRows(section, hours = Infinity) {
+  const minute = section === 'auction' ? `|${Math.floor(Date.now() / 60000)}` : '';
+  const stamp = `${dataStamp()}${minute}`;
   const key = `${section}|${hours}`;
   const hit = listCache.get(key);
   if (hit && hit.stamp === stamp) return hit.value;
@@ -278,8 +307,16 @@ function sectionRows(section, hours) {
     const rows = listOrderRows();
     value = { waiting: rows.filter((r) => r.state === 'awaiting'), quiet: rows.filter((r) => r.state === 'answered'), other: rows.filter((r) => r.state === 'closed') };
   } else {
-    const all = listItems({ states: ['awaiting', 'ack', 'closed', 'optout', 'other'], maxAgeHours: hours, source: section, limit: Infinity });
-    const newest = (x, y) => (y.lastInboundAt || y.lastActivityAt) - (x.lastInboundAt || x.lastActivityAt);
+    let all;
+    if (hours <= RECENT_HOURS) {
+      all = listItems({ states: ALL_STATES, maxAgeHours: hours, source: section, limit: Infinity });
+    } else {
+      const recent = listItems({ states: ALL_STATES, maxAgeHours: RECENT_HOURS, source: section, limit: Infinity });
+      const have = new Set(recent.map((i) => i.itemKey));
+      // Marketplace chats the engine has handed to a person come first, as listItems orders them.
+      const order = section === 'marketplace' ? (a, b) => (Number(b.marketplace.needsPerson) - Number(a.marketplace.needsPerson)) || newest(a, b) : newest;
+      all = [...recent, ...olderRows(section, hours).filter((i) => !have.has(i.itemKey))].sort(order);
+    }
     const awaiting = all.filter((i) => i.state === 'awaiting').slice(0, LIST_LIMIT);
     const setAside = awaiting.filter((i) => isDismissed(i.itemKey, i.anchorKey));
     const quiet = all.filter((i) => ['ack', 'closed', 'optout'].includes(i.state)).slice(0, LIST_LIMIT);
@@ -291,7 +328,7 @@ function sectionRows(section, hours) {
   }
   value.unread = value.waiting.filter((r) => r.unread).length;
   // Building the rows can itself write (a first-time match key), which moves the stamp.
-  listCache.set(key, { stamp: `${dataStamp()}|${Math.floor(Date.now() / 60000)}`, value });
+  listCache.set(key, { stamp: `${dataStamp()}${minute}`, value });
   while (listCache.size > 12) listCache.delete(listCache.keys().next().value);
   return value;
 }
@@ -327,7 +364,9 @@ async function api(req, res, url) {
 
   if (req.method === 'GET' && p === '/api/items') {
     const tab = ['waiting', 'quiet', 'other'].includes(url.searchParams.get('tab')) ? url.searchParams.get('tab') : 'waiting';
-    const hours = Number(url.searchParams.get('hours')) || config.draftMaxAgeHours;
+    // Every conversation unless a window is asked for (hours=72 keeps the list to the last three days).
+    const askedHours = Number(url.searchParams.get('hours'));
+    const hours = askedHours > 0 ? askedHours : Infinity;
     // Three separate sections: dashboard leads, Facebook Marketplace chats, and auction orders.
     const asked = url.searchParams.get('section');
     const section = SECTIONS.includes(asked) && sectionOn(asked) ? asked : 'dashboard';
@@ -343,7 +382,7 @@ async function api(req, res, url) {
     // Auction orders are few, and one can be on any of the three lists: all of them are sent, so
     // a search finds an order wherever it is.
     const everything = section === 'auction' ? [...here.waiting, ...here.quiet, ...here.other] : undefined;
-    return send(res, 200, { items: here[tab], everything, counts: { waiting: here.waiting.length, quiet: here.quiet.length, other: here.other.length }, sections, unread, section, hours });
+    return send(res, 200, { items: here[tab], everything, counts: { waiting: here.waiting.length, quiet: here.quiet.length, other: here.other.length }, sections, unread, section, hours: Number.isFinite(hours) ? hours : null });
   }
 
   if (req.method === 'POST' && p === '/api/sync') {

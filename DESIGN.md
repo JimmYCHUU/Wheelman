@@ -499,7 +499,7 @@ A small label in front of a row's preview text, used for "Dismissed" under No re
 Up to three segments under the brand block: Dashboard, Marketplace and Auction. It chooses which list is shown; they are never mixed. A section that is switched off has no segment, and the others share the width.
 - **Style:** a Panel Mist track with 0.75rem corners and 0.1875rem padding, holding equal segments 2.125rem tall with 0.5625rem corners. Labels are Muted at 0.875rem / 500. A badge after each label counts who is waiting there, and is hidden at zero.
 - **State:** the selected segment takes the list ground (white in light, the open-row colour in dark), Ink text at 650 and the hairline shadow in light. Exactly one is selected. Hover on the other segment darkens its label. Press scales to 0.97.
-- **Behaviour:** switching resets the filter to the first chip, clears the search and closes the open chat. In Marketplace the "Not customers" chip is hidden. In Auction the three chips read To do, In progress and Finished, and the "Showing the last 3 days" choice is hidden, because every order is listed.
+- **Behaviour:** switching resets the filter to the first chip, clears the search and closes the open chat. In Marketplace the "Not customers" chip is hidden. In Auction the three chips read To do, In progress and Finished. Every conversation and every order is listed, newest first; there is no time window.
 
 ### Auction orders
 An order uses the same three columns as a conversation, with these differences.
@@ -539,8 +539,7 @@ The conversation list is the only navigation.
 
 ### List footer
 A quiet strip under the rows, below a 1px line, in Faint at 0.8125rem.
-- **Learned line:** "Learned from N replies you used", with ", M of them edited" added when some were changed before use. It is hidden until at least one reply has been learned, sits 0.25rem above the select, and explains itself in a tooltip. Plain text, no colour, no icon.
-- **Time-window select:** "Showing the" followed by the select described under Inputs.
+- **Orders line (Auction only):** how many orders were read from the dashboard and how they split across the three lists. Plain text, no colour, no icon; the footer is hidden in the other sections.
 
 ### Avatar and badge
 - **Avatar:** a circle with white initials (first and last name) at 650. 3rem in the list, 2.5rem in the chat header, 5rem at the top of the details panel. Ground from the eight avatar hues.

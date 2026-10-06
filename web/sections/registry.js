@@ -15,7 +15,6 @@ export const SECTIONS = {
       { id: 'other', label: 'Not customers' },
     ],
     search: { placeholder: 'Search name, number or message', phone: true },
-    hours: true,
     place: 'the dashboard',
     placeShort: 'Dashboard',
     phone: true,
@@ -43,7 +42,6 @@ export const SECTIONS = {
       null,
     ],
     search: { placeholder: 'Search name, car or message', phone: false },
-    hours: true,
     place: 'Marketplace',
     placeShort: 'Marketplace',
     phone: false,
@@ -71,7 +69,6 @@ export const SECTIONS = {
       { id: 'other', label: 'Finished' },
     ],
     search: { placeholder: 'Search name, car or order number', phone: true },
-    hours: false,
     place: 'the dashboard',
     placeShort: 'Dashboard',
     phone: false,
@@ -96,5 +93,3 @@ export const sectionOf = (key) => SECTION_IDS.find((id) => SECTIONS[id].prefixes
 /** The list a conversation state sits on, and the name of that list for an order found by a search on another list. */
 export const TAB_STATE = { waiting: 'awaiting', quiet: 'answered', other: 'closed' };
 export const ORDER_LIST = { awaiting: 'To do', answered: 'In progress', closed: 'Finished' };
-
-export const HOURS = [24, 72, 168, 336];
