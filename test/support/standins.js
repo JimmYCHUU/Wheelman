@@ -1,4 +1,4 @@
-// Stand-in services for the tests and the demo: the dealer dashboard, the website's live-auction
+// Stand-in services for the tests: the dealer dashboard, the website's live-auction
 // feed and the AI on one local server, the Marketplace content engine on another. They answer in
 // the same shapes as the real services, from an invented world (fixtures.js), and nothing in them
 // can reach the internet. Every request is recorded so a test can assert what was asked.
@@ -13,10 +13,10 @@ const readBody = (req) => new Promise((resolve) => { let body = ''; req.on('data
 const DEFAULT_REPLY = { reply: 'Hi {{NAME}},\nNo worries.', needs_human: [], facts_used: [], hold: false };
 
 /**
- * The AI stand-in's behaviour, shared by tests and the demo:
+ * The AI stand-in's behaviour:
  *   script:   replies handed out in order (a test queues what the model "says"); each is the JSON the
  *             model would answer with, or { status, message } for an error answer
- *   behave:   a function (requestBody) => reply JSON, used when the script is empty (the demo)
+ *   behave:   a function (requestBody) => reply JSON, used when the script is empty
  *   usedUp:   model names that answer "today's allowance is used up"
  *   down:     when true, every call answers 503
  */

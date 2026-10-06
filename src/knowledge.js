@@ -10,7 +10,7 @@ import { availability } from './normalize.js';
 /**
  * The dealer's own file when it is there; otherwise the example committed with the project. The
  * real business facts and the operations guide hold fees, terms and partners, so they stay on the
- * dealer's computer and are never committed; a fresh clone, the demo and the automated checks
+ * dealer's computer and are never committed; a fresh clone and the automated checks
  * run on the examples.
  */
 export function knowledgeFile(name) {

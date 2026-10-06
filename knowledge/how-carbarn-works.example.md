@@ -2,7 +2,7 @@
 
 This is the example file committed with the project. The real one, `how-carbarn-works.md` beside
 it, stays on the dealer's computer and is never committed; it names the dealer's partners and
-describes its actual practice. When the real file is missing (a fresh clone, the demo, the
+describes its actual practice. When the real file is missing (a fresh clone, the
 automated checks) Wheelman reads this one.
 
 Wheelman reads everything below the line on every suggestion, so it can answer like someone who works here.

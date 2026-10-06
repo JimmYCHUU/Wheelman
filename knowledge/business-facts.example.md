@@ -2,7 +2,7 @@
 
 This is the example file committed with the project. The real one, `business-facts.md` beside it,
 stays on the dealer's computer and is never committed; it holds the dealer's actual fees, terms
-and partners. When the real file is missing (a fresh clone, the demo, the automated checks)
+and partners. When the real file is missing (a fresh clone, the automated checks)
 Wheelman reads this one. The figures and partner names below are examples, not Carbarn's terms.
 
 Wheelman reads this file every time it writes a suggestion. You can edit it in any text editor.

@@ -1,5 +1,5 @@
 // Points the app's settings at the stand-ins. The clients read config at call time, so this is all
-// a test or the demo has to do after starting them.
+// a test has to do after starting them.
 
 /**
  * @param config      the object from src/config.js

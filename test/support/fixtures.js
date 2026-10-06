@@ -1,4 +1,4 @@
-// An invented world for the tests and the demo, in the raw shapes the upstream services send, so
+// An invented world for the tests, in the raw shapes the upstream services send, so
 // that the real sync code reads it exactly as it reads the real thing.
 //
 // Every name, number, email and address here is made up. None belongs to a real staff member or a
