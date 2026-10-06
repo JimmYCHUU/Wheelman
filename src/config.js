@@ -1,3 +1,4 @@
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,6 +12,8 @@ export const config = {
   dataDir: path.join(root, 'data'),
   rawDir: path.join(root, 'data', 'raw'),
   dbPath: env.DB_PATH || path.join(root, 'data', 'app.db'),
+  // Photos from texts, fetched once and kept beside the database. Tests keep theirs in a temporary folder.
+  mediaDir: env.MEDIA_DIR || (env.DB_PATH === ':memory:' ? path.join(os.tmpdir(), `wheelman-media-${process.pid}`) : path.join(path.dirname(env.DB_PATH || path.join(root, 'data', 'app.db')), 'media')),
   sessionPath: path.join(root, 'data', '.session.json'),
   knowledgeDir: path.join(root, 'knowledge'),
   // The website's "import this model" pages, saved by fetch-website. One file per model.
@@ -95,6 +98,10 @@ export const config = {
     staleMinutes: num(env.PHONE_STALE_MINUTES, 10),
   },
 
+  // Senders that are never customers: a contact saved on the phone under a label, a finance company,
+  // a courier, a code sender. A conversation under one of these names is kept but never listed.
+  // Matched on the name without spaces or case, so "Credit One" and "creditone" are the same.
+  ignoredSenders: list(env.IGNORED_SENDERS ?? 'Not customer, OTP, Delivery Service, Autotrader, CreditOne'),
   // The example bank of genuine replies. Tests point this at a scratch copy.
   examplesPath: env.EXAMPLES_PATH || path.join(root, 'voice', 'examples.json'),
 

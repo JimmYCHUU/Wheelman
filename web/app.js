@@ -45,6 +45,7 @@ const state = {
   listLoading: true,     // the first list of a section is on its way: grey shapes stand in for the rows
   listError: false,      // the last list request failed: Wheelman is not responding
   listTick: 0,           // bumped when rows were changed in place, so the list column repaints
+  older: null,           // { key, entries, earlierAt }: messages brought in with "Load older messages" for the open conversation
 };
 
 const store = createStore(state);
@@ -340,7 +341,8 @@ function shortAvailability(a) {
 
 function threadSignature(item) {
   const m = item.marketplace;
-  return item.key + '|' + item.thread.map((e) => `${e.key}${e.unanswered ? '*' : ''}`).join(',') + (m ? `|${m.locked}${m.stage}${m.failed}${m.replyComing}${m.queuedAt && Date.now() - m.queuedAt > 15 * 60 * 1000}` : '');
+  const older = state.older?.key === item.key ? state.older.entries.length : 0;
+  return item.key + '|' + older + '|' + item.thread.map((e) => `${e.key}${e.unanswered ? '*' : ''}`).join(',') + (m ? `|${m.locked}${m.stage}${m.failed}${m.replyComing}${m.queuedAt && Date.now() - m.queuedAt > 15 * 60 * 1000}` : '');
 }
 
 function renderThread(item, els, { toBottom = false } = {}) {
@@ -348,15 +350,24 @@ function renderThread(item, els, { toBottom = false } = {}) {
   const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
   box.replaceChildren();
 
-  if (item.earlier > 0) box.append(h('div', { class: 'pill note', text: `${plural(item.earlier, 'earlier message')} not shown` }));
+  // A conversation opens on its newest twenty messages. Older ones come in with the button at the
+  // top, twenty at a time, and stay in front of the newest while this conversation is open.
+  const older = state.older?.key === item.key ? state.older.entries : [];
+  const have = new Set(item.thread.map((e) => e.key));
+  const entries = [...older.filter((e) => !have.has(e.key)), ...item.thread];
+  const remaining = Math.max(0, item.earlier - older.length);
+  if (remaining > 0) {
+    box.append(h('button', { class: 'btn outline load-older', type: 'button', onclick: () => loadOlder(item) },
+      t('thread.loadOlder'), h('span', { class: 'count', text: t('thread.older', { n: remaining }) })));
+  }
 
   let lastDay = '';
   let lastSide = '';
   let lastBy = null;
   let markedUnanswered = false;
-  const unanswered = item.thread.filter((e) => e.unanswered).length;
+  const unanswered = entries.filter((e) => e.unanswered).length;
 
-  for (const e of item.thread) {
+  for (const e of entries) {
     const day = dayKey(e.at);
     if (day !== lastDay) { box.append(h('div', { class: 'pill', text: dayLabel(e.at) })); lastDay = day; lastSide = ''; lastBy = null; }
 
@@ -385,7 +396,9 @@ function renderThread(item, els, { toBottom = false } = {}) {
     const bubble = h('div', { class: `msg ${side} ${first ? 'first' : ''} ${e.phone ? 'phone' : ''}`.replace(/\s+/g, ' ').trim() },
       h('span', { class: 'visually-hidden', text: side === 'out' ? `We wrote, ${by}: ` : 'Customer wrote: ' }),
       first && by ? h('span', { class: 'from', 'aria-hidden': side === 'out' ? 'true' : null, text: by }) : null,
-      e.media ? h('span', { class: 'media' }, icon('image'), e.media === 'photo' ? 'Photo' : 'Attachment', e.text ? '\n' : '') : null,
+      // A photo the dashboard holds an address for is shown; one it does not (or an attachment) is named.
+      e.photos && /^m:\d+$/.test(e.key) ? Array.from({ length: e.photos }, (_, i) => photoIn(e.key.slice(2), i, side)) : null,
+      e.media && !(e.photos && /^m:\d+$/.test(e.key)) ? h('span', { class: 'media' }, icon('image'), e.media === 'photo' ? 'Photo' : 'Attachment', e.text ? '\n' : '') : null,
       e.text ? linked(e.text) : null,
       h('span', { class: 'time', text: clock(e.at) }),
       item.order && /^(in|po):\d+$/.test(e.key) ? h('button', { class: 'unpaste', type: 'button', title: 'Take this pasted message out of the order', onclick: () => removePaste(item, e.key.split(':')[1]) }, 'Remove') : null);
@@ -411,6 +424,39 @@ function renderThread(item, els, { toBottom = false } = {}) {
   if (toBottom) state.stuck = true;
   if (state.stuck || nearBottom) box.scrollTop = box.scrollHeight;
   paintLatest();
+}
+
+/** A photo in a bubble: shown small, opens full size in a new tab. Served by Wheelman from its own copy. */
+function photoIn(messageId, index, side) {
+  const src = `/api/media/${messageId}/${index}`;
+  return h('a', { class: 'photo-link', href: src, target: '_blank', rel: 'noopener noreferrer', title: 'Open the photo full size' },
+    h('img', { class: 'photo', src, alt: side === 'out' ? 'Photo we sent' : 'Photo from the customer', loading: 'lazy' }));
+}
+
+/**
+ * "Load older messages": the next twenty before what is shown. With more = false, only what was
+ * already loaded is fetched again, after new messages have moved the newest twenty along.
+ */
+async function loadOlder(item, { more = true } = {}) {
+  const have = state.older?.key === item.key ? state.older : { entries: [], earlierAt: item.earlier };
+  const limit = Math.min(500, have.entries.length + (more ? 20 : Math.max(0, item.earlier - have.earlierAt)));
+  if (!limit) return;
+  const btn = $('#chat .load-older');
+  if (btn) btn.disabled = true;
+  try {
+    const out = await api(`/api/items/${item.key}/thread?shown=${item.thread.length}&limit=${limit}`);
+    if (state.selected !== item.key) return;
+    state.older = { key: item.key, entries: out.thread, earlierAt: item.earlier };
+    const els = chatFrame();
+    const box = els.thread;
+    const fromBottom = box.scrollHeight - box.scrollTop; // the message under the eye stays where it is
+    state.stuck = false;
+    renderThread(state.detail || item, els);
+    box.scrollTop = box.scrollHeight - fromBottom;
+  } catch (e) {
+    if (btn) btn.disabled = false;
+    toast(e.message);
+  }
 }
 
 // ---- message box ---------------------------------------------------------------
@@ -1012,6 +1058,7 @@ async function open(key) {
   state.copied = null;
   state.message = '';
   state.pasteOpen = false;
+  state.older = null;
   $('#app').dataset.view = 'chat';
   repaint();
   try {
@@ -1229,6 +1276,8 @@ async function refreshDetail() {
     const els = chatFrame();
     if (!els.head.contains(document.activeElement)) renderHead(item, els);
     if (threadSignature(item) !== state.threadSig) renderThread(item, els);
+    // New messages moved the newest twenty along: the older ones already loaded are fetched again so there is no gap.
+    if (state.older?.key === key && state.older.earlierAt !== item.earlier) loadOlder(item, { more: false });
     const typing = els.composer.contains(document.activeElement) && ['TEXTAREA', 'INPUT'].includes(document.activeElement.tagName);
     if (composerSignature(item) !== state.composerSig && !typing) {
       renderComposer(item, els, { arriving: !!item.draft && item.draft.id !== previous?.draft?.id });

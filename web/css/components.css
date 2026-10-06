@@ -237,6 +237,9 @@
   .msg .media { display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--muted); font-style: italic; }
   .msg.out .media { color: inherit; opacity: .85; }
   .msg .media svg.icon { width: var(--icon-sm); height: var(--icon-sm); }
+  /* A photo in a bubble: shown at a readable size, full size on click. */
+  .msg .photo-link { display: block; margin: var(--sp-1) 0 var(--sp-1); }
+  .msg .photo { display: block; max-width: 100%; max-height: 20rem; border-radius: var(--r-sm); background: var(--panel); }
   .msg .time {
     float: right; margin: var(--sp-2) 0 calc(-1 * var(--sp-05)) var(--sp-3);
     font-size: var(--fs-caption); line-height: 1; color: var(--faint); white-space: nowrap;

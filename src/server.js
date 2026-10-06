@@ -12,7 +12,8 @@ import { draftFor } from './drafter.js';
 import { availability } from './normalize.js';
 import { firstNameOf, isPlaceholderName } from './redact.js';
 import { signedName } from './signature.js';
-import { oldRowsStamp } from './db.js';
+import { oldRowsStamp, messageMedia } from './db.js';
+import { logLine } from './log.js';
 import { businessFactsForPrompt, loadBusinessFacts } from './knowledge.js';
 import * as worker from './worker.js';
 import { onCopied, onRated, onApproved, onAdvice, onEdited } from './learn.js';
@@ -25,11 +26,12 @@ import { validateReport, storePhoneReport } from './phone.js';
 const TYPES = { '.woff2': 'font/woff2', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(config.root, 'package.json'), 'utf8')).version || ''; } catch { return ''; } })();
 
-function send(res, status, body, type = 'application/json; charset=utf-8') {
+function send(res, status, body, type = 'application/json; charset=utf-8', extra = {}) {
   const data = typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body);
   res.writeHead(status, {
     'content-type': type,
     'cache-control': 'no-store',
+    ...extra,
     'x-content-type-options': 'nosniff',
     'referrer-policy': 'no-referrer',
     'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
@@ -80,7 +82,8 @@ function displayName(item) {
   return signedName(item.timeline);
 }
 
-const THREAD_LIMIT = 80;
+// The newest messages a conversation opens with; "Load older messages" brings the rest, this many at a time.
+const THREAD_LIMIT = 20;
 const LIST_LIMIT = 1000;
 
 function draftOf(item) {
@@ -208,10 +211,31 @@ function orderOf(item) {
   };
 }
 
+// Photos are kept beside the database once fetched, under their message id, so each is fetched once.
+const MEDIA_MAX_BYTES = 15 * 1024 * 1024;
+const MEDIA_TYPES = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp' };
+async function cachedMedia(id, index, url) {
+  fs.mkdirSync(config.mediaDir, { recursive: true });
+  const kept = fs.readdirSync(config.mediaDir).find((f) => f.startsWith(`${id}-${index}.`));
+  if (kept) {
+    const type = Object.keys(MEDIA_TYPES).find((t) => MEDIA_TYPES[t] === path.extname(kept)) || 'application/octet-stream';
+    return { body: fs.readFileSync(path.join(config.mediaDir, kept)), type };
+  }
+  if (!/^https:\/\/|^http:\/\/127\.0\.0\.1[:/]/i.test(url)) throw new Error('not a secure address');
+  const r = await fetch(url, { method: 'GET', redirect: 'follow', signal: AbortSignal.timeout(30000) });
+  if (!r.ok) throw new Error(`the address answered ${r.status}`);
+  const type = String(r.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  if (!MEDIA_TYPES[type]) throw new Error(`not an image (${type || 'no type'})`);
+  const body = Buffer.from(await r.arrayBuffer());
+  if (body.length > MEDIA_MAX_BYTES) throw new Error('too large');
+  fs.writeFileSync(path.join(config.mediaDir, `${id}-${index}${MEDIA_TYPES[type]}`), body);
+  return { body, type };
+}
+
 const threadOf = (item, shown) => {
   const pendingKeys = new Set(item.pending.map((e) => e.key));
   return shown.map((e) => ({
-    key: e.key, who: e.who, internal: !!e.internal, text: e.text || '', event: e.event || '', media: e.media || null,
+    key: e.key, who: e.who, internal: !!e.internal, text: e.text || '', event: e.event || '', media: e.media || null, photos: e.photos || 0,
     by: displayNameFor(e.by) || '', auto: !!e.auto, via: e.via || '', at: e.at, unanswered: item.state === 'awaiting' && pendingKeys.has(e.key),
     // Seen on the phone and not on the dashboard.
     phone: !!e.phoneOnly,
@@ -398,6 +422,34 @@ async function api(req, res, url) {
     const item = itemFromKey(m[1], { message: url.searchParams.get('message') || '' });
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
     return send(res, 200, { item: present(item) });
+  }
+
+  // A photo from a text: fetched once from the address the dashboard stored with the message, kept
+  // beside the database, and served from there. Only an address stored with a message is ever
+  // fetched; nothing the page sends is used as an address.
+  m = p.match(/^\/api\/media\/(\d+)\/(\d{1,2})$/);
+  if (req.method === 'GET' && m) {
+    const url = messageMedia(m[1])[Number(m[2])];
+    if (!url) return send(res, 404, { error: 'No photo for that message.' });
+    try {
+      const { body, type } = await cachedMedia(Number(m[1]), Number(m[2]), url);
+      return send(res, 200, body, type, { 'cache-control': 'private, max-age=86400' });
+    } catch (e) {
+      logLine('media', `Photo for message ${m[1]} could not be fetched: ${e.message}`);
+      return send(res, 502, { error: 'The photo could not be fetched. Try again in a moment.' });
+    }
+  }
+
+  // "Load older messages": the `limit` entries before the newest `shown` ones, and how many are older still.
+  m = p.match(itemRoute('/thread'));
+  if (req.method === 'GET' && m) {
+    const item = itemFromKey(m[1]);
+    if (!item) return send(res, 404, { error: 'That conversation was not found.' });
+    const shown = Math.max(0, Math.min(item.timeline.length, Number(url.searchParams.get('shown')) || 0));
+    const limit = Math.max(1, Math.min(500, Number(url.searchParams.get('limit')) || THREAD_LIMIT));
+    const end = item.timeline.length - shown;
+    const start = Math.max(0, end - limit);
+    return send(res, 200, { thread: threadOf(item, item.timeline.slice(start, end)), earlier: start });
   }
 
   m = p.match(itemRoute('/draft'));
