@@ -105,13 +105,14 @@ test('the section registry names every section, its lists and where a key belong
   assert.equal(sectionOf('mp:abc'), 'marketplace');
   assert.equal(sectionOf('ao:504'), 'auction');
   assert.equal(sectionOf(undefined), 'dashboard');
-  assert.equal(SECTIONS.marketplace.tabs[2], null, 'Marketplace has no third list');
-  assert.equal(SECTIONS.dashboard.tabs[2], null, 'senders that are not customers are never listed');
+  assert.deepEqual(SECTIONS.dashboard.tabs.map((x) => x && x.id), ['all', 'waiting', null], 'every conversation first, Waiting as a filter, no list for non-customers');
+  assert.deepEqual(SECTIONS.marketplace.tabs.map((x) => x && x.id), ['all', 'waiting', null]);
   assert.deepEqual(SECTIONS.auction.tabs.map((x) => x.label), ['To do', 'In progress', 'Finished']);
   assert.equal(ORDER_LIST[TAB_STATE.quiet], 'In progress');
   for (const id of SECTION_IDS) {
     const sec = SECTIONS[id];
     for (const list of ['waiting', 'quiet', 'other', 'search']) assert.equal(sec.empty[list].length, 2, `${id} ${list} empty state`);
+    for (const tb of sec.tabs) if (tb) assert.equal(sec.empty[tb.id]?.length, 2, `${id} ${tb.id} empty state`);
     assert.ok(sec.search.placeholder.startsWith('Search '), id);
   }
 });

@@ -24,7 +24,7 @@ const state = {
   message: '',           // Auction: the kind of message picked from "Which message?" for the open order
   pasteOpen: false,      // Auction: the box for pasting what the customer wrote is open
   listSeq: 0,            // guards against a slow list response landing in the wrong section
-  tab: 'waiting',
+  tab: 'all',            // the list on screen: 'all' (every conversation, newest first) or 'waiting'; Auction has its own three
   q: '',
   list: [],
   everything: [],        // Auction: the rows of all three lists, so a search finds an order wherever it is
@@ -1158,15 +1158,25 @@ async function removePaste(item, id) {
 async function dismissItem(item) {
   try {
     await api(`/api/items/${item.key}/dismiss`, { body: {} });
+    state.counts.waiting = Math.max(0, state.counts.waiting - (item.state === 'awaiting' ? 1 : 0));
+    if (item.state === 'awaiting' && state.sections[state.section]) state.sections[state.section] -= 1;
+    // In "All" the conversation stays where it is, marked Dismissed, and stays open.
+    if (state.tab === 'all') {
+      const row = state.list.find((r) => r.key === item.key);
+      if (row) { row.dismissed = true; row.unread = 0; }
+      repaint();
+      toast('Dismissed. It leaves Waiting and stays here, marked.', { label: 'Undo', run: () => restoreItem(item.key, true) });
+      refreshList();
+      refreshDetail();
+      return;
+    }
     const rows = visibleRows(state);
     const i = rows.findIndex((r) => r.key === item.key);
     const next = rows[i + 1] || rows[i - 1] || null;
     state.list = state.list.filter((r) => r.key !== item.key);
     state.listTotal = Math.max(0, state.listTotal - 1);
-    state.counts.waiting = Math.max(0, state.counts.waiting - (item.state === 'awaiting' ? 1 : 0));
-    if (item.state === 'awaiting' && state.sections[state.section]) state.sections[state.section] -= 1;
     repaint();
-    toast(item.order ? 'Dismissed. The order is kept under In progress.' : 'Dismissed. It is kept under No reply needed.', { label: 'Undo', run: () => restoreItem(item.key, true) });
+    toast(item.order ? 'Dismissed. The order is kept under In progress.' : 'Dismissed. It leaves Waiting and stays under All, marked.', { label: 'Undo', run: () => restoreItem(item.key, true) });
     if (next && !narrow()) { state.selected = null; state.detail = null; await open(next.key); }
     else { state.selected = null; state.detail = null; repaint(); renderChat(); $('#app').dataset.view = 'list'; }
     refreshList();
@@ -1303,7 +1313,7 @@ async function refreshAll() {
 async function showSection(section) {
   if (state.section === section) return;
   state.section = section;
-  state.tab = 'waiting';
+  state.tab = REGISTRY[section].tabs[0].id;
   state.q = '';
   state.selected = null; state.detail = null; state.rewriteOpen = false; state.betterOpen = false; state.copied = null; state.message = ''; state.pasteOpen = false;
   state.list = [];

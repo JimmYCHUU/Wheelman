@@ -1129,7 +1129,9 @@ in the bubble, fetched once from the address the dashboard holds and kept under 
 Senders on the ignore list (`IGNORED_SENDERS`) are never listed, and the "Not customers" list is
 gone with them. The list itself comes twenty conversations at a time, with "Load older
 conversations" under the last row; the search looks through every conversation. Only a text from
-the last fortnight counts as new for the blue numbers.
+the last fortnight counts as new for the blue numbers. The default list is "All": every
+conversation, newest message first whoever wrote it, so a reply never moves a conversation away;
+"Waiting" is the filter for the ones that still need one.
 
 ### Open questions for Carbarn
 

@@ -125,6 +125,33 @@ test('the signature reader: what counts as a signed name and what does not', () 
   assert.equal(signedName([]), '');
 });
 
+test('"All" holds every conversation, newest message first whoever wrote it; a reply keeps it in place and takes it out of Waiting', async () => {
+  lead(61, 61, 'Zoe', 'Campbell', '0491570161');
+  conv(61, 61, '+61491570161', 'Zoe Campbell', now - 3 * HOUR);
+  msg(61, 'IN', 'Hi, is the Serena still available?', now - 3 * HOUR);
+  lead(62, 62, 'Yusuf', 'Demir', '0491570162');
+  conv(62, 62, '+61491570162', 'Yusuf Demir', now - 2 * HOUR);
+  msg(62, 'IN', 'Can I see the Alphard on Saturday?', now - 2 * HOUR);
+
+  let all = await get('/api/items?section=dashboard&tab=all&limit=1000');
+  let keys = all.items.map((r) => r.key);
+  assert.ok(keys.indexOf('c:62') < keys.indexOf('c:61'), 'newest message first');
+  assert.equal(all.counts.all, all.total);
+  assert.ok((await get('/api/items?section=dashboard&tab=waiting&limit=1000')).items.some((r) => r.key === 'c:61'));
+
+  // We reply to the older one.
+  msg(61, 'OUT', 'Hi Zoe, yes it is. Would you like to come and see it?', now - 10 * MIN);
+  db.upsertConversation({ id: 61, phone: '+61491570161', channel: 'SMS', status: 'OPEN', leadId: 61, customerName: 'Zoe Campbell', latestDirection: 'OUT', latestAt: now - 10 * MIN, latestBody: 'x' });
+  all = await get('/api/items?section=dashboard&tab=all&limit=1000');
+  keys = all.items.map((r) => r.key);
+  assert.ok(keys.includes('c:61') && keys.indexOf('c:61') < keys.indexOf('c:62'), 'the replied-to conversation is still listed, and first');
+  const row = all.items.find((r) => r.key === 'c:61');
+  assert.deepEqual([row.state, row.preview.who, row.unread], ['answered', 'us', 0]);
+  const waiting = await get('/api/items?section=dashboard&tab=waiting&limit=1000');
+  assert.ok(!waiting.items.some((r) => r.key === 'c:61'), 'and no longer waiting');
+  assert.ok(waiting.items.some((r) => r.key === 'c:62'));
+});
+
 test('the list comes twenty at a time, "Load older conversations" brings twenty more, and a search looks through every row', async () => {
   const LASTS = ['Field', 'Stone', 'River', 'Hill', 'Wood', 'Lake', 'Marsh', 'Glen', 'Vale', 'Brook'];
   for (let i = 21; i <= 50; i++) {
