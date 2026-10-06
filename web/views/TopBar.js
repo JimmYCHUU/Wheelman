@@ -4,7 +4,6 @@ import { h } from '../lib/h.js';
 import { mark } from '../lib/icons.js';
 import { t } from '../lib/copy.js';
 import { ago, clock } from '../lib/format.js';
-import { Tag } from '../components/tag.js';
 import { IconButton } from '../components/iconButton.js';
 import { SECTIONS, SECTION_IDS } from '../sections/registry.js';
 import { totalNew } from '../lib/counts.js';
@@ -40,16 +39,12 @@ export function mountTopBar(root, store, actions) {
   const dot = h('span', { class: 'dot' });
   const text = h('span', { class: 'status-text' });
   const status = h('p', { class: 'topbar-status', title: '' }, dot, text);
-  const demo = Tag({ text: t('app.demo.short'), tone: 'warning', title: t('app.demo') });
-  demo.classList.add('demo-tag');
-  demo.hidden = true;
   const sync = IconButton({ icon: 'refresh', label: t('action.checkNow'), id: 'sync', onClick: () => actions.sync(sync) });
 
   root.replaceChildren(
     h('div', { class: 'topbar-brand' },
       h('span', { class: 'brand-mark' }, mark()),
-      h('span', { class: 'brand-words' }, h('h1', { text: t('app.name') }), h('span', { class: 'brand-by', text: t('app.by') })),
-      demo),
+      h('span', { class: 'brand-words' }, h('h1', { text: t('app.name') }), h('span', { class: 'brand-by', text: t('app.by') }))),
     status,
     h('div', { class: 'topbar-actions' }, sync));
 
@@ -59,10 +54,9 @@ export function mountTopBar(root, store, actions) {
     dot.className = `dot ${w.dot}`.trim();
     text.textContent = w.text;
     status.title = w.title;
-    demo.hidden = !s?.demo;
     const on = (id) => id === 'dashboard' || (store.state.sections[id] !== null && store.state.sections[id] !== undefined);
     const total = totalNew(store.state, SECTION_IDS, on);
-    document.title = `${total ? `(${total}) ` : ''}${t('app.name')}${s?.demo ? ' demo' : ''}`;
+    document.title = `${total ? `(${total}) ` : ''}${t('app.name')}`;
   };
   store.select((s) => ({ status: s.status, section: s.section, tick: s.listTick }), paint);
   // "2 min ago" moves on its own.

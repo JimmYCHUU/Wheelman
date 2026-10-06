@@ -12,8 +12,6 @@
 export const COPY = {
   'app.name': 'Wheelman',
   'app.by': 'by Carbarn',
-  'app.demo': 'Demo · invented customers and cars · nothing is sent',
-  'app.demo.short': 'Demo',
 
   'status.notResponding': 'Wheelman is not responding',
   'status.checking': 'Checking {place}',

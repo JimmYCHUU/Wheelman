@@ -1,4 +1,4 @@
-// The environment every test and the demo start from: an in-memory database, invented logins and
+// The environment every test starts from: an in-memory database, invented logins and
 // keys, and no real address anywhere. Call applyTestEnv() before importing anything from src/,
 // because src/config.js reads process.env once, when it is first imported.
 
