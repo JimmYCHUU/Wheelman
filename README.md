@@ -1,7 +1,7 @@
 # Wheelman 🛞
 
-![Node.js 24](https://img.shields.io/badge/node-24-339933)
-![Tests](https://img.shields.io/badge/tests-204%20passing-brightgreen)
+[![CI](https://github.com/JimmYCHUU/Wheelman/actions/workflows/ci.yml/badge.svg)](https://github.com/JimmYCHUU/Wheelman/actions/workflows/ci.yml)
+![Node.js 22.13 or newer](https://img.shields.io/badge/node-%E2%89%A522.13-339933)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-lightgrey)
 ![Free AI models](https://img.shields.io/badge/AI-free%20models%20only-blue)
 ![Never sends](https://img.shields.io/badge/sending-never%2C%20copy%20only-orange)
@@ -47,6 +47,7 @@ purpose.
 - [Troubleshooting](#troubleshooting)
 - [Tests](#tests)
 - [Project layout](#project-layout)
+- [Contributing, security and licence](#contributing-security-and-licence)
 - [Status](#status)
 
 ---
@@ -1077,6 +1078,15 @@ wheelman/
     └── support/                       the invented world (fixtures), the stand-in services, the
                                        shared environment every test starts from
 ```
+
+## Contributing, security and licence
+
+- Changes come as pull requests, with tests on invented data and `npm run check-private` clean.
+  The rules are in [CONTRIBUTING.md](CONTRIBUTING.md); every push and pull request runs the tests
+  on Windows and Ubuntu and the private-data check.
+- What Wheelman never does, what it stores, and how to report a problem: [SECURITY.md](SECURITY.md).
+- What changed in each version: [CHANGELOG.md](CHANGELOG.md).
+- All rights reserved. The code is published to be read and referred to; see [LICENSE](LICENSE).
 
 ## Status
 

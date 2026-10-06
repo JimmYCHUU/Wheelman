@@ -1,0 +1,5 @@
+#!/bin/sh
+# Runs before every push: nothing private may leave this computer, and the tests must pass.
+# Enable it once with:  git config core.hooksPath .githooks
+npm run check-private || exit 1
+npm test || exit 1

@@ -13,8 +13,13 @@ const root = config.root;
 const read = (file) => { try { return fs.readFileSync(path.join(root, file), 'utf8'); } catch { return ''; } };
 
 const SECRET = /USERNAME|PASSWORD|KEY|TOKEN|SECRET|URL|ORIGIN|PHONES/;
-const settings = read('.env').split('\n').map((l) => l.trim().match(/^([A-Z_]+)=(.*)$/)).filter(Boolean)
+const allSettings = read('.env').split('\n').map((l) => l.trim().match(/^([A-Z_]+)=(.*)$/)).filter(Boolean)
   .map((m) => [m[1], m[2].trim()]).filter(([k, v]) => SECRET.test(k) && v.length >= 3);
+// A value that is part of the repository's own address (the GitHub account name, say) is public
+// already, so it cannot be kept out of the files that link to the repository.
+const remote = (() => { try { return execSync('git config --get remote.origin.url', { cwd: root, encoding: 'utf8' }).trim().toLowerCase(); } catch { return ''; } })();
+const publicAnyway = allSettings.filter(([, v]) => remote.includes(v.toLowerCase()));
+const settings = allSettings.filter((s) => !publicAnyway.includes(s));
 const session = (() => { try { return Object.values(JSON.parse(read('data/.session.json'))).map(String).filter((v) => v.length >= 8); } catch { return []; } })();
 
 // Staff names: every word of four letters or more in the local people file, apart from field names and wording.
@@ -55,6 +60,7 @@ for (const f of files) {
 }
 
 console.log(`Checked ${files.length} files against ${settings.length} settings (${settings.map(([k]) => k).join(', ')}), ${names.length} staff name words and ${SHAPES.length} key shapes.`);
+if (publicAnyway.length) console.log(`Not checked: ${publicAnyway.map(([k]) => k).join(', ')}. The value is part of the repository's own address, so it is public already. A different value for that setting would be safer.`);
 if (problems.length) {
   console.log(`\nDo not commit or push yet. ${problems.length} problem${problems.length === 1 ? '' : 's'}:`);
   for (const p of problems) console.log(`  - ${p}`);

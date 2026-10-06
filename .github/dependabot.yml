@@ -1,0 +1,8 @@
+# Wheelman has no packages. The only things that can go stale are the GitHub actions in the
+# workflows, so those are the only updates asked for.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

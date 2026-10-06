@@ -1,0 +1,12 @@
+# Line endings: LF everywhere, except Windows batch files, which must be CRLF.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binary files.
+*.woff2 binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.db binary

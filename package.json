@@ -2,7 +2,29 @@
   "name": "wheelman",
   "version": "0.2.0",
   "private": true,
-  "description": "Carbarn's reply assistant: reads dashboard leads and Facebook Marketplace chats read-only, drafts replies in the dealership's own voice with free AI models, checks every figure against the records. Never sends anything.",
+  "description": "A reply assistant for a used-car dealer: reads the dashboard, Marketplace chats, auction orders and the business phone read-only, drafts replies with free AI models behind a verification step, and never sends anything.",
+  "license": "UNLICENSED",
+  "author": "JimmYCHUU",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JimmYCHUU/Wheelman.git"
+  },
+  "homepage": "https://github.com/JimmYCHUU/Wheelman#readme",
+  "bugs": {
+    "url": "https://github.com/JimmYCHUU/Wheelman/issues"
+  },
+  "keywords": [
+    "reply-assistant",
+    "dealer",
+    "crm",
+    "sms",
+    "llm",
+    "gemini",
+    "openrouter",
+    "node-sqlite",
+    "zero-dependency",
+    "windows"
+  ],
   "type": "module",
   "engines": {
     "node": ">=22.13"
@@ -18,6 +40,8 @@
     "report": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/report.js",
     "check-private": "node --disable-warning=ExperimentalWarning scripts/check-private.js",
     "check-css": "node scripts/check-css-budget.js",
+    "check-deps": "node scripts/check-deps.js",
+    "release-notes": "node scripts/release-notes.js",
     "test": "node --disable-warning=ExperimentalWarning --test \"test/*.test.js\""
   }
 }
