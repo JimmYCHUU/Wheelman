@@ -10,7 +10,9 @@ import { promiseChecks } from './promises.js';
 export const MARKERS = ['[PRICE?]', '[TRADE-IN VALUE?]', '[DELIVERY COST?]', '[DATE?]', '[CHECK?]', '[DEPOSIT LINK?]'];
 // A blank is any short label in capitals with a question mark, in square brackets: [PRICE?], [SOLD PRICE?].
 // The page (web/app.js) uses the same pattern to highlight them.
-export const BLANK_PATTERN = String.raw`\[[A-Z][A-Z0-9 &'/-]{1,30}\?\]`;
+// One definition of a blank, shared with the page's editor.
+export { BLANK_PATTERN } from '../web/lib/blank.js';
+import { BLANK_PATTERN } from '../web/lib/blank.js';
 const MARKER_RE = new RegExp(BLANK_PATTERN, 'g');
 
 const BANNED = [

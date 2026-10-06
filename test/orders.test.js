@@ -581,10 +581,13 @@ test('makes and models typed in capitals are written as a person would, and shor
   assert.equal(orders.carTitle({ year: 2023, make: 'TOYOTA', model: 'VOXY', variant: 'HYBRID S-Z PACKAGE' }), '2023 Toyota Voxy Hybrid S-Z Package');
 });
 
-test('a blank is recognised the same way by the checks, the learning and the page', () => {
+test('a blank is recognised the same way by the checks, the learning and the page', async () => {
+  // The page and the checks import the one definition in web/lib/blank.js.
+  const shared = await import('../web/lib/blank.js');
+  assert.equal(shared.BLANK_PATTERN, checks.BLANK_PATTERN);
   const page = fs.readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
-  const inPage = page.match(/const BLANK = \/(.+)\/g;/)[1].replace('\\[(', '\\[').replace(')\\?\\]', '\\?\\]');
-  assert.equal(inPage, checks.BLANK_PATTERN);
+  assert.match(page, /import \{ blankMatcher \} from '\.\/lib\/blank\.js'/, 'the page takes the pattern from the shared file');
+  assert.deepEqual(shared.blanksIn('Sold for [SOLD PRICE?] and [PRICE?]').map((b) => b.kind), ['SOLD PRICE', 'PRICE']);
   const re = new RegExp(checks.BLANK_PATTERN, 'g');
   assert.deepEqual('Sold for [SOLD PRICE?], arriving [ARRIVAL DATE?]. [PRICE?] [check?] [Not this] [DEPOSIT LINK?]'.match(re), ['[SOLD PRICE?]', '[ARRIVAL DATE?]', '[PRICE?]', '[DEPOSIT LINK?]']);
 });

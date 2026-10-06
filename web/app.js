@@ -1,7 +1,9 @@
 // Wheelman page. A messaging-app layout: conversations on the left, one open chat,
 // and the suggested reply waiting in the message box.
-// Two separate sections share the layout: Dashboard (leads and texts) and Marketplace (Facebook chats).
+// Three sections share the layout: Dashboard (leads and texts), Marketplace (Facebook chats) and Auction (orders).
 // Customer text is always inserted as text, never as HTML.
+
+import { blankMatcher } from './lib/blank.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -52,16 +54,14 @@ const ICONS = {
   down: [['path', { d: 'm6 9 6 6 6-6' }]],
 };
 
-/** The Wheelman mark: a white steering wheel on a Carbarn-blue disc, like Carbarn's own round icon. */
+/** The Wheelman mark: a white steering wheel on a disc in the brand colour, drawn once in assets/brand.svg. */
 function wheelMark() {
   const svg = document.createElementNS(SVG, 'svg');
-  svg.setAttribute('viewBox', '0 0 48 48');
+  svg.setAttribute('class', 'mark');
   svg.setAttribute('aria-hidden', 'true');
-  const el = (tag, attrs) => { const n = document.createElementNS(SVG, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); svg.append(n); };
-  el('circle', { cx: 24, cy: 24, r: 24, fill: '#0073ea' });
-  el('circle', { cx: 24, cy: 24, r: 13.5, fill: 'none', stroke: '#fff', 'stroke-width': 4.5 });
-  el('path', { d: 'M11.2 21.2h25.6M24 27.5V37', fill: 'none', stroke: '#fff', 'stroke-width': 4.5, 'stroke-linecap': 'round' });
-  el('circle', { cx: 24, cy: 24.6, r: 4.6, fill: '#fff' });
+  const use = document.createElementNS(SVG, 'use');
+  use.setAttribute('href', 'assets/brand.svg#mark');
+  svg.append(use);
   return svg;
 }
 
@@ -734,7 +734,7 @@ function renderThread(item, els, { toBottom = false } = {}) {
 
 // A blank is any short label in capitals with a question mark, in square brackets: [PRICE?], [SOLD PRICE?].
 // The same pattern is used in src/checks.js and src/learn.js.
-const BLANK = /\[([A-Z][A-Z0-9 &'/-]{1,30})\?\]/g;
+const BLANK = blankMatcher();
 const BLANK_NAME = { PRICE: 'the price', 'TRADE-IN VALUE': 'the trade-in value', 'DELIVERY COST': 'the delivery cost', DATE: 'the date', CHECK: 'something to confirm', 'DEPOSIT LINK': 'the deposit link', SHIP: "the ship's name", 'WHICH CAR': 'which car',
   'WHICH AUCTION': 'which auction', KM: 'the kilometres', GRADE: 'the auction grade', 'HOW MANY': 'how many' };
 const blankName = (kind) => BLANK_NAME[kind] || `the ${kind.toLowerCase()}`;

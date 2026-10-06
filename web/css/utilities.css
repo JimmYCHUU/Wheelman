@@ -1,0 +1,7 @@
+/* Last word: the layer that wins over every other, so these need no !important. */
+
+@layer utilities {
+  [hidden] { display: none; }
+  .u-grow { flex: 1; }
+  .u-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}

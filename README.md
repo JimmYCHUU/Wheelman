@@ -1076,7 +1076,11 @@ wheelman/
 │   ├── server.js                      the local page's data, on 127.0.0.1 only
 │   ├── db.js · time.js · config.js    SQLite, Sydney time, settings
 │   └── app.js                         start
-├── web/                               the page: index.html · app.js · styles.css · fonts
+├── web/                               the page: index.html · app.js · fonts
+│   ├── css/                           tokens (every colour, size, space, corner, shadow, duration)
+│   │                                  · base · components · views · utilities, in layers
+│   ├── lib/                           blank.js: what a blank is, shared with the server's checks
+│   └── assets/                        brand.svg: the mark, placed with <use>
 ├── scripts/                           check-login · check-model · replay · report
 │                                      build-voice · fetch-website · import-history
 │                                      check-private
