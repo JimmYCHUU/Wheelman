@@ -15,6 +15,7 @@ import { learnedExamples, corrections, ownerGuidance } from './learn.js';
 import { practiceFor, labelled } from './practice.js';
 import { blockCarries } from './firstreply.js';
 import { allVehicles } from './db.js';
+import { saleStage, stageLines } from './selling.js';
 
 const read = (name) => fs.readFileSync(path.join(config.voiceDir, name), 'utf8').replace(/\r/g, '').trim();
 
@@ -65,6 +66,7 @@ Return one JSON object and nothing else:
 {
   "reply": "the ${chat ? 'chat message' : order ? 'WhatsApp message' : 'SMS text'}. Use {{NAME}} where the customer's first name belongs. Use \\n for line breaks. No sign-off and no sender name.",
   "next_step": "the one next step you offered, in a few words, or empty",
+  "rung": "where this customer is, exactly as given under THIS CUSTOMER'S NEXT STEP: interest, proof, fit, commit or buyer; empty when that section is absent",
   "facts_used": ["each fact you relied on, as a short statement including the figure"],
   "needs_human": [{"marker": "[PRICE?]", "reason": "why a person must decide this"}],
   "hold": false
@@ -328,8 +330,8 @@ export function standardPlan(item, vehicle, { gone = false, owner = false, inspe
     `${holds.slice(0, -1).join(', ')} and ${holds[holds.length - 1]}.`,
     'So write only:',
     '- the greeting line, then',
-    '- one or two short sentences that answer what the customer asked. Under 30 words in all.',
-    `Do not write ${item.situation.all.includes('location_hours') ? '' : 'the address, the suburb, the opening hours, '}the Google Maps link${vehicleUrl ? ", the vehicle's page link" : ''}${inspectionUrl ? ', the booking link' : ''} or a phone number: the block gives them. Do not add a closing line after your answer.`,
+    "- one or two short sentences that answer what the customer asked, then one sentence that offers the next step named under THIS CUSTOMER'S NEXT STEP, in words. Under 45 words in all.",
+    `Do not write ${item.situation.all.includes('location_hours') ? '' : 'the address, the suburb, the opening hours, '}the Google Maps link${vehicleUrl ? ", the vehicle's page link" : ''}${inspectionUrl ? ', the booking link' : ''} or a phone number: the block gives them. Do not add a closing line after the next step: no "let us know", no "feel free", no "any questions".`,
     'Never point at the block: no "below", "see below" or "details are below". Each sentence must stand on its own.',
     item.situation.all.includes('location_hours')
       ? 'They asked where we are or when we are open, so answer that in your own sentence: the suburb and street ("128 Frances Street, Lidcombe"), or the day and hours they asked about. This is the one case where your lines may give the address or the hours.'
@@ -367,6 +369,8 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   const primaryOpts = primary ? factsOpts(primary) : {};
   const primaryGone = primary && !primaryOpts.owner && (availability(primary).code === 'sold' || primaryOpts.reserved);
   const alts = primaryGone && !deal ? alternatives(primary, allVehicles()) : [];
+  // Where this customer is on the way to a sale, and the one move the reply should make.
+  const stage = importPlan || item.order ? null : saleStage(item, { now });
 
   // An auction order's amounts never go to the AI: wherever one appears it is replaced by its marker.
   const mask = importPlan?.mask || ((t) => t);
@@ -380,6 +384,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     text: item.pendingText + ' ' + item.events.join(' '),
     // A buyer's first text is not a first enquiry: examples of replies to new enquiries would mislead.
     firstReply: item.isFirstReply && !deal,
+    rung: stage?.rung || null,
     excludeConversationId: holdOutConversation ? item.conversationId : null,
     excludeItemKey: holdOutConversation ? item.itemKey : null,
   };
@@ -453,6 +458,12 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   if (inspection.lines.length) {
     P.push('\n=== INSPECTION ===');
     P.push(inspection.lines.join('\n'));
+  }
+
+  // The rung the customer is on, the move to make, and the one question allowed.
+  if (stage) {
+    P.push("\n=== THIS CUSTOMER'S NEXT STEP ===");
+    P.push(stageLines(stage).join('\n'));
   }
 
   // An import enquiry has its own closing lines, added by the drafter, in place of the standard block.
@@ -600,6 +611,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     unconfirmedText,
     inspection,
     standard,
+    stage,
     user: P.join('\n'),
     exampleIds: examples.map((e) => e.id),
     exampleReplies: examples.map((e) => e.reply),

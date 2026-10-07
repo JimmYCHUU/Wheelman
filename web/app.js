@@ -923,6 +923,8 @@ function renderInfo() {
         : h('section', {}, h('h4', { text: 'Car' }), h('p', { class: 'fine', text: 'No car could be matched to this conversation.' })),
       d && d.status === 'ready' ? h('section', {},
         h('h4', { text: 'What the suggestion relies on' }),
+        d.rungLabel ? h('p', { class: 'fine', text: `Where they are: ${d.rungLabel}.` }) : null,
+        d.nextStep ? h('p', { class: 'fine', text: `The next step it offers: ${d.nextStep}.` }) : null,
         d.factsUsed.length ? h('ul', { class: 'facts' }, d.factsUsed.map((f) => h('li', { text: f }))) : h('p', { class: 'fine', text: 'No particular facts were listed.' }),
         h('p', { class: 'fine', text: d.provider === 'none' ? `Written from ${d.model || 'your wording'} at ${clock(d.createdAt)}, with no AI.${d.instruction ? ` What you added: “${d.instruction}”.` : ''}` : `Written by ${d.model || 'the AI model'} at ${clock(d.createdAt)}.${d.instruction ? ` Your instruction: “${d.instruction}”.` : ''}` })) : null,
       item.state === 'awaiting' && !item.dismissed ? h('section', {},

@@ -1025,9 +1025,11 @@ wheelman/
 │   ├── business-facts.md              what Wheelman may state, topic by topic
 │   ├── how-carbarn-works.md           the steps of a sale and the usual answers
 │   └── website/                       saved website pages (downloaded, local only)
+├── docs/
+│   └── selling-by-text.md             what the replies are taught about selling, and the evidence behind it
 ├── voice/
 │   ├── house-voice.md                 the tone, from our salespeople's real replies
-│   ├── sales-playbook.md              how it sells, and what it hands to a person
+│   ├── sales-playbook.md              how it sells: the ladder, the ten rules, the moves, the one question
 │   ├── first-reply.md                 the standard block under a first reply; edit freely
 │   ├── import-ask.md                  the first reply to an import or auction enquiry; edit freely
 │   ├── auction-offer.md               the layout of an auction offer; edit freely
@@ -1055,6 +1057,7 @@ wheelman/
 │   ├── examples.js · learn.js         which examples fit; what was copied, sent and changed
 │   ├── practice.js                    what the team really sent for similar messages
 │   ├── prompt.js                      the request: facts, rules for the channel, inspection plan
+│   ├── selling.js                     where the customer is on the way to a sale, the one move and the one question
 │   ├── llm.js                         free models in order, resting busy ones, setting aside
 │   │                                  ones that are used up for the day, the daily cap
 │   ├── log.js                         what went wrong, written to data/wheelman.log
@@ -1142,6 +1145,15 @@ conversations" under the last row; the search looks through every conversation. 
 the last fortnight counts as new for the blue numbers. The default list is "All": every
 conversation, newest message first whoever wrote it, so a reply never moves a conversation away;
 "Waiting" is the filter for the ones that still need one.
+
+7 October 2026: the replies are taught to sell. A customer is on a ladder (interested, wants
+proof, working out fit and cost, ready to commit, a buyer) and every reply aims one rung up with
+one concrete next step and at most one question, from a question bank; the deposit is proposed
+once interest is clear, with the one true urgency that a deposit takes the car off the market.
+New checks refuse pressure wording and claims the records cannot back, and warn on filler, two
+questions and a reply with no next step. The next step and the rung are saved with each
+suggestion, and the replay and the report score every reply on six points. The evidence is in
+`docs/selling-by-text.md`.
 
 ### Open questions for Carbarn
 

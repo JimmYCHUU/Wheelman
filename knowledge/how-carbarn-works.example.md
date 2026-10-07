@@ -48,5 +48,5 @@ Wheelman leaves those to you.
 - Answer every part of the customer's message. If they ask three things, answer three things.
 - Never reply with only a greeting or only our address.
 - If a specification is in the vehicle facts (seats, drive type, fuel use, dimensions), give it. If it is not there, for example towing capacity, say we will check and leave [CHECK?].
-- We reply once and leave the decision with the customer. We do not chase people who have gone quiet, and we never argue with a low offer.
+- Every reply ends with one next step. A customer who goes quiet gets at most one follow-up a couple of days later, with something new in it; never a second. We never argue with a low offer.
 - When a customer cancels or chooses another car, accept it warmly in one line.

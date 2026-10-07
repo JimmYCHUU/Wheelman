@@ -240,6 +240,8 @@ export function openDb(file = config.dbPath) {
   ensureColumn(db, 'drafts', 'context_json', 'TEXT');
   ensureColumn(db, 'drafts', 'edited_text', 'TEXT');
   ensureColumn(db, 'drafts', 'edited_at', 'INTEGER');
+  ensureColumn(db, 'drafts', 'next_step', 'TEXT');
+  ensureColumn(db, 'drafts', 'rung', 'TEXT');
   ensureColumn(db, 'advice', 'lessons_json', 'TEXT');
   ensureColumn(db, 'leads', 'status_history_json', 'TEXT');
   ensureColumn(db, 'conversations', 'lead_platform', 'TEXT');
@@ -706,11 +708,12 @@ export function countRows(table) {
 
 export function insertDraft(d) {
   const info = stmt(`
-    INSERT INTO drafts(item_key, anchor_key, situation, reply, needs_human_json, facts_used_json, checks_json, provider, model, status, instruction, error, created_at, context_json)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO drafts(item_key, anchor_key, situation, reply, needs_human_json, facts_used_json, checks_json, provider, model, status, instruction, error, created_at, context_json, next_step, rung)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(d.itemKey, d.anchorKey, d.situation || null, d.reply || null, JSON.stringify(d.needsHuman || []),
     JSON.stringify(d.factsUsed || []), JSON.stringify(d.checks || []), d.provider || null, d.model || null,
-    d.status, d.instruction || null, d.error || null, Date.now(), d.context ? JSON.stringify(d.context) : null);
+    d.status, d.instruction || null, d.error || null, Date.now(), d.context ? JSON.stringify(d.context) : null,
+    d.nextStep || null, d.rung || null);
   return Number(info.lastInsertRowid);
 }
 

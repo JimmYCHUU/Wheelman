@@ -173,6 +173,9 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
     }
 
     const prompt = buildPrompt(item, { instruction, coaching, importPlan: plan, holdOutConversation, now });
+    // Where the customer was on the way to a sale, and the move asked for, so the report can read it later.
+    context.rung = prompt.stage?.rung || null;
+    context.move = prompt.stage?.move || null;
     const allowed = allowedMaterial(item, prompt);
     // The auction car, its link and its figures are ours to state: they came from the live auction.
     if (plan?.stage === 'offer') allowed.trusted += `\n${plan.tail}\n${plan.lines.join('\n')}`;
@@ -206,7 +209,7 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
         allowedText: allowed.trusted, policyText: allowed.policy, customerText: allowed.customer,
         instruction: staffSaid, situation: item.situation, hold: !!json.hold,
         examples: prompt.exampleReplies, inConversation: !item.isFirstReply,
-        said, now,
+        said, stage: prompt.stage, nextStep: String(json.next_step || ''), now,
       });
       const repeat = offer
         ? (/[$¥]\s?\d|https?:\/\//.test(body) ? { level: 'fail', code: 'block-repeat', tokens: [], message: 'The opening states a figure or a link. The block below it gives the car, the bid, the costs and the link: write only the greeting and why the car may suit.' } : null)
@@ -270,6 +273,7 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
         ...(Array.isArray(result.json.facts_used) ? result.json.facts_used.map(String).slice(0, 12) : []),
       ],
       nextStep: String(result.json.next_step || ''),
+      rung: String(result.json.rung || prompt.stage?.rung || ''),
       checks: best.checks,
       provider: result.provider,
       model: result.model,
