@@ -778,6 +778,18 @@ what the team really sends. **How to say it** comes from the two voices.
   every reply, go last in the request, where they override the examples and the general
   selling advice. A rewrite that repeats seven of your words in a row is sent back. If no
   AI model is free, the note is kept and its lesson is worked out later.
+- **The model replies.** `voice/model-replies.md` holds thirty-seven invented scenarios, each
+  with a reply written to the selling playbook in the house voice: a first text about
+  availability, a price asked before a visit, a customer who turns out to be interstate, a
+  booked inspection, a buyer after the deposit, a no, Marketplace chats. They appear under
+  **Standards** in the page, one by one in the normal message box, and count only once you
+  have marked one **Good reply**, as written or after your changes. **Could be better** keeps
+  your note with it and writes it again for you to rate; **Set this one aside** drops it, and
+  it can be put back. An approved one is shown to the AI as the standard for messages like
+  it: the moves, the one question and the length, never the sentences, which are refused as
+  copied. Nothing from a scenario is learned, and showing one costs no AI request. Edit the
+  file freely; the ratings are kept beside it in `voice/model-replies.json`, and the section
+  leaves the page when the file is empty.
 
 A reply is not learned from if it still contains a blank, contains bank details, or is
 standard wording the team sends to everyone. The standard address block and the sign-off are
@@ -1030,6 +1042,8 @@ wheelman/
 ├── voice/
 │   ├── house-voice.md                 the tone, from our salespeople's real replies
 │   ├── sales-playbook.md              how it sells: the ladder, the ten rules, the moves, the one question
+│   ├── model-replies.md               the model replies, rated under Standards on the page; edit freely
+│   ├── model-replies.json             where each model reply stands: to rate, approved, set aside
 │   ├── first-reply.md                 the standard block under a first reply; edit freely
 │   ├── import-ask.md                  the first reply to an import or auction enquiry; edit freely
 │   ├── auction-offer.md               the layout of an auction offer; edit freely
@@ -1058,6 +1072,7 @@ wheelman/
 │   ├── practice.js                    what the team really sent for similar messages
 │   ├── prompt.js                      the request: facts, rules for the channel, inspection plan
 │   ├── selling.js                     where the customer is on the way to a sale, the one move and the one question
+│   ├── modelreplies.js                the model replies as conversations; the approved ones, for the request
 │   ├── llm.js                         free models in order, resting busy ones, setting aside
 │   │                                  ones that are used up for the day, the daily cap
 │   ├── log.js                         what went wrong, written to data/wheelman.log
@@ -1154,6 +1169,13 @@ New checks refuse pressure wording and claims the records cannot back, and warn 
 questions and a reply with no next step. The next step and the rung are saved with each
 suggestion, and the replay and the report score every reply on six points. The evidence is in
 `docs/selling-by-text.md`.
+
+7 October 2026, later: the model replies. Thirty-seven invented scenarios, SMS and Marketplace,
+each with a reply written to the playbook in the house voice, shown under Standards in the page
+one by one in the normal message box with Good reply and Could be better; an approved one is the
+standard the AI is shown for messages like it. Every one passes Wheelman's own checks without a
+warning. A no from a customer now gets the one move of accepting it, with no next step. Checked
+on the automated tests (nine new ones) and in a browser on a throwaway copy. None rated yet.
 
 ### Open questions for Carbarn
 

@@ -46,13 +46,14 @@
   }
   .sections, .notices, .search, .filters, .side-foot { flex: none; }
 
-  /* section switch: Dashboard | Marketplace | Auction. One list at a time. A section that is
-     switched off is hidden, and the others share the width. */
+  /* section switch: Dashboard | Marketplace | Auction | Standards. One list at a time. A section
+     that is switched off is hidden, and the others share the width; four of them take two rows. */
   .sections {
     display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--sp-05);
     margin: var(--sp-3) var(--sp-3) var(--sp-2); padding: var(--sp-05);
     border-radius: var(--r-md); background: var(--panel);
   }
+  .sections[data-n="4"] { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .section {
     height: var(--ctl-md); border: 0; border-radius: var(--r-sm);
     display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);

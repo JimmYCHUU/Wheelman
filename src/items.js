@@ -11,6 +11,7 @@ import { firstNameOf, isPlaceholderName } from './redact.js';
 import { config } from './config.js';
 import { dealFor } from './deal.js';
 import { namesStaff } from './voice.js';
+import { scenarioItem } from './modelreplies.js';
 
 const MIN = 60 * 1000;
 
@@ -621,12 +622,13 @@ export function buildPhoneItem(id, { now = Date.now() } = {}) {
 
 /** Finds an item by its key: c:<conversation>, l:<lead>, mp:<Marketplace chat>, ao:<auction order> or ph:<phone conversation>. */
 export function itemFromKey(key, opts = {}) {
-  const m = String(key || '').match(/^(c|l|mp|ao|ph):(\d+)$/);
+  const m = String(key || '').match(/^(c|l|mp|ao|ph|tr):(\d+)$/);
   if (!m) return null;
   const id = Number(m[2]);
   if (m[1] === 'mp') return buildMarketplaceItem(id);
   if (m[1] === 'ao') return buildOrderItem(id, opts);
   if (m[1] === 'ph') return buildPhoneItem(id);
+  if (m[1] === 'tr') return scenarioItem(id, opts); // a model reply's invented scenario
   return buildItem(m[1] === 'c' ? { conversationId: id } : { leadId: id });
 }
 

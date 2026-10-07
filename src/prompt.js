@@ -16,6 +16,7 @@ import { practiceFor, labelled } from './practice.js';
 import { blockCarries } from './firstreply.js';
 import { allVehicles } from './db.js';
 import { saleStage, stageLines } from './selling.js';
+import { modelReplies } from './modelreplies.js';
 
 const read = (name) => fs.readFileSync(path.join(config.voiceDir, name), 'utf8').replace(/\r/g, '').trim();
 
@@ -385,6 +386,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     // A buyer's first text is not a first enquiry: examples of replies to new enquiries would mislead.
     firstReply: item.isFirstReply && !deal,
     rung: stage?.rung || null,
+    channel: item.channel,
     excludeConversationId: holdOutConversation ? item.conversationId : null,
     excludeItemKey: holdOutConversation ? item.itemKey : null,
   };
@@ -392,6 +394,8 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   const recent = learnedExamples(want, 2, now);
   const examples = [...recent, ...pickExamples(want, 6 - recent.length)];
   const fixes = corrections(want, 2, now);
+  // The replies the owner approved as the standard for messages like this one.
+  const models = modelReplies(want, 3);
 
   const website = relevantWebsite(item.pendingText + ' ' + item.situation.all.map(labelFor).join(' '));
   const lastUs = [...item.timeline].reverse().find((e) => e.who === 'us' && !e.internal);
@@ -533,6 +537,14 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     });
   }
 
+  if (models.length) {
+    P.push('\n=== MODEL REPLIES ===');
+    P.push('Replies the owner approved as the standard for messages like this one. They answer invented customers about invented cars. These set the standard: match the moves, the one question and the length. Never copy a sentence, and never reuse their figures, cars or links.');
+    models.forEach((x, n) => {
+      P.push(`Model ${n + 1} (${x.situation || 'general'}${x.rung ? `, ${x.rung}` : ''}${x.channel === 'marketplace' ? ', Marketplace chat' : ''})\n  Customer: ${x.customer.replace(/\s*\n\s*/g, ' / ').slice(0, 300)}\n  Our reply: ${x.reply.replace(/\n+/g, ' / ')}`);
+    });
+  }
+
   if (fixes.length) {
     P.push('\n=== HOW OUR STAFF CHANGED EARLIER SUGGESTIONS ===');
     P.push('For similar messages you drafted one thing and our staff used something else. Learn from the difference in length, wording and what they left out. Do not reuse the figures.');
@@ -614,7 +626,8 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     stage,
     user: P.join('\n'),
     exampleIds: examples.map((e) => e.id),
-    exampleReplies: examples.map((e) => e.reply),
+    // The model replies join the examples here so a reply lifted from one is caught as copied.
+    exampleReplies: [...examples.map((e) => e.reply), ...models.map((x) => x.reply)],
     practiceIds: sent.map((s) => s.id),
     websiteSources: website.map((w) => w.source),
     alternatives: alts,

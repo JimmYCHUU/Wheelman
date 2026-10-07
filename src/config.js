@@ -104,6 +104,10 @@ export const config = {
   ignoredSenders: list(env.IGNORED_SENDERS ?? 'Not customer, OTP, Delivery Service, Autotrader, CreditOne'),
   // The example bank of genuine replies. Tests point this at a scratch copy.
   examplesPath: env.EXAMPLES_PATH || path.join(root, 'voice', 'examples.json'),
+  // The model replies: invented scenarios with a reply in the house voice, rated by the owner on the
+  // page. The markdown is edited by hand; the status of each one is kept beside it in JSON.
+  modelRepliesPath: env.MODEL_REPLIES_PATH || path.join(root, 'voice', 'model-replies.md'),
+  modelRepliesStatePath: env.MODEL_REPLIES_STATE_PATH || path.join(root, 'voice', 'model-replies.json'),
 
   port: num(env.PORT, 3210),
   syncMinutes: num(env.SYNC_MINUTES, 3),

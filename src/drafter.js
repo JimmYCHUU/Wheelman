@@ -119,6 +119,80 @@ function coachingCopied(body, note) {
 }
 
 /**
+ * Turns what the model answered (or a reply written by hand) into the finished suggestion and
+ * runs every check on it. plan: an import or auction-order plan, when there is one.
+ */
+export function assessReply(item, prompt, json, { plan = null, chat = false, again = false, staffSaid = '', allowed, said, coaching = null, now = Date.now() }) {
+  // A brand-new enquiry gets the team's standard block in place of the sign-off. A holding
+  // reply (a complaint, say) does not.
+  const { vehicleUrl, inspectionUrl } = prompt.standard;
+  const offer = plan?.stage === 'offer';
+  // An import reply has its own lines underneath: the whole offer, or the short contact block.
+  const block = plan ? (json.hold ? '' : plan.tail || '') : prompt.standard.on && !json.hold ? standardBlock({ vehicleUrl, inspectionUrl }) : '';
+  let text = String(json.reply || '').replace(/\\n/g, '\n');
+  if (plan?.tokens) text = restoreAmounts(text, plan.tokens);
+  if (block) text = tidyOpening(text, vehicleUrl, inspectionUrl);
+  // An offer opens the way the team writes it: the greeting, a blank line, then one short paragraph.
+  if (offer) text = text.trim().replace(/^([^\n]{1,40},)\n+/, (m, hi) => `${hi}\n\n`).replace(/([^\n])\n(?!\n)/g, (m, c) => `${c} `);
+  let body = fixGreeting(stripModelSignOff(text), sydneyHour(now));
+  if (chat) body = chatStyle(body);
+  else if (again && !offer) body = dropGreeting(body);
+  // Marketplace suggestions carry no sign-off: it is a chat, not a text message. An import
+  // reply keeps its closing lines even when we have already written today.
+  const signOff = chat ? '' : plan && block ? block : again ? '' : block || config.signOff;
+  const reply = finishReply(text, item.lead, { now, signOff, chat, greeting: offer || !again });
+  let checks = checkDraft({
+    channel: item.channel,
+    reply, body,
+    needsHuman: json.needs_human,
+    allowedText: allowed.trusted, policyText: allowed.policy, customerText: allowed.customer,
+    instruction: staffSaid, situation: item.situation, hold: !!json.hold,
+    examples: prompt.exampleReplies, inConversation: !item.isFirstReply,
+    said, stage: prompt.stage, nextStep: String(json.next_step || ''), now,
+  });
+  const repeat = offer
+    ? (/[$¥]\s?\d|https?:\/\//.test(body) ? { level: 'fail', code: 'block-repeat', tokens: [], message: 'The opening states a figure or a link. The block below it gives the car, the bid, the costs and the link: write only the greeting and why the car may suit.' } : null)
+    : block ? blockCheck(body, vehicleUrl, inspectionUrl, { askedWhere: !plan && item.situation.all.includes('location_hours') }) : null;
+  if (offer) {
+    checks = [...checks.filter((c) => c.level !== 'ok'),
+      // Left out of the offer once a deposit is paid, so there is nothing to paste then.
+      ...(plan.tail.includes('[DEPOSIT LINK?]') ? [{ level: 'input', code: 'marker', tokens: ['[DEPOSIT LINK?]'], message: 'Paste the deposit link before sending.' }] : []),
+      ...(plan.estimate.needsReview ? [{ level: 'input', code: 'auction-review', tokens: [], message: 'The cost calculator marks this car for a manual check (tax or import limits). Confirm the figures before sending.' }] : []),
+      { level: 'warn', code: 'auction', tokens: [], message: auctionNote(plan) }];
+  }
+  if (plan?.stage === 'unread') checks = [...checks.filter((c) => c.level !== 'ok'), { level: 'warn', code: 'auction', tokens: [], message: 'The live auction could not be read, so no car was looked for. Use Rewrite to try again.' }];
+  // "Your inspection is booked" is only true once somebody has booked it.
+  const booked = !chat && /\binspection\b[^.!?\n]{0,60}\b(is|has been|have been|'s)\s+(now\s+)?booked\b|\bbooked\b[^.!?\n]{0,40}\binspection\b/i.test(body)
+    && !item.timeline.some((e) => /booked (an inspection|a test drive)/i.test(e.event || ''));
+  if (booked) checks = [...checks.filter((c) => c.level !== 'ok'), { level: 'input', code: 'book-first', tokens: [], message: 'This reply says the inspection is booked. Book it on the website first, then send.' }];
+  if (repeat) checks = [...checks.filter((c) => c.level !== 'ok'), repeat];
+  // A label such as "[inspection booking link]" stands for a link in another customer's reply.
+  const label = body.match(LEFTOVER_LABEL);
+  if (label) checks = [...checks.filter((c) => c.level !== 'ok'), { level: 'fail', code: 'label', tokens: [label[0]], message: `"${label[0]}" is a label from an example, not a real link or figure. Use the real one from this request, or leave it out.` }];
+  const pasted = coaching ? coachingCopied(body, coaching.note) : '';
+  if (pasted) checks = [...checks.filter((c) => c.level !== 'ok'), { level: 'fail', code: 'coaching-copied', tokens: [], message: `The reply repeats the owner's coaching word for word ("${pasted} …"). The note says how to handle the message. Say it to the customer in your own words, or leave it out if it was a line to avoid.` }];
+  const listing = chat ? listingPriceCheck(item) : null;
+  if (listing) checks = [...checks.filter((c) => c.level !== 'ok'), listing];
+  const visit = inspectionCheck(prompt.inspection, body, block);
+  if (visit) checks = [...checks.filter((c) => c.level !== 'ok'), visit];
+  const buyer = buyerCheck(item, body);
+  if (buyer) checks = [...checks.filter((c) => c.level !== 'ok'), buyer];
+  return { body, reply, checks };
+}
+
+/**
+ * A reply written by a person (a model reply) finished and checked the way the AI's would be, with
+ * no AI request. Returns the finished reply, the checks and the prompt it was judged against.
+ */
+export function assessProposed(item, reply, { now = Date.now() } = {}) {
+  const prompt = buildPrompt(item, { now });
+  const chat = item.channel === 'marketplace';
+  const again = !chat && writtenToday(item, now);
+  const out = assessReply(item, prompt, { reply, needs_human: [], facts_used: [], hold: false, next_step: '', rung: prompt.stage?.rung || '' }, { chat, again, allowed: allowedMaterial(item, prompt), said: saidIn(item), now });
+  return { ...out, prompt };
+}
+
+/**
  * @param coaching  { note, draft } from "Could be better": what the owner said about the last
  *                  draft, and that draft. It guides the rewrite; it is not wording to send.
  */
@@ -183,63 +257,7 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
     if (plan?.stage === 'order') allowed.trusted += `\n${plan.trustedText}`;
     const said = saidIn(item);
 
-    const assess = (json) => {
-      // A brand-new enquiry gets the team's standard block in place of the sign-off. A holding
-      // reply (a complaint, say) does not.
-      const { vehicleUrl, inspectionUrl } = prompt.standard;
-      const offer = plan?.stage === 'offer';
-      // An import reply has its own lines underneath: the whole offer, or the short contact block.
-      const block = plan ? (json.hold ? '' : plan.tail || '') : prompt.standard.on && !json.hold ? standardBlock({ vehicleUrl, inspectionUrl }) : '';
-      let text = String(json.reply || '').replace(/\\n/g, '\n');
-      if (plan?.tokens) text = restoreAmounts(text, plan.tokens);
-      if (block) text = tidyOpening(text, vehicleUrl, inspectionUrl);
-      // An offer opens the way the team writes it: the greeting, a blank line, then one short paragraph.
-      if (offer) text = text.trim().replace(/^([^\n]{1,40},)\n+/, (m, hi) => `${hi}\n\n`).replace(/([^\n])\n(?!\n)/g, (m, c) => `${c} `);
-      let body = fixGreeting(stripModelSignOff(text), sydneyHour(now));
-      if (chat) body = chatStyle(body);
-      else if (again && !offer) body = dropGreeting(body);
-      // Marketplace suggestions carry no sign-off: it is a chat, not a text message. An import
-      // reply keeps its closing lines even when we have already written today.
-      const signOff = chat ? '' : plan && block ? block : again ? '' : block || config.signOff;
-      const reply = finishReply(text, item.lead, { now, signOff, chat, greeting: offer || !again });
-      let checks = checkDraft({
-        channel: item.channel,
-        reply, body,
-        needsHuman: json.needs_human,
-        allowedText: allowed.trusted, policyText: allowed.policy, customerText: allowed.customer,
-        instruction: staffSaid, situation: item.situation, hold: !!json.hold,
-        examples: prompt.exampleReplies, inConversation: !item.isFirstReply,
-        said, stage: prompt.stage, nextStep: String(json.next_step || ''), now,
-      });
-      const repeat = offer
-        ? (/[$¥]\s?\d|https?:\/\//.test(body) ? { level: 'fail', code: 'block-repeat', tokens: [], message: 'The opening states a figure or a link. The block below it gives the car, the bid, the costs and the link: write only the greeting and why the car may suit.' } : null)
-        : block ? blockCheck(body, vehicleUrl, inspectionUrl, { askedWhere: !plan && item.situation.all.includes('location_hours') }) : null;
-      if (offer) {
-        checks = [...checks.filter((c) => c.level !== 'ok'),
-          // Left out of the offer once a deposit is paid, so there is nothing to paste then.
-          ...(plan.tail.includes('[DEPOSIT LINK?]') ? [{ level: 'input', code: 'marker', tokens: ['[DEPOSIT LINK?]'], message: 'Paste the deposit link before sending.' }] : []),
-          ...(plan.estimate.needsReview ? [{ level: 'input', code: 'auction-review', tokens: [], message: 'The cost calculator marks this car for a manual check (tax or import limits). Confirm the figures before sending.' }] : []),
-          { level: 'warn', code: 'auction', tokens: [], message: auctionNote(plan) }];
-      }
-      if (plan?.stage === 'unread') checks = [...checks.filter((c) => c.level !== 'ok'), { level: 'warn', code: 'auction', tokens: [], message: 'The live auction could not be read, so no car was looked for. Use Rewrite to try again.' }];
-      // "Your inspection is booked" is only true once somebody has booked it.
-      const booked = !chat && /\binspection\b[^.!?\n]{0,60}\b(is|has been|have been|'s)\s+(now\s+)?booked\b|\bbooked\b[^.!?\n]{0,40}\binspection\b/i.test(body)
-        && !item.timeline.some((e) => /booked (an inspection|a test drive)/i.test(e.event || ''));
-      if (booked) checks = [...checks.filter((c) => c.level !== 'ok'), { level: 'input', code: 'book-first', tokens: [], message: 'This reply says the inspection is booked. Book it on the website first, then send.' }];
-      if (repeat) checks = [...checks.filter((c) => c.level !== 'ok'), repeat];
-      // A label such as "[inspection booking link]" stands for a link in another customer's reply.
-      const label = body.match(LEFTOVER_LABEL);
-      if (label) checks = [...checks.filter((c) => c.level !== 'ok'), { level: 'fail', code: 'label', tokens: [label[0]], message: `"${label[0]}" is a label from an example, not a real link or figure. Use the real one from this request, or leave it out.` }];
-      const pasted = coaching ? coachingCopied(body, coaching.note) : '';
-      if (pasted) checks = [...checks.filter((c) => c.level !== 'ok'), { level: 'fail', code: 'coaching-copied', tokens: [], message: `The reply repeats the owner's coaching word for word ("${pasted} …"). The note says how to handle the message. Say it to the customer in your own words, or leave it out if it was a line to avoid.` }];
-      const listing = chat ? listingPriceCheck(item) : null;
-      if (listing) checks = [...checks.filter((c) => c.level !== 'ok'), listing];
-      const visit = inspectionCheck(prompt.inspection, body, block);
-      if (visit) checks = [...checks.filter((c) => c.level !== 'ok'), visit];
-      const buyer = buyerCheck(item, body);
-      if (buyer) checks = [...checks.filter((c) => c.level !== 'ok'), buyer];
-      return { body, reply, checks };
-    };
+    const assess = (json) => assessReply(item, prompt, json, { plan, chat, again, staffSaid, allowed, said, coaching, now });
     const failures = (checks) => checks.filter((c) => c.level === 'fail').length;
 
     // An offer does not depend on the AI: its figures come from the auction. If no model can

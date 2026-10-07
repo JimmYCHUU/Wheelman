@@ -35,13 +35,20 @@ export const AIMS = {
 const FIT = new Set(['price_negotiation', 'finance', 'trade_in', 'delivery_interstate', 'rego_roadworthy', 'warranty']);
 
 // A customer who has said no, or has bought elsewhere. Nothing is pushed after this.
-export const DECLINED = /\b(not interested|no longer (interested|looking|need)|already (bought|purchased|got one|sorted)|bought (one |something )?(elsewhere|somewhere else|another)|gone with (another|someone else)|changed (my|our) mind|found (one|something|another)|no thanks?|not (for me|what i'?m after)|give it a miss|pass on (it|this))\b/i;
+export const DECLINED = /\b(not interested|no longer (interested|looking|need)|already (bought|purchased|got one|sorted)|bought (one |something )?(elsewhere|somewhere else|another)|gone with (another|someone else)|changed (my|our) mind|found (one|something|another)|no thanks?|not (for me|what i'?m after)|give it a miss|pass on (it|this)|i'?ll pass)\b/i;
+
+/** They cannot make the visit that was arranged: not a no to the car, but not a commitment either. */
+export const CANNOT_COME = /\b(can'?t|cannot|can not|unable to|not able to|won'?t be able to|will not be able to) (come|make it|get (there|down|up|in|over)|get to|travel|drive)\b/i;
 
 /**
  * The moves. Each is what the reply does after answering, and the one question it may ask.
  * The AI is told the move in words; the question is the only one it may ask unprompted.
  */
 export const MOVES = {
+  accept_no: {
+    text: 'They have said no. Accept it in a line, thank them, and stop: no next step, no question, and no other car unless they asked for one. A customer who feels no pressure comes back.',
+    question: '',
+  },
   invite_inspection: {
     text: 'Answer, then invite them to come and see it at Lidcombe, in words. The booking link is governed by INSPECTION: give it only if that section supplies it. If it helps them decide, offer the walkaround video and the auction sheet.',
     question: 'Would a weekday after work or Saturday morning suit you to see it?',
@@ -169,8 +176,10 @@ export function saleStage(item, { now = Date.now() } = {}) {
   for (let i = t.length - 1; i >= 0; i--) if (ours(t[i]) && recent(t[i]) && (/\bsee you\b/i.test(t[i].text) || /#inspection=/.test(t[i].text))) { arranged = i; break; }
   if (arranged >= 0) {
     const after = t.slice(arranged + 1).filter((e) => e.who === 'customer' && e.text);
-    if (after.length && !after.some((e) => DECLINED.test(e.text))) signals.push('a visit was arranged and they wrote again');
+    if (after.length && !after.some((e) => DECLINED.test(e.text) || CANNOT_COME.test(e.text))) signals.push('a visit was arranged and they wrote again');
   }
+  // The message waiting for a reply is a no: the only move is to accept it.
+  const declined = !item.deal && DECLINED.test(item.pendingText || '');
 
   let rung;
   if (item.deal) rung = 'buyer';
@@ -185,6 +194,7 @@ export function saleStage(item, { now = Date.now() } = {}) {
   let move;
   if (rung === 'buyer') move = sit.includes('complaint') ? 'hold' : 'after_sale_step';
   else if (sit.includes('complaint')) move = 'hold';
+  else if (declined) move = 'accept_no';
   else if (gone) move = 'offer_alternative';
   else if (rung === 'commit') move = told.deposit ? 'confirm_step' : 'propose_deposit';
   else {
