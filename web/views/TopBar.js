@@ -25,6 +25,9 @@ export function statusWords(s, section) {
   else if (last) text = t('status.notReached', { place: sec.placeShort });
   else text = t('status.notChecked', { place: sec.placeShort });
   const parts = [text, t('status.ai', { used: s.ai.usedToday, limit: s.ai.limit })];
+  // The dashboard's notification feed, read for a new lead between checks.
+  const al = s.alerts;
+  if (!chat && al?.on && al.at) parts.push(al.ok ? t('status.alerts.checked', { ago: ago(al.at) }) : t('status.alerts.notReached'));
   const ph = s.phone;
   if (sec.phone && ph?.on && ph.lastReportAt) parts.push(ph.stale ? t('status.phone.stale', { time: clock(ph.lastReportAt) }) : t('status.phone.heard', { ago: ago(ph.lastReportAt) }));
   const models = (s.ai.providers || []).map((p) => `${p.model}${p.marketplace === false ? ` (${t('status.model.dashboardOnly')})` : ''}${p.usedUpUntil ? ` (${t('status.model.usedUp', { time: clock(p.usedUpUntil) })})` : p.restingMinutes ? ` (${t('status.model.busy')})` : ''}`).join('\n');

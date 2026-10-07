@@ -6,6 +6,18 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- The dashboard's notification feed is read every 45 seconds (`NOTIFICATIONS_SECONDS`): a new
+  lead sets off a check at once, a car's price change or sale refreshes the car list, and an
+  enquiry from another Carbarn site, which the Sydney lead list never carries, is counted and
+  left alone. The feed is read and never marked as read.
+- Model replies: thirty-seven invented scenarios in `voice/model-replies.md`, rated one by one
+  under a Standards section on the page. An approved one is shown to the AI as the standard for
+  messages like it; nothing from a scenario is learned.
+- Selling by text: every reply aims one rung up a ladder (interest, proof, fit, commitment,
+  buyer) with one next step and at most one question; the deposit is proposed once interest is
+  clear; new checks refuse pressure wording and unbacked claims; the next step and the rung are
+  saved with each suggestion and scored by the replay and the report. `docs/selling-by-text.md`
+  holds the evidence.
 - The invented world and the stand-in services for the dashboard, the Marketplace engine, the
   live-auction feed and the AI live in `test/support/`, shared by every test. (A demo mode built
   on them was tried and removed the same day.)
