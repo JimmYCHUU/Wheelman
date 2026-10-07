@@ -297,6 +297,7 @@ function renderHead(item, els) {
   const where = chat ? `Marketplace${listing?.account ? `, ${listing.account}` : ''}` : (item.name ? item.phone : '');
   const sub = writing ? 'writing a suggestion…'
     : order ? [where, `Order ${order.orderNo}`, order.prefers ? `prefers ${order.prefers}` : ''].filter(Boolean).join(' · ')
+      : item.standard ? [`Model reply · ${t(`tag.standard.${item.standard.status.toLowerCase()}`)}`, chat ? 'Marketplace chat' : '', item.situation && item.situation !== 'General enquiry' ? `Asking about: ${item.situation.toLowerCase()}` : ''].filter(Boolean).join(' · ')
       : [where, item.situation && item.situation !== 'General enquiry' ? `Asking about: ${item.situation.toLowerCase()}` : ''].filter(Boolean).join(' · ');
   const others = newCount(state, state.section);
   els.head.replaceChildren(
@@ -802,8 +803,9 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
 
   put(after, h('span', { class: 'said' }, icon('check'), 'Copied'));
 
-  // Two ways to teach Wheelman. Marketplace chats are never learned from, so they have neither.
-  const teach = item.channel === 'sms';
+  // Two ways to teach Wheelman. Marketplace chats are never learned from, so they have neither;
+  // a model reply has both, because rating it is what sets the standard.
+  const teach = item.channel === 'sms' || !!item.standard;
   const approved = d.rating === 'good';
   const approveBtn = teach ? h('button', { class: `btn ${approved ? 'is-on' : ''}`.trim(), type: 'button', 'aria-pressed': approved ? 'true' : 'false',
     title: approved ? 'You approved this reply. Click to take that back.' : 'This reply is right as it is. Wheelman will write similar replies the same way.',
@@ -927,7 +929,12 @@ function renderInfo() {
         d.nextStep ? h('p', { class: 'fine', text: `The next step it offers: ${d.nextStep}.` }) : null,
         d.factsUsed.length ? h('ul', { class: 'facts' }, d.factsUsed.map((f) => h('li', { text: f }))) : h('p', { class: 'fine', text: 'No particular facts were listed.' }),
         h('p', { class: 'fine', text: d.provider === 'none' ? `Written from ${d.model || 'your wording'} at ${clock(d.createdAt)}, with no AI.${d.instruction ? ` What you added: “${d.instruction}”.` : ''}` : `Written by ${d.model || 'the AI model'} at ${clock(d.createdAt)}.${d.instruction ? ` Your instruction: “${d.instruction}”.` : ''}` })) : null,
-      item.state === 'awaiting' && !item.dismissed ? h('section', {},
+      item.standard ? h('section', {},
+        h('h4', { text: 'Model reply' }),
+        h('p', { class: 'fine', text: `${item.standard.title}. ${STANDARD_WORDS[item.standard.status] || ''}` }),
+        item.standard.note ? h('p', { class: 'fine', text: `Your note: “${item.standard.note}”` }) : null,
+        h('button', { class: 'btn outline', type: 'button', onclick: () => setStandard(item, item.standard.status === 'REJECTED' ? 'PROPOSED' : 'REJECTED') }, item.standard.status === 'REJECTED' ? 'Put it back to rate' : 'Set this one aside')) : null,
+      item.state === 'awaiting' && !item.dismissed && !item.standard ? h('section', {},
         h('h4', { text: 'Dismiss' }),
         h('p', { class: 'fine', text: item.order
           ? 'Takes this order out of To do, for example when you have already told them by phone. Nothing is deleted: the order stays under In progress and the message can be put back.'
@@ -1208,8 +1215,26 @@ async function approve(item) {
     d.rating = next;
     if (state.detail?.draft?.id === d.id) state.detail.draft.rating = next;
     if (state.selected === item.key) renderComposer(item, chatFrame());
-    toast(!next ? 'Approval taken back' : out.learned ? 'Approved. Wheelman will write similar replies this way.' : 'Approved');
+    toast(!next ? 'Approval taken back' : out.standard ? 'Approved as the standard for messages like this.' : out.learned ? 'Approved. Wheelman will write similar replies this way.' : 'Approved');
+    if (out.standard) { refreshList(); refreshDetail(); }
     refreshStatus();
+  } catch (e) { toast(e.message); }
+}
+
+const STANDARD_WORDS = {
+  PROPOSED: 'Not rated yet. Mark it Good reply as it stands or after your changes, or say what could be better and it is written again.',
+  CHANGED: 'Written again after your note. Rate the new version.',
+  APPROVED: 'Approved: Wheelman treats it as the standard for messages like this one.',
+  REJECTED: 'Set aside: it is not used.',
+};
+
+/** Set a model reply aside, or put it back to be rated. */
+async function setStandard(item, status) {
+  try {
+    const out = await api(`/api/standards/${item.standard.id}/status`, { body: { status } });
+    if (out.item && state.selected === item.key) { state.detail = out.item; renderChat(); }
+    toast(status === 'REJECTED' ? 'Set aside. It can be put back from Set aside.' : 'Back under To rate.');
+    refreshList();
   } catch (e) { toast(e.message); }
 }
 
@@ -1237,6 +1262,7 @@ async function improve(item, note) {
       renderInfo();
     } else if (state.selected === item.key) { renderHead(state.detail, chatFrame()); renderComposer(state.detail, chatFrame()); }
     const lesson = (out.lessons || [])[0];
+    if (out.standard) { toast(out.ok ? 'Written again from your note. Rate the new version.' : out.error || 'It could not be written again'); refreshList(); return; }
     toast(!out.learned ? 'That could not be saved' : lesson ? `Learned: ${lesson.do}` : out.pending ? 'Noted. The lesson will be worked out when the AI is free.' : 'Noted for this reply. Nothing to reuse was found in it.');
   } catch (e) {
     state.busy.delete(item.key);

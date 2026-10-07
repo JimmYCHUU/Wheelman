@@ -98,7 +98,8 @@ test('the store calls a view once now, then only when what it selected has chang
 });
 
 test('the section registry names every section, its lists and where a key belongs', () => {
-  assert.deepEqual(SECTION_IDS, ['dashboard', 'marketplace', 'auction']);
+  assert.deepEqual(SECTION_IDS, ['dashboard', 'marketplace', 'auction', 'standards']);
+  assert.equal(sectionOf('tr:12'), 'standards');
   assert.equal(sectionOf('c:12'), 'dashboard');
   assert.equal(sectionOf('l:12'), 'dashboard');
   assert.equal(sectionOf('ph:0491570101'), 'dashboard');

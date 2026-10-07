@@ -31,6 +31,12 @@ export function rowTags(r, state) {
   const order = r.section === 'auction';
   const setAside = r.dismissed && r.state === 'awaiting';
   if (order && r.state !== TAB_STATE[state.tab] && ORDER_LIST[r.state]) tags.push({ text: ORDER_LIST[r.state], tone: 'neutral' });
+  // A model reply: where it stands with the owner.
+  if (r.section === 'standards' && r.standardStatus) {
+    const tone = { PROPOSED: 'warning', CHANGED: 'info', APPROVED: 'success', REJECTED: 'neutral' }[r.standardStatus] || 'neutral';
+    tags.push({ text: t(`tag.standard.${r.standardStatus.toLowerCase()}`), tone });
+    return tags;
+  }
   if (r.phoneOnly) tags.push({ text: t('tag.phoneOnly'), tone: 'neutral' });
   if (setAside) tags.push({ text: t('tag.dismissed'), tone: 'neutral' });
   else if (order && r.due) tags.push({ text: String(r.due).replace(/^Send:\s*/i, 'Due: '), tone: r.dueKind === 'reply' ? 'info' : 'warning' });
@@ -101,6 +107,7 @@ export function mountListColumn(root, store, actions) {
   store.select((s) => ({ section: s.section, tick: s.listTick }), () => {
     const items = SECTION_IDS.map((id) => ({ id, label: SECTIONS[id].label, count: on(id) ? newCount(state, id) : 0, srCount: ' ' + t(`row.newIn.${id}`, { n: on(id) ? newCount(state, id) : 0 }), hidden: !on(id) }));
     sections.hidden = !SECTION_IDS.some((id) => id !== 'dashboard' && on(id));
+    sections.dataset.n = String(items.filter((it) => !it.hidden).length);
     sections.update({ items, value: state.section });
   });
 

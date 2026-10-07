@@ -266,7 +266,7 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   if (urgency) add('fail', 'urgency', `"${urgency[0]}": never say that other people are interested, that the car is selling fast or that the price will change.`, [urgency[0]]);
   const stays = String(body).match(STAYS_FOR_SALE);
   if (stays && !stage?.allowsUrgency) add('warn', 'urgency', 'Says the deposit takes the car off the market. Say this only once the customer has shown real interest: booked to see it, seen it, or asked to hold it.', [stays[0]]);
-  if (stage && !hold && stage.rung !== 'buyer' && stage.move !== 'hold' && !/\?/.test(body) && !findUrls(body).length && !NEXT_STEP_SIGNS.test(body)) {
+  if (stage && !hold && stage.rung !== 'buyer' && stage.move !== 'hold' && stage.move !== 'accept_no' && !/\?/.test(body) && !findUrls(body).length && !NEXT_STEP_SIGNS.test(body)) {
     add('warn', 'next-step', `No next step offered${String(nextStep || '').trim() ? ` (the model called its next step "${String(nextStep).trim().slice(0, 60)}")` : ''}. Aim for: ${stage.aim}.`);
   }
 

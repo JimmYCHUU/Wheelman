@@ -36,6 +36,10 @@ export const COPY = {
   'tag.needsYou': 'Needs you',
   'tag.dismissed': 'Dismissed',
   'tag.phoneOnly': 'Phone only',
+  'tag.standard.proposed': 'To rate',
+  'tag.standard.changed': 'Written again',
+  'tag.standard.approved': 'Approved',
+  'tag.standard.rejected': 'Set aside',
 
   'thread.loadOlder': 'Load older messages',
   'thread.older': '{n} more',
@@ -47,6 +51,7 @@ export const COPY = {
   'row.newIn.dashboard': '{n, one: conversation with new messages, other: conversations with new messages}',
   'row.newIn.marketplace': '{n, one: conversation with new messages, other: conversations with new messages}',
   'row.newIn.auction': '{n, one: order with something new, other: orders with something new}',
+  'row.newIn.standards': '{n, one: model reply not looked at yet, other: model replies not looked at yet}',
 
   'notice.setup.title': 'Setup is not finished',
   'notice.setup.body': 'Open the file .env, fill in what is listed here, then restart Wheelman.',

@@ -72,6 +72,11 @@ test('where the customer is: interest, proof, fit, commit, buyer', () => {
   assert.deepEqual([arranged.rung, arranged.move], ['commit', 'propose_deposit']);
   const declined = stage({ situations: ['general'], texts: [{ who: 'customer', text: 'Can I come Saturday?' }, { who: 'us', text: 'See you Saturday at 10.' }, { who: 'customer', text: 'Sorry, we have already bought elsewhere.' }] });
   assert.equal(declined.rung, 'interest', 'a decline after an arranged visit is not a commitment');
+  const cannot = stage({ situations: ['inspection_booking'], texts: [{ who: 'customer', text: 'Can I come Saturday?' }, { who: 'us', text: 'See you Saturday at 10.' }, { who: 'customer', text: "Sorry, I can't make it down on Saturday after all." }] });
+  assert.notEqual(cannot.rung, 'commit', 'not being able to come is not a commitment either');
+  const no = stage({ situations: ['general'], texts: [{ who: 'customer', text: 'Is the Noah available?' }, { who: 'us', text: 'Yes, it is here at Lidcombe.' }, { who: 'customer', text: "Thanks but I've found another car, I'll pass." }] });
+  assert.deepEqual([no.move, no.question], ['accept_no', ''], 'a no is accepted: no next step, no question');
+  assert.match(no.moveText, /no next step, no question/);
 
   const booked = stage({ situations: ['inspection_booking'], events: ['Customer booked an inspection through the website: Saturday 10:00'] });
   assert.deepEqual([booked.rung, booked.move], ['commit', 'propose_deposit']);
@@ -117,6 +122,7 @@ test('the checks refuse pressure and unbacked claims, and warn on filler, two qu
   assert.ok(!codes(run('The Noah has 8 seats. Would Saturday suit?', { stage: interest })).includes('warn:next-step'));
   assert.equal(checks.worst(run('The Noah has 8 seats.')), 'ok', 'without a stage, a bare statement is not judged on its next step');
   assert.ok(!codes(run('See you Saturday at 10.', { stage: { rung: 'buyer', move: 'after_sale_step', allowsUrgency: false, aim: 'x' } })).includes('warn:next-step'));
+  assert.ok(!codes(run('No worries, thank you for letting us know.', { stage: { rung: 'interest', move: 'accept_no', allowsUrgency: false, aim: 'x' } })).includes('warn:next-step'), 'a no gets no next step');
 
   const note = checks.retryNote(run('Other buyers are interested.'));
   assert.match(note, /Do not say or imply that other people are interested/);
