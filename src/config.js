@@ -111,6 +111,9 @@ export const config = {
 
   port: num(env.PORT, 3210),
   syncMinutes: num(env.SYNC_MINUTES, 3),
+  // How often the dashboard's notification feed is read for a new lead, in seconds. 0 switches it
+  // off; anything else is at least 15, so the dashboard is not asked more than four times a minute.
+  notificationsSeconds: (() => { const n = num(env.NOTIFICATIONS_SECONDS, 45); return n > 0 ? Math.max(15, n) : 0; })(),
   draftMaxAgeHours: num(env.DRAFT_MAX_AGE_HOURS, 72),
   // A message older than this still shows under Waiting, but no suggestion is written until asked.
   autoDraftMaxAgeHours: num(env.AUTO_DRAFT_MAX_AGE_HOURS, 24),

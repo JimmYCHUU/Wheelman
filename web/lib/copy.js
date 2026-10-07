@@ -20,6 +20,8 @@ export const COPY = {
   'status.notReached': '{place} not reached',
   'status.notChecked': '{place} not checked yet',
   'status.ai': '{used} of {limit} AI requests used today',
+  'status.alerts.checked': 'Lead alerts checked {ago}',
+  'status.alerts.notReached': 'Lead alerts not reached',
   'status.phone.heard': 'Phone add-on heard {ago}',
   'status.phone.stale': 'The phone add-on has not reported since {time}',
   'status.models': 'AI models, tried in order:',

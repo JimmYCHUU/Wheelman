@@ -284,8 +284,9 @@ Enforced in code, not by convention.
 
 - **RULE-0 Never sends.** There is no code path that sends a message. The only way a reply
   leaves is a person's copy and paste.
-- **RULE-1 Read-only.** The dashboard client can sign in and GET five addresses. The content
-  engine client can GET three. The live auction client uses no login: it can GET three
+- **RULE-1 Read-only.** The dashboard client can sign in and GET six addresses: the leads, the
+  conversations, their messages, the cars, the auction orders, and the notification feed, which
+  is only ever read and never marked as read. The content engine client can GET three. The live auction client uses no login: it can GET three
   addresses (the cars coming up, one car, what similar cars sold for) and ask the website's
   cost calculator for one figure. That one request is a
   POST, because that is how the website's own page asks. It carries the bid amount and
@@ -394,7 +395,15 @@ npm.cmd test                :: the automated checks, no internet needed
 6. The customer leaves **Waiting** by themselves once the reply appears in the conversation.
    Wheelman then compares what was sent with what it suggested, and learns from it.
 
-Wheelman checks the dashboard and the Marketplace inbox every three minutes.
+Wheelman checks the dashboard and the Marketplace inbox every three minutes. Between checks it
+reads the dashboard's own notification feed every 45 seconds (`NOTIFICATIONS_SECONDS`; 0 switches
+it off). A new lead announced there sets off a check at once, so the lead's text is in Wheelman
+within about a minute without anyone pressing "Check for new messages now", and a price change
+or a sale refreshes the car list straight away. The feed covers every Carbarn site, but the
+Sydney lead list that the dashboard and Wheelman both read is filtered to the Australian
+platform, so an enquiry from another site (a bare phone number from "Lead Service", say) is
+announced and never listed: Wheelman runs one check for it, finds it is not there, and leaves it
+alone. The status line says when the feed was last read.
 
 ## The page
 
@@ -1051,7 +1060,8 @@ wheelman/
 │   ├── people.example.json            whose writing sets the voice (invented names; the real file is local)
 │   └── exclusions.json                templates and conversations kept out of the example bank
 ├── src/
-│   ├── dashboard.js                   dashboard client: sign in and five GET addresses
+│   ├── dashboard.js                   dashboard client: sign in and six GET addresses
+│   ├── notifications.js               the dashboard's notification feed: a new lead sets off a check at once
 │   ├── marketplace.js                 content engine client: three GET addresses
 │   ├── auction.js                     live auction client: three GET addresses and the cost calculator
 │   ├── imports.js                     import enquiries: what they want, which auction car, the bid, the offer
@@ -1176,6 +1186,15 @@ one by one in the normal message box with Good reply and Could be better; an app
 standard the AI is shown for messages like it. Every one passes Wheelman's own checks without a
 warning. A no from a customer now gets the one move of accepting it, with no next step. Checked
 on the automated tests (nine new ones) and in a browser on a throwaway copy. None rated yet.
+
+7 October 2026, evening: the dashboard's notification feed is read every 45 seconds, so a new
+lead sets off a check at once instead of waiting for the next three-minute one or a press of
+"Check for new messages now", and a car's price change or sale refreshes the car list straight
+away. The feed is read and never marked as read. A read-only look at the live feed showed why
+some announced enquiries never reach the dashboard's lead list: they come from Carbarn's other
+sites, and the Sydney list (which Wheelman reads the same way) is filtered to the Australian
+platform; those are counted and left alone. Checked on the automated tests (eight new ones) and
+by one read-only read of the live feed.
 
 ### Open questions for Carbarn
 

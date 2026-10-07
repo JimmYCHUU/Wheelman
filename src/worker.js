@@ -12,12 +12,15 @@ import { learnFrom, canLearnFrom, comparable, distilPending } from './learn.js';
 import { refreshVoiceBankIfStale } from './voicebank.js';
 import { similarity } from './text.js';
 import { logLine } from './log.js';
+import { pollNotifications, leadKnown } from './notifications.js';
 
 export const state = {
   startedAt: Date.now(),
   syncing: false,
   drafting: false,
   lastSync: null,       // { at, ok, message, result }
+  alerts: null,         // the dashboard's notification feed: { at, ok, message, newLeads, skipped, triggered }
+  vehiclesStale: false, // a notification said a car changed: refresh the vehicle list at the next check
   lastDraftError: null, // { at, message }
   pausedUntil: 0,       // set when the AI daily limit is hit
   holdUntil: 0,         // set for a few minutes when every AI model was busy
@@ -62,7 +65,8 @@ export function runSync() {
   state.syncing = true;
   dashboardCheck = (async () => {
     try {
-      const result = await syncAll();
+      const result = await syncAll({ vehicles: { force: state.vehiclesStale } });
+      state.vehiclesStale = false;
       state.lastSync = { at: Date.now(), ok: true, message: `Checked the dashboard: ${result.conversationsUpdated} conversation(s) updated.`, result };
     } catch (e) {
       state.lastSync = { at: Date.now(), ok: false, message: e.message };
@@ -222,15 +226,61 @@ export async function cycle() {
   await draftWaiting();
 }
 
+// Leads the notification feed announced that are not yet on the lists Wheelman reads. A check
+// runs for them; one that is still missing afterwards belongs to another Carbarn site.
+const pendingLeads = new Map(); // leadId -> { source, at }
+
+/**
+ * Reads the dashboard's notification feed. A new lead sets off a check at once instead of at the
+ * next few-minute tick, and a change to a car marks the vehicle list for a refresh. The feed is
+ * only read; nothing is marked as read, and nothing from it reaches the AI or the page.
+ */
+export async function checkAlerts() {
+  if (!config.notificationsSeconds || !config.dashboard.baseUrl || !config.dashboard.username || !config.dashboard.password) return null;
+  try {
+    const r = await pollNotifications();
+    if (r.vehicles) state.vehiclesStale = true;
+    for (const n of r.leads) if (!leadKnown(n.leadId)) pendingLeads.set(n.leadId, { source: n.source, at: n.at });
+    let triggered = false;
+    if ((pendingLeads.size || r.vehicles) && !state.syncing && !state.drafting) {
+      triggered = true;
+      await cycle();
+    }
+    // After a full check, a lead the feed announced but the Sydney lists do not carry is from
+    // another Carbarn site. It is counted and forgotten.
+    let skipped = 0;
+    if (triggered) for (const [id] of pendingLeads) { if (leadKnown(id)) pendingLeads.delete(id); else { pendingLeads.delete(id); skipped++; } }
+    const prev = state.alerts && state.alerts.ok ? state.alerts : null;
+    state.alerts = {
+      at: Date.now(), ok: true, triggered,
+      newLeads: r.leads.length, skipped, skippedTotal: (prev?.skippedTotal || 0) + skipped,
+      lastLeadAt: r.leads.length ? Math.max(...r.leads.map((n) => n.at)) : prev?.lastLeadAt || null,
+      message: r.first ? 'Lead alerts: reading from here on.' : triggered ? `Lead alerts: ${r.leads.length} new lead(s), checked the dashboard.` : 'Lead alerts: nothing new.',
+    };
+  } catch (e) {
+    state.alerts = { ...(state.alerts || {}), at: Date.now(), ok: false, triggered: false, message: e.message };
+    logLine('alerts', `Reading the notification feed failed: ${e.message}`);
+  }
+  return state.alerts;
+}
+
 let timer = null;
+let alertTimer = null;
 export function start() {
   const tick = async () => {
     try { await cycle(); } catch (e) { state.lastSync = { at: Date.now(), ok: false, message: e.message }; }
     timer = setTimeout(tick, Math.max(1, config.syncMinutes) * 60 * 1000);
   };
   tick();
+  if (config.notificationsSeconds > 0) {
+    const alertTick = async () => {
+      try { await checkAlerts(); } catch { /* noted in state.alerts */ }
+      alertTimer = setTimeout(alertTick, config.notificationsSeconds * 1000);
+    };
+    alertTimer = setTimeout(alertTick, config.notificationsSeconds * 1000);
+  }
 }
-export function stop() { if (timer) clearTimeout(timer); }
+export function stop() { if (timer) clearTimeout(timer); if (alertTimer) clearTimeout(alertTimer); }
 
 /** The phone add-on, for the page and for the add-on's own popup. */
 function phoneStatus() {
@@ -267,6 +317,8 @@ export function statusReport() {
     paused: Date.now() < state.pausedUntil,
     ai: { providers: modelStatus(), lastModel: lastModel().model, usedToday: u.total, limit: u.limit },
     syncMinutes: config.syncMinutes,
+    // The notification feed: on when a poll interval is set, with the last read's outcome.
+    alerts: { on: config.notificationsSeconds > 0, everySeconds: config.notificationsSeconds, ...(state.alerts || {}) },
     marketplace: {
       enabled: config.marketplace.enabled,
       syncing: state.mpSyncing,

@@ -61,6 +61,12 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
     if (p === '/carbarnau/auth/v1/api/user/signin') return json(res, 200, { username: 'tester' }, { 'set-cookie': 'carbarn_session=stand-in; Path=/' });
     if (p === '/carbarnau/auth/v1/api/user/refreshtoken') return json(res, 200, { ok: true });
     if (p === '/carbarnau/auth/v1/api/user/validate-session') return json(res, 200, { username: 'tester' });
+    // The notification feed, newest first, as many as asked for. A world can take it down.
+    if (p === '/carbarnau/api/notifications') {
+      if (world?.notificationsDown) return json(res, 503, { error: 'Service Unavailable' });
+      const rows = [...((world && world.notifications) || [])].sort((a, b) => b.id - a.id);
+      return json(res, 200, rows.slice(0, Number(q.limit) || 80));
+    }
     if (p === '/core/user/api/v1/lead/paginated') {
       const list = (world.leads || {})[q.platform] || [];
       const page = Number(q.page) || 1, size = Number(q.size) || 50;

@@ -15,6 +15,8 @@ const READ_ALLOWLIST = [
   /^\/carbarnau\/api\/v1\/vehicles$/,
   // The auction orders: who asked us to buy a car at auction, what they want, and how far it has got.
   /^\/carbarnau\/api\/v1\/sales\/auction$/,
+  // The dashboard's notification feed: read to hear about a new lead sooner. Never marked as read.
+  /^\/carbarnau\/api\/notifications$/,
   /^\/carbarnau\/auth\/v1\/api\/user\/validate-session$/,
 ];
 const SIGNIN = '/carbarnau/auth/v1/api/user/signin';
@@ -159,6 +161,12 @@ export async function fetchAllVehicles() {
     if (page < totalPages) await pause(300);
   }
   return out;
+}
+
+/** The newest entries of the dashboard's notification feed, as the dashboard's own bell shows them. */
+export async function fetchNotifications(limit = 80) {
+  const j = await get('/carbarnau/api/notifications', { limit });
+  return Array.isArray(j) ? j : Array.isArray(j?.content) ? j.content : [];
 }
 
 export async function whoAmI() {
