@@ -108,7 +108,7 @@ test('the portal stock number is matched to the right car', async () => {
 test('customer details never reach the AI service, and cost figures are never sent', async () => {
   const { items, drafter } = await load();
   seen.length = 0;
-  script = [{ status: 200, reply: { reply: 'Hi {{NAME}},\nYes, the Noah is still available at $28,900.\nYou can see more details here:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159', needs_human: [], facts_used: ['Available now', 'Price $28,900'], next_step: 'come and see it', hold: false } }];
+  script = [{ status: 200, reply: { reply: 'Hi {{NAME}},\nYes, the Noah is still available at $28,900. You are welcome to come and see it any day.\nYou can see more details here:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159', needs_human: [], facts_used: ['Available now', 'Price $28,900'], next_step: 'come and see it', hold: false } }];
   const d = await drafter.draftFor(items.buildItem({ conversationId: 201 }));
 
   const sent = JSON.stringify(seen[0].body);
@@ -121,7 +121,7 @@ test('customer details never reach the AI service, and cost figures are never se
   assert.equal(d.status, 'ready');
   // A brand-new enquiry: the team's standard block follows the answer. The car's page link the AI
   // typed is dropped, because the block gives it.
-  assert.equal(d.reply, 'Hi Priya,\nYes, the Noah is still available at $28,900.\n\n'
+  assert.equal(d.reply, 'Hi Priya,\nYes, the Noah is still available at $28,900. You are welcome to come and see it any day.\n\n'
     + 'Vehicle details:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159\n\n'
     + 'Our location:\n📍 Unit D3, 128-130 Frances Street, Lidcombe NSW 2141\n\n'
     + 'Google Maps:\nhttps://maps.app.goo.gl/EQfdkTE7FYDF4DTT8\n\n'
@@ -257,7 +257,7 @@ test('the background worker drafts each waiting customer once and respects Dismi
 test('once a reply is sent, the suggestion is compared with it', async () => {
   const { worker, db } = await load();
   const d = db.latestDraft('c:201', (await import('../src/items.js')).buildItem({ conversationId: 201 }).anchorKey);
-  db.upsertMessage({ id: 9001, conversationId: 201, direction: 'OUT', body: 'Hi Priya,\nYes, the Noah is still available at $28,900. You can book an inspection on the listing.', sentBy: 'Dana', status: 'SENT', mediaType: null, at: Date.now() - 60e3, importedAt: Date.now() - 60e3 });
+  db.upsertMessage({ id: 9001, conversationId: 201, direction: 'OUT', body: 'Hi Priya,\nYes, the Noah is still available at $28,900. You are welcome to come and see it any day this week.', sentBy: 'Dana', status: 'SENT', mediaType: null, at: Date.now() - 60e3, importedAt: Date.now() - 60e3 });
   assert.equal(worker.updateOutcomes(), 1);
   const after = db.getDraft(d.id);
   assert.equal(after.status, 'answered');

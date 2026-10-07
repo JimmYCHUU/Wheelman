@@ -6,6 +6,7 @@ import { restore, leftoverPlaceholders, NAME_TOKEN } from './redact.js';
 import { findUrls, hasEmoji, wordCount, stripEmoji, similarity } from './text.js';
 import { sydneyHour } from './time.js';
 import { promiseChecks } from './promises.js';
+import { FILLER, URGENCY, STAYS_FOR_SALE, CLAIM, NEXT_STEP_SIGNS } from './selling.js';
 
 export const MARKERS = ['[PRICE?]', '[TRADE-IN VALUE?]', '[DELIVERY COST?]', '[DATE?]', '[CHECK?]', '[DEPOSIT LINK?]'];
 // A blank is any short label in capitals with a question mark, in square brackets: [PRICE?], [SOLD PRICE?].
@@ -15,15 +16,10 @@ export { BLANK_PATTERN } from '../web/lib/blank.js';
 import { BLANK_PATTERN } from '../web/lib/blank.js';
 const MARKER_RE = new RegExp(BLANK_PATTERN, 'g');
 
+// Filler, pressure and unbacked claims have their own checks (filler, urgency, claim); these are the rest.
 const BANNED = [
-  [/i hope (this|you|that)/i, 'opens with "I hope…"'],
-  [/thank you for (reaching out|contacting|your interest in carbarn)/i, 'uses "thank you for reaching out"'],
-  [/(feel free to|don'?t hesitate to|do not hesitate to) (reach out|contact|get in touch|ask)/i, 'uses a stock closing line'],
-  [/(don'?t miss out|won'?t last|selling fast|act (now|fast)|hurry|limited time|once in a lifetime)/i, 'uses pressure wording'],
   [/\b(amazing|stunning|incredible|unbeatable|fantastic|awesome|perfect choice|great choice|excellent choice)\b/i, 'uses marketing wording'],
   [/\b(as an ai|language model|i am an ai|i'?m an ai)\b/i, 'mentions being an AI'],
-  [/\b(sold as[\s-]is|no warranty|without warranty)\b/i, 'says there is no warranty'],
-  [/\b(guaranteed? (approval|finance)|you will be approved|approval is (certain|guaranteed))\b/i, 'promises finance approval'],
   [/\b\d+(\.\d+)?\s?% ?(p\.?a\.?|per annum|interest|comparison)/i, 'quotes an interest rate'],
 ];
 
@@ -209,9 +205,11 @@ function figureProblems(replyBody, trustedText, customerText = '', policyText = 
  *   instruction  staff instruction, whose figures are allowed
  *   channel      'sms' or 'marketplace' (a chat, where replies are much shorter)
  *   said         the conversation as [{ who, text, at }]; when given, promises, days and places are checked
+ *   stage        from selling.js saleStage: where the customer is; when given, the reply must offer a next step
+ *   nextStep     what the model said its next step was
  *   now          when the reply would be sent
  */
-export function checkDraft({ reply, body, needsHuman = [], allowedText = '', policyText = '', customerText = '', instruction = '', situation = null, hold = false, examples = [], inConversation = false, channel = 'sms', said = null, now = Date.now() }) {
+export function checkDraft({ reply, body, needsHuman = [], allowedText = '', policyText = '', customerText = '', instruction = '', situation = null, hold = false, examples = [], inConversation = false, channel = 'sms', said = null, stage = null, nextStep = '', now = Date.now() }) {
   const results = [];
   const add = (level, code, message, tokens = []) => results.push({ level, code, message, tokens });
   const allowed = `${allowedText}\n${instruction}\n${config.site.phone}\n${config.signOff}`;
@@ -257,9 +255,22 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   }
 
   const questions = (String(body).match(/\?/g) || []).length - markers.length;
-  if (questions > 2) add('warn', 'questions', `Asks ${questions} questions. One is usually enough.`);
+  if (questions > 1) add('warn', 'questions', `Asks ${questions} questions. One at most.`);
 
-  for (const [re, what] of BANNED) if (re.test(body)) add(/warranty|approval|interest rate|AI/.test(what) ? 'fail' : 'warn', 'wording', `Off-voice or risky wording: ${what}.`);
+  // Selling: no filler, no pressure, no claim the records cannot back, and a next step.
+  const filler = String(body).match(FILLER);
+  if (filler) add('warn', 'filler', `"${filler[0]}" reads as a reply for the sake of replying. Say the next step instead.`, [filler[0]]);
+  const claim = String(body).match(CLAIM);
+  if (claim) add('fail', 'claim', `"${claim[0]}" is a claim the records cannot back. Say only what the vehicle facts and business facts state, in their words.`, [claim[0]]);
+  const urgency = String(body).match(URGENCY);
+  if (urgency) add('fail', 'urgency', `"${urgency[0]}": never say that other people are interested, that the car is selling fast or that the price will change.`, [urgency[0]]);
+  const stays = String(body).match(STAYS_FOR_SALE);
+  if (stays && !stage?.allowsUrgency) add('warn', 'urgency', 'Says the deposit takes the car off the market. Say this only once the customer has shown real interest: booked to see it, seen it, or asked to hold it.', [stays[0]]);
+  if (stage && !hold && stage.rung !== 'buyer' && stage.move !== 'hold' && !/\?/.test(body) && !findUrls(body).length && !NEXT_STEP_SIGNS.test(body)) {
+    add('warn', 'next-step', `No next step offered${String(nextStep || '').trim() ? ` (the model called its next step "${String(nextStep).trim().slice(0, 60)}")` : ''}. Aim for: ${stage.aim}.`);
+  }
+
+  for (const [re, what] of BANNED) if (re.test(body)) add(/interest rate|AI/.test(what) ? 'fail' : 'warn', 'wording', `Off-voice or risky wording: ${what}.`);
 
   if (situation?.all?.includes('price_negotiation') && !markers.includes('[PRICE?]') && /(lowest|best price|we can do|discount|negotiab)/i.test(body)) {
     add('input', 'price', 'This talks about price. Confirm the figure before sending.');
@@ -280,7 +291,9 @@ export function retryNote(checks) {
   return 'Your previous draft was rejected for these reasons:\n'
     + fails.map((c) => `- ${c.message}`).join('\n')
     + '\nWrite it again, in your own words for this customer. Use only figures and links that appear in the supplied material. A dollar amount that only the customer mentioned is their figure, not ours: do not state or accept it. Where a figure is not supplied, use the matching marker such as [PRICE?], [DELIVERY COST?], [DATE?] or [CHECK?].'
-    + (fails.some((c) => TIME_CODES.has(c.code)) ? '\nDo not swap one day or time for another. Where the day or time of something we will do is not given by our staff, write "shortly" or use [DATE?]. Where nobody on our side agreed to do something, say we will check and come back to them.' : '');
+    + (fails.some((c) => TIME_CODES.has(c.code)) ? '\nDo not swap one day or time for another. Where the day or time of something we will do is not given by our staff, write "shortly" or use [DATE?]. Where nobody on our side agreed to do something, say we will check and come back to them.' : '')
+    + (fails.some((c) => c.code === 'urgency') ? '\nDo not say or imply that other people are interested, that the car is selling fast, or that the price will change. If the request allows urgency, the one true fact is that a $1,000 refundable holding deposit takes the car off the market; otherwise say nothing about urgency.' : '')
+    + (fails.some((c) => c.code === 'claim') ? '\nSay nothing about accidents, condition, approval, cooling-off or warranty beyond what VEHICLE FACTS and BUSINESS FACTS state, in their words.' : '');
 }
 
 const TIME_CODES = new Set(['time-passed', 'day-mismatch', 'promise']);

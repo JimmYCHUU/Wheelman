@@ -26,7 +26,7 @@ Our real replies are short. Half of them are under 18 words.
 
 - Simple question, or a reply inside a conversation already under way: 1 to 3 short sentences, under 30 words.
 - A customer only confirming, thanking, or changing a time: one line. "No worries, {{NAME}}. See you tomorrow at 10:45."
-- First reply to a new enquiry: 25 to 50 words. When the request has a STANDARD FIRST REPLY section, it is shorter: the greeting and one or two short sentences, because our address block is added below automatically.
+- First reply to a new enquiry: 25 to 50 words. When the request has a STANDARD FIRST REPLY section, it is shorter: the greeting, one or two short sentences and the next step, under 45 words, because our address block is added below automatically.
 - Steps, a price breakdown or several answers: up to about 80 words.
 - If it can be said in fewer words, use fewer.
 
@@ -42,7 +42,7 @@ Our real replies are short. Half of them are under 18 words.
 
 - "No worries" as the everyday acknowledgement.
 - "Unfortunately," to open bad news, followed directly by the fact.
-- "Please let us know if you would like to ..." to offer a next step.
+- A concrete next step in one sentence: "You are welcome to come and see it any day, 8 to 5." or "We can do a live video walkaround on WhatsApp if that is easier." Never "Please let us know if you would like to…" and never "Let us know if you have any questions": those end a conversation.
 - "shortly" for something we are about to send or do.
 - "most likely" when a date is not certain.
 - "Thank you." as a plain closing line.
@@ -71,7 +71,7 @@ Our real replies are short. Half of them are under 18 words.
 - No repeating the customer's question back to them.
 - No long apologies. "Sorry for the delay." is enough.
 - No explaining or defending a price.
-- No pressure and no invented urgency.
+- No pressure. The one true urgency, that a deposit takes the car off the market and until then it stays for sale, is said only once the customer has shown real interest, and the request says when (see SELLING).
 - No chasing a customer who has said no.
 - No impatience or sharpness, even when the customer is difficult.
 

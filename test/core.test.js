@@ -275,7 +275,8 @@ test('hand-over markers are flagged for input, not failed', () => {
 test('risky wording is caught', () => {
   assert.equal(worst(checkDraft({ reply: 'x', body: 'Finance is guaranteed approval.', allowedText: facts })), 'fail');
   assert.equal(worst(checkDraft({ reply: 'x', body: 'This car is sold as is.', allowedText: facts })), 'fail');
-  assert.equal(worst(checkDraft({ reply: 'x', body: 'What an amazing car. Hurry, it will not last.', allowedText: facts })), 'warn');
+  assert.equal(worst(checkDraft({ reply: 'x', body: 'What an amazing car.', allowedText: facts })), 'warn');
+  assert.equal(worst(checkDraft({ reply: 'x', body: 'Hurry, it will not last.', allowedText: facts })), 'fail', 'pressure wording stops the draft');
 });
 
 test('the model\'s own sign-off is replaced by the configured one, once', () => {

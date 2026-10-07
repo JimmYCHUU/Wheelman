@@ -21,6 +21,8 @@ import { isAcknowledgement, similarity, wordCount } from '../src/text.js';
 import { providers } from '../src/llm.js';
 import { worst } from '../src/checks.js';
 import { formatSydney } from '../src/time.js';
+import { salesScore } from '../src/selling.js';
+import { farAway } from '../src/situations.js';
 
 const args = process.argv.slice(2);
 const wanted = Math.max(1, Math.min(200, Number(args.find((a) => /^\d+$/.test(a))) || 20));
@@ -93,8 +95,11 @@ for (const [n, c] of sample.entries()) {
   // Draft as if it were the moment they replied, so the time of day matches.
   const d = await draftFor(item, { save: false, holdOutConversation: true, now: c.at });
   const level = d.status === 'ready' ? worst(d.checks) : 'error';
-  console.log(level);
-  rows.push({ c, item, d, level, match: d.reply ? similarity(comparable(d.reply), comparable(c.actual)) : 0 });
+  // Does the suggestion do what a selling reply does: a next step, one question at most, the right length, proof where it matters, no filler, no urgency.
+  const score = d.reply ? salesScore({ body: comparable(d.reply), nextStep: d.nextStep, rung: d.rung, situations: item.situation.all, channel: 'sms', farAway: farAway(item.pendingText, item.lead?.state).far, firstReply: item.isNewEnquiry }) : { score: 0, parts: {}, notes: ['no reply'] };
+  const theirs = salesScore({ body: comparable(c.actual), rung: d.rung, situations: item.situation.all, channel: 'sms', farAway: farAway(item.pendingText, item.lead?.state).far, firstReply: item.isNewEnquiry });
+  console.log(`${level}  sells ${score.score}/6${score.notes.length ? ` (${score.notes.join(', ')})` : ''}`);
+  rows.push({ c, item, d, level, score, theirs, match: d.reply ? similarity(comparable(d.reply), comparable(c.actual)) : 0 });
   if (d.daily) { console.log('\nDaily AI allowance reached. Stopping early.'); break; }
 }
 
@@ -108,6 +113,13 @@ const summary = {
   passedAllChecks: tally('ok'), styleWarnings: tally('warn'), needsYourInput: tally('input'), failedFactCheck: tally('fail'),
   medianWordsOurs: median(done.map((r) => wordCount(comparable(r.d.reply)))),
   medianWordsTheirs: median(done.map((r) => wordCount(comparable(r.c.actual)))),
+  // The sales score, out of six, averaged over the written suggestions, and the same for what the team sent.
+  salesScoreOurs: done.length ? Math.round((done.reduce((s, r) => s + r.score.score, 0) / done.length) * 10) / 10 : 0,
+  salesScoreTheirs: done.length ? Math.round((done.reduce((s, r) => s + r.theirs.score, 0) / done.length) * 10) / 10 : 0,
+  withNextStep: done.filter((r) => r.score.parts.nextStep).length,
+  oneQuestionOrFewer: done.filter((r) => r.score.parts.oneQuestion).length,
+  noFiller: done.filter((r) => r.score.parts.noFiller).length,
+  urgencyOutsideCommit: done.filter((r) => !r.score.parts.noUrgency).length,
 };
 
 const html = `<!doctype html><html lang="en-AU"><head><meta charset="utf-8"><title>Replay test</title>
@@ -140,6 +152,9 @@ h1{font-size:22px;margin:0 0 4px} .lead{color:#5d655a;margin:0 0 18px}
 <div class="stat"><b>${summary.failedFactCheck}</b>failed the fact check</div>
 <div class="stat"><b>${summary.styleWarnings}</b>style warnings</div>
 <div class="stat"><b>${summary.medianWordsOurs} vs ${summary.medianWordsTheirs}</b>median words: agent vs them</div>
+<div class="stat"><b>${summary.salesScoreOurs} vs ${summary.salesScoreTheirs}</b>sales score out of 6: agent vs them</div>
+<div class="stat"><b>${summary.withNextStep} / ${summary.written}</b>offer a next step</div>
+<div class="stat"><b>${summary.urgencyOutsideCommit}</b>urgency where it should not be</div>
 </div>
 ${rows.map((r, i) => `<section class="case">
 <div class="head"><span><b>Case ${i + 1}</b></span><span>${esc(r.item.situation.label)}</span><span>${r.item.deal ? 'already a buyer' : r.item.isNewEnquiry ? 'new enquiry' : 'mid-conversation'}</span><span>answered by ${esc(r.c.author ? displayOfVoice(r.c.author) : 'the team')}</span><span>${esc(formatSydney(r.c.at))}</span><span>${r.item.vehicles[0] ? esc(r.item.vehicles[0].title) : 'no vehicle matched'}</span></div>
@@ -148,7 +163,7 @@ ${rows.map((r, i) => `<section class="case">
 <div><div class="k">What they actually sent</div>${esc(r.c.actual)}</div>
 <div><div class="k">Agent's suggestion</div>${r.d.status === 'ready' ? esc(r.d.reply) : '<em>' + esc(r.d.error || 'No suggestion') + '</em>'}
 ${(r.d.checks || []).map((c) => `<div class="flag ${esc(c.level)}">${esc(c.message)}</div>`).join('')}
-<div class="score">Wording overlap with their reply: ${Math.round(r.match * 100)}%</div></div>
+<div class="score">Wording overlap with their reply: ${Math.round(r.match * 100)}% · sells ${r.score.score}/6${r.score.notes.length ? ` (${esc(r.score.notes.join(', '))})` : ''} · theirs ${r.theirs.score}/6${r.d.nextStep ? ` · next step: ${esc(r.d.nextStep)}` : ''}${r.d.rung ? ` · rung: ${esc(r.d.rung)}` : ''}</div></div>
 </div></section>`).join('\n')}
 </main></body></html>`;
 
@@ -162,6 +177,7 @@ fs.writeFileSync(path.join(outDir, 'replay-cases.json'), JSON.stringify(rows.map
   customer: r.item.pending.map((e) => [e.event, e.text].filter(Boolean).join(' ')).join('\n'),
   actual: r.c.actual, suggestion: r.d.reply || '', model: r.d.model || '', status: r.d.status, error: r.d.error || '',
   checks: r.d.checks || [], factsUsed: r.d.factsUsed || [], match: r.match,
+  nextStep: r.d.nextStep || '', rung: r.d.rung || '', score: r.score, theirs: r.theirs,
 })), null, 1));
 
 console.log('\nSummary');
