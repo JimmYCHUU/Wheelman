@@ -19,6 +19,8 @@ export const state = {
   startedAt: Date.now(),
   syncing: false,
   drafting: false,
+  draftAgain: false,    // suggestions were asked for while a pass was under way: one more pass follows it
+  draftRun: null,       // the pass set off by a lead alert, for anyone who needs to wait for it
   lastSync: null,       // { at, ok, message, result }
   alerts: null,         // the dashboard's notification feed: { at, ok, message, newLeads, skipped, triggered }
   vehiclesStale: false, // a notification said a car changed: refresh the vehicle list at the next check
@@ -159,10 +161,12 @@ export function updateOutcomes() {
 }
 
 export async function draftWaiting({ max = 25 } = {}) {
-  if (state.drafting) return 0;
+  // Asked while a pass is under way: that pass began before this request, so one more follows it.
+  if (state.drafting) { state.draftAgain = true; return 0; }
   if (!providers().length) return 0;
   if (Date.now() < state.pausedUntil || Date.now() < state.holdUntil) return 0;
   state.drafting = true;
+  state.draftAgain = false;
   let made = 0;
   try {
     // Dashboard customers first. Marketplace chats follow, within their own allowance,
@@ -209,6 +213,7 @@ export async function draftWaiting({ max = 25 } = {}) {
   } finally {
     state.drafting = false;
   }
+  if (state.draftAgain) return made + await draftWaiting({ max });
   return made;
 }
 
@@ -249,9 +254,22 @@ export async function checkAlerts() {
     if (r.vehicles) state.vehiclesStale = true;
     for (const n of r.leads) if (!leadKnown(n.leadId)) pendingLeads.set(n.leadId, { source: n.source, at: n.at });
     let triggered = false;
-    if ((pendingLeads.size || r.vehicles) && !state.syncing && !state.drafting) {
+    let checks = 0;
+    if (pendingLeads.size || r.vehicles) {
       triggered = true;
-      await cycle();
+      const started = Date.now();
+      // A check already under way began before the feed was read, so it may not carry this lead:
+      // it is waited for, then one more is run. A suggestion being written for someone else does
+      // not hold the check up: the lead is listed as soon as the dashboard has it.
+      const underWay = state.syncing;
+      const busy = state.drafting;
+      await runSync();
+      checks++;
+      if (underWay) { await runSync(); checks++; }
+      // Its suggestion is written in the background (or by one more pass, once the pass under
+      // way ends), so the feed keeps being read every few seconds while the AI answers.
+      state.draftRun = draftWaiting().catch((e) => { logLine('drafting', `Writing suggestions after a lead alert failed: ${e.message}`); return 0; });
+      if (r.leads.length) logLine('alerts', `${r.leads.length} new lead(s) announced by the feed; the dashboard was checked in ${Math.round((Date.now() - started) / 1000)} s${underWay ? ', after the check already under way' : ''}${busy ? ', while a suggestion was being written' : ''}`);
     }
     // After a full check, a lead the feed announced but the Sydney lists do not carry is from
     // another Carbarn site. It is counted and forgotten.
@@ -259,7 +277,7 @@ export async function checkAlerts() {
     if (triggered) for (const [id] of pendingLeads) { if (leadKnown(id)) pendingLeads.delete(id); else { pendingLeads.delete(id); skipped++; } }
     const prev = state.alerts && state.alerts.ok ? state.alerts : null;
     state.alerts = {
-      at: Date.now(), ok: true, triggered,
+      at: Date.now(), ok: true, triggered, checks,
       newLeads: r.leads.length, skipped, skippedTotal: (prev?.skippedTotal || 0) + skipped,
       lastLeadAt: r.leads.length ? Math.max(...r.leads.map((n) => n.at)) : prev?.lastLeadAt || null,
       message: r.first ? 'Lead alerts: reading from here on.' : triggered ? `Lead alerts: ${r.leads.length} new lead(s), checked the dashboard.` : 'Lead alerts: nothing new.',

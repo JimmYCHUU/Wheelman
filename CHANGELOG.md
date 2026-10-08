@@ -62,6 +62,12 @@ and versions follow `MAJOR.MINOR.PATCH`.
   a `PRIVATE_WORDS` list from the environment for CI.
 
 ### Fixed
+- A lead announced by the notification feed while a suggestion was being written for someone
+  else, or while a check was already under way, was not checked for until the next three-minute
+  check, and that check waited for its own drafting to finish first: a new lead could take ten
+  minutes to appear. It is now listed as soon as the dashboard has it, its suggestion follows
+  once the AI is free, and a line in the log says when each announced lead was checked and how
+  long it took.
 - Running the tests no longer overwrites this computer's `voice/examples.json` with the invented
   world's examples, and no longer reads this computer's ratings of the model replies: both are
   pointed at scratch files, so the checks pass whatever has been rated here.

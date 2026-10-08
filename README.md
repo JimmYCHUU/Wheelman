@@ -399,8 +399,10 @@ npm.cmd test                :: the automated checks, no internet needed
 Wheelman checks the dashboard and the Marketplace inbox every three minutes. Between checks it
 reads the dashboard's own notification feed every 45 seconds (`NOTIFICATIONS_SECONDS`; 0 switches
 it off). A new lead announced there sets off a check at once, so the lead's text is in Wheelman
-within about a minute without anyone pressing "Check for new messages now", and a price change
-or a sale refreshes the car list straight away. The feed covers every Carbarn site, but the
+within about a minute without anyone pressing "Check for new messages now", even while a
+suggestion is being written for someone else or a check is already under way; its own suggestion
+follows as soon as the AI is free. A price change or a sale refreshes the car list straight away.
+Each announced lead is noted in `data\wheelman.log` with how long the check took. The feed covers every Carbarn site, but the
 Sydney lead list that the dashboard and Wheelman both read is filtered to the Australian
 platform, so an enquiry from another site (a bare phone number from "Lead Service", say) is
 announced and never listed: Wheelman runs one check for it, finds it is not there, and leaves it

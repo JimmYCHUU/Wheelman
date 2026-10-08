@@ -24,6 +24,18 @@ const LEADS = '/core/user/api/v1/lead/paginated';
 const VEHICLES = '/carbarnau/api/v1/vehicles';
 const FEED = '/carbarnau/api/notifications';
 const hits = (p) => calls.filter((c) => c.path === p).length;
+const draftsFor = (itemKey) => db.openDb().prepare('SELECT COUNT(*) AS n FROM drafts WHERE item_key = ?').get(itemKey).n;
+/** A brand-new enquiry on the dashboard: the lead, its conversation with one text, and the feed entry. */
+function enquiryArrives({ leadId, conversationId, noteId, first, last, phone, text }) {
+  const lead = { ...world.leads.carbarnau[0], id: leadId, conversationId, customerFirstName: first, customerLastName: last, customerPhone: phone, customerEmail: `${first.toLowerCase()}@example.com`, leadDate: sydneyNaive(now - 2 * MIN), updatedAt: sydneyNaive(now - MIN), stocks: ['1201'], inquiries: [] };
+  world.leads.carbarnau.unshift(lead);
+  const shape = world.conversations[0];
+  world.conversations.unshift({
+    row: { ...shape.row, id: conversationId, phoneNumber: `+61${phone.replace(/\D/g, '').slice(1)}`, lead: { id: leadId, customerName: `${first} ${last}`, platform: lead.platform, currentStatus: lead.leadStatus, customerEmail: lead.customerEmail }, latestMessageDirection: 'IN', latestMessageAt: sydneyNaive(now - 2 * MIN), latestMessageBody: text },
+    messages: [{ ...shape.messages[0], id: 9000 + leadId, conversationId, direction: 'IN', body: text, sentBy: null, providerCreatedAt: sydneyNaive(now - 2 * MIN), createdAt: sydneyNaive(now - 2 * MIN + 4000) }],
+  });
+  world.notifications.unshift(note(noteId, 'LEAD_INQUIRY_RECEIVED', `A new inquiry received from ${first} ${last} for stock 1201.`, `/dashboard/leads?leadId=${leadId}`, 'carsales.com.au', MIN));
+}
 const note = (id, type, body, url, actor, agoMs = MIN) => ({ id, type, title: type, body, url, actorUsername: actor, read: false, createdAt: new Date(now - agoMs).toISOString() });
 
 before(async () => {
@@ -68,37 +80,55 @@ test('the first read only records where the feed stands: an old backlog sets off
   assert.deepEqual([s.on, s.everySeconds, s.ok, s.triggered], [true, 30, true, false]);
 });
 
-test('a new lead on the Sydney list sets off a check at once, so its text is in Wheelman within one poll', async () => {
-  // The enquiry arrives on the dashboard: the lead, its conversation with one text, and the feed entry.
-  const lead = { ...world.leads.carbarnau[0], id: 150, conversationId: 250, customerFirstName: 'Noor', customerLastName: 'Test', customerPhone: '0491 570 150', customerEmail: 'noor@example.com', leadDate: sydneyNaive(now - 2 * MIN), updatedAt: sydneyNaive(now - MIN), stocks: ['1201'], inquiries: [] };
-  world.leads.carbarnau.unshift(lead);
-  const first = world.conversations[0];
-  world.conversations.unshift({
-    row: { ...first.row, id: 250, phoneNumber: '+61491570150', lead: { id: 150, customerName: 'Noor Test', platform: lead.platform, currentStatus: lead.leadStatus, customerEmail: lead.customerEmail }, latestMessageDirection: 'IN', latestMessageAt: sydneyNaive(now - 2 * MIN), latestMessageBody: 'Hi, is the Hiace still available?' },
-    messages: [{ ...first.messages[0], id: 9001, conversationId: 250, direction: 'IN', body: 'Hi, is the Hiace still available?', sentBy: null, providerCreatedAt: sydneyNaive(now - 2 * MIN), createdAt: sydneyNaive(now - 2 * MIN + 4000) }],
-  });
-  world.notifications.unshift(note(1003, 'LEAD_INQUIRY_RECEIVED', 'A new inquiry received from Noor Test for stock 1201.', '/dashboard/leads?leadId=150', 'carsales.com.au', MIN));
+test('a new lead on the Sydney list sets off a check at once, so its text is in Wheelman within one poll, and its suggestion follows', async () => {
+  enquiryArrives({ leadId: 150, conversationId: 250, noteId: 1003, first: 'Noor', last: 'Test', phone: '0491 570 150', text: 'Hi, is the Hiace still available?' });
   assert.ok(!db.getLead(150), 'not known before the poll');
 
   const r = await worker.checkAlerts();
-  assert.deepEqual([r.ok, r.triggered, r.newLeads, r.skipped], [true, true, 1, 0]);
+  assert.deepEqual([r.ok, r.triggered, r.checks, r.newLeads, r.skipped], [true, true, 1, 1, 0]);
   assert.ok(db.getLead(150), 'the lead was read');
   assert.ok(db.getConversation(250), 'and its conversation');
   assert.equal(db.getMeta('notifications_last_id', 0), 1003);
   assert.match(r.message, /1 new lead/);
   assert.equal(r.lastLeadAt, Date.parse(world.notifications[0].createdAt));
+  // The suggestion is written in the background, so the feed loop is not held up by the AI.
+  await worker.state.draftRun;
+  assert.ok(draftsFor('c:250') >= 1, 'a suggestion was written for it');
+});
+
+test('a lead announced while a suggestion is being written for someone else is listed at once; its suggestion follows when the AI is free', async () => {
+  enquiryArrives({ leadId: 160, conversationId: 260, noteId: 1004, first: 'Mira', last: 'Test', phone: '0491 570 160', text: 'Is the Hiace automatic?' });
+  worker.state.drafting = true; // a suggestion for someone else is being written
+  const r = await worker.checkAlerts();
+  assert.deepEqual([r.ok, r.triggered, r.checks, r.newLeads], [true, true, 1, 1]);
+  assert.ok(db.getLead(160) && db.getConversation(260), 'listed without waiting for the drafting to end');
+  assert.equal(draftsFor('c:260'), 0, 'nothing written yet: the AI is busy with someone else');
+  assert.equal(worker.state.draftAgain, true, 'one more pass is owed');
+  worker.state.drafting = false; // that suggestion is done
+  await worker.draftWaiting();
+  assert.ok(draftsFor('c:260') >= 1, 'now its suggestion is written');
+  assert.equal(worker.state.draftAgain, false);
+});
+
+test('a lead announced while a check is already under way is checked for again, since that check began before the feed was read', async () => {
+  const underWay = worker.runSync();
+  world.notifications.unshift(note(1005, 'LEAD_INQUIRY_RECEIVED', 'A new inquiry received from 3105550199.', '/dashboard/leads?leadId=170', 'Lead Service', MIN));
+  const r = await worker.checkAlerts();
+  await underWay;
+  assert.deepEqual([r.triggered, r.checks, r.newLeads, r.skipped], [true, 2, 1, 1]);
 });
 
 test('an enquiry from another Carbarn site is announced but never on the Sydney list: one check, counted, then left alone', async () => {
-  world.notifications.unshift(note(1004, 'LEAD_INQUIRY_RECEIVED', 'A new inquiry received from 3105550123.', '/dashboard/leads?leadId=151', 'Lead Service', MIN));
+  world.notifications.unshift(note(1006, 'LEAD_INQUIRY_RECEIVED', 'A new inquiry received from 3105550123.', '/dashboard/leads?leadId=151', 'Lead Service', MIN));
   const before = hits(LEADS);
   let r = await worker.checkAlerts();
-  assert.deepEqual([r.triggered, r.newLeads, r.skipped, r.skippedTotal], [true, 1, 1, 1]);
+  // skippedTotal counts the one announced during the check under way, above, as well.
+  assert.deepEqual([r.triggered, r.newLeads, r.skipped, r.skippedTotal], [true, 1, 1, 2]);
   assert.ok(hits(LEADS) > before, 'the check ran');
   assert.ok(!db.getLead(151), 'and the Sydney list did not carry it');
   const again = hits(LEADS);
   r = await worker.checkAlerts();
-  assert.deepEqual([r.triggered, r.newLeads, r.skipped, r.skippedTotal], [false, 0, 0, 1], 'nothing new: no second check');
+  assert.deepEqual([r.triggered, r.newLeads, r.skipped, r.skippedTotal], [false, 0, 0, 2], 'nothing new: no second check');
   assert.equal(hits(LEADS), again);
 });
 
@@ -106,7 +136,7 @@ test('a change to a car refreshes the vehicle list at the next check instead of 
   const before = hits(VEHICLES);
   await worker.checkAlerts();
   assert.equal(hits(VEHICLES), before, 'the list is fresh, so a quiet poll does not read it');
-  world.notifications.unshift(note(1005, 'VEHICLE_PRICE_UPDATED', 'Vehicle price updated for vehicle 1201 / GDH206-0002.', '/dashboard/au-vehicles?chassisNo=GDH206-0002', 'Staff', MIN));
+  world.notifications.unshift(note(1007, 'VEHICLE_PRICE_UPDATED', 'Vehicle price updated for vehicle 1201 / GDH206-0002.', '/dashboard/au-vehicles?chassisNo=GDH206-0002', 'Staff', MIN));
   const r = await worker.checkAlerts();
   assert.deepEqual([r.triggered, r.newLeads, worker.state.vehiclesStale], [true, 0, false]);
   assert.equal(hits(VEHICLES), before + 1, 'read again at once');
