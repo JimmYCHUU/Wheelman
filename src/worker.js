@@ -13,6 +13,7 @@ import { refreshVoiceBankIfStale } from './voicebank.js';
 import { similarity } from './text.js';
 import { logLine } from './log.js';
 import { pollNotifications, leadKnown } from './notifications.js';
+import { backupIfStale, lastBackup } from './backup.js';
 
 export const state = {
   startedAt: Date.now(),
@@ -224,6 +225,12 @@ export async function cycle() {
   // that is due. These come from the wording file, so no AI is asked and no key is needed.
   try { await prepareOrders(buildOrderItem); } catch (e) { logLine('auction', `Preparing auction orders failed: ${e.message}`); }
   await draftWaiting();
+  // Once a day, a backup of everything that lives only on this computer, in case the window is
+  // never closed properly (a crash, a power cut) and the backup on closing never comes.
+  if (config.backup.on) {
+    try { const b = backupIfStale(); if (b) logLine('backup', `Daily backup written to ${b.file}: ${Math.round(b.bytes / 1024)} KB in ${b.tookMs} ms`); }
+    catch (e) { logLine('backup', `The daily backup failed: ${e.message}`); }
+  }
 }
 
 // Leads the notification feed announced that are not yet on the lists Wheelman reads. A check
@@ -327,6 +334,8 @@ export function statusReport() {
       dailyDrafts: config.marketplace.dailyDrafts,
     },
     phone: phoneStatus(),
+    // Backups: whether they run by themselves, where they go, and the last one written.
+    backup: { on: config.backup.on, dir: config.backup.dir, last: lastBackup() },
     outcomes: { answered: stats.answered || 0, sentAlmostUnchanged: stats.close || 0, sentWithEdits: stats.edited || 0, averageMatch: stats.average ? Math.round(stats.average * 100) : null },
   };
 }

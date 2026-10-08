@@ -33,6 +33,7 @@ purpose.
 - [Non-negotiable rules](#non-negotiable-rules)
 - [Install & run](#install--run)
 - [The daily workflow](#the-daily-workflow)
+- [Backups and another computer](#backups-and-another-computer)
 - [The page](#the-page)
 - [The Marketplace section](#the-marketplace-section)
 - [The Auction section](#the-auction-section)
@@ -326,8 +327,8 @@ Enforced in code, not by convention.
 
 Double-click **Start Wheelman.cmd**. A black window opens and stays open, and the page opens
 in your browser at http://localhost:3210. Leave the window open while you work; the page
-refreshes by itself. Close the window to stop Wheelman. For a desktop shortcut, right-click the
-file, then **Send to > Desktop (create shortcut)**.
+refreshes by itself. Close the window to stop Wheelman: a backup is written as it closes. For a
+desktop shortcut, right-click the file, then **Send to > Desktop (create shortcut)**.
 
 No exe and no installer on purpose: Wheelman has no packages to install. Node.js is all it
 needs.
@@ -404,6 +405,54 @@ Sydney lead list that the dashboard and Wheelman both read is filtered to the Au
 platform, so an enquiry from another site (a bare phone number from "Lead Service", say) is
 announced and never listed: Wheelman runs one check for it, finds it is not there, and leaves it
 alone. The status line says when the feed was last read.
+
+At the end of the day, close the black window. A backup is written on the way out.
+
+## Backups and another computer
+
+Everything Wheelman has learned lives in files on this computer that git never sees: the
+database, the `.env` settings, the staff names, the voice files and the private business
+facts. A backup is one dated zip file holding all of them, such as
+`Wheelman backup 2026-10-08 17.32.05.zip`.
+
+- **By itself.** A backup is written when the black window closes (Ctrl+C, the window's X, or
+  Windows shutting down), and once a day while Wheelman is open, in case it is never closed
+  properly. The welcome panel on the page says when the last one was written.
+- **By hand.** Double-click **Back up Wheelman.cmd**, or run `npm run backup`. This works while
+  Wheelman is open.
+- **Where.** `Documents\Wheelman backups`, outside the Wheelman folder on purpose. The newest
+  20 are kept and the oldest removed. Set `BACKUP_DIR` in `.env` to a folder on a USB drive, or
+  one that OneDrive or Google Drive syncs, so a backup survives the computer. A backup holds the
+  dashboard password and the AI keys from `.env`: keep it where only you can open it.
+- **Left out.** Photos, the downloaded website pages and the raw history, because they can be
+  fetched again.
+
+To use Wheelman on another computer, with everything it has learned:
+
+1. On this computer, double-click **Back up Wheelman.cmd** and copy the newest file from the
+   backup folder to a USB drive.
+2. On the other computer, install Node.js and get the Wheelman folder (clone it from GitHub, or
+   copy this folder across).
+3. Drop the backup file onto **Restore Wheelman.cmd** and type `yes`. With no file dropped on
+   it, it restores the newest backup in that computer's backup folder. Then start Wheelman as
+   usual.
+
+A restore replaces the database, `.env`, the voice files and the private notes with what is in
+the backup, after keeping what was there as a "Wheelman before restore" file in the backup
+folder, so a restore can itself be undone. Wheelman must be closed first; the restore says so
+if it is not.
+
+Two computers learn separately: a reply approved at the office is not known at home until a
+backup is carried across. Carry the newest backup each way and restore it before starting, or
+use Wheelman on one computer at a time. Never put the Wheelman folder itself in a synced folder
+such as OneDrive while Wheelman runs on both computers: the database would be damaged. The
+backup folder is fine to sync.
+
+| Setting in `.env` | What it does | Default |
+|---|---|---|
+| `BACKUPS` | `0` stops the backup on closing and the daily one. **Back up Wheelman.cmd** still works | `1` |
+| `BACKUP_DIR` | Where the backups go | `Documents\Wheelman backups` |
+| `BACKUP_KEEP` | How many to keep; the oldest are removed | `20` |
 
 ## The page
 
@@ -903,6 +952,10 @@ one-off US$10 credit purchase raises that to 1,000.
 |---|---|
 | Double-click `Start Wheelman.cmd` | Runs Wheelman and opens the page |
 | `npm start` | The same, from a terminal |
+| Double-click `Back up Wheelman.cmd` | Writes a backup now, into the backup folder. Works while Wheelman is open |
+| Drop a backup onto `Restore Wheelman.cmd` | Puts that backup back; with nothing dropped on it, the newest one. Wheelman must be closed |
+| `npm run backup` | The same backup, from a terminal |
+| `npm run restore` | The same restore. `-- "C:\path\Wheelman backup ....zip"` names the file |
 | `npm run check-login` | Tests the dashboard login |
 | `npm run check-model` | Tests the AI keys and shows which models answer |
 | `npm run replay` | Compares suggestions with real past replies. `-- 60` for 60 cases, `-- --buyers` or `-- --first` for one kind |
@@ -933,6 +986,7 @@ computer. Git never sees any of it.
 | `eval\out\` | Replay comparisons against real past replies |
 | `knowledge\website\` | Downloaded website pages. Rebuilt with `fetch-website -- --all` |
 | `.playwright-mcp\`, `.impeccable\review\` | Captures and screenshots from building the page |
+| `Documents\Wheelman backups` (outside this folder) | The backups: one dated zip file each, holding the database, `.env`, the staff names, the voice files and the private notes. See [Backups and another computer](#backups-and-another-computer) |
 
 ## Troubleshooting
 
@@ -960,6 +1014,9 @@ computer. Git never sees any of it.
 | "Port 3210 is already in use" | Wheelman is already running in another window | Use that window, or close it |
 | "running scripts is disabled on this system" | Windows PowerShell blocks `npm` | Use the double-click file, or type `npm.cmd` |
 | The page says Wheelman is not responding | The black window was closed | Double-click **Start Wheelman.cmd** again |
+| "The backup could not be written" in the black window or the log | The backup folder is on a drive that is not there, or cannot be written to | Plug the drive in, or set `BACKUP_DIR` in `.env` to a folder that is, then restart |
+| "Wheelman is open. Close its black window first" when restoring | Wheelman holds the database open while it runs | Close the black window, then run the restore again |
+| "This is not a Wheelman backup file" | The file is some other zip, or a backup that was damaged in copying | Use a file from the backup folder, copied again if need be |
 | A change to the code is not showing | The black window still runs the old code | Close it and start again. Page-only changes need just a reload |
 | No vehicle matched | The enquiry had no stock number | The reply asks which car, or answers generally |
 
