@@ -90,6 +90,10 @@ export const COPY = {
   'learned.changed': '{n} {n, one: reply, other: replies} you changed',
   'learned.approved': '{n} you approved',
   'learned.notes': '{n} {n, one: note, other: notes}',
+  'welcome.backup': 'Backed up {when} to {dir}',
+  'welcome.backup.none': 'Not backed up yet. A backup is written when Wheelman closes, and once a day.',
+  'welcome.backup.off': 'Backups are switched off (BACKUPS=0 in the .env file).',
+  'welcome.backup.title': 'One file with the database, the settings, the staff names and the voice files. Copy it to another computer and double-click "Restore Wheelman.cmd" there to carry Wheelman across, with everything it has learned.',
 
   'toast.phoneCopied': 'Phone number copied',
   'toast.checked': '{placeShort} checked',

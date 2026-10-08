@@ -2,8 +2,18 @@
 // keys, and no real address anywhere. Call applyTestEnv() before importing anything from src/,
 // because src/config.js reads process.env once, when it is first imported.
 
+import os from 'node:os';
+import path from 'node:path';
+
 export const BASE_ENV = {
   DB_PATH: ':memory:',
+  // No test writes a backup unless it says so, and never into the real backup folder.
+  BACKUPS: '0',
+  BACKUP_DIR: path.join(os.tmpdir(), `wheelman-test-backups-${process.pid}`),
+  // The example bank and the ratings of the model replies are this computer's own: a check that
+  // runs a cycle rebuilds the bank, so it is built in a scratch file, and the ratings start empty.
+  EXAMPLES_PATH: path.join(os.tmpdir(), `wheelman-test-examples-${process.pid}.json`),
+  MODEL_REPLIES_STATE_PATH: path.join(os.tmpdir(), `wheelman-test-model-replies-${process.pid}.json`),
   SIGN_OFF: 'Regards,\\nTeam Carbarn',
   GEMINI_API_KEY: 'test-key',
   OPENROUTER_API_KEY: '',

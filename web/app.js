@@ -233,6 +233,9 @@ function renderWelcome() {
     learned.approved ? t('learned.approved', { n: learned.approved }) : '',
     learned.notes ? t('learned.notes', { n: learned.notes }) : '',
   ].filter(Boolean);
+  // The last backup: when it was written and where, so a missing one is noticed before it matters.
+  const backup = state.status?.backup || null;
+  const backupLine = !backup ? '' : backup.last ? t('welcome.backup', { when: ago(backup.last.at), dir: backup.dir }) : backup.on ? t('welcome.backup.none') : t('welcome.backup.off');
   chat.replaceChildren(h('div', { class: 'welcome' },
     h('div', { class: 'welcome-mark' }, wheelMark()),
     h('h2', { text: inAuction()
@@ -243,7 +246,8 @@ function renderWelcome() {
       h('li', {}, h('span', {}, h('b', { text: sec.welcome.check }), ' ', t('welcome.checkIt'))),
       h('li', {}, h('span', {}, h('b', { text: t('welcome.copy') }), ' ', sec.welcome.paste))),
     h('p', { text: t('welcome.neverSent') }),
-    bits.length ? h('p', { text: t('welcome.learned', { bits: listOf(bits) }), title: t('welcome.learned.title') }) : null));
+    bits.length ? h('p', { text: t('welcome.learned', { bits: listOf(bits) }), title: t('welcome.learned.title') }) : null,
+    backupLine ? h('p', { text: backupLine, title: t('welcome.backup.title') }) : null));
   state.threadSig = '';
   state.composerSig = '';
 }

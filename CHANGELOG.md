@@ -6,6 +6,15 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- Backups: one dated zip file of everything that lives only on this computer (the database, the
+  `.env` settings, the staff names, the voice files, the private business facts and notes),
+  written when the black window closes, once a day while Wheelman is open, and by hand with
+  **Back up Wheelman.cmd** (`npm run backup`). **Restore Wheelman.cmd** (`npm run restore`) puts
+  one back, on this computer or another, after keeping what was there as a "before restore"
+  file. The folder is `Documents\Wheelman backups` (`BACKUP_DIR`), the newest 20 are kept
+  (`BACKUP_KEEP`), `BACKUPS=0` switches the automatic ones off, and the welcome panel says when
+  the last one was written. The database is now closed cleanly on the way out, so its side file
+  is folded in. The zip is written and read with Node's own zlib: still no dependencies.
 - The dashboard's notification feed is read every 45 seconds (`NOTIFICATIONS_SECONDS`): a new
   lead sets off a check at once, a car's price change or sale refreshes the car list, and an
   enquiry from another Carbarn site, which the Sydney lead list never carries, is counted and
@@ -51,6 +60,11 @@ and versions follow `MAJOR.MINOR.PATCH`.
   file is missing.
 - `check-private` treats the real knowledge files as private, compares the new settings, and takes
   a `PRIVATE_WORDS` list from the environment for CI.
+
+### Fixed
+- Running the tests no longer overwrites this computer's `voice/examples.json` with the invented
+  world's examples, and no longer reads this computer's ratings of the model replies: both are
+  pointed at scratch files, so the checks pass whatever has been rated here.
 
 ## [0.2.0] - 2026-10-06
 

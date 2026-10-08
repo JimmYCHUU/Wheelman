@@ -44,7 +44,7 @@ const SHAPES = [
   ['a GitHub token', /gh[pousr]_[0-9A-Za-z]{30,}/],
   ['a password written out', /password\s*[:=]\s*['"][^'"\s]{4,}['"]/i],
 ];
-const PRIVATE_FILE = /(^|\/)\.env$|^data\/|(^|\/)people\.json$|(^|\/)examples\.json$|^PLAN\.md$|^Auction\.txt$|evidence|\.session|^\.playwright-mcp\/|^eval\/out\/|^knowledge\/website\/|^knowledge\/(business-facts|how-carbarn-works)\.md$/;
+const PRIVATE_FILE = /(^|\/)\.env$|^data\/|(^|\/)people\.json$|(^|\/)examples\.json$|^PLAN\.md$|^Auction\.txt$|evidence|\.session|^\.playwright-mcp\/|^eval\/out\/|^knowledge\/website\/|^knowledge\/(business-facts|how-carbarn-works)\.md$|^backups\/|(^|\/)Wheelman (backup|before restore) .*\.zip$/;
 
 const files = execSync('git ls-files --cached --others --exclude-standard', { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).split('\n').filter(Boolean);
 const problems = [];

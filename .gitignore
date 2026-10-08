@@ -16,6 +16,10 @@ Desktop.ini
 
 # Real customer data — must stay on this computer
 data/
+# Backups go to a folder outside this one by default; never into the repository
+backups/
+Wheelman backup *.zip
+Wheelman before restore *.zip
 .playwright-mcp/
 voice/examples.json
 eval/out/

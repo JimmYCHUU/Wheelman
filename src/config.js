@@ -98,6 +98,16 @@ export const config = {
     staleMinutes: num(env.PHONE_STALE_MINUTES, 10),
   },
 
+  // Backups: one dated zip file of everything that lives only on this computer, written when
+  // Wheelman closes and once a day while it is open. BACKUPS=0 switches that off ("npm run backup"
+  // still works). The folder is outside the Wheelman folder on purpose, so a copy survives the
+  // folder being deleted; point BACKUP_DIR at a USB drive or a synced folder to survive the computer.
+  backup: {
+    on: !/^(0|false|no|off)$/i.test((env.BACKUPS ?? '1').trim()),
+    dir: (env.BACKUP_DIR || '').trim() || path.join(os.homedir(), 'Documents', 'Wheelman backups'),
+    keep: Math.max(1, num(env.BACKUP_KEEP, 20)),
+  },
+
   // Senders that are never customers: a contact saved on the phone under a label, a finance company,
   // a courier, a code sender. A conversation under one of these names is kept but never listed.
   // Matched on the name without spaces or case, so "Credit One" and "creditone" are the same.
