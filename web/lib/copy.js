@@ -54,6 +54,7 @@ export const COPY = {
   'row.newIn.marketplace': '{n, one: conversation with new messages, other: conversations with new messages}',
   'row.newIn.auction': '{n, one: order with something new, other: orders with something new}',
   'row.newIn.standards': '{n, one: model reply not looked at yet, other: model replies not looked at yet}',
+  'standards.done': 'Every model reply is rated. The Standards tab leaves the page until one needs rating again.',
 
   'notice.setup.title': 'Setup is not finished',
   'notice.setup.body': 'Open the file .env, fill in what is listed here, then restart Wheelman.',

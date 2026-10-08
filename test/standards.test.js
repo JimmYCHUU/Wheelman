@@ -192,7 +192,7 @@ test('the Standards section: To rate, Approved and Set aside, in the order of th
   assert.deepEqual([row.section, row.standardStatus, row.car, row.name, row.phone, row.preview.text], ['standards', 'PROPOSED', 'Is it still available', 'Priya', '', 'Hi, is the Noah still available?']);
   assert.deepEqual((await get('/api/items?section=standards&tab=quiet')).items, []);
   assert.deepEqual((await get('/api/items?section=standards&tab=other')).items, []);
-  assert.deepEqual([waiting.sections.standards, waiting.counts.waiting, waiting.total], [5, 5, 5], 'the section is on while scenarios exist');
+  assert.deepEqual([waiting.sections.standards, waiting.counts.waiting, waiting.total], [5, 5, 5], 'the section is on while scenarios wait for a rating');
   const listed = await get('/api/standards');
   assert.deepEqual(listed.counts, { total: 5, toRate: 5, approved: 0, rejected: 0 });
   assert.deepEqual(listed.scenarios.map((s) => [s.key, s.status, s.channel]), [['tr:1', 'PROPOSED', 'sms'], ['tr:2', 'PROPOSED', 'sms'], ['tr:3', 'PROPOSED', 'marketplace'], ['tr:4', 'PROPOSED', 'sms'], ['tr:5', 'PROPOSED', 'sms']]);
@@ -266,6 +266,21 @@ test('Set aside and Put back, from the details panel', async () => {
   assert.ok((await get('/api/items?section=standards&tab=waiting')).items.some((r) => r.key === 'tr:4'));
   assert.equal((await send('/api/standards/4/status', { status: 'MAYBE' })).status, 400);
   assert.equal((await send('/api/standards/99/status', { status: 'REJECTED' })).status, 404);
+});
+
+test('once every model reply is rated the Standards tab leaves the page, and comes back when one needs rating again', async () => {
+  assert.deepEqual((await get('/api/standards')).counts, { total: 5, toRate: 2, approved: 3, rejected: 0 });
+  await post('/api/standards/4/status', { status: 'APPROVED' });
+  await post('/api/standards/5/status', { status: 'APPROVED' });
+  assert.deepEqual((await get('/api/standards')).counts, { total: 5, toRate: 0, approved: 5, rejected: 0 });
+  const gone = await get('/api/items?section=standards&tab=waiting');
+  assert.deepEqual([gone.section, gone.sections.standards, gone.unread.standards], ['dashboard', null, null], 'the Dashboard is answered instead, and the tab is off');
+  assert.deepEqual(mr.modelReplies({ text: 'Is the Noah available?', primary: 'availability', situations: ['availability'], rung: 'interest', channel: 'sms' }, 3).map((p) => p.id), [1, 3], 'the approved ones still set the standard');
+  // A rating taken back, or a scenario added to the file: something to rate again, so the tab is back.
+  await post('/api/standards/4/status', { status: 'PROPOSED' });
+  await post('/api/standards/5/status', { status: 'PROPOSED' });
+  const back = await get('/api/items?section=standards&tab=waiting');
+  assert.deepEqual([back.section, back.sections.standards, back.items.map((r) => r.key)], ['standards', 2, ['tr:4', 'tr:5']]);
 });
 
 test('an approved model reply is shown to the AI as the standard for a message like it, and a lifted sentence is caught', async () => {
