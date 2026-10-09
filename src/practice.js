@@ -24,13 +24,15 @@ const LINK_LABELS = [
   [/https?:\/\/\S*carbarn\.com\.au\/vehicles\/\S+#inspection\S*/gi, '[inspection booking link]'],
   [/https?:\/\/\S*carbarn\.com\.au\/vehicles\/\S+/gi, '[vehicle page link]'],
   [/https?:\/\/\S*carbarn\.com\.au\/live-auction\/\S+/gi, '[live auction link]'],
+  [/https?:\/\/\S*carbarn\.com\.au\/importing\/\S+/gi, '[model page link]'],
+  [/https?:\/\/\S*carbarn\.com\.au\/(?:how-importing-works|how-compliance-works|live-auction)\S*/gi, '[guide page link]'],
   [/https?:\/\/\S*carbarn\.com\.au\/customer-links\/\S+/gi, '[link]'],
   [/https?:\/\/(?:photos\.app\.goo\.gl|photos\.google\.com)\S*/gi, '[photo album link]'],
   [/https?:\/\/(?:maps\.app\.goo\.gl|(?:www\.)?google\.[a-z.]+\/maps)\S*/gi, '[Google Maps link]'],
   [/https?:\/\/\S+/gi, '[link]'],
 ];
 /** A label left in a finished reply means the AI copied an example instead of using the real thing. */
-export const LEFTOVER_LABEL = /\[(?:online video inspection link|inspection booking link|vehicle page link|photo album link|Google Maps link|live auction link|link|amount|then our standard address block|then the auction car: its details, link, bid and cost breakdown)\]/i;
+export const LEFTOVER_LABEL = /\[(?:online video inspection link|inspection booking link|vehicle page link|model page link|guide page link|photo album link|Google Maps link|live auction link|link|amount|then our standard address block|then the auction car: its details, link, bid and cost breakdown)\]/i;
 
 /** Links and dollar amounts belong to the other customer's deal: only what kind of thing it was is kept. */
 export function labelled(text) {
@@ -45,17 +47,33 @@ const SIGN_LINE = [
   /^\p{Lu}[\p{L}'’-]+(\s+\p{Lu}[\p{L}'’-]+)?\s+(from|at|@)\s+carbarn\.?$/iu,
   /^(the\s+)?(team\s+)?carbarn(\s+team)?\.?$/i,
   /^(📞\s*)?(\+?61|0)[\d\s-]{8,12}$/,
+  // The lines an email signature carries under the name: the company, the address, a phone, an
+  // address or website, a title.
+  /^carbarn( pty ltd| australia)?\.?$/i,
+  /^(unit\s+\w+,?\s*)?\d{1,4}([-–]\d{1,4})?\s+frances\s+st(reet)?\b.*$/i,
+  /^lidcombe\b.*$/i,
+  /^(?:m|t|p|ph|phone|mobile|tel|e|email|w|web)\b\s*[:.]\s*\S.*$/i,
+  /^\S+@\S+\.\S+$/,
+  /^(https?:\/\/)?(www\.)?carbarn\.com\.au\/?$/i,
+  /^(sales|sales team|import team|customer service|director|dealer principal|sales (manager|consultant))$/i,
 ];
+// One to three capitalised words on a line of their own: a name, when it follows a regards line.
+const NAME_LINE = /^\p{Lu}[\p{L}'’.-]+(\s+\p{Lu}[\p{L}'’.-]+){0,2}$/u;
+const REGARDS = /^(kind |warm |best |many )?(regards|thanks|thank you|cheers),?\.?$/i;
 
 /**
  * Removes whoever signed the text, whether or not they are in the people file: "Regards, Kim",
- * "Kim from Carbarn", and "Kim from Carbarn here." at the start.
+ * "Kim from Carbarn", "Kim from Carbarn here." at the start, and an email signature's lines.
  */
 function withoutAnySignature(text) {
   const lines = stripSignature(text).split('\n');
   while (lines.length) {
     const last = lines[lines.length - 1].trim();
-    if (last === '' || SIGN_LINE.some((re) => re.test(last))) lines.pop(); else break;
+    const before = lines.length > 1 ? lines[lines.length - 2].trim() : '';
+    if (last === '' || SIGN_LINE.some((re) => re.test(last))) { lines.pop(); continue; }
+    // "Regards,\nSam Lee": the name line goes with the regards line above it.
+    if (NAME_LINE.test(last) && REGARDS.test(before)) { lines.pop(); lines.pop(); continue; }
+    break;
   }
   return lines.join('\n')
     .replace(/[\s,]*(kind |warm |best )?regards,?\s*\p{Lu}[\p{L}'’-]+(\s+(from|at)\s+carbarn)?\.?\s*$/u, '')
@@ -105,6 +123,9 @@ function maskTrailingNames(text) {
     return line.replace(new RegExp(`${last}([.!,]*)\\s*$`), '{{NAME}}$1');
   }).join('\n');
 }
+
+/** The same cleaning, for the email threads the Import Query section learns from (mailpractice.js). */
+export { cleanReply as cleanOurText };
 
 /** How many words a reply has once the greeting and the name are set aside. */
 const substance = (text) => wordCount(String(text || '').replace(/\{\{NAME\}\}/g, ' ').replace(/\b(hi|hello|hey|dear|good (morning|afternoon|evening)|morning)\b/gi, ' ').replace(/[,.!]/g, ' '));

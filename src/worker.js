@@ -115,7 +115,8 @@ export async function runMarketplaceSync() {
 
 /**
  * For each suggestion still open, see whether a reply has since been sent, and compare.
- * Dashboard conversations only: Marketplace suggestions are not tracked and never learned from.
+ * Dashboard conversations and import emails only: Marketplace suggestions are not tracked and
+ * never learned from. An email reply counts when the thread is sent from Gmail again with it in.
  */
 export function updateOutcomes() {
   let n = 0;
@@ -141,10 +142,11 @@ export function updateOutcomes() {
     if (after[0].who !== 'us') { for (const d of drafts) markSuperseded(d.id); continue; }
 
     // Our reply: the texts we sent in a row, up to the customer's next message. Replies are
-    // often split over two or three texts sent within a few minutes.
+    // often split over two or three texts sent within a few minutes; emails over a day.
+    const within = item.channel === 'email' ? 24 * 3600 * 1000 : 15 * 60 * 1000;
     const burst = [];
     for (const e of after) {
-      if (e.who !== 'us' || e.at - after[0].at > 15 * 60 * 1000) break;
+      if (e.who !== 'us' || e.at - after[0].at > within) break;
       burst.push(e);
     }
     const sentText = burst.map((e) => e.text).join('\n');

@@ -18,6 +18,7 @@ import { allVehicles } from './db.js';
 import { saleStage, stageLines } from './selling.js';
 import { modelReplies } from './modelreplies.js';
 import { renderResearch } from './importquery.js';
+import { mailPracticeFor } from './mailpractice.js';
 
 const read = (name) => fs.readFileSync(path.join(config.voiceDir, name), 'utf8').replace(/\r/g, '').trim();
 
@@ -603,6 +604,17 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   // What to say is learned from what the team really sent for similar messages; how to say it
   // comes from the voice. Dashboard conversations only, and never for a Marketplace chat's own text.
   const sent = email ? [] : practiceFor(want, 3, now);
+  // An import email learns what to say from the email threads the owner sent from Gmail: what the
+  // team really wrote back to similar enquiries. Nothing from texts, and never the other way round.
+  const mailSent = email ? mailPracticeFor({ ...want, codes: research?.asked?.codes?.known || [], families: (research?.asked?.families || []).map((f) => f.toLowerCase()) }, 3, now) : [];
+  if (mailSent.length) {
+    P.push('\n=== HOW WE ANSWERED SIMILAR IMPORT EMAILS ===');
+    P.push('Emails our team really sent to other customers who asked something similar. Learn what they say and include: how they open, which facts they give (eligibility, the estimate and its parts, the deposit, the timeline, the inspection before bidding), the order, and how they close. Then write this reply in our voice, in correct English.');
+    P.push('Their facts belong to other customers. Figures and links appear only as labels such as [amount] or [model page link]: every figure and link in your reply comes from RESEARCH FOR THIS IMPORT QUESTION. Never write a label in your reply.');
+    mailSent.forEach((s, n) => {
+      P.push(`Email ${n + 1}${s.firstReply ? ' (a first reply)' : ''}${s.subject ? ` · Subject: ${s.subject.replace(/\s*\n\s*/g, ' ')}` : ''}\n  Customer: ${s.customer.replace(/\s*\n\s*/g, ' / ').slice(0, 400)}\n  We replied: ${s.reply.replace(/\n+/g, ' / ')}`);
+    });
+  }
   if (sent.length) {
     P.push('\n=== WHAT OUR TEAM REALLY SENT FOR SIMILAR MESSAGES ===');
     P.push('Recent replies our team sent to other customers who wrote something similar. Learn from these first: what they chose to say, what they included (the vehicle\'s link, a booking link, the address, a question back), what they left out, the order, and how much they wrote. Then write your reply in the voice described under VOICE, in correct English.');
@@ -673,9 +685,9 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     stage,
     user: P.join('\n'),
     exampleIds: examples.map((e) => e.id),
-    // The model replies join the examples here so a reply lifted from one is caught as copied.
-    exampleReplies: [...examples.map((e) => e.reply), ...models.map((x) => x.reply)],
-    practiceIds: sent.map((s) => s.id),
+    // The model replies and the past emails join the examples here so a reply lifted from one is caught as copied.
+    exampleReplies: [...examples.map((e) => e.reply), ...models.map((x) => x.reply), ...mailSent.map((s) => s.reply)],
+    practiceIds: [...sent.map((s) => s.id), ...mailSent.map((s) => s.id)],
     websiteSources: website.map((w) => w.source),
     alternatives: alts,
     sameModelUrl: sameModel?.url || '',

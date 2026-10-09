@@ -686,6 +686,8 @@ export function buildMailItem(id, { now = Date.now() } = {}) {
   }, timeline, { now, autoDraftMaxAgeHours: config.mail.autoDraftMaxAgeDays * 24 });
   item.imports = null;
   item.isNewEnquiry = false;
+  // Every thread in Import Query is an import enquiry: that comes first, whatever else it touches.
+  item.situation = { ...item.situation, primary: 'import_sourcing', all: ['import_sourcing', ...item.situation.all.filter((s) => s !== 'import_sourcing' && s !== 'general')], label: labelFor('import_sourcing') };
   item.mail = {
     id: t.id, subject: t.subject || '', customerName: t.customer_name || '', customerEmail: t.customer_email || '', ref: t.ref || '',
     messages: t.message_count || 0, collapsed: t.collapsed_count || 0, firstAt: t.first_at || null, lastAt: t.last_at || null,
