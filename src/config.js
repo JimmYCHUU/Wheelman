@@ -98,6 +98,16 @@ export const config = {
     staleMinutes: num(env.PHONE_STALE_MINUTES, 10),
   },
 
+  // Email threads the owner hands in from Gmail with the add-on's "Send to Wheelman" button: the
+  // Import Query section. MAIL_INTAKE=0 switches the intake off. A message from one of these
+  // domains is our side of a thread; everything else is the customer.
+  mail: {
+    switchedOn: !/^(0|false|no|off)$/i.test((env.MAIL_INTAKE ?? '1').trim()),
+    ourDomains: list(env.MAIL_OUR_DOMAINS ?? 'carbarn.com.au').map((d) => d.toLowerCase().replace(/^@/, '')),
+    // An email older than this still shows under Waiting, but no reply is written until asked.
+    autoDraftMaxAgeDays: num(env.MAIL_AUTO_DRAFT_MAX_AGE_DAYS, 7),
+  },
+
   // Backups: one dated zip file of everything that lives only on this computer, written when
   // Wheelman closes and once a day while it is open. BACKUPS=0 switches that off ("npm run backup"
   // still works). The folder is outside the Wheelman folder on purpose, so a copy survives the

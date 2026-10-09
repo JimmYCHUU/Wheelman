@@ -31,6 +31,7 @@ export const state = {
   mpSyncing: false,
   mpSync: null,         // Marketplace: { at, ok, message, result }
   phone: null,          // the phone add-on's last report: { at, threads, stored, signedOut, found, hidden }
+  mail: null,           // the last email thread the Gmail button sent: { at, key, subject, added, updated }
 };
 
 const PHONE_NOTE_GAP_MS = 5 * 60 * 1000;
@@ -42,6 +43,12 @@ export function notePhoneReport(r) {
   state.phone = { at, threads: r.threads || 0, stored: r.stored || 0, signedOut: !!r.signedOut, found: r.found || null, hidden: !!r.hidden, lastStoredAt: r.stored ? at : before?.lastStoredAt || null };
   const persisted = getMeta('phone_last_report', null);
   if (r.stored || !persisted || at - (persisted.at || 0) >= PHONE_NOTE_GAP_MS) setMeta('phone_last_report', state.phone);
+}
+
+/** Notes an email thread handed in from Gmail. These are rare, so each one is written down. */
+export function noteMailReport(out) {
+  state.mail = { at: Date.now(), key: out.key, subject: out.subject || '', added: out.added || 0, updated: out.updated || 0 };
+  setMeta('mail_last_report', state.mail);
 }
 
 const RETRY_FAILED_AFTER_MS = 10 * 60 * 1000;
@@ -177,6 +184,8 @@ export async function draftWaiting({ max = 25 } = {}) {
       marketplaceLeft = Math.max(0, config.marketplace.dailyDrafts - mpDraftsLastDay());
       queue.push(...listItems({ source: 'marketplace', states: ['awaiting'] }));
     }
+    // Email threads from Gmail come last. (Nothing is written for them until the research step is in.)
+    if (config.mail.switchedOn) queue.push(...listItems({ source: 'importquery', states: ['awaiting'] }));
     for (const item of queue) {
       if (made >= max) break;
       const chat = item.channel === 'marketplace';
@@ -342,6 +351,8 @@ export function statusReport() {
     paused: Date.now() < state.pausedUntil,
     ai: { providers: modelStatus(), lastModel: lastModel().model, usedToday: u.total, limit: u.limit },
     syncMinutes: config.syncMinutes,
+    // The Gmail button: whether the intake is on, and the last thread it handed in.
+    mail: { on: config.mail.switchedOn, last: config.mail.switchedOn ? (state.mail || getMeta('mail_last_report', null)) : null },
     // The notification feed: on when a poll interval is set, with the last read's outcome.
     alerts: { on: config.notificationsSeconds > 0, everySeconds: config.notificationsSeconds, ...(state.alerts || {}) },
     marketplace: {

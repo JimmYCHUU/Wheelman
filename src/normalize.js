@@ -23,6 +23,12 @@ export function phoneKey(s) {
   return '';
 }
 
+/** An email address as a match key: trimmed and lower-cased; '' when it is not an address. */
+export function emailKey(s) {
+  const e = String(s ?? '').trim().toLowerCase();
+  return /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(e) ? e : '';
+}
+
 /** Every phone number in the given values (a field can hold two, split by "|", "," or "/"). */
 export function phoneKeys(...values) {
   const out = new Set();

@@ -37,7 +37,8 @@ purpose.
 - [The page](#the-page)
 - [The Marketplace section](#the-marketplace-section)
 - [The Auction section](#the-auction-section)
-- [The phone add-on](#the-phone-add-on)
+- [The Import Query section](#the-import-query-section)
+- [The browser add-on](#the-browser-add-on)
 - [What Wheelman knows](#what-wheelman-knows)
 - [How Wheelman learns](#how-wheelman-learns)
 - [Rules as Carbarn confirmed them](#rules-as-carbarn-confirmed-them)
@@ -378,7 +379,7 @@ blocked by a Windows security setting and shows "running scripts is disabled on 
 In Command Prompt, plain `npm` works.
 
 To catch texts that reach the business phone but not the dashboard, load the browser add-on
-once: see [The phone add-on](#the-phone-add-on).
+once: see [The browser add-on](#the-browser-add-on).
 
 ### Check it worked
 
@@ -705,7 +706,36 @@ that knows their order. This is the one place the section asks an AI, on the bet
 - The live auction is looked at for each order that is still searching, at most once an hour.
 - Nothing is learned from this section. The wording is corrected in its file.
 
-## The phone add-on
+## The Import Query section
+
+Customers also ask about importing by email to the business mailbox: whether a model can be
+imported, what it would land for, how the process works. The mailbox holds much else besides, so
+Wheelman does not read it. Instead you hand each import enquiry over yourself: open the email in
+Gmail, press **Send to Wheelman**, and the whole thread appears in the Import Query section in
+the usual conversation, the customer on the left and the team's replies on the right. Nothing in
+Gmail changes.
+
+- **One press per thread.** The button reads the subject and every message that is open on the
+  page: who sent it, when, and its text, with the quoted history under a reply left out. A
+  message Gmail has folded cannot be read: the row says **Folded in Gmail**, the thread shows
+  where it sits, and pressing **Expand all** in Gmail and then the button again fills it in.
+- **Send it again after you reply.** The same press after replying in Gmail adds the reply to
+  the thread; nothing already there is added twice.
+- **Our side** is any message from an address at `carbarn.com.au` (`MAIL_OUR_DOMAINS`). Everything
+  else is the customer, named from the first such message.
+- **Copy and paste.** A reply is copied from the message box and pasted into your reply in
+  Gmail. Nothing is sent from here.
+- **No suggestions yet.** Suggested replies for emails come with the research step, which
+  looks the model up on the website; until then the section lists and shows the threads.
+- **Nothing is learned** from an email thread, and the example bank never sees one.
+
+| Setting in `.env` | What it does | Default |
+|---|---|---|
+| `MAIL_INTAKE` | Set to `0` to switch the section and the intake off | `1` |
+| `MAIL_OUR_DOMAINS` | The domains whose senders are our side of a thread, comma-separated | `carbarn.com.au` |
+| `MAIL_AUTO_DRAFT_MAX_AGE_DAYS` | An email older than this is listed but not written for unasked | `7` |
+
+## The browser add-on
 
 The dashboard gets its texts through a Pushbullet link to the business phone, and now and then
 one does not arrive. The phone is also paired to Google Messages for web, which shows them all.
@@ -756,7 +786,7 @@ Installing it, once:
 1. In Chrome, open `chrome://extensions` (in Edge, `edge://extensions`), switch on
    **Developer mode** at the top right, press **Load unpacked** and choose the `extension`
    folder inside the Wheelman folder.
-2. Click the puzzle-piece icon in the toolbar and pin **Wheelman phone reader**.
+2. Click the puzzle-piece icon in the toolbar and pin **Wheelman reader**.
 3. Open https://messages.google.com/web in that browser and sign in if it asks. Leave the tab
    open: the add-on pins it, and opens it again at the next start.
 4. In Chrome's settings, under Performance, add `messages.google.com` to **Always keep these
@@ -771,10 +801,25 @@ longer be read, the icon says so, and **Copy page details** copies the shape of 
 element names, no words) to fix the reader with. The names it looks for are in one table at
 the top of `extension/reader.js`.
 
+### Send to Wheelman in Gmail
+
+The same add-on puts a **Send to Wheelman** button at the bottom right of Gmail while an email
+is open. Pressing it reads that conversation and hands it to Wheelman for the Import Query
+section; see [The Import Query section](#the-import-query-section) for what happens then. It
+reads only when pressed, and it never clicks, marks read, types or sends anything in Gmail.
+
+After updating Wheelman, open `chrome://extensions`, press the add-on's reload arrow, and accept
+the new permission for mail.google.com when Chrome asks. The button says in plain words what
+happened: "Sent to Wheelman · 3 messages", "Wheelman is not running on this computer", or why
+Wheelman refused the thread. If Gmail's page has changed and the email cannot be read, the
+button offers **Copy page details** (the add-on's icon has the same under "Copy Gmail page
+details"), which copies the shape of the page, element names only, to fix the table at the top
+of `extension/mail.js` with.
+
 | Setting in `.env` | What it does | Default |
 |---|---|---|
-| `PHONE_ADDON` | Set to `0` to stop taking the add-on's reports | `1` |
-| `PHONE_ADDON_ID` | The add-on's id as `chrome://extensions` shows it, so no other add-on is listened to | Empty: any add-on on this computer |
+| `PHONE_ADDON` | Set to `0` to stop taking the phone reader's reports | `1` |
+| `PHONE_ADDON_ID` | The add-on's id as `chrome://extensions` shows it, so no other add-on is listened to, on either of its routes | Empty: any add-on on this computer |
 | `PHONE_STALE_MINUTES` | After this long without a report, the page says the add-on has gone quiet | `10` |
 | `IGNORED_SENDERS` | Senders that are never customers and are never listed: a contact saved on the phone under a label, a finance company, a courier. Comma-separated; spaces and case are ignored | `Not customer, OTP, Delivery Service, Autotrader, CreditOne` |
 
@@ -792,6 +837,7 @@ Wheelman only states facts it has been given.
 | Auction orders: the stage, what was asked for, the car, what is charged and paid | The dashboard | Read every few minutes |
 | The wording of messages to auction customers | `voice/auction-messages.md`, `voice/auction-offer.md` | You edit them |
 | Texts that reached the business phone but not the dashboard | The phone add-on, reading Google Messages for web in your browser | Every 30 seconds while the browser is open |
+| Import enquiries that came by email | The Send to Wheelman button in Gmail, pressed by you on an open email | When you press it |
 
 In `knowledge/business-facts.md` each topic is marked `CONFIRMED` (stated freely), `WORKING`
 (in use, please check) or `NEEDS ANSWER` (Wheelman says nothing and leaves a blank). Write the
@@ -960,6 +1006,11 @@ one-off US$10 credit purchase raises that to 1,000.
   latest text of each conversation and its time. Nothing more: no photos, no other contact
   details. The texts are never learned from, and go through the same removal of details as
   any other before an AI sees one.
+- From an email thread you send from Gmail, Wheelman stores the subject, and for each message
+  the sender's name and address, the time, the text with the quoted history removed, and how
+  many attachments it had. Never the HTML, the attachments, the recipients or anything about
+  the Gmail account. The customer's address is kept readable, as it is for an auction order,
+  so the page can show and copy it; it is removed like any other before an AI sees the text.
 - `.env` holds the dashboard password and the AI keys. Git never sees it.
 - The folders that hold real customer details are listed under
   [Where your files live](#where-your-files-live). Git never sees those either.
@@ -1028,6 +1079,9 @@ computer. Git never sees any of it.
 | "The phone add-on has not reported since …" | Chrome is closed, the Messages tab is closed, or the browser put it to sleep | Open Chrome with the Messages tab in it. The add-on's icon gives the reason |
 | "Messages for web is signed out" | Google signs a computer out after weeks without use | Open the Messages tab and sign in again (whoever has the phone taps the matching emoji) |
 | "The phone add-on could not read the Messages list" | Google changed its page | Click the add-on's icon, press **Copy page details**, and keep what it copied for fixing the table at the top of `extension/reader.js` |
+| The Gmail button says "Could not read this email" | Google changed its page, or nothing is open | Open the email, then press the button again. If it still fails, press **Copy page details** under the button and keep what it copied for fixing the table at the top of `extension/mail.js` |
+| The Gmail button says "Wheelman refused it" | The thread could not be checked (nothing readable in it, or the intake is off) | The reason follows the words. A thread with every message folded: press **Expand all** in Gmail first |
+| A thread's row says "Folded in Gmail" | Gmail had one or more messages folded when the button was pressed | In Gmail, press **Expand all**, then **Send to Wheelman** again |
 | The add-on's icon says "Wheelman is not running" | The black window is closed | Double-click **Start Wheelman.cmd** |
 | "Port 3210 is already in use" | Wheelman is already running in another window | Use that window, or close it |
 | "running scripts is disabled on this system" | Windows PowerShell blocks `npm` | Use the double-click file, or type `npm.cmd` |
@@ -1044,7 +1098,7 @@ computer. Git never sees any of it.
 npm.cmd test
 ```
 
-268 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
+276 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
 a stand-in auction feed on this computer: who counts as waiting and who does not, stock numbers matched to the right
 car however a portal writes them (a year in front, a portal code, upper or lower case), that
 no customer detail and no cost figure reaches the AI request, an invented price
@@ -1110,7 +1164,13 @@ unknown numbers with nothing written unasked, codes and sender ids set aside, a 
 matched by its name; a Phone only conversation moving under the dashboard's key with its
 suggestion and marks; and a reply
 typed on the phone counting as sent after a grace period, teaching nothing and kept out of the
-example bank.
+example bank. The Import Query section: the Gmail button's parser reading addresses in three
+forms, dates, and bodies with the quoted history cut; a thread taken only from the add-on, on
+its own route, with its own header; limits, time clamps and which side a sender is on; a thread
+sent again adding only what is new, a folded message filled in, and threads without Gmail's ids
+still told apart; a thread as an item (waiting, answered, an "unsubscribe" footer not an
+opt-out); the section's lists, counts and search, and the section off with the intake;
+dismiss, seen and put back; and nothing from a thread reaching what Wheelman has learned.
 
 ## Project layout
 
@@ -1119,8 +1179,9 @@ wheelman/
 ├── Start Wheelman.cmd                 one click: start and open the page
 ├── .env.example                       settings; copy to .env
 ├── PRODUCT.md · DESIGN.md             who the page is for, and how it looks
-├── extension/                         the phone add-on for Chrome or Edge, loaded unpacked once:
-│                                      manifest · background · reader · parse · popup
+├── extension/                         the browser add-on for Chrome or Edge, loaded unpacked once:
+│                                      manifest · background · reader · parse · popup (the phone)
+│                                      · mail · mailparse · shape (the Send to Wheelman button in Gmail)
 ├── knowledge/
 │   ├── business-facts.md              what Wheelman may state, topic by topic
 │   ├── how-carbarn-works.md           the steps of a sale and the usual answers
@@ -1148,6 +1209,7 @@ wheelman/
 │   ├── ordermessages.js               the messages for an order, from the wording file; replies to pasted messages
 │   ├── templates.js                   reads the wording files and fills them in
 │   ├── phone.js                       the phone add-on's reports: checked, kept, matched by number
+│   ├── mail.js                        email threads from the Gmail button: checked, kept, merged
 │   ├── sync.js · normalize.js         what is read, and what is kept of it
 │   ├── items.js                       who is waiting: one shape for a lead and a Marketplace chat
 │   ├── situations.js · text.js        what a message is about, by keyword rules

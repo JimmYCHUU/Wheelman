@@ -18,7 +18,8 @@ import { RUNG_LABELS } from './selling.js';
 import { loadModelReplies, scenarioOf, scenarioItem, setScenarioStatus, standardsCounts, modelRepliesStamp, STATUSES } from './modelreplies.js';
 import { assessProposed } from './drafter.js';
 import { insertDraft } from './db.js';
-import { comparable, currentText } from './learn.js';
+import { comparable, currentText, canLearnFrom } from './learn.js';
+import { validateMailReport, storeMailThread } from './mail.js';
 import { oldRowsStamp, messageMedia } from './db.js';
 import { logLine } from './log.js';
 import { businessFactsForPrompt, loadBusinessFacts } from './knowledge.js';
@@ -59,11 +60,15 @@ function readBody(req, limit = 100000) {
   });
 }
 
+// The two routes the browser add-on (extension/) may post to, each with its own header: the phone
+// reader's reports, and an email thread from the Send to Wheelman button in Gmail.
+const ADDON_ROUTES = [[/^\/api\/phone\//, 'x-wheelman-phone'], [/^\/api\/mail\//, 'x-wheelman-mail']];
+
 /**
- * Only this computer's own browser page may use the app. The one exception is the phone add-on
- * (extension/), which reports from a browser add-on's own origin: it is let in on its own route
- * only, with its own header (an ordinary web page cannot add one without a preflight request, which
- * this server never answers), and only when PHONE_ADDON_ID, if set, names it.
+ * Only this computer's own browser page may use the app. The one exception is the browser add-on
+ * (extension/), which reports from a browser add-on's own origin: it is let in on its two routes
+ * only, each with its own header (an ordinary web page cannot add one without a preflight request,
+ * which this server never answers), and only when PHONE_ADDON_ID, if set, names it.
  */
 function allowed(req, pathname = '') {
   const host = String(req.headers.host || '');
@@ -71,9 +76,10 @@ function allowed(req, pathname = '') {
   if (req.method !== 'GET') {
     const origin = String(req.headers.origin || '');
     const json = /application\/json/i.test(String(req.headers['content-type'] || ''));
-    if (/^\/api\/phone\//.test(pathname) && /^chrome-extension:\/\/[a-p]{32}$/.test(origin)) {
+    const route = ADDON_ROUTES.find(([re]) => re.test(pathname));
+    if (route && /^chrome-extension:\/\/[a-p]{32}$/.test(origin)) {
       if (config.phone.addonId && origin !== `chrome-extension://${config.phone.addonId}`) return false;
-      return req.headers['x-wheelman-phone'] === '1' && json;
+      return req.headers[route[1]] === '1' && json;
     }
     if (origin && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return false;
     if (!json) return false;
@@ -130,10 +136,13 @@ function summary(item) {
   const lastShown = [...item.timeline].reverse().find((e) => !e.internal) || last;
   return {
     key: item.itemKey,
-    section: item.standard ? 'standards' : item.channel === 'marketplace' ? 'marketplace' : 'dashboard',
+    section: item.standard ? 'standards' : item.channel === 'marketplace' ? 'marketplace' : item.channel === 'email' ? 'importquery' : 'dashboard',
     // A model reply's scenario: its title and where it stands with the owner.
     standardStatus: item.standard?.status || null,
     account: item.marketplace?.account || '',
+    // An email thread: the customer's address, and how many of its messages Gmail had folded.
+    email: item.mail?.customerEmail || '',
+    collapsed: item.mail?.collapsed || 0,
     needsPerson: !!item.marketplace?.needsPerson,
     replyComing: !!item.marketplace?.replyComing,
     anchor: item.anchorKey,
@@ -152,7 +161,7 @@ function summary(item) {
     unread: item.state === 'awaiting' && !isSeen(item.itemKey, item.anchorKey) && (item.lastInboundAt || 0) >= Date.now() - RECENT_HOURS * 3600e3 ? item.pending.length : 0,
     preview: { who: lastShown.who, text: lastShown.text || lastShown.event || (lastShown.media ? 'Photo' : ''), media: lastShown.media || null },
     flag: flagLevel(draft),
-    car: item.standard ? item.standard.title : item.vehicles[0]?.title || item.marketplace?.listingTitle || (item.imports ? wantedFrom(item).car : ''),
+    car: item.standard ? item.standard.title : item.mail ? (item.mail.car || item.mail.subject) : item.vehicles[0]?.title || item.marketplace?.listingTitle || (item.imports ? wantedFrom(item).car : ''),
   };
 }
 
@@ -198,6 +207,13 @@ function marketplaceOf(item) {
     autoReply: e.enabled, stage: e.stage, locked: e.locked, lockReason: e.lockReason, lockDetail: e.lockDetail,
     urgency: e.urgency, nextAction: e.nextAction, notes: e.notes,
   };
+}
+
+/** What the page shows about an email thread, beyond the messages. */
+function mailOf(item) {
+  const m = item.mail;
+  if (!m) return null;
+  return { subject: m.subject, customerName: m.customerName, customerEmail: m.customerEmail, messages: m.messages, collapsed: m.collapsed, firstAt: m.firstAt, lastAt: m.lastAt, car: m.car, draftsOff: !!m.draftsOff };
 }
 
 /** How the car is described in the strip under the customer's name. */
@@ -282,7 +298,7 @@ function presentOrder(item) {
   const shown = item.timeline.slice(-THREAD_LIMIT);
   return {
     ...summary(item),
-    note: '', channel: 'auction', marketplace: null,
+    note: '', channel: 'auction', marketplace: null, mail: null, teaches: false,
     firstName: firstNameOf(item.lead), source: 'Auction order', leadStatus: '', location: '', email: item.lead.email || '',
     noLead: false, autoDraft: false, autoReason: '', firstReply: item.isFirstReply, looking: null, vehicle: null,
     order: orderOf(item),
@@ -302,6 +318,9 @@ function present(item) {
     note: item.note,
     channel: item.channel,
     marketplace: marketplaceOf(item),
+    mail: mailOf(item),
+    // Whether the teaching buttons (Good reply, Could be better) belong here: the one gate in learn.js decides.
+    teaches: !!item.standard || canLearnFrom(item.itemKey),
     firstName: firstNameOf(item.lead || {}),
     source: item.lead?.source || '',
     leadStatus: item.lead?.status || '',
@@ -320,12 +339,13 @@ function present(item) {
   };
 }
 
-const SECTIONS =['dashboard', 'marketplace', 'auction', 'standards'];
+const SECTIONS = ['dashboard', 'marketplace', 'auction', 'importquery', 'standards'];
 // Standards: the model replies, on the page only while one is waiting for a rating. Once every
 // one is approved or set aside the tab goes (the approved ones still set the standard), and it
 // comes back when the file gains a scenario or "Could be better" writes one again.
-const sectionOn = (s) => (s === 'marketplace' ? config.marketplace.enabled : s === 'standards' ? standardsCounts().toRate > 0 : true);
-const KEY = '((?:c|l|mp|ao|ph|tr):\\d+)';
+// Import Query: email threads sent from Gmail; off when the intake is switched off.
+const sectionOn = (s) => (s === 'marketplace' ? config.marketplace.enabled : s === 'standards' ? standardsCounts().toRate > 0 : s === 'importquery' ? config.mail.switchedOn : true);
+const KEY = '((?:c|l|mp|ao|ph|tr|em):\\d+)';
 const itemRoute = (tail = '') => new RegExp(`^/api/items/${KEY}${tail}$`);
 
 const listCache = new Map();
@@ -440,6 +460,16 @@ async function api(req, res, url) {
   }
 
   if (req.method === 'GET' && p === '/api/phone/status') return send(res, 200, worker.statusReport().phone);
+
+  // The Send to Wheelman button in Gmail hands over one email thread. See allowed() for who may call this.
+  if (req.method === 'POST' && p === '/api/mail/threads') {
+    if (!config.mail.switchedOn) return send(res, 403, { error: 'The email intake is switched off (MAIL_INTAKE=0 in the .env file).' });
+    let report;
+    try { report = validateMailReport(await readBody(req, 3000000)); } catch (e) { return send(res, 400, { error: e.message === 'too large' ? 'The thread is too large to take in.' : e.message === 'bad json' ? 'The thread could not be read.' : e.message }); }
+    const out = storeMailThread(report);
+    worker.noteMailReport(out);
+    return send(res, 200, { ok: true, ...out, serverTime: Date.now() });
+  }
 
   if (req.method === 'GET' && p === '/api/items') {
     const tab = ['all', 'waiting', 'quiet', 'other'].includes(url.searchParams.get('tab')) ? url.searchParams.get('tab') : 'waiting';

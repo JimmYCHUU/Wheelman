@@ -42,9 +42,26 @@ function paint(last) {
   $('#open').hidden = !w.noTab;
 }
 
+/** The last email thread the Gmail button sent, in a line. */
+function mailWords(m) {
+  if (!m) return { text: 'Gmail: nothing sent yet. Open an email and press Send to Wheelman.', bad: false };
+  const n = m.messages || 0;
+  const what = `"${(m.subject || 'no subject').slice(0, 60)}" ${ago(m.at)} · ${n} message${n === 1 ? '' : 's'}`;
+  if (m.ok) return { text: `Gmail: sent ${what}.${m.collapsed ? ` ${m.collapsed} folded: press Expand all in Gmail and send again.` : ''}`, bad: false };
+  const why = m.problem === 'no-wheelman' ? 'Wheelman is not running on this computer.' : m.problem === 'refused' ? `Wheelman did not accept it: ${m.error || ''}` : m.error || 'Something went wrong.';
+  return { text: `Gmail: could not send ${what}. ${why}`, bad: true };
+}
+
+function paintMail(lastMail) {
+  const w = mailWords(lastMail);
+  $('#mail').textContent = w.text;
+  $('#mail').classList.toggle('bad', w.bad);
+}
+
 async function load() {
-  const { last } = await chrome.storage.local.get('last');
+  const { last, lastMail } = await chrome.storage.local.get(['last', 'lastMail']);
   paint(last);
+  paintMail(lastMail);
 }
 
 $('#read').addEventListener('click', async () => {
@@ -69,5 +86,19 @@ $('#shape').addEventListener('click', async () => {
   }
 });
 
-chrome.storage.onChanged.addListener((changes) => { if (changes.last) paint(changes.last.newValue); });
+$('#mailShape').addEventListener('click', async () => {
+  const out = await chrome.runtime.sendMessage({ type: 'mailShape' });
+  if (!out || out.error) { $('#mail').textContent = (out && out.error) || 'Could not read the Gmail page.'; return; }
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(out, null, 1));
+    $('#mail').textContent = `Copied the shape of the Gmail page (${out.containers} message${out.containers === 1 ? '' : 's'} found). Paste it where the reader is being fixed.`;
+  } catch {
+    $('#mail').textContent = 'The clipboard could not be used.';
+  }
+});
+
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.last) paint(changes.last.newValue);
+  if (changes.lastMail) paintMail(changes.lastMail.newValue);
+});
 load();

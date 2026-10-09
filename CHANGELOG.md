@@ -6,6 +6,16 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- The Import Query section: import enquiries that arrive by email. The browser add-on gains a
+  **Send to Wheelman** button in Gmail; pressed on an open email, it hands the whole thread
+  (subject, each message's sender, time and text, with the quoted history removed) to Wheelman,
+  which lists it under the new section and shows it in the usual thread, the customer on the
+  left and the team's replies on the right. Sent again after a reply, only what is new is added,
+  and a message Gmail had folded is filled in. Our side is any sender at `@carbarn.com.au`
+  (`MAIL_OUR_DOMAINS`); `MAIL_INTAKE=0` switches the intake off. Nothing is learned from a thread
+  and no reply is written for one yet: that comes with the research step. The add-on is now
+  "Wheelman reader", with a second route and header for Gmail; four section tabs sit two by two,
+  and five (with Standards) put Standards on a full third row.
 - Marketplace replies are sent from the page. **Send reply** in a Marketplace chat hands the
   text in the box to the content engine's own reply address, the one its inbox page uses, and
   the engine's phone types it into the chat. The reply shows in the conversation marked

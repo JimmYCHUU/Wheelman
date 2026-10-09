@@ -38,6 +38,8 @@ export function rowTags(r, state) {
     return tags;
   }
   if (r.phoneOnly) tags.push({ text: t('tag.phoneOnly'), tone: 'neutral' });
+  // An email thread with a message Gmail had folded, so part of it could not be read.
+  if (r.collapsed) tags.push({ text: t('tag.folded'), tone: 'warning' });
   if (setAside) tags.push({ text: t('tag.dismissed'), tone: 'neutral' });
   else if (order && r.due) tags.push({ text: String(r.due).replace(/^Send:\s*/i, 'Due: '), tone: r.dueKind === 'reply' ? 'info' : 'warning' });
   else if (r.flag === 'fail') tags.push({ text: t('tag.check'), tone: 'danger' });
@@ -143,7 +145,7 @@ export function mountListColumn(root, store, actions) {
       const unread = r.key === state.selected || setAside ? 0 : r.unread || 0;
       const preview = order ? (r.dueKind === 'reply' ? r.preview.text : r.stage) : r.preview.media && !r.preview.text ? t('row.photo') : r.preview.text;
       const row = Row({
-        key: r.key, name: r.name, title: r.phone || sec.unknown, time: r.lastAt, car: (state.section !== 'dashboard') ? r.car : '',
+        key: r.key, name: r.name, title: r.phone || r.email || sec.unknown, time: r.lastAt, car: (state.section !== 'dashboard') ? r.car : '',
         tags: rowTags(r, state), prefix: !order && r.preview.who === 'us' ? t('row.you') : '', preview, unread,
         selected: r.key === state.selected, onOpen: actions.open,
       });

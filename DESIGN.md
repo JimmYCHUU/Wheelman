@@ -496,10 +496,13 @@ A small label in front of a row's preview text, used for "Dismissed" under No re
 - **Style:** Panel Mist ground, Muted text at 0.75rem / 650, 0.25rem corners, 0.375rem side padding. It sits inline with the preview and never changes the row's height. A dismissed row shows no number badge and is not bold.
 
 ### Section switch
-Up to three segments under the brand block: Dashboard, Marketplace and Auction. It chooses which list is shown; they are never mixed. A section that is switched off has no segment, and the others share the width.
+Up to five segments under the brand block: Dashboard, Marketplace, Auction, Import Query and, while a model reply waits for a rating, Standards. It chooses which list is shown; they are never mixed. A section that is switched off has no segment, and the others share the width: three in one row, four two by two, and five with Standards (always the last) on a full-width third row.
 - **Style:** a Panel Mist track with 0.75rem corners and 0.1875rem padding, holding equal segments 2.125rem tall with 0.5625rem corners. Labels are Muted at 0.875rem / 500. A badge after each label counts who is waiting there, and is hidden at zero.
 - **State:** the selected segment takes the list ground (white in light, the open-row colour in dark), Ink text at 650 and the hairline shadow in light. Exactly one is selected. Hover on the other segment darkens its label. Press scales to 0.97.
 - **Behaviour:** switching resets the filter to the first chip, clears the search and closes the open chat. In Marketplace the "Not customers" chip is hidden. In Auction the three chips read To do, In progress and Finished. Every conversation and every order is listed, newest first; there is no time window.
+
+### Import Query
+An email thread uses the same three columns as a conversation. The row carries the subject on the car line, the address stands in for a missing name, and a "Folded in Gmail" tag in amber marks a thread with a message Gmail had folded. The header reads "Email · subject". Customer bubbles say "via Email"; ours carry the sender's name from Gmail, or "Sent from Gmail". The details panel adds an Import Query block (subject, address with copy, message count, first and latest) and a Research notes heading for what the website said about the model asked about.
 
 ### Auction orders
 An order uses the same three columns as a conversation, with these differences.
