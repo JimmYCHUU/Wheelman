@@ -1,6 +1,6 @@
 // Builds the list of "work items": customers who have said something and are waiting for a reply.
 
-import { openDb, getLead, getLeadByConversation, getLeadByPhone, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor } from './db.js';
+import { openDb, getLead, getLeadByConversation, getLeadByPhone, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor, getMailThread, getMailMessages, listMailThreads } from './db.js';
 import { orderKey, orderMarks, orderStatus, orderRow, occasionFor, MESSAGES } from './orders.js';
 import { sameMessage, windowFor } from './phone.js';
 import { phoneKeys } from './normalize.js';
@@ -241,7 +241,7 @@ function findVehicles(lead, timeline, deal = null, pending = []) {
  * and Marketplace chats.
  * base: { itemKey, channel, lead, hasLeadRecord, conversation, conversationId, phone }
  */
-export function finishItem(base, timeline, { now = Date.now() } = {}) {
+export function finishItem(base, timeline, { now = Date.now(), autoDraftMaxAgeHours = config.autoDraftMaxAgeHours } = {}) {
   const { lead, hasLeadRecord } = base;
 
   let lastUs = -1;
@@ -262,7 +262,8 @@ export function finishItem(base, timeline, { now = Date.now() } = {}) {
     const last = pending[pending.length - 1];
     const meaningful = pending.filter((e) => e.event || e.media || (e.text && !isAcknowledgement(e.text)));
     menu = previousOut ? menuReply(last.text, previousOut.text) : null;
-    if (pending.some((e) => isOptOut(e.text))) { state = 'optout'; note = 'Customer asked not to be contacted. Do not reply.'; }
+    // An email's footer may say "unsubscribe" under a long message: only a short email is an opt-out.
+    if (pending.some((e) => isOptOut(e.text) && (base.channel !== 'email' || squash(e.text).length <= 160))) { state = 'optout'; note = 'Customer asked not to be contacted. Do not reply.'; }
     else if (menu?.notLooking) { state = 'closed'; note = 'Customer chose "no longer looking". No reply needed.'; }
     else if (!meaningful.length) { state = 'ack'; note = 'Customer only said thanks or OK. No reply needed.'; }
     else if (isAutomatedNotice(pending)) { state = 'other'; note = 'An automatic notice (a login code, voicemail or missed call), not a message from a customer.'; }
@@ -300,9 +301,10 @@ export function finishItem(base, timeline, { now = Date.now() } = {}) {
   let autoReason = '';
   if (autoDraft && mediaOnly) { autoDraft = false; autoReason = 'The customer sent a photo or attachment with no words. The agent cannot see photos, so nothing was written automatically.'; }
   else if (autoDraft && !known) { autoDraft = false; autoReason = 'This number has no customer record, so nothing was written automatically. If it is a customer, choose Write it now.'; }
-  else if (autoDraft && now - (last.at || 0) > config.autoDraftMaxAgeHours * 60 * MIN) {
+  else if (autoDraft && now - (last.at || 0) > autoDraftMaxAgeHours * 60 * MIN) {
     autoDraft = false;
-    autoReason = 'This message is more than a day old, so nothing was written automatically. If it still needs a reply, choose Write it now.';
+    const age = autoDraftMaxAgeHours >= 48 ? `more than ${Math.round(autoDraftMaxAgeHours / 24)} days old` : 'more than a day old';
+    autoReason = `This message is ${age}, so nothing was written automatically. If it still needs a reply, choose Write it now.`;
   }
 
   return {
@@ -632,20 +634,71 @@ export function buildPhoneItem(id, { now = Date.now() } = {}) {
   return item;
 }
 
-/** Finds an item by its key: c:<conversation>, l:<lead>, mp:<Marketplace chat>, ao:<auction order> or ph:<phone conversation>. */
+// ---- email threads from Gmail (the Import Query section) -----------------------------------
+
+/** One email of a thread, as a timeline entry. Key mm:<id>. */
+function mailEntry(r) {
+  const ours = r.direction === 'OUT';
+  const text = String(r.text || '').trim();
+  return {
+    who: ours ? 'us' : 'customer',
+    via: 'Email',
+    text,
+    // A message Gmail had folded has no text to show; the entry stands in its place and says so.
+    event: r.collapsed && !text ? 'A message Gmail had folded: in Gmail, press Expand all, then Send to Wheelman again.' : '',
+    media: r.attachments ? 'attachment' : null,
+    at: r.at,
+    by: ours ? (r.from_name || r.from_email || '') : null,
+    key: `mm:${r.id}`,
+    approx: !!r.approx,
+  };
+}
+
+/**
+ * One email thread the owner sent from Gmail, in the same shape as a dashboard item. Key em:<id>.
+ * The customer is whoever first wrote from an address that is not ours. Nothing is matched to the
+ * dashboard yet, and nothing is written for it unasked: suggested replies for emails come with
+ * the research step.
+ */
+export function buildMailItem(id, { now = Date.now() } = {}) {
+  const t = getMailThread(Number(id));
+  if (!t || !config.mail.switchedOn) return null;
+  const timeline = getMailMessages(t.id).map(mailEntry).filter((e) => e.text || e.media || e.event);
+  if (!timeline.length) return null;
+  const [first, ...rest] = String(t.customer_name || '').trim().split(/\s+/);
+  const lead = { id: null, first_name: first || '', last_name: rest.join(' '), phone: '', email: t.customer_email || '', status: '', platform: '', source: 'Email', state: '', stocks: [], inquiries: [], statusHistory: [], nameOnly: true };
+  const item = finishItem({
+    itemKey: `em:${t.id}`, channel: 'email', lead, hasLeadRecord: true,
+    conversation: null, conversationId: null, phone: '',
+  }, timeline, { now, autoDraftMaxAgeHours: config.mail.autoDraftMaxAgeDays * 24 });
+  item.imports = null;
+  item.isNewEnquiry = false;
+  // Until the research step is in, no reply is written for an email, asked or unasked.
+  item.autoDraft = false;
+  item.autoReason = 'Suggested replies for emails come with the next update. For now, reply in Gmail as usual.';
+  item.mail = {
+    id: t.id, subject: t.subject || '', customerName: t.customer_name || '', customerEmail: t.customer_email || '', ref: t.ref || '',
+    messages: t.message_count || 0, collapsed: t.collapsed_count || 0, firstAt: t.first_at || null, lastAt: t.last_at || null,
+    car: '', draftsOff: true,
+  };
+  return item;
+}
+
+/** Finds an item by its key: c:<conversation>, l:<lead>, mp:<Marketplace chat>, ao:<auction order>, ph:<phone conversation>, tr:<model reply> or em:<email thread>. */
 export function itemFromKey(key, opts = {}) {
-  const m = String(key || '').match(/^(c|l|mp|ao|ph|tr):(\d+)$/);
+  const m = String(key || '').match(/^(c|l|mp|ao|ph|tr|em):(\d+)$/);
   if (!m) return null;
   const id = Number(m[2]);
   if (m[1] === 'mp') return buildMarketplaceItem(id);
   if (m[1] === 'ao') return buildOrderItem(id, opts);
   if (m[1] === 'ph') return buildPhoneItem(id);
   if (m[1] === 'tr') return scenarioItem(id, opts); // a model reply's invented scenario
+  if (m[1] === 'em') return buildMailItem(id);
   return buildItem(m[1] === 'c' ? { conversationId: id } : { leadId: id });
 }
 
 /**
- * Customers, newest first. source: 'dashboard' or 'marketplace'. maxAgeHours limits the list to
+ * Customers, newest first. source: 'dashboard', 'marketplace' or 'importquery'. maxAgeHours limits the list to
  * conversations with activity that recent; Infinity lists every conversation ever stored.
  * olderThanHours leaves out the recent ones instead, so the two halves can be built and kept apart.
  */
@@ -666,6 +719,14 @@ export function listItems({ maxAgeHours = config.draftMaxAgeHours, olderThanHour
     for (const r of db.prepare('SELECT id FROM mp_conversations WHERE last_message_at >= ? AND last_message_at < ? ORDER BY last_message_at DESC').all(cutoff, before)) keep(buildMarketplaceItem(r.id));
     // Chats the engine has handed to a person come first.
     items.sort((a, b) => (Number(b.marketplace.needsPerson) - Number(a.marketplace.needsPerson)) || newest(a, b));
+    return items.slice(0, limit);
+  }
+
+  // Email threads sent from Gmail: their own section, never mixed with the dashboard's conversations.
+  if (source === 'importquery') {
+    if (!config.mail.switchedOn) return [];
+    for (const r of listMailThreads({ cutoff, before })) keep(buildMailItem(r.id));
+    items.sort(newest);
     return items.slice(0, limit);
   }
 

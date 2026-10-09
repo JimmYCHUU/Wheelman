@@ -6,7 +6,7 @@
 import { blankMatcher } from './lib/blank.js';
 import { $, h, put } from './lib/h.js';
 import { icon, mark as wheelMark } from './lib/icons.js';
-import { clock, dayKey, dayLabel, ago, money, plural } from './lib/format.js';
+import { clock, dayKey, dayLabel, listTime, ago, money, plural } from './lib/format.js';
 import { createStore } from './lib/store.js';
 import { t, listOf } from './lib/copy.js';
 import { SECTIONS as REGISTRY, sectionOf } from './sections/registry.js';
@@ -18,9 +18,9 @@ import { mountListColumn, visibleRows } from './views/ListColumn.js';
 // ---- state -------------------------------------------------------------------
 
 const state = {
-  section: 'dashboard',  // 'dashboard', 'marketplace' or 'auction'
-  sections: { dashboard: 0, marketplace: null, auction: null }, // waiting in each; null means the section is switched off
-  unread: { dashboard: 0, marketplace: null, auction: null },   // waiting conversations with messages not looked at yet
+  section: 'dashboard',  // 'dashboard', 'marketplace', 'auction', 'importquery' or 'standards'
+  sections: { dashboard: 0, marketplace: null, auction: null, importquery: null }, // waiting in each; null means the section is switched off
+  unread: { dashboard: 0, marketplace: null, auction: null, importquery: null },   // waiting conversations with messages not looked at yet
   message: '',           // Auction: the kind of message picked from "Which message?" for the open order
   pasteOpen: false,      // Auction: the box for pasting what the customer wrote is open
   listSeq: 0,            // guards against a slow list response landing in the wrong section
@@ -169,8 +169,8 @@ function replaceText(ta, text) {
 /** The avatar component under its older name: 'small' and 'large' are the sizes the older views ask for. */
 const avatar = (name, extra = '') => Avatar({ name, size: extra === 'small' ? 'sm' : extra === 'large' ? 'lg' : 'md' });
 
-function sender(by) {
-  if (!by) return 'Sent from the phone';
+function sender(by, via = '') {
+  if (!by) return via === 'Email' ? 'Sent from Gmail' : 'Sent from the phone';
   return by;
 }
 
@@ -297,9 +297,10 @@ function renderHead(item, els) {
   const chat = item.channel === 'marketplace';
   const listing = item.marketplace || null;
   const order = item.order || null;
-  const title = item.name || item.phone || (chat ? 'Marketplace buyer' : order ? 'Auction customer' : 'Unknown number');
+  const mail = item.mail || null;
+  const title = item.name || item.phone || item.email || (chat ? 'Marketplace buyer' : order ? 'Auction customer' : mail ? 'Email enquiry' : 'Unknown number');
   const writing = state.busy.has(item.key);
-  const where = chat ? `Marketplace${listing?.account ? `, ${listing.account}` : ''}` : (item.name ? item.phone : '');
+  const where = mail ? ['Email', mail.subject].filter(Boolean).join(' · ') : chat ? `Marketplace${listing?.account ? `, ${listing.account}` : ''}` : (item.name ? item.phone : '');
   const sub = writing ? 'writing a suggestion…'
     : order ? [where, `Order ${order.orderNo}`, order.prefers ? `prefers ${order.prefers}` : ''].filter(Boolean).join(' · ')
       : item.standard ? [`Model reply · ${t(`tag.standard.${item.standard.status.toLowerCase()}`)}`, chat ? 'Marketplace chat' : '', item.situation && item.situation !== 'General enquiry' ? `Asking about: ${item.situation.toLowerCase()}` : ''].filter(Boolean).join(' · ')
@@ -312,7 +313,8 @@ function renderHead(item, els) {
       avatar(item.name, 'small'),
       h('span', { class: 'who-text' }, h('span', { class: 'who-name', text: title }), sub ? h('span', { class: `who-sub ${writing ? 'is-writing' : ''}`.trim(), text: sub }) : null)),
     h('div', { class: 'head-actions' },
-      item.phone ? h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Copy phone number', title: 'Copy phone number', onclick: async () => { await copyText(item.phone); toast('Phone number copied'); } }, icon('copy')) : null,
+      item.phone ? h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Copy phone number', title: 'Copy phone number', onclick: async () => { await copyText(item.phone); toast('Phone number copied'); } }, icon('copy'))
+        : item.email ? h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Copy email address', title: 'Copy email address', onclick: async () => { await copyText(item.email); toast(t('toast.emailCopied')); } }, icon('copy')) : null,
       h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Customer and car details', title: 'Customer and car details', onclick: toggleInfo }, icon('info'))));
 
   const v = item.vehicle;
@@ -400,7 +402,7 @@ function renderThread(item, els, { toBottom = false } = {}) {
 
     const side = e.who === 'us' ? 'out' : 'in';
     // A text the phone add-on saw and the dashboard does not have says so, whichever way it went.
-    const by = e.phone ? (side === 'out' ? 'Sent from the phone, not on the dashboard' : 'Seen on the phone, not on the dashboard') : side === 'out' ? sender(e.by) : viaLabel(e.via);
+    const by = e.phone ? (side === 'out' ? 'Sent from the phone, not on the dashboard' : 'Seen on the phone, not on the dashboard') : side === 'out' ? sender(e.by, e.via) : viaLabel(e.via);
     const first = side !== lastSide || by !== lastBy;
     const bubble = h('div', { class: `msg ${side} ${first ? 'first' : ''} ${e.phone ? 'phone' : ''}`.replace(/\s+/g, ' ').trim() },
       h('span', { class: 'visually-hidden', text: side === 'out' ? `We wrote, ${by}: ` : 'Customer wrote: ' }),
@@ -533,6 +535,11 @@ function renderComposer(item, els, { arriving = false } = {}) {
   }
   if (item.state !== 'awaiting' && !(d && d.status === 'ready')) {
     box.append(h('div', { class: 'quiet' }, h('p', { text: item.note || 'No reply needed.' }), writeBtn('Write a reply anyway', 'outline')));
+    return;
+  }
+  // An email thread, until the research step is in: nothing is written for it, asked or unasked.
+  if (item.mail?.draftsOff && !(d && d.status === 'ready')) {
+    box.append(h('div', { class: 'quiet' }, h('p', { text: item.autoReason || 'Suggested replies for emails come with the next update.' })));
     return;
   }
   if (!d || d.status !== 'ready') {
@@ -672,7 +679,7 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
   function paintAdvice() {
     const blanks = blanksIn(ta.value);
     const lines = [];
-    const teaches = item.channel === 'sms';
+    const teaches = !!item.teaches;
     // The box was cleared: what the checks said about the suggestion no longer applies.
     if (isEmpty()) {
       advice.replaceChildren(h('div', { class: 'tip input' }, icon('pencil'),
@@ -779,7 +786,7 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
     if (!ok) { toast('Copying is blocked by the browser. Select the text and press Ctrl + C.'); return; }
     const left = blanksIn(ta.value).length;
     const chat = item.channel === 'marketplace';
-    toast(left ? `Copied, with ${plural(left, 'blank')} still to fill` : chat ? 'Copied. Paste it into the Marketplace chat to send.' : order ? `Copied. Paste it into ${order.prefers === 'WhatsApp' || !order.prefers ? 'WhatsApp' : 'your message to them'} to send.` : 'Copied. Paste it into the dashboard to send.');
+    toast(left ? `Copied, with ${plural(left, 'blank')} still to fill` : chat ? 'Copied. Paste it into the Marketplace chat to send.' : item.channel === 'email' ? t('composer.copyEmail') : order ? `Copied. Paste it into ${order.prefers === 'WhatsApp' || !order.prefers ? 'WhatsApp' : 'your message to them'} to send.` : 'Copied. Paste it into the dashboard to send.');
     noteCopied();
   }
 
@@ -847,7 +854,7 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
 
   // Two ways to teach Wheelman. Marketplace chats are never learned from, so they have neither;
   // a model reply has both, because rating it is what sets the standard.
-  const teach = item.channel === 'sms' || !!item.standard;
+  const teach = !!item.teaches;
   const approved = d.rating === 'good';
   const approveBtn = teach ? h('button', { class: `btn ${approved ? 'is-on' : ''}`.trim(), type: 'button', 'aria-pressed': approved ? 'true' : 'false',
     title: approved ? 'You approved this reply. Click to take that back.' : 'This reply is right as it is. Wheelman will write similar replies the same way.',
@@ -926,12 +933,12 @@ function renderInfo() {
       h('div', { class: 'info-top' },
         avatar(item.name),
         h('h3', { text: item.name || 'Unknown name' }),
-        h('p', { text: item.phone || (item.marketplace ? 'Facebook Marketplace' : '') })),
+        h('p', { text: item.phone || item.email || (item.marketplace ? 'Facebook Marketplace' : '') })),
       h('section', {},
         h('h4', { text: item.marketplace ? 'Buyer' : 'Customer' }),
         h('dl', {},
           row('Phone', item.phone ? h('button', { class: 'link-btn', type: 'button', onclick: async () => { await copyText(item.phone); toast('Phone number copied'); } }, `${item.phone} (copy)`) : ''),
-          row('Email', item.email),
+          row('Email', item.email ? h('button', { class: 'link-btn', type: 'button', onclick: async () => { await copyText(item.email); toast(t('toast.emailCopied')); } }, `${item.email} (copy)`) : ''),
           row('Prefers', item.order?.prefers),
           row('Came from', item.order ? item.order.cameFrom : sourceLabel(item.source)),
           row('State', item.location),
@@ -939,6 +946,7 @@ function renderInfo() {
           row('Asking about', item.order ? '' : item.situation)),
         item.noLead ? h('p', { class: 'fine', text: 'This number has no customer record in the dashboard.' }) : null),
       item.marketplace ? marketplaceInfo(item.marketplace, row) : null,
+      item.mail ? mailInfo(item.mail, row) : null,
       item.order ? orderInfo(item.order, row) : null,
       // An import or auction enquiry: what they asked us to find from Japan.
       item.looking ? h('section', {},
@@ -986,10 +994,25 @@ function renderInfo() {
       h('section', {}, h('p', { class: 'fine', text: 'All times are Sydney time.' }))));
 }
 
+/** The Import Query part of the details panel: the thread as it came from Gmail, and the research notes. */
+function mailInfo(m, row) {
+  return h('section', {},
+    h('h4', { text: 'Import Query' }),
+    h('dl', {},
+      row('Subject', m.subject),
+      row('From', m.customerEmail),
+      row('Messages', m.messages ? `${m.messages}${m.collapsed ? `, ${m.collapsed} folded in Gmail` : ''}` : ''),
+      row('First message', m.firstAt ? listTime(m.firstAt) : ''),
+      row('Latest', m.lastAt ? listTime(m.lastAt) : '')),
+    m.collapsed ? h('p', { class: 'fine', text: 'Part of this thread could not be read because Gmail had folded it. In Gmail, press Expand all, then Send to Wheelman again.' }) : null,
+    h('h4', { text: 'Research notes' }),
+    h('p', { class: 'fine', text: t('info.research.none') }));
+}
+
 /** The auction-order part of the details panel: the order, what they asked for, the car, and what has been charged and paid. */
 function orderInfo(o, row) {
   const km = (n) => (n ? `${Number(n).toLocaleString('en-AU')} km` : '');
-  const day = (ms) => (ms ? fmtShort.format(new Date(ms)) : '');
+  const day = (ms) => (ms ? listTime(ms) : '');
   const link = (url, text) => (url ? h('a', { href: url, target: '_blank', rel: 'noopener noreferrer', text }) : '');
   const m = o.money;
   return [

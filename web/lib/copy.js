@@ -53,6 +53,8 @@ export const COPY = {
   'row.newIn.dashboard': '{n, one: conversation with new messages, other: conversations with new messages}',
   'row.newIn.marketplace': '{n, one: conversation with new messages, other: conversations with new messages}',
   'row.newIn.auction': '{n, one: order with something new, other: orders with something new}',
+  'row.newIn.importquery': '{n, one: enquiry with new messages, other: enquiries with new messages}',
+  'tag.folded': 'Folded in Gmail',
   'row.newIn.standards': '{n, one: model reply not looked at yet, other: model replies not looked at yet}',
   'standards.done': 'Every model reply is rated. The Standards tab leaves the page until one needs rating again.',
 
@@ -103,6 +105,9 @@ export const COPY = {
   'toast.sentQueued': 'Queued. The Marketplace system sends it as soon as its phone is back online.',
   'composer.sending': 'Your reply is on its way. The Marketplace system is typing it into the chat from the phone.',
   'composer.replied': 'We have replied. Nothing is waiting here.',
+  'composer.copyEmail': 'Copied. Paste it into your reply in Gmail.',
+  'toast.emailCopied': 'Email address copied',
+  'info.research.none': 'Notes from the website about the model they asked for will appear here.',
   'toast.checked': '{placeShort} checked',
   'toast.notReached': '{place} could not be reached',
 };

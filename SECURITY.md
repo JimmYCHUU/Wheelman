@@ -21,8 +21,9 @@ please report it (see below).
   text is sent to a model, and the first name is put back afterwards. Auction amounts travel as
   markers that code fills in. Marketplace chats and texts seen on the phone are never learned from.
 - **Local only.** The page is served on `127.0.0.1` and refuses any other host or origin, with a
-  strict content security policy. The browser add-on may post to one route only, from an
-  extension origin, with its own header.
+  strict content security policy. The browser add-on may post to two routes only (the phone
+  reader's reports, and an email thread from the Send to Wheelman button in Gmail), from an
+  extension origin, each with its own header.
 - **Nothing private in the repository.** `.env`, the session cookie, the database, the real
   business facts, the staff names and the evidence files are git-ignored. `npm run check-private`
   compares every file git would publish against the values in `.env`, the session, the staff
@@ -32,9 +33,11 @@ please report it (see below).
 
 Leads, conversations, messages and stock from the dashboard; Marketplace chats without thread,
 participant or photo identifiers; auction orders with what the customer was charged and paid,
-never the dealer's costs; the latest text of each conversation seen on the phone; every
-suggestion and what the person did with it. All of it in one SQLite file under `data/`, which
-git never sees.
+never the dealer's costs; the latest text of each conversation seen on the phone; the email
+threads the owner sends from Gmail (the subject, and each message's sender name and address,
+time, plain text with the quoted history removed, and attachment count; never HTML, attachments,
+recipients or account identifiers); every suggestion and what the person did with it. All of it
+in one SQLite file under `data/`, which git never sees.
 
 ## Reporting a problem
 
