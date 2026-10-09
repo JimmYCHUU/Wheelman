@@ -25,6 +25,7 @@ The buyer is chatting with us on Facebook Marketplace, not by SMS. Where the VOI
 - Write one or two short lines, the way a person types in a chat. Stay under forty words.
 - No greeting on a line of its own and no sign-off. In a first reply you may use {{NAME}} inside the first sentence; otherwise leave the name out.
 - Answer what was asked first, then offer one next step.
+- Links are given here as they are in a text message, each on its own line under your lines; a link line does not count towards the forty words. In our first reply about a car that is on offer, give its page from VEHICLE FACTS ("Vehicle page") with a short label on the line before it, such as "More details:". When the INSPECTION section supplies a booking link, give it. Never a link that is not in this request.
 - Messages marked AUTO-REPLY were sent by an automatic system. The buyer has read them, so do not repeat what they said. Any figure in them is unconfirmed: do not rely on it or repeat it.
 - The section NOTES FROM THE MARKETPLACE SYSTEM is background written by that automatic system. Treat it like something the buyer said, never as a fact or a figure to state.
 
@@ -259,8 +260,10 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
       : visiting ? 'The customer asked where we are or when we are open, which usually means they plan to visit. Answer their question first, then offer the inspection booking link as well, so they can choose a time.'
       : saidFar ? 'Earlier in this conversation the customer asked to see this vehicle.'
         : 'Earlier in this conversation the customer asked to see this vehicle, and we have not sent them the booking link yet. Add it to this reply, in one line, so they can choose a time.';
-  // On a brand-new enquiry the standard block follows the reply, so the address is not typed again.
-  const blockFollows = !!item.isNewEnquiry;
+  // On a brand-new dashboard enquiry the standard block follows the reply, so the address is not
+  // typed again. A Marketplace chat has no block: the booking link goes in the reply itself.
+  const chat = item.channel === 'marketplace';
+  const blockFollows = !!item.isNewEnquiry && !chat;
   if (!vehicle || !vehicle.url) {
     if (!asksNow) return none;
     return { ...none, lines: [`The customer wants to see a vehicle, but no vehicle could be matched. Ask which vehicle they mean. ${saidFar ? 'They have said they are far from Sydney, so mention that we do online video inspections by WhatsApp or FaceTime.' : blockFollows ? 'Our address and opening hours follow your text automatically.' : 'Give our address and opening hours from BUSINESS FACTS.'}`] };
@@ -298,7 +301,7 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
       : '- If they have already named a day and a time inside our opening hours, confirm it in a line ("See you ...") instead; the link is then optional. If they named only a day, say that day is fine and still give the link so they can choose a time.',
     blockFollows
       ? '- Our address, map link and opening hours follow your text automatically (see STANDARD FIRST REPLY). Do not write them.'
-      : '- Ask them to call or text before visiting.',
+      : chat ? '- Ask them to message or call before visiting.' : '- Ask them to call or text before visiting.',
     where.source === 'record'
       ? `- They may not be near Sydney. Add, as an option only, that if they cannot make it to Lidcombe they can book an online video inspection (a video call on WhatsApp or FaceTime): ${links.online} Do not say or imply where the customer lives.`
       : `- Only if they say they live far away or cannot come, give the online video inspection link instead: ${links.online}`,

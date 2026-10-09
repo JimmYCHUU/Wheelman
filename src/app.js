@@ -40,7 +40,7 @@ if (providers().length) console.log(`AI models, tried in order: ${providers().ma
 try {
   await startServer();
   console.log(`\nOpen this page in your browser:  http://localhost:${config.port}`);
-  console.log(`Checking the dashboard${config.marketplace.enabled ? ' and the Marketplace inbox' : ''} every ${config.syncMinutes} minute(s). Nothing is ever sent to customers.`);
+  console.log(`Checking the dashboard${config.marketplace.enabled ? ' and the Marketplace inbox' : ''} every ${config.syncMinutes} minute(s). Nothing is sent to customers by itself${config.marketplace.enabled ? '; a Marketplace reply goes only when you press Send' : ''}.`);
   console.log(`Anything that goes wrong is noted in ${logFile()}`);
   console.log('Press Ctrl+C to stop.\n');
   logLine('start', `Wheelman started. AI models, in order: ${providers().map((p) => p.model).join(', ') || 'none'}`);

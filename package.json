@@ -2,7 +2,7 @@
   "name": "wheelman",
   "version": "0.2.0",
   "private": true,
-  "description": "A reply assistant for a used-car dealer: reads the dashboard, Marketplace chats, auction orders and the business phone read-only, drafts replies with free AI models behind a verification step, and never sends anything.",
+  "description": "A reply assistant for a used-car dealer: reads the dashboard, Marketplace chats, auction orders and the business phone, drafts replies with free AI models behind a verification step, and sends nothing by itself. A Marketplace reply goes only when a person presses Send; everything else is copy and paste.",
   "license": "UNLICENSED",
   "author": "JimmYCHUU",
   "repository": {

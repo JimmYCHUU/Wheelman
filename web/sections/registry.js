@@ -56,7 +56,7 @@ export const SECTIONS = {
       other: ['Nothing here', ''],
       search: ['Nothing matches', 'Try a name, a car or a word from the message.'],
     },
-    welcome: { pick: 'Pick a buyer', check: 'Check the reply', paste: 'and paste it into the Marketplace chat.' },
+    welcome: { pick: 'Pick a buyer', check: 'Check the reply', paste: 'and it goes to the Marketplace chat. Or copy it and paste it there yourself.' },
     more: 'Load older conversations',
     backTo: 'Waiting',
     dismiss: 'Dismiss this conversation',

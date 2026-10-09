@@ -45,7 +45,7 @@ deposit; a customer who has booked to see it is.
 | Not in the yard yet (in transit, still in Japan) | It cannot be inspected yet. They can reserve it with the refundable holding deposit and see it when it lands. We tell them as soon as it arrives |
 | Wants a car we do not have | We can source it from Japan, with the importing link. The asking reply and the offer follow their own plan |
 | Already bought | The next practical step: the invoice, the deposit, the registration, the pickup time, the delivery update |
-| Marketplace chat | The same moves in one or two lines. No greeting line, no sign-off |
+| Marketplace chat | The same moves in one or two lines. No greeting line, no sign-off. Links as in a text: the car's page on a first reply, the booking link when INSPECTION supplies it, each on its own line |
 
 Never reply with only "when can you come in?". Never hold back an answer to force a visit.
 

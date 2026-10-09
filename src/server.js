@@ -29,6 +29,10 @@ import { reservedByAnother } from './deal.js';
 import { wantedFrom } from './imports.js';
 import { learnedStats } from './db.js';
 import { validateReport, storePhoneReport } from './phone.js';
+import { sendReply, fetchConversation, normalizeMpMessage } from './marketplace.js';
+import { storeMpConversation } from './sync.js';
+import { appendMpMessage, recordSentHere } from './db.js';
+import { blankMatcher } from '../web/lib/blank.js';
 
 const TYPES = { '.woff2': 'font/woff2', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(config.root, 'package.json'), 'utf8')).version || ''; } catch { return ''; } })();
@@ -101,6 +105,8 @@ function draftOf(item) {
     // What the person has typed over the suggestion: null when untouched, '' when they cleared it.
     edited: typeof draft.edited_text === 'string' ? draft.edited_text : null, editedAt: draft.edited_at || null,
     model: draft.model, provider: draft.provider, createdAt: draft.created_at, instruction: draft.instruction || '', error: draft.error || '', rating: draft.rating || '',
+    // Marketplace only: when Send was pressed on this suggestion.
+    sentHereAt: draft.sent_here_at || null,
     needsHuman: (draft.needsHuman || []).filter((n) => n && n.marker && n.reason).map((n) => ({ marker: String(n.marker), reason: String(n.reason) })),
     // What the reply is for: the one next step it offers, and where the customer is on the way to a sale.
     nextStep: draft.next_step || '', rung: draft.rung || '', rungLabel: RUNG_LABELS[draft.rung] || '',
@@ -188,7 +194,7 @@ function marketplaceOf(item) {
   const e = m.engine;
   return {
     account: m.account, listingTitle: m.listingTitle, listingPrice: m.listingPrice, listingUrl: m.listingUrl,
-    archived: m.archived, needsPerson: m.needsPerson, replyComing: m.replyComing, queuedAt: m.queuedAt, failed: m.failed, unsent: m.unsent,
+    archived: m.archived, needsPerson: m.needsPerson, replyComing: m.replyComing, queuedAt: m.queuedAt, failed: m.failed, unsent: m.unsent, sending: !!m.sending,
     autoReply: e.enabled, stage: e.stage, locked: e.locked, lockReason: e.lockReason, lockDetail: e.lockDetail,
     urgency: e.urgency, nextAction: e.nextAction, notes: e.notes,
   };
@@ -266,6 +272,8 @@ const threadOf = (item, shown) => {
     by: displayNameFor(e.by) || '', auto: !!e.auto, via: e.via || '', at: e.at, unanswered: item.state === 'awaiting' && pendingKeys.has(e.key),
     // Seen on the phone and not on the dashboard.
     phone: !!e.phoneOnly,
+    // A Marketplace reply the engine has queued for its phone to type into the chat.
+    sending: !!e.sending,
   }));
 };
 
@@ -322,6 +330,9 @@ const itemRoute = (tail = '') => new RegExp(`^/api/items/${KEY}${tail}$`);
 
 const listCache = new Map();
 const olderCache = new Map();
+// Marketplace chats with a reply on its way to the engine right now, so a second press of Send
+// while the first is still being answered cannot send the same reply twice.
+const sendingNow = new Set();
 const ALL_STATES = ['awaiting', 'answered', 'ack', 'closed', 'optout', 'other'];
 // Conversations with activity in the last fortnight are rebuilt whenever anything is written;
 // older ones only when something a row depends on has changed (see oldRowsStamp).
@@ -533,6 +544,43 @@ async function api(req, res, url) {
       draft = await draftFor(item, { instruction });
     }
     return send(res, 200, { item: present(itemFromKey(m[1], picked) || item), ok: draft.status === 'ready', error: draft.error || '' });
+  }
+
+  // Send, Marketplace only: the text in the message box goes to the buyer through the content
+  // engine's own reply address, the one its inbox page uses. The engine queues it and its phone
+  // types it into the chat. Only a Marketplace key matches this route; a dashboard or auction
+  // conversation has no send. Nothing is learned from what was sent (RULE-4).
+  m = p.match(/^\/api\/items\/(mp:\d+)\/send$/);
+  if (req.method === 'POST' && m) {
+    if (!config.marketplace.enabled) return send(res, 403, { error: 'The Marketplace section is switched off.' });
+    const item = itemFromKey(m[1]);
+    if (!item || item.channel !== 'marketplace') return send(res, 404, { error: 'That Marketplace chat was not found.' });
+    const body = await readBody(req);
+    const text = String(body.text ?? '').replace(/\r/g, '').trim();
+    if (!text) return send(res, 400, { error: 'There is nothing to send.' });
+    // A blank is for the person to fill in. It is never sent to a buyer as it stands.
+    const blanks = [...new Set([...text.matchAll(blankMatcher())].map((x) => x[0]))];
+    if (blanks.length) return send(res, 400, { error: `Fill in ${blanks.length === 1 ? 'the blank' : 'the blanks'} before sending: ${blanks.join(', ')}.` });
+    if (sendingNow.has(item.itemKey)) return send(res, 409, { error: 'This reply is already on its way.' });
+    sendingNow.add(item.itemKey);
+    try {
+      const out = await sendReply(item.marketplace.id, text);
+      // The suggestion it came from: what was in the box is kept with it, and that Send was pressed.
+      const draft = Number(body.draftId) ? getDraft(Number(body.draftId)) : null;
+      if (draft && draft.item_key === item.itemKey) { onEdited(item, draft.id, text); recordSentHere(draft.id); }
+      // The engine's record of the queued reply goes into the thread at once; then the chat is read
+      // again so everything else is current too. If that read fails, the next check brings it.
+      if (out.message && Number.isInteger(Number(out.message.id))) appendMpMessage(item.marketplace.id, normalizeMpMessage(out.message, 0, item.marketplace.id));
+      try {
+        const detail = await fetchConversation(item.marketplace.id);
+        if (detail?.conversation?.id === item.marketplace.id) storeMpConversation(detail.conversation, detail.messages || []);
+      } catch (e) { logLine('marketplace', `${item.itemKey}: the reply was sent, but the chat could not be read back: ${e.message}`); }
+      logLine('marketplace', `${item.itemKey}: a reply was sent from the page (${text.length} characters)${out.workerOnline ? '' : '; the engine\'s phone is offline, so it is queued'}`);
+      return send(res, 200, { ok: true, queued: !out.workerOnline, item: present(itemFromKey(m[1]) || item) });
+    } catch (e) {
+      logLine('marketplace', `${item.itemKey}: the reply could not be sent. ${e.message}`);
+      return send(res, 502, { error: e.message });
+    } finally { sendingNow.delete(item.itemKey); }
   }
 
   m = p.match(itemRoute('/dismiss'));

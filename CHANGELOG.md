@@ -6,6 +6,13 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- Marketplace replies are sent from the page. **Send reply** in a Marketplace chat hands the
+  text in the box to the content engine's own reply address, the one its inbox page uses, and
+  the engine's phone types it into the chat. The reply shows in the conversation marked
+  "Sending" until the engine reports it sent, the chat leaves Waiting at once, a blank such as
+  `[PRICE?]` is never sent, a second press while the first is under way is refused, and a
+  refused or unreachable engine changes nothing. Copy and paste still works there. Dashboard
+  and auction replies are unchanged: copy and paste only. Nothing is learned from a sent reply.
 - Backups: one dated zip file of everything that lives only on this computer (the database, the
   `.env` settings, the staff names, the voice files, the private business facts and notes),
   written when the black window closes, once a day while Wheelman is open, and by hand with
@@ -47,6 +54,12 @@ and versions follow `MAJOR.MINOR.PATCH`.
   the name the customer signed in a text (shown only; never given to the AI).
 
 ### Changed
+- RULE-0 "never sends" is now "sends nothing by itself": the one send is the Marketplace Send
+  button. The Marketplace client keeps its three read addresses and gains the one reply address.
+- Marketplace suggestions carry links: the car's page on a first reply, and the inspection
+  booking link whenever the buyer asks to see the car, each on its own line. Until now a
+  Marketplace chat got neither, because both lived in the standard block that only dashboard
+  replies carry, and a buyer who asked to see a car got a red flag instead of a link.
 - The list is "All": every conversation ever stored, newest message first whoever wrote it, with
   "Waiting" as the filter for the ones that need a reply. No time window, no "No reply needed",
   no "Not customers". Only a text from the last fortnight counts as new for the blue numbers.

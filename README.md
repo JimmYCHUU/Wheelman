@@ -4,7 +4,7 @@
 ![Node.js 22.13 or newer](https://img.shields.io/badge/node-%E2%89%A522.13-339933)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-lightgrey)
 ![Free AI models](https://img.shields.io/badge/AI-free%20models%20only-blue)
-![Never sends](https://img.shields.io/badge/sending-never%2C%20copy%20only-orange)
+![Sends only on Send](https://img.shields.io/badge/sending-Marketplace%20Send%20button%20only-orange)
 
 Carbarn's reply assistant. Wheelman reads new enquiries from the Carbarn dashboard and new
 chats from Facebook Marketplace, works out who is waiting for an answer, and writes a suggested
@@ -96,7 +96,7 @@ shape with invented names. The tone guide is `voice/house-voice.md`.
 
 ```
  Carbarn dashboard ──► leads · SMS conversations · stock      (read-only, four addresses)
- Content engine    ──► Facebook Marketplace chats             (read-only, three addresses)
+ Content engine    ──► Facebook Marketplace chats             (three read addresses, one send address)
                                    │
         ┌──────────────────────────▼──────────────────────────┐
         │ 1. WHO IS WAITING   did the customer write last?     │──► NO REPLY NEEDED (thanks, STOP)
@@ -283,11 +283,15 @@ has moved past its first stage, Wheelman stops offering cars and answers as usua
 
 Enforced in code, not by convention.
 
-- **RULE-0 Never sends.** There is no code path that sends a message. The only way a reply
-  leaves is a person's copy and paste.
+- **RULE-0 Sends nothing by itself.** One code path sends a message: a Marketplace reply, to
+  the content engine's own reply address, when a person presses **Send reply** on the page. It
+  sends exactly the text in the box, refuses while a blank is still to be filled, and never
+  runs on its own. Dashboard and auction replies leave only by a person's copy and paste.
 - **RULE-1 Read-only.** The dashboard client can sign in and GET six addresses: the leads, the
   conversations, their messages, the cars, the auction orders, and the notification feed, which
-  is only ever read and never marked as read. The content engine client can GET three. The live auction client uses no login: it can GET three
+  is only ever read and never marked as read. The content engine client can GET three and
+  POST a reply to one; it cannot mark a chat read, archive it, retry a message or touch the
+  engine's auto-reply. The live auction client uses no login: it can GET three
   addresses (the cars coming up, one car, what similar cars sold for) and ask the website's
   cost calculator for one figure. That one request is a
   POST, because that is how the website's own page asks. It carries the bid amount and
@@ -392,7 +396,8 @@ npm.cmd test                :: the automated checks, no internet needed
 2. The browser tab shows a number when a customer has sent something new: `(2) Wheelman`.
 3. Pick a customer from the list. Their number clears once you have opened the conversation.
 4. Read the suggestion in the message box. Fill in anything highlighted.
-5. Press **Copy reply**, paste it into the dashboard or the Marketplace chat, and send it.
+5. Press **Copy reply**, paste it into the dashboard, and send it. In a Marketplace chat, press
+   **Send reply** instead and it goes to the buyer from here (Copy still works there too).
 6. The customer leaves **Waiting** by themselves once the reply appears in the conversation.
    Wheelman then compares what was sent with what it suggested, and learns from it.
 
@@ -553,7 +558,16 @@ every chat where the buyer wrote last. It works like the Dashboard section, with
 differences:
 
 - **Short replies.** One or two lines, no greeting line, no "Regards, Team Carbarn".
-- **Copy and paste.** Paste the suggestion into the Marketplace chat yourself.
+- **Links in the reply.** The car's page link on a first reply, and the inspection booking
+  link when the buyer asks to see the car, each on its own line. (Marketplace has no standard
+  block, so the links go in the reply itself.)
+- **Send from here.** **Send reply** hands the text in the box to the content engine, which
+  types it into the Marketplace chat from its phone. The reply shows in the conversation
+  marked "Sending" until the engine reports it sent, and the chat leaves **Waiting** at once.
+  A blank such as `[PRICE?]` is never sent: fill it in first. If the engine's phone is offline
+  the reply is queued and goes when it is back; if the engine refuses, nothing changes and the
+  reason is shown. **Copy reply** is still there for pasting it yourself. This is the only
+  section that sends.
 - **Auto-reply.** Messages the engine sent by itself are labelled **Auto-reply**. Messages a
   person sent are labelled **Typed by a person**.
 - **Needs a person.** When the engine has handed a chat to a person, or one of its replies
@@ -894,8 +908,8 @@ often you asked for a rewrite. Counts only; no customer text.
 | "Below" | A reply never points at the address block. It answers in the sentence itself |
 | The message box | An editor: change the text or clear it, and it is saved as you type. A changed reply teaches Wheelman when it is copied or approved |
 | AI models | The better models are kept for dashboard customers. Marketplace chats use the small one |
-| Marketplace | A suggestion for every chat where the buyer wrote last; short chat style |
-| Sending | Never. Copy and paste, in both sections |
+| Marketplace | A suggestion for every chat where the buyer wrote last; short chat style, with the car's page link and the booking link when asked |
+| Sending | Marketplace only, by the **Send reply** button. Dashboard and auction replies are copied and pasted |
 | Learning | Dashboard only |
 
 The business facts themselves are in `knowledge/business-facts.md`.
@@ -1030,7 +1044,7 @@ computer. Git never sees any of it.
 npm.cmd test
 ```
 
-214 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
+268 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
 a stand-in auction feed on this computer: who counts as waiting and who does not, stock numbers matched to the right
 car however a portal writes them (a year in front, a portal code, upper or lower case), that
 no customer detail and no cost figure reaches the AI request, an invented price
@@ -1039,11 +1053,15 @@ rewrite accepted, nothing drafted for an opt-out, a sold car bringing a similar 
 request, a message that tries to give orders passed as data, busy models and the daily cap,
 learning from copied and sent replies with details removed, that blanks and bank details are
 never learned, the greeting and sign-off once a day, the in-person and online inspection links
-and how "far away" is recognised, and the Marketplace section: only GET requests on three
-addresses, redirects refused, identifiers and contact details not stored, a failed reply not
-counting as a reply, the auto-reply's price not trusted, nothing learned from a copied
-Marketplace suggestion, its own allowance, the engine being down, dismiss with undo, and the
-unread counts. Whole-conversation scenarios cover the rest: a buyer recognised by phone, by
+and how "far away" is recognised, and the Marketplace section: three GET addresses and the one
+send address, which only the Send button reaches, redirects refused, identifiers and contact
+details not stored, a failed reply not counting as a reply, the auto-reply's price not
+trusted, the booking link and the car's page link in the reply itself, nothing learned from a
+copied or sent Marketplace suggestion, its own allowance, the engine being down, dismiss with
+undo, the unread counts, and Send: the text in the box to the engine's reply address and
+nothing else, shown on its way and the chat out of Waiting, a blank refused, a refused or
+unreachable engine changing nothing, an offline phone meaning queued, and a queued auto-reply
+still counting as waiting. Whole-conversation scenarios cover the rest: a buyer recognised by phone, by
 email, by lead status and from our own texts; no amount, buyer name or readable contact
 stored or sent; a reply that asks a buyer "which car?" rejected; a reserved car; the standard
 first reply exact to the character and never learned; "this afternoon" at 8:44 pm, "tomorrow"

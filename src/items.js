@@ -423,13 +423,22 @@ export function buildItem({ conversationId = null, leadId = null }) {
 
 // ---- Marketplace chats -----------------------------------------------------------
 
-const AUTO_SOURCE = /^(agent|auto|bot|ai)/i;
+const AUTO_SOURCE = /^(agent|auto|bot|ai|followup)/i;
+const ON_ITS_WAY = /^(queued|pending|sending)$/i;
 
 /**
  * An outgoing Marketplace message counts as ours only once the buyer can see it.
  * Queued and failed replies do not count: the buyer is still waiting.
  */
 const reachedBuyer = (m) => m.status === 'sent' || m.status === 'delivered' || m.status === 'seen' || (!m.status && !AUTO_SOURCE.test(m.source || '') && m.source !== 'dashboard');
+
+/**
+ * The one exception: a reply a person typed (here, or on the engine's own page) that the engine
+ * has queued for its phone to type into the chat. The person has answered; the chat is not
+ * waiting on anyone else. It shows as ours, marked as on its way, until the engine reports it sent.
+ * A queued auto-reply is not the same: the engine may still fail or hold it, so the buyer waits.
+ */
+const onItsWay = (m) => !AUTO_SOURCE.test(m.source || '') && ON_ITS_WAY.test(m.status || '');
 
 /** One Facebook Marketplace chat, in the same shape as a dashboard item. Key: mp:<id>. */
 export function buildMarketplaceItem(id, { now = Date.now() } = {}) {
@@ -445,9 +454,10 @@ export function buildMarketplaceItem(id, { now = Date.now() } = {}) {
     if (!m.text && !m.has_media) continue;
     const media = m.has_media ? 'attachment' : null;
     if (m.direction === 'out') {
-      if (!reachedBuyer(m)) { unsent++; if (m.status === 'queued' || m.status === 'pending' || m.status === 'sending') queuedAt = at; continue; }
+      const sending = onItsWay(m);
+      if (!reachedBuyer(m) && !sending) { unsent++; if (ON_ITS_WAY.test(m.status || '')) queuedAt = at; continue; }
       const auto = AUTO_SOURCE.test(m.source || '');
-      timeline.push({ who: 'us', via: 'Marketplace', text: m.text || '', event: '', media, at, by: auto ? 'Auto-reply' : 'Typed by a person', auto, key: `fm:${m.id}` });
+      timeline.push({ who: 'us', via: 'Marketplace', text: m.text || '', event: '', media, at, by: auto ? 'Auto-reply' : 'Typed by a person', auto, sending, key: `fm:${m.id}` });
     } else {
       if (isReaction(m.text)) continue;
       timeline.push({ who: 'customer', via: 'Marketplace', text: m.text || '', event: '', media, at, by: null, key: `fm:${m.id}` });
@@ -480,6 +490,8 @@ export function buildMarketplaceItem(id, { now = Date.now() } = {}) {
     queuedAt: replyComing && item.pending.length && queuedAt && queuedAt >= (item.pending[item.pending.length - 1].at || 0) ? queuedAt : null,
     failed: c.failedOutbound || 0,
     unsent,
+    // True while the newest message is a person's reply that the engine's phone has yet to type into the chat.
+    sending: !!timeline[timeline.length - 1]?.sending,
     engine: { enabled: !!e.enabled, stage: e.stage || '', locked: !!e.locked, lockReason: e.lockReason || '', lockDetail: e.lockDetail || '', urgency: e.urgency || '', nextAction: e.nextAction || '', notes: e.notes || [] },
   };
   return item;

@@ -85,7 +85,9 @@ export const COPY = {
   'welcome.fromList': 'from the list.',
   'welcome.checkIt': 'waiting in the message box. Fill in anything highlighted.',
   'welcome.copy': 'Copy it',
-  'welcome.neverSent': 'Nothing is ever sent to a customer from this page.',
+  'welcome.send': 'Send it',
+  'welcome.copyOnly': 'Nothing is sent to a customer from this page. You copy the reply and send it yourself.',
+  'welcome.sendOnly': 'A reply reaches the buyer only when you press Send. Nothing is sent by itself.',
   'welcome.learned': 'Learned from {bits}',
   'welcome.learned.title': 'Wheelman learns from the replies you change before sending, the ones you mark Good reply, and what you write under Could be better. Only dashboard conversations are used.',
   'learned.changed': '{n} {n, one: reply, other: replies} you changed',
@@ -97,6 +99,10 @@ export const COPY = {
   'welcome.backup.title': 'One file with the database, the settings, the staff names and the voice files. Copy it to another computer and double-click "Restore Wheelman.cmd" there to carry Wheelman across, with everything it has learned.',
 
   'toast.phoneCopied': 'Phone number copied',
+  'toast.sent': 'Sent. It is on its way to the buyer.',
+  'toast.sentQueued': 'Queued. The Marketplace system sends it as soon as its phone is back online.',
+  'composer.sending': 'Your reply is on its way. The Marketplace system is typing it into the chat from the phone.',
+  'composer.replied': 'We have replied. Nothing is waiting here.',
   'toast.checked': '{placeShort} checked',
   'toast.notReached': '{place} could not be reached',
 };

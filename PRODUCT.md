@@ -14,7 +14,7 @@ One person: the owner, who answers customer enquiries for Carbarn by SMS. He wor
 
 Wheelman is Carbarn’s customer representative assistant. It suggests a reply to each customer who is waiting for one, written the way our two lead salespeople write (one brisk and factual, one courteous and a little warmer), and informed by how the business actually runs. The owner reads the suggestion, edits it if needed, copies it, and sends it from the dashboard himself. The product never sends anything.
 
-A separate Marketplace section does the same for buyers on Facebook Marketplace, whose chats are read from Carbarn’s content engine. The owner copies the suggestion and pastes it into the Marketplace chat himself. (User’s instruction, 1 Oct 2026.)
+A separate Marketplace section does the same for buyers on Facebook Marketplace, whose chats are read from Carbarn’s content engine. The owner sends the reply to the buyer from the page with the Send button, through the content engine, or copies it and pastes it into the Marketplace chat himself. Marketplace is the only section that sends. (User’s instructions, 1 and 9 Oct 2026: "Just the marketplace replies, nothing else".)
 
 Success is the owner answering each waiting customer faster, with a reply that is accurate and sounds like the dealership.
 
@@ -33,9 +33,9 @@ The suggestions are written in the blended voice of the dealership's two lead sa
 ## Capabilities and Constraints
 
 - Reads leads, conversations, messages and stock from the dashboard. Read-only.
-- Reads Marketplace chats from the content engine. Read-only: three addresses, GET only.
+- Reads Marketplace chats from the content engine: three addresses, GET only. Sends a Marketplace reply through the engine’s own reply address (the one its inbox page uses), and only when the owner presses Send; the engine’s phone types it into the chat. A blank is never sent. Nothing is sent by itself, and nothing else is sent. (User’s instruction, 9 Oct 2026.)
 - Three sections, never mixed: Dashboard, Marketplace and Auction. A switch at the top of the list chooses one and shows how many are waiting in each.
-- Marketplace suggestions are short chat lines: one or two lines, no greeting line, no sign-off. Every chat where the buyer wrote last gets one. (User’s choices, 1 Oct 2026.)
+- Marketplace suggestions are short chat lines: one or two lines, no greeting line, no sign-off. Every chat where the buyer wrote last gets one. (User’s choices, 1 Oct 2026.) The car’s page link goes in a first reply, and the inspection booking link whenever the buyer asks to see the car, each on its own line; the earlier practice of giving neither on Marketplace is revoked. (User’s instruction, 9 Oct 2026.)
 - In Marketplace, the engine’s automatic messages are labelled "Auto-reply", chats handed to a person are marked and listed first, and a figure that only an auto-reply mentioned is never treated as Carbarn’s.
 - Writes one suggested reply per waiting customer, using free AI models that are often busy.
 - Leaves a marked blank where a person must decide: `[PRICE?]`, `[TRADE-IN VALUE?]`, `[DELIVERY COST?]`, `[DATE?]`, `[CHECK?]`.
@@ -88,6 +88,6 @@ The suggestions are written in the blended voice of the dealership's two lead sa
 
 1. One conversation at a time. Show who is waiting, then give full attention to the one selected.
 2. It must always be obvious who said what: the customer, us, or the agent's unsent suggestion.
-3. Nothing is sent from here. The interface must never look as though it sends. This holds in both sections.
+3. Nothing is sent by itself. The one Send button, in a Marketplace chat, says what it does and sends exactly the text in the box. Everywhere else the interface must never look as though it sends.
 4. Warnings are plain sentences in the place they apply, not codes or colour alone.
 5. Familiar over clever. It should work the way a messaging app already works.

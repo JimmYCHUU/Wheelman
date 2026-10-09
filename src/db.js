@@ -242,6 +242,8 @@ export function openDb(file = config.dbPath) {
   ensureColumn(db, 'drafts', 'edited_at', 'INTEGER');
   ensureColumn(db, 'drafts', 'next_step', 'TEXT');
   ensureColumn(db, 'drafts', 'rung', 'TEXT');
+  // When a Marketplace reply was sent from the page. The text itself is the engine's record.
+  ensureColumn(db, 'drafts', 'sent_here_at', 'INTEGER');
   ensureColumn(db, 'advice', 'lessons_json', 'TEXT');
   ensureColumn(db, 'leads', 'status_history_json', 'TEXT');
   ensureColumn(db, 'conversations', 'lead_platform', 'TEXT');
@@ -639,6 +641,19 @@ export function replaceMpMessages(conversationId, messages, sig) {
   d.prepare('UPDATE mp_conversations SET sig = ?, messages_synced_at = ? WHERE id = ?').run(sig, Date.now(), conversationId);
 }
 
+/**
+ * Adds the engine's record of a reply just sent from the page to the stored chat, so the thread
+ * shows it before the next read. The change fingerprint is left alone: the next read sees the
+ * engine's summary has moved on and fetches the whole chat again.
+ */
+export function appendMpMessage(conversationId, m) {
+  const d = openDb();
+  const seq = (d.prepare('SELECT IFNULL(MAX(seq), -1) + 1 AS n FROM mp_messages WHERE conversation_id = ?').get(conversationId)).n;
+  d.prepare('INSERT OR REPLACE INTO mp_messages(id, conversation_id, seq, direction, source, text, status, has_media, at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(m.id, conversationId, seq, m.direction, m.source, m.text, m.status, m.hasMedia ? 1 : 0, m.at);
+  if (m.direction === 'out') d.prepare('UPDATE mp_conversations SET last_direction = ?, last_message_at = MAX(IFNULL(last_message_at, 0), ?) WHERE id = ?').run('out', m.at || Date.now(), conversationId);
+}
+
 export function getMpConversation(id) {
   const r = stmt('SELECT * FROM mp_conversations WHERE id = ?').get(id);
   return r ? { ...r, data: JSON.parse(r.data_json || '{}') } : null;
@@ -794,6 +809,11 @@ export function recordEdit(id, text) {
 /** Notes that Copy was pressed, without keeping the text. Used for Marketplace suggestions. */
 export function recordCopiedTime(id) {
   stmt('UPDATE drafts SET copied_at = ? WHERE id = ?').run(Date.now(), id);
+}
+
+/** Notes that Send was pressed on a Marketplace suggestion. Marketplace only; no text is kept here. */
+export function recordSentHere(id, now = Date.now()) {
+  stmt("UPDATE drafts SET sent_here_at = ? WHERE id = ? AND item_key LIKE 'mp:%'").run(now, id);
 }
 
 // ---- learning ------------------------------------------------------------

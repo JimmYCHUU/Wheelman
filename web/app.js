@@ -244,8 +244,9 @@ function renderWelcome() {
     h('ol', {},
       h('li', {}, h('span', {}, h('b', { text: sec.welcome.pick }), ' ', t('welcome.fromList'))),
       h('li', {}, h('span', {}, h('b', { text: sec.welcome.check }), ' ', t('welcome.checkIt'))),
-      h('li', {}, h('span', {}, h('b', { text: t('welcome.copy') }), ' ', sec.welcome.paste))),
-    h('p', { text: t('welcome.neverSent') }),
+      h('li', {}, h('span', {}, h('b', { text: inMarketplace() ? t('welcome.send') : t('welcome.copy') }), ' ', sec.welcome.paste))),
+    // Marketplace replies are sent from here, by the Send button and nothing else. The rest is copied and pasted.
+    h('p', { text: inMarketplace() ? t('welcome.sendOnly') : t('welcome.copyOnly') }),
     bits.length ? h('p', { text: t('welcome.learned', { bits: listOf(bits) }), title: t('welcome.learned.title') }) : null,
     backupLine ? h('p', { text: backupLine, title: t('welcome.backup.title') }) : null));
   state.threadSig = '';
@@ -350,7 +351,7 @@ function shortAvailability(a) {
 function threadSignature(item) {
   const m = item.marketplace;
   const older = state.older?.key === item.key ? state.older.entries.length : 0;
-  return item.key + '|' + older + '|' + item.thread.map((e) => `${e.key}${e.unanswered ? '*' : ''}`).join(',') + (m ? `|${m.locked}${m.stage}${m.failed}${m.replyComing}${m.queuedAt && Date.now() - m.queuedAt > 15 * 60 * 1000}` : '');
+  return item.key + '|' + older + '|' + item.thread.map((e) => `${e.key}${e.unanswered ? '*' : ''}${e.sending ? '~' : ''}`).join(',') + (m ? `|${m.locked}${m.stage}${m.failed}${m.replyComing}${m.queuedAt && Date.now() - m.queuedAt > 15 * 60 * 1000}` : '');
 }
 
 function renderThread(item, els, { toBottom = false } = {}) {
@@ -408,7 +409,8 @@ function renderThread(item, els, { toBottom = false } = {}) {
       e.photos && /^m:\d+$/.test(e.key) ? Array.from({ length: e.photos }, (_, i) => photoIn(e.key.slice(2), i, side)) : null,
       e.media && !(e.photos && /^m:\d+$/.test(e.key)) ? h('span', { class: 'media' }, icon('image'), e.media === 'photo' ? 'Photo' : 'Attachment', e.text ? '\n' : '') : null,
       e.text ? linked(e.text) : null,
-      h('span', { class: 'time', text: clock(e.at) }),
+      // A Marketplace reply the engine's phone has yet to type into the chat says so in place of its time.
+      h('span', { class: 'time', text: e.sending ? 'Sending' : clock(e.at), title: e.sending ? 'The Marketplace system is typing this into the chat from the phone.' : null }),
       item.order && /^(in|po):\d+$/.test(e.key) ? h('button', { class: 'unpaste', type: 'button', title: 'Take this pasted message out of the order', onclick: () => removePaste(item, e.key.split(':')[1]) }, 'Remove') : null);
     box.append(bubble);
     lastSide = side; lastBy = by;
@@ -525,7 +527,8 @@ function renderComposer(item, els, { arriving = false } = {}) {
     return;
   }
   if (item.state === 'answered') {
-    box.append(h('div', { class: 'quiet' }, icon('check'), h('p', { text: 'We have replied. Nothing is waiting here.' })));
+    // A Marketplace reply the engine's phone has yet to type into the chat is still "on its way".
+    box.append(h('div', { class: 'quiet' }, icon('check'), h('p', { text: item.marketplace?.sending ? t('composer.sending') : t('composer.replied') })));
     return;
   }
   if (item.state !== 'awaiting' && !(d && d.status === 'ready')) {
@@ -600,12 +603,16 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
   const order = item.order || null;
   const outbound = !!order && !order.replying;
   const what = outbound ? 'message' : 'reply';
-  const ta = h('textarea', { class: `draft ${arriving ? 'arriving' : ''}`.trim(), rows: '3', spellcheck: 'true', placeholder: `Type your ${what} here`, 'aria-label': `Your ${what}, not sent. Change it here, then copy it.` });
+  // A Marketplace chat is the one place a reply can be sent from here. Everywhere else, copy and paste.
+  const sends = item.channel === 'marketplace' && !item.standard;
+  const ta = h('textarea', { class: `draft ${arriving ? 'arriving' : ''}`.trim(), rows: '3', spellcheck: 'true', placeholder: `Type your ${what} here`, 'aria-label': `Your ${what}, not sent. Change it here, then ${sends ? 'send it, or copy it' : 'copy it'}.` });
   ta.value = state.edits.has(d.id) ? state.edits.get(d.id) : d.edited ?? d.reply;
   const backdrop = h('div', { class: 'backdrop', 'aria-hidden': 'true' });
   const advice = h('div', { class: 'advice' });
   const count = h('span', { class: 'count' });
-  const copyBtn = h('button', { class: 'btn primary', type: 'button', title: 'Copy (Ctrl + Enter)' }, icon('copy'), h('span', { text: `Copy ${what}` }));
+  const copyBtn = h('button', { class: sends ? 'btn' : 'btn primary', type: 'button', title: sends ? 'Copy it to paste into the Marketplace chat yourself (Ctrl + Enter)' : 'Copy (Ctrl + Enter)' }, icon('copy'), h('span', { text: `Copy ${what}` }));
+  const sendBtn = sends ? h('button', { class: 'btn primary', type: 'button', title: 'Send this reply to the buyer in the Marketplace chat' }, icon('send'), h('span', { text: 'Send reply' })) : null;
+  let sendingNow = false;
   const clearBtn = h('button', { class: 'btn', type: 'button', title: `Empty the box to write your own ${what}. The suggestion can be brought back.`, onclick: () => replaceText(ta, '') }, icon('x'), 'Clear');
   const after = h('div', { class: 'after', hidden: state.copied !== d.id });
   const tag = h('span', { class: 'draft-tag' });
@@ -704,8 +711,9 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
     advice.replaceChildren(...lines);
 
     const open = blanks.length > 0;
-    copyBtn.classList.toggle('wait', open);
+    copyBtn.classList.toggle('wait', open && !sends);
     copyBtn.lastChild.textContent = open ? 'Copy with blanks' : `Copy ${what}`;
+    if (sendBtn) sendBtn.title = open ? 'Fill in the highlighted parts first. A blank is never sent to a buyer.' : 'Send this reply to the buyer in the Marketplace chat';
   }
 
   function paintCount() {
@@ -728,8 +736,10 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
   // What the buttons may do depends on what is in the box right now.
   function paintButtons() {
     const empty = isEmpty();
-    copyBtn.disabled = empty;
+    copyBtn.disabled = empty || sendingNow;
     clearBtn.hidden = empty;
+    // Send waits while the box is empty, while a blank is still to be filled, and while a send is under way.
+    if (sendBtn) sendBtn.disabled = empty || sendingNow || blanksIn(ta.value).length > 0;
     if (!approveBtn) return;
     // An emptied box cannot be a good reply: the approval goes, here and in Wheelman's records.
     if (empty && d.rating === 'good') { d.rating = ''; state.composerSig = composerSignature(item); }
@@ -773,6 +783,33 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
     noteCopied();
   }
 
+  /**
+   * Marketplace only. The text as it stands goes to the buyer through the Marketplace system. The
+   * box is locked while the answer is awaited; on success the chat shows the reply on its way and
+   * leaves Waiting, and on failure the box is unlocked with the reason shown.
+   */
+  async function doSend() {
+    if (!sendBtn || sendingNow || isEmpty() || blanksIn(ta.value).length) return;
+    sendingNow = true;
+    ta.readOnly = true;
+    sendBtn.lastChild.textContent = 'Sending';
+    paintButtons();
+    try {
+      await flushEdit(d.id);
+      const out = await api(`/api/items/${item.key}/send`, { body: { text: ta.value, draftId: d.id } });
+      state.copied = null;
+      toast(out.queued ? t('toast.sentQueued') : t('toast.sent'));
+      if (state.selected === item.key && out.item) { state.detail = out.item; renderChat(); }
+      refreshList();
+    } catch (e) {
+      sendingNow = false;
+      ta.readOnly = false;
+      sendBtn.lastChild.textContent = 'Send reply';
+      paintButtons();
+      toast(e.message);
+    }
+  }
+
   ta.addEventListener('input', () => { state.edits.set(d.id, ta.value); saveEdit(d.id, ta.value); sync(); });
   ta.addEventListener('blur', () => flushEdit(d.id));
   ta.addEventListener('scroll', () => { backdrop.scrollTop = ta.scrollTop; });
@@ -783,6 +820,7 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
     if (picked && picked === ta.value.trim()) noteCopied();
   });
   copyBtn.addEventListener('click', doCopy);
+  if (sendBtn) sendBtn.addEventListener('click', doSend);
 
   const rewriteInput = outbound
     ? h('input', { type: 'text', maxlength: '300', placeholder: 'For example: we bid 1.2m, sold for 1.31m. Or: ETA 14 Nov, ship Hoegh Trader', 'aria-label': 'What you know that the message needs' })
@@ -850,7 +888,8 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
         h('span', { class: 'grow' }),
         count,
         clearBtn,
-        copyBtn)),
+        copyBtn,
+        sendBtn)),
     rewriteRow,
     teach ? betterRow : null,
     after);
