@@ -21,7 +21,7 @@ export function isOptOut(body) {
     || /\b(stop (texting|messaging|contacting) me|take me off your list|unsubscribe me)\b/.test(t);
 }
 
-const ACK_WORDS = new Set(('ok okay k kk thanks thank you thx ty cheers great perfect awesome cool nice good lovely excellent '
+const ACK_WORDS = new Set(('ok okay k kk thanks thank you thankyou thanku thanx thnx tks tysm thx ty cheers great perfect awesome cool nice good lovely excellent '
   + 'noted received sure yep yes yeah yup no worries problem sounds all will do got it that that\'s thats is fine '
   + 'see ya then soon there tomorrow much so very heaps alot a lot again mate bro brother buddy sir team legend champ '
   + 'appreciate appreciated appreciate it for the info information update reply response help getting back to me us '
