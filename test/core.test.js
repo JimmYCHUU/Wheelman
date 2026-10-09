@@ -100,6 +100,9 @@ test('first name goes back in, and the greeting is tidied when there is no name'
 
 test('first names are taken sensibly from messy portal records', () => {
   assert.equal(firstNameOf({ firstName: 'KerrynDowner' }), 'Kerryn');
+  assert.equal(firstNameOf({ firstName: 'GrahamMcLeod' }), 'Graham', 'a joined name with a capital inside the surname');
+  assert.equal(firstNameOf({ firstName: 'McKenzie' }), 'Mckenzie', 'a capital after two letters is one name');
+  assert.equal(firstNameOf({ firstName: 'DeShawn' }), 'Deshawn');
   assert.equal(firstNameOf({ firstName: 'mic langborne' }), 'Mic');
   assert.equal(firstNameOf({ firstName: 'someone@example.com' }), '');
   assert.equal(firstNameOf({ firstName: '+61400111222' }), '');
@@ -109,7 +112,7 @@ test('first names are taken sensibly from messy portal records', () => {
 // ---- reading customer messages ------------------------------------------------
 
 test('thanks and OK are recognised as needing no reply', () => {
-  for (const s of ['Thanks', 'ok thanks', 'Thank you!', '👍', 'No worries', 'Thanks Lex', 'Okay, thanks mate', 'Perfect thank you so much', 'See you then'])
+  for (const s of ['Thanks', 'ok thanks', 'Thank you!', '👍', 'No worries', 'Thanks Lex', 'Okay, thanks mate', 'Perfect thank you so much', 'See you then', 'Thankyou', 'Ok thankyou', 'Thanku', 'Thanx mate'])
     assert.equal(isAcknowledgement(s), true, s);
   for (const s of ['Thanks, is it still available?', 'What time do you open', 'Ok can you send photos', 'I will come Saturday at 10 to look at the Hiace and bring my mechanic'])
     assert.equal(isAcknowledgement(s), false, s);
