@@ -1,8 +1,10 @@
-// Read-only client for the content engine's Marketplace inbox.
+// Client for the content engine's Marketplace inbox.
 //
-// Safety: this module can only READ. It can call exactly three addresses, with GET, and nothing else.
-// It has no way to send a reply, change a chat, or switch the engine's auto-reply on or off.
-// It sends no cookies and refuses redirects.
+// Safety: reading uses exactly three addresses, with GET. Writing uses exactly one: the engine's
+// own "reply" address, the one its inbox page calls when a person types a reply there, and only
+// sendReply() can call it, only when a person presses Send on the Wheelman page (see server.js).
+// There is no way to change a chat, mark it read, archive it, or switch the engine's auto-reply
+// on or off. No cookies are sent and redirects are refused.
 
 import { config } from './config.js';
 
@@ -11,6 +13,10 @@ const READ_ALLOWLIST = [
   /^\/conversations\/\d+$/,
   /^\/devices$/,
 ];
+// The one address a reply may be sent to. The engine queues the text and its phone types it into
+// the Marketplace chat; the message then comes back on the next read with its status.
+const SEND_ADDRESS = /^\/conversations\/\d+\/reply$/;
+const SEND_MAX_CHARS = 2000;
 
 export class MarketplaceError extends Error {
   constructor(message, status) { super(message); this.status = status; }
@@ -42,6 +48,41 @@ export async function get(pathname, params = {}) {
 
 export const fetchConversationsPage = (offset = 0, limit = 100) => get('/conversations', { limit, offset });
 export const fetchConversation = (id) => get(`/conversations/${Number(id)}`);
+
+/**
+ * Sends one reply into one Marketplace chat, through the engine's own reply address. Called only
+ * from the Send route, after a person pressed Send on the page. Refused before any request leaves
+ * when the chat id or the text is not usable. Returns the engine's record of the queued message
+ * and whether its worker (the phone that types replies) was online.
+ */
+export async function sendReply(conversationId, text) {
+  const id = Number(conversationId);
+  if (!Number.isInteger(id) || id <= 0) throw new MarketplaceError('Not a Marketplace chat.');
+  const body = String(text ?? '').replace(/\r/g, '').trim();
+  if (!body) throw new MarketplaceError('There is nothing to send.');
+  if (body.length > SEND_MAX_CHARS) throw new MarketplaceError(`That is too long for one Marketplace message. Keep it under ${SEND_MAX_CHARS.toLocaleString('en-AU')} characters.`);
+  const pathname = `/conversations/${id}/reply`;
+  if (!SEND_ADDRESS.test(pathname)) throw new MarketplaceError(`Blocked: ${pathname} is not the Marketplace send address`);
+  const url = new URL(baseUrl() + pathname);
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST', redirect: 'error', credentials: 'omit',
+      headers: { accept: 'application/json', 'content-type': 'application/json', 'user-agent': 'Wheelman/0.2' },
+      body: JSON.stringify({ text: body, urls: [] }),
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch (e) {
+    throw new MarketplaceError(`The content engine could not be reached (${e.name === 'TimeoutError' ? 'timed out' : e.message}), so the reply was not sent.`, 0);
+  }
+  let json = {};
+  try { json = await res.json(); } catch { json = {}; }
+  if (!res.ok) {
+    const why = [json.error, json.detail, json.message].find((x) => typeof x === 'string' && x.trim()) || `it answered ${res.status}`;
+    throw new MarketplaceError(`The Marketplace system did not accept the reply: ${why}`, res.status);
+  }
+  return { message: json.message && typeof json.message === 'object' ? json.message : null, workerOnline: json.worker_online !== false };
+}
 
 // ---- turning the engine's records into what Wheelman stores -----------------------------------
 

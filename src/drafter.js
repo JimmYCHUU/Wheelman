@@ -3,7 +3,8 @@
 import { buildPrompt, writtenToday } from './prompt.js';
 import { complete, LlmError } from './llm.js';
 import { logLine } from './log.js';
-import { finishReply, fixGreeting, checkDraft, retryNote, stripModelSignOff, worst, chatStyle, dropGreeting } from './checks.js';
+import { finishReply, fixGreeting, checkDraft, retryNote, stripModelSignOff, worst, chatStyle, dropGreeting, emailChecks } from './checks.js';
+import { researchFor, renderResearch } from './importquery.js';
 import { config } from './config.js';
 import { redact, restore } from './redact.js';
 import { planImport, auctionNote, bidBasisLine } from './imports.js';
@@ -30,7 +31,8 @@ function allowedMaterial(item, prompt) {
   // The inspection booking links count as ours only when the customer asked to see the car.
   const booking = (prompt.inspection?.urls || []).join('\n');
   return {
-    trusted: [prompt.vehicleText, alts, booking, prompt.sameModelUrl || '', (prompt.importUrls || []).join('\n'), ours, prompt.user.split('=== VEHICLE FACTS ===')[0]].join('\n'),
+    // The research for an import email is ours to state: its figures and links came from our website.
+    trusted: [prompt.vehicleText, alts, booking, prompt.sameModelUrl || '', (prompt.importUrls || []).join('\n'), prompt.researchText || '', ours, prompt.user.split('=== VEHICLE FACTS ===')[0]].join('\n'),
     policy: [prompt.businessFactsText, prompt.websiteText].join('\n'),
     customer: [theirs, prompt.unconfirmedText || ''].join('\n'),
   };
@@ -122,7 +124,7 @@ function coachingCopied(body, note) {
  * Turns what the model answered (or a reply written by hand) into the finished suggestion and
  * runs every check on it. plan: an import or auction-order plan, when there is one.
  */
-export function assessReply(item, prompt, json, { plan = null, chat = false, again = false, staffSaid = '', allowed, said, coaching = null, now = Date.now() }) {
+export function assessReply(item, prompt, json, { plan = null, chat = false, email = false, research = null, again = false, staffSaid = '', allowed, said, coaching = null, now = Date.now() }) {
   // A brand-new enquiry gets the team's standard block in place of the sign-off. A holding
   // reply (a complaint, say) does not.
   const { vehicleUrl, inspectionUrl } = prompt.standard;
@@ -173,6 +175,9 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, aga
   if (pasted) checks = [...checks.filter((c) => c.level !== 'ok'), { level: 'fail', code: 'coaching-copied', tokens: [], message: `The reply repeats the owner's coaching word for word ("${pasted} …"). The note says how to handle the message. Say it to the customer in your own words, or leave it out if it was a line to avoid.` }];
   const listing = chat ? listingPriceCheck(item) : null;
   if (listing) checks = [...checks.filter((c) => c.level !== 'ok'), listing];
+  // An import email: the exact answer or a blank, never a holding line, and every model asked about answered.
+  const mail = email ? emailChecks({ body, research, hold: !!json.hold }) : [];
+  if (mail.length) checks = [...checks.filter((c) => c.level !== 'ok'), ...mail];
   const visit = inspectionCheck(prompt.inspection, body, block);
   if (visit) checks = [...checks.filter((c) => c.level !== 'ok'), visit];
   const buyer = buyerCheck(item, body);
@@ -220,8 +225,10 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
 
   try {
     const chat = item.channel === 'marketplace';
-    // The greeting and "Regards, Team Carbarn" go on the first reply to a customer each day, not on every message.
-    const again = !chat && writtenToday(item, now);
+    const email = item.channel === 'email';
+    // The greeting and "Regards, Team Carbarn" go on the first reply to a customer each day, not on
+    // every message. An email is greeted every time.
+    const again = !chat && !email && writtenToday(item, now);
     // The owner's figures, links and promises count as staff-given, whichever box they were typed in.
     const staffSaid = [instruction, coaching?.note].filter(Boolean).join('\n');
 
@@ -229,7 +236,7 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
     let plan = null;
     // A reply to an auction customer: the order's facts go to the AI, its amounts only as markers.
     if (item.order) plan = planOrderReply(item);
-    else if (!chat && item.imports) {
+    else if (!chat && !email && item.imports) {
       try { plan = await planImport(item, { instruction: staffSaid, now }); }
       catch (e) {
         logLine('auction', `${item.itemKey}: ${e.message}`);
@@ -246,18 +253,29 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
       return d;
     }
 
-    const prompt = buildPrompt(item, { instruction, coaching, importPlan: plan, holdOutConversation, now });
+    // An import email: the model, its eligibility and cost are looked up on our website first.
+    // Whatever could not be found becomes a blank in the reply and a note on the page.
+    const research = email ? await researchFor(item, { instruction: staffSaid, now }) : null;
+    const rendered = research ? renderResearch(research) : null;
+    context.research = research ? { models: research.models.map((m) => m.code), notFound: research.notFound.length, stale: research.stale } : null;
+
+    const prompt = buildPrompt(item, { instruction, coaching, importPlan: plan, research, holdOutConversation, now });
     // Where the customer was on the way to a sale, and the move asked for, so the report can read it later.
     context.rung = prompt.stage?.rung || null;
     context.move = prompt.stage?.move || null;
+    // How many of the team's own replies (texts, or past emails) the request showed, so the page can say.
+    context.practice = (prompt.practiceIds || []).length;
     const allowed = allowedMaterial(item, prompt);
     // The auction car, its link and its figures are ours to state: they came from the live auction.
     if (plan?.stage === 'offer') allowed.trusted += `\n${plan.tail}\n${plan.lines.join('\n')}`;
     // The order's own amounts are ours to state: code puts them where the AI left their markers.
     if (plan?.stage === 'order') allowed.trusted += `\n${plan.trustedText}`;
     const said = saidIn(item);
+    // What the website says about the process (we inspect before bidding, VIA before shipping) is
+    // ours to promise, and an auction date in the research is a known day.
+    if (email && prompt.researchText) said.push({ who: 'us', text: prompt.researchText, at: now });
 
-    const assess = (json) => assessReply(item, prompt, json, { plan, chat, again, staffSaid, allowed, said, coaching, now });
+    const assess = (json) => assessReply(item, prompt, json, { plan, chat, email, research, again, staffSaid, allowed, said, coaching, now });
     const failures = (checks) => checks.filter((c) => c.level === 'fail').length;
 
     // An offer does not depend on the AI: its figures come from the auction. If no model can
@@ -274,7 +292,7 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
     // One second attempt when a hard check fails.
     if (worst(best.checks) === 'fail' && result.provider !== 'none') {
       try {
-        const again = await complete(prompt.system, `${prompt.user}\n\n${retryNote(best.checks)}\n\nYour rejected draft was:\n${redact(best.body, item.lead)}`, which);
+        const again = await complete(prompt.system, `${prompt.user}\n\n${retryNote(best.checks, { channel: item.channel })}\n\nYour rejected draft was:\n${redact(best.body, item.lead)}`, which);
         const second = assess(again.json);
         if (failures(second.checks) < failures(best.checks)) { result = again; best = second; }
       } catch (e) { if (!usable(e)) throw e; }
@@ -286,7 +304,10 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
       status: 'ready',
       reply: best.reply,
       needsHuman: Array.isArray(result.json.needs_human) ? result.json.needs_human : [],
+      // What was looked up for an import email, for the page's research notes.
+      research: rendered ? rendered.panel : null,
       factsUsed: [
+        ...(rendered ? rendered.panel.found.slice(0, 6) : []),
         ...(plan?.stage === 'offer' ? [`Auction car ${plan.lot.id}: ${plan.lot.title}, ${plan.lot.km.toLocaleString('en-AU')} km, grade ${plan.lot.grade}`, `The website's suggested bid ¥${plan.lot.benchmarkYen.toLocaleString('en-AU')}; bid used ¥${plan.bidYen.toLocaleString('en-AU')} (${plan.bidBy === 'suggested' ? 'ours' : plan.bidBy === 'staff' ? 'yours' : "the customer's"})`, ...(plan.pick ? [bidBasisLine(plan.pick)] : []), `Estimated landed and complied $${plan.estimate.totalAud.toLocaleString('en-AU')} from the website's calculator`] : []),
         ...(Array.isArray(result.json.facts_used) ? result.json.facts_used.map(String).slice(0, 12) : []),
       ],

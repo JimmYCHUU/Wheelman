@@ -101,7 +101,11 @@ Answer: We can source a vehicle from Japanese auctions for a customer. We physic
 
 ## Deposit for importing to order
 Status: CONFIRMED
-Answer: Importing to order starts with a refundable deposit, which covers our inspection of the vehicle in Japan. The deposit is refunded if no vehicle is secured. Once the customer approves a vehicle and we place the bid, the deposit is no longer refundable and goes towards the purchase. The amount depends on the value of the vehicle and a person confirms it for each customer: leave [CHECK?] for the amount.
+Answer: Importing to order starts with a refundable deposit, which covers our inspection of the vehicle in Japan. The deposit is refunded if no vehicle is secured. Once the customer approves a vehicle and we place the bid, the deposit is no longer refundable and goes towards the purchase. The amount depends on the value of the vehicle: for an import email, the research gives the exact deposit for the model from our website's eligible-models list, or the deposit bands from the how-importing-works page; state that figure. Where neither is given, leave [DEPOSIT?] for the amount.
+
+## The 25-year rule
+Status: WORKING
+Answer: A vehicle built more than 25 years ago may be imported under the 25-year concessional rule rather than SEVS; it still needs a Vehicle Import Approval before shipping. Whether a particular car qualifies is confirmed by a person: leave [ELIGIBILITY?] unless the model is on our eligible-models list.
 
 ## Optional extras
 Status: CONFIRMED

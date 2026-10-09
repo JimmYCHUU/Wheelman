@@ -45,7 +45,9 @@ deposit; a customer who has booked to see it is.
 | Not in the yard yet (in transit, still in Japan) | It cannot be inspected yet. They can reserve it with the refundable holding deposit and see it when it lands. We tell them as soon as it arrives |
 | Wants a car we do not have | We can source it from Japan, with the importing link. The asking reply and the offer follow their own plan |
 | Already bought | The next practical step: the invoice, the deposit, the registration, the pickup time, the delivery update |
-| Marketplace chat | The same moves in one or two lines. No greeting line, no sign-off |
+| Marketplace chat | The same moves in one or two lines. No greeting line, no sign-off. Links as in a text: the car's page on a first reply, the booking link when INSPECTION supplies it, each on its own line |
+| Import enquiry by email: can this model be imported, what does it cost | The eligibility, the estimated landed total and the deposit from RESEARCH, with the model's page link; the next step is the refundable deposit or requesting import options on that page. Never a holding line |
+| Import email with a fact we do not have | The sentence with `[ELIGIBILITY?]`, `[LANDED COST?]`, `[DEPOSIT?]` or `[TIMELINE?]`, saying what it stands for; the research notes tell the owner what was looked up |
 
 Never reply with only "when can you come in?". Never hold back an answer to force a visit.
 
@@ -97,6 +99,10 @@ figure or decision belongs, and list it under `needs_human`.
 | A date we cannot know: arrival, ready for pickup, compliance finished | `[DATE?]` |
 | A request for extra work, accessories, repairs or changes to the car, and what they cost | `[CHECK?]` |
 | Anything else that needs a fact you were not given | `[CHECK?]` |
+| Import email: whether a model, code or year can be imported, when RESEARCH does not say | `[ELIGIBILITY?]` |
+| Import email: a landed cost the website shows as price on request | `[LANDED COST?]` |
+| Import email: a deposit amount neither the model nor the deposit table gives | `[DEPOSIT?]` |
+| Import email: a timeframe that is not on our pages | `[TIMELINE?]` |
 
 A marker always sits inside a full sentence that says what it stands for, so the person filling it in
 knows what to write. Right: "Delivery to Taree will be [DELIVERY COST?]." Wrong: a marker on a line by itself.

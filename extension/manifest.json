@@ -1,16 +1,17 @@
 {
   "manifest_version": 3,
-  "name": "Wheelman phone reader",
-  "version": "0.1",
-  "description": "Reads the Google Messages for web tab in this browser and hands new texts to Wheelman on this computer. It never sends, types or opens anything.",
+  "name": "Wheelman reader",
+  "version": "0.2",
+  "description": "Reads the Google Messages for web tab in this browser and hands new texts to Wheelman on this computer, and adds a Send to Wheelman button to Gmail for import enquiries. It never sends, types or opens anything.",
   "permissions": ["alarms", "storage", "tabs"],
-  "host_permissions": ["http://127.0.0.1:3210/*", "https://messages.google.com/*"],
+  "host_permissions": ["http://127.0.0.1:3210/*", "https://messages.google.com/*", "https://mail.google.com/*"],
   "background": { "service_worker": "background.js" },
   "content_scripts": [
-    { "matches": ["https://messages.google.com/web/*"], "js": ["reader.js"], "run_at": "document_idle" }
+    { "matches": ["https://messages.google.com/web/*"], "js": ["reader.js"], "run_at": "document_idle" },
+    { "matches": ["https://mail.google.com/*"], "js": ["mail.js"], "run_at": "document_idle" }
   ],
   "web_accessible_resources": [
-    { "resources": ["parse.js"], "matches": ["https://messages.google.com/*"] }
+    { "resources": ["parse.js", "mailparse.js", "shape.js"], "matches": ["https://messages.google.com/*", "https://mail.google.com/*"] }
   ],
-  "action": { "default_popup": "popup.html", "default_title": "Wheelman phone reader" }
+  "action": { "default_popup": "popup.html", "default_title": "Wheelman reader" }
 }

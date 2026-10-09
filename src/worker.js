@@ -14,6 +14,7 @@ import { similarity } from './text.js';
 import { logLine } from './log.js';
 import { pollNotifications, leadKnown } from './notifications.js';
 import { backupIfStale, lastBackup } from './backup.js';
+import { refreshEligibleModelsIfStale, eligibleModelsInfo } from './eligible.js';
 
 export const state = {
   startedAt: Date.now(),
@@ -31,6 +32,7 @@ export const state = {
   mpSyncing: false,
   mpSync: null,         // Marketplace: { at, ok, message, result }
   phone: null,          // the phone add-on's last report: { at, threads, stored, signedOut, found, hidden }
+  mail: null,           // the last email thread the Gmail button sent: { at, key, subject, added, updated }
 };
 
 const PHONE_NOTE_GAP_MS = 5 * 60 * 1000;
@@ -42,6 +44,12 @@ export function notePhoneReport(r) {
   state.phone = { at, threads: r.threads || 0, stored: r.stored || 0, signedOut: !!r.signedOut, found: r.found || null, hidden: !!r.hidden, lastStoredAt: r.stored ? at : before?.lastStoredAt || null };
   const persisted = getMeta('phone_last_report', null);
   if (r.stored || !persisted || at - (persisted.at || 0) >= PHONE_NOTE_GAP_MS) setMeta('phone_last_report', state.phone);
+}
+
+/** Notes an email thread handed in from Gmail. These are rare, so each one is written down. */
+export function noteMailReport(out) {
+  state.mail = { at: Date.now(), key: out.key, subject: out.subject || '', added: out.added || 0, updated: out.updated || 0 };
+  setMeta('mail_last_report', state.mail);
 }
 
 const RETRY_FAILED_AFTER_MS = 10 * 60 * 1000;
@@ -107,7 +115,8 @@ export async function runMarketplaceSync() {
 
 /**
  * For each suggestion still open, see whether a reply has since been sent, and compare.
- * Dashboard conversations only: Marketplace suggestions are not tracked and never learned from.
+ * Dashboard conversations and import emails only: Marketplace suggestions are not tracked and
+ * never learned from. An email reply counts when the thread is sent from Gmail again with it in.
  */
 export function updateOutcomes() {
   let n = 0;
@@ -133,27 +142,27 @@ export function updateOutcomes() {
     if (after[0].who !== 'us') { for (const d of drafts) markSuperseded(d.id); continue; }
 
     // Our reply: the texts we sent in a row, up to the customer's next message. Replies are
-    // often split over two or three texts sent within a few minutes.
+    // often split over two or three texts sent within a few minutes; emails over a day.
+    const within = item.channel === 'email' ? 24 * 3600 * 1000 : 15 * 60 * 1000;
     const burst = [];
     for (const e of after) {
-      if (e.who !== 'us' || e.at - after[0].at > 15 * 60 * 1000) break;
+      if (e.who !== 'us' || e.at - after[0].at > within) break;
       burst.push(e);
     }
     const sentText = burst.map((e) => e.text).join('\n');
     const sent = burst[0];
     // A reply seen only on the phone: the dashboard's copy may still be on its way, so wait a
-    // while. If it never comes, the reply counts as sent but teaches nothing (the phone never does).
-    if (sent.phoneOnly) {
-      if (Date.now() - (sent.at || 0) < 15 * 60 * 1000) continue;
-      for (const d of drafts) { recordOutcome(d.id, { sentText, sentBy: 'phone', sentAt: sent.at, similarity: similarity(comparable(d.reply), comparable(sentText)) }); n++; }
-      continue;
-    }
+    // while. If it never comes, the reply counts as sent, and teaches like any other as long as
+    // the add-on saw all of it: a text the Messages list cut short is not what was said.
+    const phoneOnly = !!sent.phoneOnly;
+    if (phoneOnly && Date.now() - (sent.at || 0) < 15 * 60 * 1000) continue;
     for (const d of drafts) {
-      recordOutcome(d.id, { sentText, sentBy: sent.by || 'phone', sentAt: sent.at, similarity: similarity(comparable(d.reply), comparable(sentText)) });
+      recordOutcome(d.id, { sentText, sentBy: phoneOnly ? 'phone' : sent.by || 'phone', sentAt: sent.at, similarity: similarity(comparable(d.reply), comparable(sentText)) });
       n++;
     }
+    if (phoneOnly && burst.some((e) => e.truncated)) continue;
     // The reply that was really sent is the best teacher: one lesson per customer message, taken
-    // from the suggestion that was copied, or else the newest. Dashboard conversations only.
+    // from the suggestion that was copied, or else the newest. Dashboard conversations and emails.
     const teacher = drafts.find((d) => d.copied_at) || drafts[0];
     try { learnFrom(item, teacher, sentText, 'sent', { at: sent.at }); } catch { /* learning must never stop the sync */ }
   }
@@ -177,6 +186,8 @@ export async function draftWaiting({ max = 25 } = {}) {
       marketplaceLeft = Math.max(0, config.marketplace.dailyDrafts - mpDraftsLastDay());
       queue.push(...listItems({ source: 'marketplace', states: ['awaiting'] }));
     }
+    // Email threads from Gmail come last; they are few, and each is researched on the website first.
+    if (config.mail.switchedOn) queue.push(...listItems({ source: 'importquery', states: ['awaiting'] }));
     for (const item of queue) {
       if (made >= max) break;
       const chat = item.channel === 'marketplace';
@@ -224,6 +235,8 @@ export async function cycle() {
   try { updateOutcomes(); } catch (e) { state.lastDraftError = { at: Date.now(), message: 'Comparing sent replies failed: ' + e.message }; logLine('outcomes', `${e.message} | ${String(e.stack || '').split('\n').slice(1, 4).join(' ')}`); }
   // Once a day, relearn our salespeople's genuine replies from the latest dashboard conversations.
   try { refreshVoiceBankIfStale(); } catch { /* keep the existing bank */ }
+  // Once a day, the website's list of import-eligible models, for the Import Query section.
+  if (config.mail.switchedOn) { try { await refreshEligibleModelsIfStale(); } catch { /* next time */ } }
   // A coaching note written while every AI model was busy still has its lesson to be worked out.
   try { if (providers().length && Date.now() >= state.pausedUntil) await distilPending(2); } catch { /* next time */ }
   // Auction orders: look at the live auction for the ones still searching, and write the message
@@ -342,6 +355,10 @@ export function statusReport() {
     paused: Date.now() < state.pausedUntil,
     ai: { providers: modelStatus(), lastModel: lastModel().model, usedToday: u.total, limit: u.limit },
     syncMinutes: config.syncMinutes,
+    // The Gmail button: whether the intake is on, and the last thread it handed in.
+    mail: { on: config.mail.switchedOn, last: config.mail.switchedOn ? (state.mail || getMeta('mail_last_report', null)) : null },
+    // The website's eligible-models list: how many models, and when it was last read.
+    eligibleModels: config.mail.switchedOn ? eligibleModelsInfo() : null,
     // The notification feed: on when a poll interval is set, with the last read's outcome.
     alerts: { on: config.notificationsSeconds > 0, everySeconds: config.notificationsSeconds, ...(state.alerts || {}) },
     marketplace: {

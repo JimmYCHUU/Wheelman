@@ -20,6 +20,9 @@ test('the wording table fills in names and picks plurals by the number', () => {
   assert.equal(t('learned.changed', { n: 1 }), '1 reply you changed');
   assert.equal(t('learned.changed', { n: 3 }), '3 replies you changed');
   assert.equal(t('welcome.waiting', { n: 2, noun: 'buyers' }), '2 buyers waiting for a reply');
+  assert.equal(t('welcome.reads.email', { n: 1 }), 'Reads 1 past import email the team answered');
+  assert.equal(t('welcome.reads.email', { n: 12 }), 'Reads 12 past import emails the team answered');
+  assert.equal(t('welcome.reads.dashboard', { team: t('practice.team', { n: 556 }), voice: 40 }), 'Reads 556 replies the team sent in the last year, whoever sent them and from wherever, and 40 of our salespeople\'s own replies');
   assert.equal(t('status.ai', { used: 14, limit: 500 }), '14 of 500 AI requests used today');
   assert.equal(t('no.such.key'), 'no.such.key');
   assert.equal(t('status.checking', {}), 'Checking ');
@@ -98,8 +101,11 @@ test('the store calls a view once now, then only when what it selected has chang
 });
 
 test('the section registry names every section, its lists and where a key belongs', () => {
-  assert.deepEqual(SECTION_IDS, ['dashboard', 'marketplace', 'auction', 'standards']);
+  assert.deepEqual(SECTION_IDS, ['dashboard', 'marketplace', 'auction', 'importquery', 'standards'], 'Standards stays last: the five-tab layout gives the last tab the full third row');
   assert.equal(sectionOf('tr:12'), 'standards');
+  assert.equal(sectionOf('em:3'), 'importquery');
+  assert.deepEqual(SECTIONS.importquery.tabs.map((x) => x && x.id), ['all', 'waiting', null]);
+  assert.deepEqual(rowTags({ section: 'importquery', collapsed: 2, state: 'awaiting', flag: 'none' }, { tab: 'waiting' }), [{ text: 'Folded in Gmail', tone: 'warning' }]);
   assert.equal(sectionOf('c:12'), 'dashboard');
   assert.equal(sectionOf('l:12'), 'dashboard');
   assert.equal(sectionOf('ph:0491570101'), 'dashboard');

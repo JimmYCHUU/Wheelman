@@ -82,25 +82,15 @@ async function readAll() {
 }
 
 /** The shape of the page: element names and the attributes that name things. No words from any message. */
-function shape(el, depth = 0) {
-  if (!el || depth > 7) return '';
-  const attrs = [...el.attributes].map((a) => {
-    if (a.name === 'class') return `class=${a.value.split(/\s+/).filter(Boolean).slice(0, 4).join('.')}`;
-    if (/^(data-e2e-|role$|aria-)/.test(a.name)) return a.name;
-    return a.name;
-  }).join(' ');
-  const kids = [...el.children].slice(0, 12).map((k) => shape(k, depth + 1)).filter(Boolean);
-  return `${el.tagName.toLowerCase()}${attrs ? ` [${attrs}]` : ''}${kids.length ? ` { ${kids.join(' ; ')} }` : ''}`;
-}
-
-function pageShape() {
+async function pageShape() {
+  const { pageShape: describe } = await import(chrome.runtime.getURL('shape.js'));
   const items = listItems();
   const root = items[0] || document.querySelector('main, mw-main-container, mw-app') || document.body;
-  return { path: location.pathname, listItems: items.length, shape: shape(root).slice(0, 8000) };
+  return describe(root, { path: location.pathname, listItems: items.length });
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (msg && msg.type === 'read') { readAll().then(reply, (e) => reply({ v: 1, seenAt: Date.now(), error: String(e && e.message || e), found: { listItems: 0, parsed: 0 }, threads: [] })); return true; }
-  if (msg && msg.type === 'shape') { reply(pageShape()); return false; }
+  if (msg && msg.type === 'shape') { pageShape().then(reply, (e) => reply({ error: String(e && e.message || e) })); return true; }
   return false;
 });

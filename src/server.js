@@ -18,7 +18,11 @@ import { RUNG_LABELS } from './selling.js';
 import { loadModelReplies, scenarioOf, scenarioItem, setScenarioStatus, standardsCounts, modelRepliesStamp, STATUSES } from './modelreplies.js';
 import { assessProposed } from './drafter.js';
 import { insertDraft } from './db.js';
-import { comparable, currentText } from './learn.js';
+import { comparable, currentText, canLearnFrom } from './learn.js';
+import { validateMailReport, storeMailThread } from './mail.js';
+import { recentPractice, PRACTICE_DAYS } from './practice.js';
+import { recentMailPractice } from './mailpractice.js';
+import { loadExamples } from './examples.js';
 import { oldRowsStamp, messageMedia } from './db.js';
 import { logLine } from './log.js';
 import { businessFactsForPrompt, loadBusinessFacts } from './knowledge.js';
@@ -29,6 +33,10 @@ import { reservedByAnother } from './deal.js';
 import { wantedFrom } from './imports.js';
 import { learnedStats } from './db.js';
 import { validateReport, storePhoneReport } from './phone.js';
+import { sendReply, fetchConversation, normalizeMpMessage } from './marketplace.js';
+import { storeMpConversation } from './sync.js';
+import { appendMpMessage, recordSentHere } from './db.js';
+import { blankMatcher } from '../web/lib/blank.js';
 
 const TYPES = { '.woff2': 'font/woff2', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(config.root, 'package.json'), 'utf8')).version || ''; } catch { return ''; } })();
@@ -55,11 +63,15 @@ function readBody(req, limit = 100000) {
   });
 }
 
+// The two routes the browser add-on (extension/) may post to, each with its own header: the phone
+// reader's reports, and an email thread from the Send to Wheelman button in Gmail.
+const ADDON_ROUTES = [[/^\/api\/phone\//, 'x-wheelman-phone'], [/^\/api\/mail\//, 'x-wheelman-mail']];
+
 /**
- * Only this computer's own browser page may use the app. The one exception is the phone add-on
- * (extension/), which reports from a browser add-on's own origin: it is let in on its own route
- * only, with its own header (an ordinary web page cannot add one without a preflight request, which
- * this server never answers), and only when PHONE_ADDON_ID, if set, names it.
+ * Only this computer's own browser page may use the app. The one exception is the browser add-on
+ * (extension/), which reports from a browser add-on's own origin: it is let in on its two routes
+ * only, each with its own header (an ordinary web page cannot add one without a preflight request,
+ * which this server never answers), and only when PHONE_ADDON_ID, if set, names it.
  */
 function allowed(req, pathname = '') {
   const host = String(req.headers.host || '');
@@ -67,9 +79,10 @@ function allowed(req, pathname = '') {
   if (req.method !== 'GET') {
     const origin = String(req.headers.origin || '');
     const json = /application\/json/i.test(String(req.headers['content-type'] || ''));
-    if (/^\/api\/phone\//.test(pathname) && /^chrome-extension:\/\/[a-p]{32}$/.test(origin)) {
+    const route = ADDON_ROUTES.find(([re]) => re.test(pathname));
+    if (route && /^chrome-extension:\/\/[a-p]{32}$/.test(origin)) {
       if (config.phone.addonId && origin !== `chrome-extension://${config.phone.addonId}`) return false;
-      return req.headers['x-wheelman-phone'] === '1' && json;
+      return req.headers[route[1]] === '1' && json;
     }
     if (origin && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return false;
     if (!json) return false;
@@ -101,6 +114,12 @@ function draftOf(item) {
     // What the person has typed over the suggestion: null when untouched, '' when they cleared it.
     edited: typeof draft.edited_text === 'string' ? draft.edited_text : null, editedAt: draft.edited_at || null,
     model: draft.model, provider: draft.provider, createdAt: draft.created_at, instruction: draft.instruction || '', error: draft.error || '', rating: draft.rating || '',
+    // Marketplace only: when Send was pressed on this suggestion.
+    sentHereAt: draft.sent_here_at || null,
+    // An import email: what was looked up on the website, found and not found, with its sources.
+    research: draft.research || null,
+    // How many of the team's own replies to similar messages the request showed.
+    practiceUsed: draft.context?.practice || 0,
     needsHuman: (draft.needsHuman || []).filter((n) => n && n.marker && n.reason).map((n) => ({ marker: String(n.marker), reason: String(n.reason) })),
     // What the reply is for: the one next step it offers, and where the customer is on the way to a sale.
     nextStep: draft.next_step || '', rung: draft.rung || '', rungLabel: RUNG_LABELS[draft.rung] || '',
@@ -124,10 +143,13 @@ function summary(item) {
   const lastShown = [...item.timeline].reverse().find((e) => !e.internal) || last;
   return {
     key: item.itemKey,
-    section: item.standard ? 'standards' : item.channel === 'marketplace' ? 'marketplace' : 'dashboard',
+    section: item.standard ? 'standards' : item.channel === 'marketplace' ? 'marketplace' : item.channel === 'email' ? 'importquery' : 'dashboard',
     // A model reply's scenario: its title and where it stands with the owner.
     standardStatus: item.standard?.status || null,
     account: item.marketplace?.account || '',
+    // An email thread: the customer's address, and how many of its messages Gmail had folded.
+    email: item.mail?.customerEmail || '',
+    collapsed: item.mail?.collapsed || 0,
     needsPerson: !!item.marketplace?.needsPerson,
     replyComing: !!item.marketplace?.replyComing,
     anchor: item.anchorKey,
@@ -146,7 +168,7 @@ function summary(item) {
     unread: item.state === 'awaiting' && !isSeen(item.itemKey, item.anchorKey) && (item.lastInboundAt || 0) >= Date.now() - RECENT_HOURS * 3600e3 ? item.pending.length : 0,
     preview: { who: lastShown.who, text: lastShown.text || lastShown.event || (lastShown.media ? 'Photo' : ''), media: lastShown.media || null },
     flag: flagLevel(draft),
-    car: item.standard ? item.standard.title : item.vehicles[0]?.title || item.marketplace?.listingTitle || (item.imports ? wantedFrom(item).car : ''),
+    car: item.standard ? item.standard.title : item.mail ? (item.mail.car || item.mail.subject) : item.vehicles[0]?.title || item.marketplace?.listingTitle || (item.imports ? wantedFrom(item).car : ''),
   };
 }
 
@@ -188,10 +210,17 @@ function marketplaceOf(item) {
   const e = m.engine;
   return {
     account: m.account, listingTitle: m.listingTitle, listingPrice: m.listingPrice, listingUrl: m.listingUrl,
-    archived: m.archived, needsPerson: m.needsPerson, replyComing: m.replyComing, queuedAt: m.queuedAt, failed: m.failed, unsent: m.unsent,
+    archived: m.archived, needsPerson: m.needsPerson, replyComing: m.replyComing, queuedAt: m.queuedAt, failed: m.failed, unsent: m.unsent, sending: !!m.sending,
     autoReply: e.enabled, stage: e.stage, locked: e.locked, lockReason: e.lockReason, lockDetail: e.lockDetail,
     urgency: e.urgency, nextAction: e.nextAction, notes: e.notes,
   };
+}
+
+/** What the page shows about an email thread, beyond the messages. */
+function mailOf(item) {
+  const m = item.mail;
+  if (!m) return null;
+  return { subject: m.subject, customerName: m.customerName, customerEmail: m.customerEmail, messages: m.messages, collapsed: m.collapsed, firstAt: m.firstAt, lastAt: m.lastAt, car: m.car, draftsOff: !!m.draftsOff };
 }
 
 /** How the car is described in the strip under the customer's name. */
@@ -266,6 +295,8 @@ const threadOf = (item, shown) => {
     by: displayNameFor(e.by) || '', auto: !!e.auto, via: e.via || '', at: e.at, unanswered: item.state === 'awaiting' && pendingKeys.has(e.key),
     // Seen on the phone and not on the dashboard.
     phone: !!e.phoneOnly,
+    // A Marketplace reply the engine has queued for its phone to type into the chat.
+    sending: !!e.sending,
   }));
 };
 
@@ -274,7 +305,7 @@ function presentOrder(item) {
   const shown = item.timeline.slice(-THREAD_LIMIT);
   return {
     ...summary(item),
-    note: '', channel: 'auction', marketplace: null,
+    note: '', channel: 'auction', marketplace: null, mail: null, teaches: false,
     firstName: firstNameOf(item.lead), source: 'Auction order', leadStatus: '', location: '', email: item.lead.email || '',
     noLead: false, autoDraft: false, autoReason: '', firstReply: item.isFirstReply, looking: null, vehicle: null,
     order: orderOf(item),
@@ -294,6 +325,9 @@ function present(item) {
     note: item.note,
     channel: item.channel,
     marketplace: marketplaceOf(item),
+    mail: mailOf(item),
+    // Whether the teaching buttons (Good reply, Could be better) belong here: the one gate in learn.js decides.
+    teaches: !!item.standard || canLearnFrom(item.itemKey),
     firstName: firstNameOf(item.lead || {}),
     source: item.lead?.source || '',
     leadStatus: item.lead?.status || '',
@@ -312,16 +346,20 @@ function present(item) {
   };
 }
 
-const SECTIONS =['dashboard', 'marketplace', 'auction', 'standards'];
+const SECTIONS = ['dashboard', 'marketplace', 'auction', 'importquery', 'standards'];
 // Standards: the model replies, on the page only while one is waiting for a rating. Once every
 // one is approved or set aside the tab goes (the approved ones still set the standard), and it
 // comes back when the file gains a scenario or "Could be better" writes one again.
-const sectionOn = (s) => (s === 'marketplace' ? config.marketplace.enabled : s === 'standards' ? standardsCounts().toRate > 0 : true);
-const KEY = '((?:c|l|mp|ao|ph|tr):\\d+)';
+// Import Query: email threads sent from Gmail; off when the intake is switched off.
+const sectionOn = (s) => (s === 'marketplace' ? config.marketplace.enabled : s === 'standards' ? standardsCounts().toRate > 0 : s === 'importquery' ? config.mail.switchedOn : true);
+const KEY = '((?:c|l|mp|ao|ph|tr|em):\\d+)';
 const itemRoute = (tail = '') => new RegExp(`^/api/items/${KEY}${tail}$`);
 
 const listCache = new Map();
 const olderCache = new Map();
+// Marketplace chats with a reply on its way to the engine right now, so a second press of Send
+// while the first is still being answered cannot send the same reply twice.
+const sendingNow = new Set();
 const ALL_STATES = ['awaiting', 'answered', 'ack', 'closed', 'optout', 'other'];
 // Conversations with activity in the last fortnight are rebuilt whenever anything is written;
 // older ones only when something a row depends on has changed (see oldRowsStamp).
@@ -406,7 +444,12 @@ async function api(req, res, url) {
 
   if (req.method === 'GET' && p === '/api/status') {
     const facts = businessFactsForPrompt();
-    return send(res, 200, { ...worker.statusReport(), learned: learnedStats(), facts: { ...facts.counts, unanswered: facts.unanswered, toConfirm: loadBusinessFacts().filter((t) => t.status === 'working').map((t) => t.title) } });
+    // What Wheelman reads of the team's own replies, so the page can say it learns from them:
+    // the dashboard's replies in the last year (whoever sent them), the past import emails, and
+    // the salespeople's genuine replies in the example bank.
+    let practice = { dashboard: 0, days: PRACTICE_DAYS, email: 0, voice: 0 };
+    try { practice = { dashboard: recentPractice().length, days: PRACTICE_DAYS, email: config.mail.switchedOn ? recentMailPractice().length : 0, voice: loadExamples().length }; } catch { /* the counts are a courtesy */ }
+    return send(res, 200, { ...worker.statusReport(), learned: learnedStats(), practice, facts: { ...facts.counts, unanswered: facts.unanswered, toConfirm: loadBusinessFacts().filter((t) => t.status === 'working').map((t) => t.title) } });
   }
 
   // Is Wheelman alive and able to read its database? For a watchdog, the demo check and a person.
@@ -429,6 +472,16 @@ async function api(req, res, url) {
   }
 
   if (req.method === 'GET' && p === '/api/phone/status') return send(res, 200, worker.statusReport().phone);
+
+  // The Send to Wheelman button in Gmail hands over one email thread. See allowed() for who may call this.
+  if (req.method === 'POST' && p === '/api/mail/threads') {
+    if (!config.mail.switchedOn) return send(res, 403, { error: 'The email intake is switched off (MAIL_INTAKE=0 in the .env file).' });
+    let report;
+    try { report = validateMailReport(await readBody(req, 3000000)); } catch (e) { return send(res, 400, { error: e.message === 'too large' ? 'The thread is too large to take in.' : e.message === 'bad json' ? 'The thread could not be read.' : e.message }); }
+    const out = storeMailThread(report);
+    worker.noteMailReport(out);
+    return send(res, 200, { ok: true, ...out, serverTime: Date.now() });
+  }
 
   if (req.method === 'GET' && p === '/api/items') {
     const tab = ['all', 'waiting', 'quiet', 'other'].includes(url.searchParams.get('tab')) ? url.searchParams.get('tab') : 'waiting';
@@ -533,6 +586,43 @@ async function api(req, res, url) {
       draft = await draftFor(item, { instruction });
     }
     return send(res, 200, { item: present(itemFromKey(m[1], picked) || item), ok: draft.status === 'ready', error: draft.error || '' });
+  }
+
+  // Send, Marketplace only: the text in the message box goes to the buyer through the content
+  // engine's own reply address, the one its inbox page uses. The engine queues it and its phone
+  // types it into the chat. Only a Marketplace key matches this route; a dashboard or auction
+  // conversation has no send. Nothing is learned from what was sent (RULE-4).
+  m = p.match(/^\/api\/items\/(mp:\d+)\/send$/);
+  if (req.method === 'POST' && m) {
+    if (!config.marketplace.enabled) return send(res, 403, { error: 'The Marketplace section is switched off.' });
+    const item = itemFromKey(m[1]);
+    if (!item || item.channel !== 'marketplace') return send(res, 404, { error: 'That Marketplace chat was not found.' });
+    const body = await readBody(req);
+    const text = String(body.text ?? '').replace(/\r/g, '').trim();
+    if (!text) return send(res, 400, { error: 'There is nothing to send.' });
+    // A blank is for the person to fill in. It is never sent to a buyer as it stands.
+    const blanks = [...new Set([...text.matchAll(blankMatcher())].map((x) => x[0]))];
+    if (blanks.length) return send(res, 400, { error: `Fill in ${blanks.length === 1 ? 'the blank' : 'the blanks'} before sending: ${blanks.join(', ')}.` });
+    if (sendingNow.has(item.itemKey)) return send(res, 409, { error: 'This reply is already on its way.' });
+    sendingNow.add(item.itemKey);
+    try {
+      const out = await sendReply(item.marketplace.id, text);
+      // The suggestion it came from: what was in the box is kept with it, and that Send was pressed.
+      const draft = Number(body.draftId) ? getDraft(Number(body.draftId)) : null;
+      if (draft && draft.item_key === item.itemKey) { onEdited(item, draft.id, text); recordSentHere(draft.id); }
+      // The engine's record of the queued reply goes into the thread at once; then the chat is read
+      // again so everything else is current too. If that read fails, the next check brings it.
+      if (out.message && Number.isInteger(Number(out.message.id))) appendMpMessage(item.marketplace.id, normalizeMpMessage(out.message, 0, item.marketplace.id));
+      try {
+        const detail = await fetchConversation(item.marketplace.id);
+        if (detail?.conversation?.id === item.marketplace.id) storeMpConversation(detail.conversation, detail.messages || []);
+      } catch (e) { logLine('marketplace', `${item.itemKey}: the reply was sent, but the chat could not be read back: ${e.message}`); }
+      logLine('marketplace', `${item.itemKey}: a reply was sent from the page (${text.length} characters)${out.workerOnline ? '' : '; the engine\'s phone is offline, so it is queued'}`);
+      return send(res, 200, { ok: true, queued: !out.workerOnline, item: present(itemFromKey(m[1]) || item) });
+    } catch (e) {
+      logLine('marketplace', `${item.itemKey}: the reply could not be sent. ${e.message}`);
+      return send(res, 502, { error: e.message });
+    } finally { sendingNow.delete(item.itemKey); }
   }
 
   m = p.match(itemRoute('/dismiss'));

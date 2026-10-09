@@ -14,10 +14,12 @@ are welcome as pull requests. The rules below are what keep it safe to publish.
 3. **Nothing private leaves the computer.** Run `npm run check-private` before every push, and
    enable the hook so it runs by itself: `git config core.hooksPath .githooks`. The real business
    facts, staff names, `.env` and the database are git-ignored; keep them that way.
-4. **The product rules are fixed.** Wheelman never sends; every outside system is read-only
-   through an allowlist; customer details never reach an AI; every figure and link is verified or
-   left as a blank; Marketplace and the phone never teach; Dismiss is always recoverable. A change
-   that weakens one of these will not be merged.
+4. **The product rules are fixed.** Wheelman sends nothing by itself: the one send is a
+   Marketplace reply when a person presses Send, to the engine's own reply address, and nothing
+   else is ever sent; every outside system is otherwise read-only through an allowlist; customer
+   details never reach an AI; every figure and link is verified or left as a blank; Marketplace
+   and the phone never teach; Dismiss is always recoverable. A change that weakens one of these
+   will not be merged.
 
 ## Working on it
 

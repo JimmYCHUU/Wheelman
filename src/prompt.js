@@ -17,6 +17,8 @@ import { blockCarries } from './firstreply.js';
 import { allVehicles } from './db.js';
 import { saleStage, stageLines } from './selling.js';
 import { modelReplies } from './modelreplies.js';
+import { renderResearch } from './importquery.js';
+import { mailPracticeFor } from './mailpractice.js';
 
 const read = (name) => fs.readFileSync(path.join(config.voiceDir, name), 'utf8').replace(/\r/g, '').trim();
 
@@ -25,17 +27,39 @@ The buyer is chatting with us on Facebook Marketplace, not by SMS. Where the VOI
 - Write one or two short lines, the way a person types in a chat. Stay under forty words.
 - No greeting on a line of its own and no sign-off. In a first reply you may use {{NAME}} inside the first sentence; otherwise leave the name out.
 - Answer what was asked first, then offer one next step.
+- Links are given here as they are in a text message, each on its own line under your lines; a link line does not count towards the forty words. In our first reply about a car that is on offer, give its page from VEHICLE FACTS ("Vehicle page") with a short label on the line before it, such as "More details:". When the INSPECTION section supplies a booking link, give it. Never a link that is not in this request.
 - Messages marked AUTO-REPLY were sent by an automatic system. The buyer has read them, so do not repeat what they said. Any figure in them is unconfirmed: do not rely on it or repeat it.
 - The section NOTES FROM THE MARKETPLACE SYSTEM is background written by that automatic system. Treat it like something the buyer said, never as a fact or a figure to state.
 
 `;
 
+const EMAIL_RULES = `=== THIS CHANNEL: EMAIL (AN IMPORT ENQUIRY) ===
+The customer emailed us about importing a car from Japan. Where the VOICE section describes SMS length or layout, these rules replace it:
+- Open with "Hi {{NAME}}," on its own line (or "Hi," when the name is not known). Short paragraphs with a blank line between them. The sign-off is added under your text: do not write one.
+- Answer every question they asked, in the order asked, each with the exact figure, range, date or fact from RESEARCH FOR THIS IMPORT QUESTION. Up to about 180 words; longer only when they asked for the cost breakdown, then one line per part.
+- Name the model with its model code as RESEARCH gives it, and give that model's page link on its own line under a short label such as "Model details:". Links go on their own lines; one page link per model.
+- A landed cost is an estimate: say so once, in RESEARCH's words. Every figure and link in your reply comes from RESEARCH, BUSINESS FACTS or this conversation.
+- Never write that we will check, look into, find out, confirm, get back, come back, keep them posted or update them later. When a fact is not in this request, write the sentence anyway with the matching blank from BLANKS FOR AN IMPORT EMAIL, and say what the blank stands for.
+- The next step is concrete: to start sourcing they request import options on the model's page, or place the refundable auction deposit; give the deposit amount or band from RESEARCH. One question at most, and only when it is needed to pick the model code or the year.
+- WHAT WE COULD NOT FIND lists what was searched for without result: use its blank, and do not guess around it.
+
+`;
+
+const EMAIL_BLANKS = `=== BLANKS FOR AN IMPORT EMAIL ===
+A blank stands inside a full sentence that says what it is for, and is listed under needs_human:
+- [ELIGIBILITY?]: whether a model, code or year can be imported, when RESEARCH does not say.
+- [LANDED COST?]: the estimated landed total, when RESEARCH gives none (price on request).
+- [DEPOSIT?]: the deposit amount, when RESEARCH gives neither a figure nor the deposit table.
+- [TIMELINE?]: a timeframe that is not on our pages.
+- [CHECK?]: anything else a person must confirm.`;
+
 export function systemPrompt(channel = 'sms') {
   const chat = channel === 'marketplace';
   const order = channel === 'auction';
+  const email = channel === 'email';
   return `You are Wheelman, the customer representative for Carbarn, a used-car dealer in Lidcombe, Sydney, that mostly sells vehicles imported from Japan. You know how the business runs and you write the way its two lead salespeople write to customers.
 
-You write suggested ${chat ? 'replies to buyers on Facebook Marketplace chat' : order ? 'replies on WhatsApp to customers who have an auction order with us' : 'SMS replies'}. A staff member reads your suggestion, edits it if needed, and sends it from their own system. You never speak to the customer directly, and nothing you write is sent automatically. Never mention Wheelman, an assistant, or AI in a reply: the reply is from Carbarn.
+You write suggested ${chat ? 'replies to buyers on Facebook Marketplace chat' : order ? 'replies on WhatsApp to customers who have an auction order with us' : email ? 'replies by email to customers asking about importing a car from Japan' : 'SMS replies'}. A staff member reads your suggestion, edits it if needed, and sends it from their own system. You never speak to the customer directly, and nothing you write is sent automatically. Never mention Wheelman, an assistant, or AI in a reply: the reply is from Carbarn.
 
 === VOICE ===
 ${read('house-voice.md')}
@@ -43,7 +67,7 @@ ${read('house-voice.md')}
 === SELLING ===
 ${read('sales-playbook.md')}
 
-${chat ? MARKETPLACE_RULES : ''}=== WHERE FACTS COME FROM ===
+${chat ? MARKETPLACE_RULES : email ? EMAIL_RULES : ''}=== WHERE FACTS COME FROM ===
 - Facts about a vehicle come only from the section VEHICLE FACTS.
 - Facts about how the business works come only from BUSINESS FACTS, HOW CARBARN WORKS and WEBSITE EXTRACTS. Where they differ, BUSINESS FACTS wins.
 - Anything the customer or our staff already said in the conversation may be referred to.
@@ -56,7 +80,9 @@ ${chat ? MARKETPLACE_RULES : ''}=== WHERE FACTS COME FROM ===
 - Every number, price, date and link in your reply must appear in the supplied material.
 
 === PROMISES AND TIMES ===
-- Promise an action (sending, calling, booking, holding, fixing, delivering) only if our staff said we would, in the instruction for this draft or earlier in this conversation. Otherwise write "We will check and come back to you shortly."
+${email
+    ? '- Promise an action (sending, calling, booking, holding, fixing, delivering) only if our staff said we would, in the instruction for this draft or earlier in this conversation. Otherwise give the answer itself, or the sentence with its blank. Never a holding line: no "we will check", no "we will get back to you".'
+    : '- Promise an action (sending, calling, booking, holding, fixing, delivering) only if our staff said we would, in the instruction for this draft or earlier in this conversation. Otherwise write "We will check and come back to you shortly."'}
 - Name a day or a time for something we will do only if our staff gave it. Otherwise write "shortly", or use [DATE?].
 - A day or time the customer gave is theirs: keep it. If they wrote "this morning", do not answer "see you tomorrow". Each message shows when it was written; work out which day they meant from that, and compare it with NOW.
 - Never name a part of today that has already passed (see NOW). After midday there is no "this morning". In the evening there is no "this afternoon".
@@ -65,7 +91,7 @@ ${chat ? MARKETPLACE_RULES : ''}=== WHERE FACTS COME FROM ===
 === OUTPUT ===
 Return one JSON object and nothing else:
 {
-  "reply": "the ${chat ? 'chat message' : order ? 'WhatsApp message' : 'SMS text'}. Use {{NAME}} where the customer's first name belongs. Use \\n for line breaks. No sign-off and no sender name.",
+  "reply": "the ${chat ? 'chat message' : order ? 'WhatsApp message' : email ? 'body of the email' : 'SMS text'}. Use {{NAME}} where the customer's first name belongs. Use \\n for line breaks. No sign-off and no sender name.",
   "next_step": "the one next step you offered, in a few words, or empty",
   "rung": "where this customer is, exactly as given under THIS CUSTOMER'S NEXT STEP: interest, proof, fit, commit or buyer; empty when that section is absent",
   "facts_used": ["each fact you relied on, as a short statement including the figure"],
@@ -259,8 +285,10 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
       : visiting ? 'The customer asked where we are or when we are open, which usually means they plan to visit. Answer their question first, then offer the inspection booking link as well, so they can choose a time.'
       : saidFar ? 'Earlier in this conversation the customer asked to see this vehicle.'
         : 'Earlier in this conversation the customer asked to see this vehicle, and we have not sent them the booking link yet. Add it to this reply, in one line, so they can choose a time.';
-  // On a brand-new enquiry the standard block follows the reply, so the address is not typed again.
-  const blockFollows = !!item.isNewEnquiry;
+  // On a brand-new dashboard enquiry the standard block follows the reply, so the address is not
+  // typed again. A Marketplace chat has no block: the booking link goes in the reply itself.
+  const chat = item.channel === 'marketplace';
+  const blockFollows = !!item.isNewEnquiry && !chat;
   if (!vehicle || !vehicle.url) {
     if (!asksNow) return none;
     return { ...none, lines: [`The customer wants to see a vehicle, but no vehicle could be matched. Ask which vehicle they mean. ${saidFar ? 'They have said they are far from Sydney, so mention that we do online video inspections by WhatsApp or FaceTime.' : blockFollows ? 'Our address and opening hours follow your text automatically.' : 'Give our address and opening hours from BUSINESS FACTS.'}`] };
@@ -298,7 +326,7 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
       : '- If they have already named a day and a time inside our opening hours, confirm it in a line ("See you ...") instead; the link is then optional. If they named only a day, say that day is fine and still give the link so they can choose a time.',
     blockFollows
       ? '- Our address, map link and opening hours follow your text automatically (see STANDARD FIRST REPLY). Do not write them.'
-      : '- Ask them to call or text before visiting.',
+      : chat ? '- Ask them to message or call before visiting.' : '- Ask them to call or text before visiting.',
     where.source === 'record'
       ? `- They may not be near Sydney. Add, as an option only, that if they cannot make it to Lidcombe they can book an online video inspection (a video call on WhatsApp or FaceTime): ${links.online} Do not say or imply where the customer lives.`
       : `- Only if they say they live far away or cannot come, give the online video inspection link instead: ${links.online}`,
@@ -358,9 +386,12 @@ function modelStock(vehicle, all) {
  * @param importPlan  for an import or auction enquiry: what the reply should be (see imports.js).
  *                    Its lines are given to the AI; what it adds under the AI's text is put on by the drafter.
  */
-export function buildPrompt(item, { instruction = '', coaching = null, importPlan = null, now = Date.now(), holdOutConversation = true } = {}) {
+export function buildPrompt(item, { instruction = '', coaching = null, importPlan = null, research = null, now = Date.now(), holdOutConversation = true } = {}) {
   const lead = item.lead;
   const chat = item.channel === 'marketplace';
+  // An import enquiry by email: the research record carries the facts, and the SMS-only sections are off.
+  const email = item.channel === 'email';
+  const rendered = email && research ? renderResearch(research) : null;
   const mp = chat ? item.marketplace || {} : null;
   const facts = businessFactsForPrompt();
   const deal = item.deal || null;
@@ -371,7 +402,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   const primaryGone = primary && !primaryOpts.owner && (availability(primary).code === 'sold' || primaryOpts.reserved);
   const alts = primaryGone && !deal ? alternatives(primary, allVehicles()) : [];
   // Where this customer is on the way to a sale, and the one move the reply should make.
-  const stage = importPlan || item.order ? null : saleStage(item, { now });
+  const stage = importPlan || item.order || email ? null : saleStage(item, { now });
 
   // An auction order's amounts never go to the AI: wherever one appears it is replaced by its marker.
   const mask = importPlan?.mask || ((t) => t);
@@ -397,7 +428,8 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   // The replies the owner approved as the standard for messages like this one.
   const models = modelReplies(want, 3);
 
-  const website = relevantWebsite(item.pendingText + ' ' + item.situation.all.map(labelFor).join(' '));
+  // For an email the research record carries the website's passages, chosen for the question.
+  const website = email ? [] : relevantWebsite(item.pendingText + ' ' + item.situation.all.map(labelFor).join(' '));
   const lastUs = [...item.timeline].reverse().find((e) => e.who === 'us' && !e.internal);
 
   const P = [];
@@ -418,6 +450,10 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   if (chat) {
     P.push(`CHANNEL: Facebook Marketplace chat${mp.listingTitle ? `, about our listing "${redact(mp.listingTitle, lead)}"` : ''}. Keep it to one or two short lines.`);
     P.push(`CUSTOMER NAME: ${item.hasName ? 'known. If you use it, write {{NAME}} inside a sentence, never on a greeting line of its own.' : 'not known. Do not use {{NAME}}.'}`);
+  } else if (email) {
+    const subject = item.mail?.subject ? redact(item.mail.subject, lead) : '';
+    P.push(`CHANNEL: Email, an enquiry about importing a car from Japan.${subject ? ` Subject: "${subject}".` : ''} Write the body of the reply email; every email is greeted.`);
+    P.push(`CUSTOMER NAME: ${item.hasName ? 'known. Open with "Hi {{NAME}}," on its own line.' : 'not known. Open with "Hi," on its own line and do not use {{NAME}}.'}`);
   } else {
     // An auction offer is a quote in its own right: it is greeted even when we wrote earlier today.
     P.push(writtenToday(item, now) && importPlan?.stage !== 'offer'
@@ -458,7 +494,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
 
   // Which inspection booking link to offer: in person, or online video for a customer who is far away.
   const noPlan = { kind: null, url: '', urls: [], lines: [], must: false };
-  const inspection = importPlan ? noPlan : inspectionPlan(item, primary, { instruction: [instruction, coaching?.note].filter(Boolean).join('\n'), now });
+  const inspection = importPlan || email ? noPlan : inspectionPlan(item, primary, { instruction: [instruction, coaching?.note].filter(Boolean).join('\n'), now });
   if (inspection.lines.length) {
     P.push('\n=== INSPECTION ===');
     P.push(inspection.lines.join('\n'));
@@ -471,7 +507,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   }
 
   // An import enquiry has its own closing lines, added by the drafter, in place of the standard block.
-  const standard = importPlan ? { on: false, vehicleUrl: '', inspectionUrl: '', lines: [] } : standardPlan(item, primary, { gone: !!primaryGone, owner: !!primaryOpts.owner, inspection });
+  const standard = importPlan || email ? { on: false, vehicleUrl: '', inspectionUrl: '', lines: [] } : standardPlan(item, primary, { gone: !!primaryGone, owner: !!primaryOpts.owner, inspection });
   if (standard.on) {
     P.push('\n=== STANDARD FIRST REPLY ===');
     P.push(standard.lines.join('\n'));
@@ -508,13 +544,24 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     P.push(guide);
   }
 
+  // An import email: what was looked up for it, what could not be found, and the blanks to use.
+  if (rendered) {
+    P.push('\n=== RESEARCH FOR THIS IMPORT QUESTION ===');
+    P.push(rendered.lines.join('\n'));
+    if (rendered.notFoundLines.length) {
+      P.push('\n=== WHAT WE COULD NOT FIND ===');
+      P.push(rendered.notFoundLines.join('\n'));
+    }
+    P.push(`\n${EMAIL_BLANKS}`);
+  }
+
   if (importPlan?.lines?.length) {
     P.push(`\n=== ${importPlan.stage === 'offer' ? 'AUCTION CAR FOR THIS CUSTOMER' : importPlan.stage === 'order' ? "THIS CUSTOMER'S AUCTION ORDER" : 'IMPORT ENQUIRY'} ===`);
     P.push(importPlan.lines.join('\n'));
   }
 
   // A model the customer asks us to import: its page on our website, when there is one.
-  const importPages = !deal && !item.order && importPlan?.stage !== 'offer' && item.situation.all.includes('import_sourcing') ? importPagesFor(`${item.pendingText} ${importPlan?.w?.car || ''}`) : [];
+  const importPages = !deal && !item.order && !email && importPlan?.stage !== 'offer' && item.situation.all.includes('import_sourcing') ? importPagesFor(`${item.pendingText} ${importPlan?.w?.car || ''}`) : [];
   if (importPages.length) {
     P.push('\n=== IMPORTING PAGES ON OUR WEBSITE ===');
     P.push('The customer named a model we can import to order. Its page on our website:');
@@ -531,6 +578,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     P.push('\n=== EXAMPLES OF HOW WE REPLY ===');
     P.push('Real past replies, for tone only. They were typed quickly and contain grammar slips; write correct English. Do not reuse their figures, cars or promises.');
     if (chat) P.push('They were SMS replies. Borrow the tone, not the greeting line, the length or the sign-off.');
+    if (email) P.push('They were SMS replies. Borrow the tone and the directness, not the length or the layout: an email has a greeting line, paragraphs and room for the figures.');
     examples.forEach((e, n) => {
       const asked = [e.events.join(' '), e.customer].filter(Boolean).join(' ').replace(/\s*\n\s*/g, ' / ').slice(0, 320);
       P.push(`Example ${n + 1}\n  Customer: ${asked}\n  We replied: ${e.reply.replace(/\n+/g, ' / ')}`);
@@ -555,7 +603,18 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
 
   // What to say is learned from what the team really sent for similar messages; how to say it
   // comes from the voice. Dashboard conversations only, and never for a Marketplace chat's own text.
-  const sent = practiceFor(want, 3, now);
+  const sent = email ? [] : practiceFor(want, 3, now);
+  // An import email learns what to say from the email threads the owner sent from Gmail: what the
+  // team really wrote back to similar enquiries. Nothing from texts, and never the other way round.
+  const mailSent = email ? mailPracticeFor({ ...want, codes: research?.asked?.codes?.known || [], families: (research?.asked?.families || []).map((f) => f.toLowerCase()) }, 3, now) : [];
+  if (mailSent.length) {
+    P.push('\n=== HOW WE ANSWERED SIMILAR IMPORT EMAILS ===');
+    P.push('Emails our team really sent to other customers who asked something similar. Learn what they say and include: how they open, which facts they give (eligibility, the estimate and its parts, the deposit, the timeline, the inspection before bidding), the order, and how they close. Then write this reply in our voice, in correct English.');
+    P.push('Their facts belong to other customers. Figures and links appear only as labels such as [amount] or [model page link]: every figure and link in your reply comes from RESEARCH FOR THIS IMPORT QUESTION. Never write a label in your reply.');
+    mailSent.forEach((s, n) => {
+      P.push(`Email ${n + 1}${s.firstReply ? ' (a first reply)' : ''}${s.subject ? ` · Subject: ${s.subject.replace(/\s*\n\s*/g, ' ')}` : ''}\n  Customer: ${s.customer.replace(/\s*\n\s*/g, ' / ').slice(0, 400)}\n  We replied: ${s.reply.replace(/\n+/g, ' / ')}`);
+    });
+  }
   if (sent.length) {
     P.push('\n=== WHAT OUR TEAM REALLY SENT FOR SIMILAR MESSAGES ===');
     P.push('Recent replies our team sent to other customers who wrote something similar. Learn from these first: what they chose to say, what they included (the vehicle\'s link, a booking link, the address, a question back), what they left out, the order, and how much they wrote. Then write your reply in the voice described under VOICE, in correct English.');
@@ -626,15 +685,18 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     stage,
     user: P.join('\n'),
     exampleIds: examples.map((e) => e.id),
-    // The model replies join the examples here so a reply lifted from one is caught as copied.
-    exampleReplies: [...examples.map((e) => e.reply), ...models.map((x) => x.reply)],
-    practiceIds: sent.map((s) => s.id),
+    // The model replies and the past emails join the examples here so a reply lifted from one is caught as copied.
+    exampleReplies: [...examples.map((e) => e.reply), ...models.map((x) => x.reply), ...mailSent.map((s) => s.reply)],
+    practiceIds: [...sent.map((s) => s.id), ...mailSent.map((s) => s.id)],
     websiteSources: website.map((w) => w.source),
     alternatives: alts,
     sameModelUrl: sameModel?.url || '',
     importUrls: importPages.map((p) => p.url),
     businessFactsText: facts.text,
-    websiteText: website.map((w) => w.text).join('\n') + '\n' + guide,
+    // An import email: every figure and link the research gave, which the reply may state.
+    researchText: rendered ? rendered.trustedText : '',
+    researchBlanks: research?.blanks || [],
+    websiteText: [...website.map((w) => w.text), rendered ? rendered.websiteText : '', guide].filter(Boolean).join('\n'),
     vehicleText: [primary, second].filter(Boolean).map((v) => vehicleFacts(v, factsOpts(v))).join('\n'),
   };
 }

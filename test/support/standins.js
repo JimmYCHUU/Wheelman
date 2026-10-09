@@ -92,6 +92,21 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
       return json(res, 200, { content: rows.slice(page * size, page * size + size), page: { size, number: page, totalElements: rows.length, totalPages: Math.max(1, Math.ceil(rows.length / size)) } });
     }
 
+    // The website's list of import-eligible models, and one model's figures. world.siteDown takes them down.
+    if (p === '/api/import-eligible-cars') {
+      if (world?.siteDown) return json(res, 503, { error: 'Service Unavailable' });
+      const same = (a, b) => !b || String(a || '').toLowerCase() === String(b).toLowerCase();
+      const rows = (world?.eligible || []).filter((r) => same(r.make, q.make) && same(r.model, q.model) && same(r.modelCode, q.modelCode));
+      const size = Math.min(100, Number(q.size) || 12), page = Number(q.page) || 1;
+      return json(res, 200, { ok: true, content: rows.slice((page - 1) * size, page * size), page: { size, number: page, totalElements: rows.length, totalPages: Math.max(1, Math.ceil(rows.length / size)) } });
+    }
+    if (p === '/api/import-eligible-vehicle') {
+      if (world?.siteDown) return json(res, 503, { error: 'Service Unavailable' });
+      const r = (world?.eligible || []).find((x) => String(x.modelCode).toLowerCase() === String(q.modelCode || '').toLowerCase());
+      if (!r || !r.priceOnRequest) return json(res, 200, r ? { ok: true, vehicle: { id: r.id, slug: r.slug, make: r.make, model: r.model, modelCode: r.modelCode, yearRange: r.yearRange, compliancePrice: r.compliancePrice, estimatedPrice: `$${r.costing.totalLandedPriceAud}`, vehiclePrice: `$${r.costing.avgPriceAud}`, shippingCost: `$${r.costing.shippingChargeAud}`, customsCost: `$${r.costing.gstAud}`, agentFee: `$${r.costing.carbarnAgentFeeAud}`, auctionDepositAmountAud: `$${r.costing.auctionDepositAmountAud}` } } : { ok: false });
+      return json(res, 200, { ok: false });
+    }
+
     // The website's live-auction feed. The list is filtered by make and model, as the real one is.
     if (p === '/auc/api/public/auction-vehicles') {
       const make = String(q.make || '').toLowerCase(), model = String(q.model || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -112,13 +127,33 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
     return json(res, 404, { error: 'Not Found' });
   });
 
-  // The content engine: GET only, no redirects followed by the client.
-  const engine = await listen((req, res) => {
+  // The content engine: three GET addresses, and the one reply address its own inbox page uses. A
+  // reply is queued (status "queued") for the engine's phone to type into the chat; a test marks it
+  // sent. world.engineRefusesSend makes the engine refuse; world.workerOnline = false means the
+  // phone is offline, so the reply is queued until it is back.
+  const engine = await listen(async (req, res) => {
+    const body = await readBody(req);
     const url = new URL(req.url, 'http://x');
-    engineSeen.push({ method: req.method, path: url.pathname });
+    engineSeen.push({ method: req.method, path: url.pathname, body });
+    const chats = world.chats || new Map();
+    const reply = url.pathname.match(/^\/inbox\/conversations\/(\d+)\/reply$/);
+    if (req.method === 'POST' && reply) {
+      if (world.engineRefusesSend) return json(res, 503, { detail: 'the phone is offline' });
+      const c = chats.get(Number(reply[1]));
+      if (!c) return json(res, 404, { error: 'not found' });
+      let parsed = {};
+      try { parsed = JSON.parse(body); } catch { /* not json */ }
+      const text = String(parsed.text || '').trim();
+      if (!text) return json(res, 400, { error: 'text is required' });
+      const at = new Date().toISOString();
+      const id = Math.max(0, ...[...chats.values()].flatMap((x) => x.messages.map((m) => Number(m.id) || 0))) + 1;
+      const message = { id, direction: 'out', source: 'dashboard', text, status: 'queued', sent_via: '', error: '', artifact: '', artifact_url: '', phone_ts: null, sent_at: null, seen_at: null, created_at: at, has_media: false, mentions: [], attachments: [] };
+      c.messages.push(message);
+      Object.assign(c.row, { last_direction: 'out', last_message_at: at, last_outbound_at: at, unread: false, pending_outbound: (c.row.pending_outbound || 0) + 1 });
+      return json(res, 200, { message, worker_online: world.workerOnline !== false });
+    }
     if (req.method !== 'GET') return json(res, 405, { error: 'no' });
     if (url.pathname === '/inbox/devices') { res.writeHead(302, { location: '/inbox/conversations' }); return res.end(); }
-    const chats = world.chats || new Map();
     if (url.pathname === '/inbox/conversations') {
       const all = [...chats.values()].map((c) => c.row).sort((a, b) => Date.parse(b.last_message_at) - Date.parse(a.last_message_at));
       const offset = Number(url.searchParams.get('offset')) || 0;

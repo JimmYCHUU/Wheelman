@@ -1,1 +1,224 @@
-{}
+{
+ "1": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nYes, the 2021 Noah is here at Lidcombe. It has done 62,733 km, with the auction sheet and export certificate to match.\nYou are welcome to come and see it any day.",
+  "note": "",
+  "at": 1791370957554
+ },
+ "2": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nYes, it is the 8-seater model and comes with 1 key.\nYou are welcome to come and inspect it at our Lidcombe yard.",
+  "note": "Would a weekday after work or Saturday morning suit you? remove this",
+  "at": 1791371330951
+ },
+ "3": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nIt is already listed at our best price, which includes 6 months NSW registration, a fresh blue slip, CTP insurance, a full service and detail, and Sydney delivery.\nWe can discuss the figures once you have seen the van.",
+  "note": "\"Are you paying cash, or going through finance?\" no need to mention this",
+  "at": 1791372703917
+ },
+ "4": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nHappy to send both. The Alphard is grade 4.5 on the auction sheet, and the export certificate shows the odometer history with dates.\nYour own mechanic is welcome to look it over here. Would you like the documents sent through?",
+  "note": "",
+  "at": 1791371425624
+ },
+ "5": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nYes, finance is through our lenders. The application is on the N-Box page, takes a few minutes, and starts with a soft check that does not affect your credit score. Our finance partner then calls you with the figures.",
+  "note": "",
+  "at": 1791371457885
+ },
+ "6": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nYes, we take trade-ins against a car from our stock. To have a figure ready before you come, we need the rego number and state, the kilometres, the condition and a few clear photos.\nCould you send those through?",
+  "note": "",
+  "at": 1791371470676
+ },
+ "7": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nYes, we deliver to Brisbane. Most of our interstate buyers do a live video inspection on WhatsApp or FaceTime first, and we deliver Australia-wide by car carrier.\nWhat is your postcode, so we can quote the delivery?",
+  "note": "send the video call inspection link instead of Vehicle details link",
+  "at": 1791372693412
+ },
+ "8": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nTomorrow afternoon is fine, the Hiace is here at Lidcombe. Book a time that suits and it will be out the front, washed and ready for a test drive.",
+  "note": "",
+  "at": 1791371538812
+ },
+ "9": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nWe are in Lidcombe and open every day, Sunday included. The Alphard is here, so come any time that suits and have a look.",
+  "note": "",
+  "at": 1791371556284
+ },
+ "10": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nYes, it includes a 3-month dealer warranty and a 5-year extended warranty.\nYou are welcome to come and see it at the Lidcombe yard any day.",
+  "note": "Would a weekday after work or Saturday morning suit? do not use this. also add from 8 AM to 5 PM after this line \"It is here at Lidcombe whenever you would like to see it\"",
+  "at": 1791372711394
+ },
+ "11": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nYes, the price includes 6 months NSW rego, a fresh blue slip and CTP. Stamp duty and the transfer fee are paid to Service NSW when the car goes into your name.\nCome and see it any day, it is here at Lidcombe.",
+  "note": "",
+  "at": 1791371644061
+ },
+ "12": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nAll available photos and videos are on the vehicle page.\nWe can take extra photos or a closer look if there is anything specific you would like to see, and you are welcome to inspect it at our Lidcombe yard.",
+  "note": "\"We can provide a walkaround video and extra photos of the Serena's interior shortly. Would you like us to send the walkaround video through?\" we don't do like this. Tell him all the available pictures and videos are in the link. We can take more if he wants anything specific or if he wants a more closer look. also suggest him to inspect in person",
+  "at": 1791373468147
+ },
+ "13": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nThe Prius is on its way to Australia, so it cannot be seen this week. You can reserve it now with a $1,000 refundable holding deposit and test drive it when it lands.\nWe will let you know as soon as it arrives.",
+  "note": "",
+  "at": 1791371735028
+ },
+ "14": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nUnfortunately, the 2019 Mazda CX-8 has been sold.\nYou can view our current stock here:\nhttps://www.carbarn.com.au/used-cars",
+  "note": "Give similar vehicle stock pages, used car stock page, or import that model page.",
+  "at": 1791372780709
+ },
+ "15": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nThe 2018 Toyota Alphard S is available now at the Lidcombe yard with 88,000 km, 7 seats, and a 4.5 auction grade.\nYou are welcome to come and see it any day.",
+  "note": "Would a weekday after work or Saturday morning suit you? Don't mention this line",
+  "at": 1791372791720
+ },
+ "16": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nOur price includes 6 months NSW registration, a fresh blue slip, CTP insurance, a full service and detail, and doorstep delivery within Greater Sydney, with government charges extra.\nYou are welcome to come and take a look at the van, see if the price justifies it, and we can see what we can do then.",
+  "note": "\"Are you paying cash, or going through finance?\" No need to mention this or ask this. Also it's not like this \"We can go over the numbers once you have taken a look at the van.\" Suggest her to visit us, have a look on the vehicle, see if the price justifies or not, decide then, also we'll see what we can do",
+  "at": 1791373610187
+ },
+ "17": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nWe hold a car with a $1,000 refundable holding deposit, which takes it off the market for you. Until then it stays for sale.\nTo send the invoice we need a photo of your driver licence and your email address. Would you like to secure it?",
+  "note": "",
+  "at": 1791371895228
+ },
+ "18": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nSee you Saturday at 10, the Serena will be out the front for you.\nOne thing worth knowing: until a deposit is paid the car stays for sale. If it checks out on the day, a $1,000 refundable holding deposit takes it off the market for you.",
+  "note": "",
+  "at": 1791371910554
+ },
+ "19": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\n\nTo start the invoice and delivery process, we just need a photo of your driver licence and your email address.\n\nOnce payment is cleared, we will register the Alphard and arrange delivery to your door.",
+  "note": "No the next step is full payment and delivery process",
+  "at": 1791372871755
+ },
+ "20": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\n\nNo worries, it is a big decision.\n\nIf it helps, the $1,000 holding deposit is fully refundable, and you are welcome to arrange your own mechanic to inspect it.\n\nIf you don't mind may I ask, is it the car itself, or the money side?",
+  "note": "add \"if you don't mind may I ask \" before \"Is it the car itself, or the money side?\"",
+  "at": 1791372885351
+ },
+ "21": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nOur finance partner will contact you about the application. While that happens, a $1,000 refundable holding deposit takes the N-Box off the market for you, and it is refunded once the lender pays.\nWould you like to secure it in the meantime?",
+  "note": "",
+  "at": 1791372226785
+ },
+ "22": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nNo worries. Most of our interstate buyers do a live video inspection on WhatsApp or FaceTime, where we walk around the car with you, and then we send it down by car carrier.\nBook a time here: https://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/mr1#inspection=online\nWhat is your postcode, so we can quote the delivery?",
+  "note": "",
+  "at": 1791372237619
+ },
+ "23": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nWe understand 101,000 km is a consideration.\nThis Serena is a grade 3.5 import, which means it is in clean condition, and it comes with a fresh service, detail, and 6 months NSW registration.\nWe can share the auction sheet and the export certificate, which records the odometer history with dates to verify the kilometres.\nWould you like the auction sheet and the export certificate sent through?",
+  "note": "Justify the price by the auction grade, freshness of the vehicle",
+  "at": 1791372897317
+ },
+ "24": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nCars from Japan rarely come with logbooks. In their place we have the auction sheet, which grades the car, and the export certificate, which records the odometer history with dates. Every car is serviced and detailed before sale.\nWould you like both sent through?",
+  "note": "",
+  "at": 1791372361284
+ },
+ "25": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nIt includes 6 months NSW registration, a fresh blue slip, CTP insurance, a full service and detail, and a 5-year extended warranty, with government charges extra.\nYou are welcome to come in and take a look at the car, and we can see what we can do then.",
+  "note": "send him the inspection link as well",
+  "at": 1791439536919
+ },
+ "26": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nYou can complete the Queensland roadworthy and registration once it arrives up there, and we can guide you through the process.\nWhat is your postcode, so we can quote the delivery?",
+  "note": "The tone seems unprofessional We register the car in NSW. You drive on the NSW rego with the sales contract, then transfer it in Queensland and pay their stamp duty and transfer fee at that point. rather tell like this \" The Queensland roadworthy and QLD registration would need to be completed by you in Queensland, but we can assist and guide you through the process\"",
+  "at": 1791372970463
+ },
+ "27": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nOf course, happy to send both. The export certificate shows the odometer history with dates.\nIf it checks out on Saturday, a $1,000 refundable holding deposit takes the van off the market for you; until then it stays for sale.",
+  "note": "",
+  "at": 1791372655612
+ },
+ "28": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nSend a photo of your driver licence and your email address, and we will email the invoice with the bank details. The deposit is paid by bank transfer, and a screenshot of the payment confirms it on our side.",
+  "note": "",
+  "at": 1791372982860
+ },
+ "29": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nWe are finishing the roadworthy, the service and the detail now, and the pickup day is confirmed with you as soon as the roadworthy is done.\nOnce it is registered you get the rego number and VIN, so you can arrange insurance before pickup.",
+  "note": "",
+  "at": 1791372999225
+ },
+ "30": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nNo worries, thank you for letting us know. Congratulations on the new car.\nIf you want to check out our other stock in the future, our full list is here:\nhttps://www.carbarn.com.au/used-cars",
+  "note": "send our stock link as well, so if she likes another vehicle in future can let know",
+  "at": 1791373435606
+ },
+ "31": {
+  "status": "APPROVED",
+  "reply": "Hi {{NAME}},\nSaturday morning is fine. Book a time here so it is out the front for you: https://www.carbarn.com.au/vehicles/toyota/alphard/agh30w/mr3#inspection=onsite\nPlease text before you set off, and bring your licence if you would like to drive it.",
+  "note": "",
+  "at": 1791373044094
+ },
+ "32": {
+  "status": "APPROVED",
+  "reply": "Yes, the 2019 Honda N-Box Custom is available at our Lidcombe yard.\nhttps://www.carbarn.com.au/vehicles/honda/n-box/jf3/mr4",
+  "note": ", 41,000 km with the auction sheet to match. Happy to send the walkaround video, or you are welcome to come and see it any day. no need to mention this. Rather send the vehicle details link, our address, maps link and phone number",
+  "at": 1791373479972
+ },
+ "33": {
+  "status": "APPROVED",
+  "reply": "It is already listed at our best price, which includes 6 months NSW registration, a fresh blue slip, CTP insurance, a full service and detail, and doorstep delivery within Greater Sydney.\nWould you like to come in and take a look at it?",
+  "note": "The listed price is the best price. Also don't talk like this \"We talk price once you have seen the van.\" rephrase that in a suggestive manner. \" Cash or finance?\" no need to mention this",
+  "at": 1791373445101
+ },
+ "34": {
+  "status": "APPROVED",
+  "reply": "Yes, tomorrow is fine. Book a time here and it will be out the front for you: https://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/mr1#inspection=onsite",
+  "note": "",
+  "at": 1791373166814
+ },
+ "35": {
+  "status": "APPROVED",
+  "reply": "Yes, we do live video inspections on WhatsApp or FaceTime and deliver by car carrier. Book a time here: https://www.carbarn.com.au/vehicles/toyota/alphard/agh30w/mr3#inspection=online",
+  "note": "",
+  "at": 1791373175707
+ },
+ "36": {
+  "status": "APPROVED",
+  "reply": "It is a Japanese import, grade 3.5 on the auction sheet, and we can send that and the export certificate with the odometer history. Your own mechanic is welcome to look it over here.",
+  "note": "",
+  "at": 1791373188472
+ },
+ "37": {
+  "status": "APPROVED",
+  "reply": "We take trade-ins against our stock rather than straight swaps. You can submit your details and photos here:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/mr1#trade-in",
+  "note": "give her the trade in link as well",
+  "at": 1791373456154
+ }
+}

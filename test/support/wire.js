@@ -12,6 +12,7 @@ export function pointConfigAt(config, standins, { sessionPath, port } = {}) {
   config.dashboard.baseUrl = standins.base;
   config.auction.baseUrl = standins.base;
   config.marketplace.url = `${standins.engineBase}/inbox`;
+  config.site.apiUrl = standins.base;
   if (sessionPath) config.sessionPath = sessionPath;
   if (port !== undefined) config.port = port;
 }
