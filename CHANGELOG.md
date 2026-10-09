@@ -61,6 +61,12 @@ and versions follow `MAJOR.MINOR.PATCH`.
 - `check-private` treats the real knowledge files as private, compares the new settings, and takes
   a `PRIVATE_WORDS` list from the environment for CI.
 
+### Changed
+- The Standards tab is on the page only while a model reply is waiting for a rating. Once every
+  one is approved or set aside it leaves the page, and the page goes back to the Dashboard; the
+  approved ones keep setting the standard. A scenario added to the file, or a rating taken back,
+  brings the tab back.
+
 ### Fixed
 - A lead announced by the notification feed while a suggestion was being written for someone
   else, or while a check was already under way, was not checked for until the next three-minute

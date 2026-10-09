@@ -1290,6 +1290,13 @@ async function refreshList() {
     const q = state.q.trim();
     const data = await api(`/api/items?section=${state.section}&tab=${state.tab}&limit=${state.listSize}${q ? `&q=${encodeURIComponent(q)}` : ''}`);
     if (seq !== state.listSeq) return false; // a newer request has replaced this one
+    // The section on screen has left the page (the last model reply rated, say): Wheelman
+    // answered with the Dashboard instead. Follow it.
+    if (data.section && data.section !== state.section && REGISTRY[data.section]) {
+      if (state.section === 'standards') toast(t('standards.done'));
+      showSection(data.section);
+      return false;
+    }
     state.list = data.items;
     state.listTotal = data.total ?? data.items.length;
     state.everything = data.everything || [];

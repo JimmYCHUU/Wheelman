@@ -841,15 +841,17 @@ what the team really sends. **How to say it** comes from the two voices.
 - **The model replies.** `voice/model-replies.md` holds thirty-seven invented scenarios, each
   with a reply written to the selling playbook in the house voice: a first text about
   availability, a price asked before a visit, a customer who turns out to be interstate, a
-  booked inspection, a buyer after the deposit, a no, Marketplace chats. They appear under
-  **Standards** in the page, one by one in the normal message box, and count only once you
-  have marked one **Good reply**, as written or after your changes. **Could be better** keeps
-  your note with it and writes it again for you to rate; **Set this one aside** drops it, and
-  it can be put back. An approved one is shown to the AI as the standard for messages like
-  it: the moves, the one question and the length, never the sentences, which are refused as
-  copied. Nothing from a scenario is learned, and showing one costs no AI request. Edit the
-  file freely; the ratings are kept beside it in `voice/model-replies.json`, and the section
-  leaves the page when the file is empty.
+  booked inspection, a buyer after the deposit, a no, Marketplace chats. While any of them is
+  waiting for a rating, a **Standards** tab is on the page, where they come up one by one in
+  the normal message box. One counts only once you have marked it **Good reply**, as written
+  or after your changes. **Could be better** keeps your note with it and writes it again for
+  you to rate; **Set this one aside** drops it, and it can be put back. An approved one is
+  shown to the AI as the standard for messages like it: the moves, the one question and the
+  length, never the sentences, which are refused as copied. Nothing from a scenario is
+  learned, and showing one costs no AI request. Once every one is approved or set aside, the
+  tab leaves the page and the page goes back to the Dashboard; the approved ones keep setting
+  the standard. Edit the file freely: a scenario added to it brings the tab back, and the
+  ratings are kept beside it in `voice/model-replies.json`.
 
 A reply is not learned from if it still contains a blank, contains bank details, or is
 standard wording the team sends to everyone. The standard address block and the sign-off are

@@ -313,8 +313,10 @@ function present(item) {
 }
 
 const SECTIONS =['dashboard', 'marketplace', 'auction', 'standards'];
-// Standards: the model replies, shown while there are any to rate or to look back at.
-const sectionOn = (s) => (s === 'marketplace' ? config.marketplace.enabled : s === 'standards' ? standardsCounts().total > 0 : true);
+// Standards: the model replies, on the page only while one is waiting for a rating. Once every
+// one is approved or set aside the tab goes (the approved ones still set the standard), and it
+// comes back when the file gains a scenario or "Could be better" writes one again.
+const sectionOn = (s) => (s === 'marketplace' ? config.marketplace.enabled : s === 'standards' ? standardsCounts().toRate > 0 : true);
 const KEY = '((?:c|l|mp|ao|ph|tr):\\d+)';
 const itemRoute = (tail = '') => new RegExp(`^/api/items/${KEY}${tail}$`);
 
