@@ -48,6 +48,9 @@ export const config = {
 
   site: {
     baseUrl: 'https://www.carbarn.com.au',
+    // Where the website's own data (the eligible-models list) is read from. The website itself
+    // unless set otherwise; tests point it at a stand-in. Page links always use baseUrl.
+    apiUrl: (env.SITE_API_URL || '').trim().replace(/\/+$/, '') || 'https://www.carbarn.com.au',
     mapsUrl: 'https://maps.app.goo.gl/EQfdkTE7FYDF4DTT8',
     phone: '0423 840 130',
     // Other numbers of ours that may appear in a text (a staff mobile, say). They are not customer
@@ -106,6 +109,16 @@ export const config = {
     ourDomains: list(env.MAIL_OUR_DOMAINS ?? 'carbarn.com.au').map((d) => d.toLowerCase().replace(/^@/, '')),
     // An email older than this still shows under Waiting, but no reply is written until asked.
     autoDraftMaxAgeDays: num(env.MAIL_AUTO_DRAFT_MAX_AGE_DAYS, 7),
+  },
+
+  // Import Query research: the website's eligible-models list, read once a day into a file beside
+  // the database and looked up for every import email; the live auction for a snapshot of what
+  // is coming up. IMPORT_RESEARCH_DAILY caps the emails researched with live requests in a day.
+  importQuery: {
+    researchDaily: num(env.IMPORT_RESEARCH_DAILY, 60),
+    auctionSnapshot: !/^(0|false|no|off)$/i.test((env.IMPORT_AUCTION_SNAPSHOT ?? '1').trim()),
+    modelsMaxAgeMs: 24 * 3600 * 1000,
+    modelsPath: env.ELIGIBLE_MODELS_PATH || path.join(path.dirname(env.DB_PATH && env.DB_PATH !== ':memory:' ? env.DB_PATH : path.join(root, 'data', 'app.db')), 'eligible-models.json'),
   },
 
   // Backups: one dated zip file of everything that lives only on this computer, written when

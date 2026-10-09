@@ -6,6 +6,18 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- Import Query replies are researched on the website before they are written. The model codes
+  and names in an email are matched against carbarn.com.au's list of import-eligible models,
+  read once a day into `data\eligible-models.json`; the reply carries the model's eligibility
+  and build years, the estimated landed and complied cost with its parts, the refundable
+  deposit, the model's page link, and the process facts from the guide pages, each figure
+  checked against that research like any other. A sentence that puts the answer off ("we will
+  check and get back to you") is refused and the reply written again; a model code the customer
+  named must be answered. What the website does not have becomes a blank (`[ELIGIBILITY?]`,
+  `[LANDED COST?]`, `[DEPOSIT?]`, `[TIMELINE?]`) in a full sentence, with research notes in the
+  details panel saying what was looked up and where. If the website cannot be read, the list
+  on this computer and the saved pages stand in, with a warning. Settings: `SITE_API_URL`,
+  `IMPORT_RESEARCH_DAILY`, `IMPORT_AUCTION_SNAPSHOT`.
 - The Import Query section: import enquiries that arrive by email. The browser add-on gains a
   **Send to Wheelman** button in Gmail; pressed on an open email, it hands the whole thread
   (subject, each message's sender, time and text, with the quoted history removed) to Wheelman,

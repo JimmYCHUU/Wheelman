@@ -477,7 +477,8 @@ async function loadOlder(item, { more = true } = {}) {
 // The same pattern is used in src/checks.js and src/learn.js.
 const BLANK = blankMatcher();
 const BLANK_NAME = { PRICE: 'the price', 'TRADE-IN VALUE': 'the trade-in value', 'DELIVERY COST': 'the delivery cost', DATE: 'the date', CHECK: 'something to confirm', 'DEPOSIT LINK': 'the deposit link', SHIP: "the ship's name", 'WHICH CAR': 'which car',
-  'WHICH AUCTION': 'which auction', KM: 'the kilometres', GRADE: 'the auction grade', 'HOW MANY': 'how many' };
+  'WHICH AUCTION': 'which auction', KM: 'the kilometres', GRADE: 'the auction grade', 'HOW MANY': 'how many',
+  ELIGIBILITY: 'whether it can be imported', 'LANDED COST': 'the landed cost', DEPOSIT: 'the deposit', TIMELINE: 'the timeframe' };
 const blankName = (kind) => BLANK_NAME[kind] || `the ${kind.toLowerCase()}`;
 
 function blanksIn(text) {
@@ -946,7 +947,7 @@ function renderInfo() {
           row('Asking about', item.order ? '' : item.situation)),
         item.noLead ? h('p', { class: 'fine', text: 'This number has no customer record in the dashboard.' }) : null),
       item.marketplace ? marketplaceInfo(item.marketplace, row) : null,
-      item.mail ? mailInfo(item.mail, row) : null,
+      item.mail ? mailInfo(item.mail, row, d) : null,
       item.order ? orderInfo(item.order, row) : null,
       // An import or auction enquiry: what they asked us to find from Japan.
       item.looking ? h('section', {},
@@ -994,19 +995,30 @@ function renderInfo() {
       h('section', {}, h('p', { class: 'fine', text: 'All times are Sydney time.' }))));
 }
 
-/** The Import Query part of the details panel: the thread as it came from Gmail, and the research notes. */
-function mailInfo(m, row) {
+/**
+ * The Import Query part of the details panel: the thread as it came from Gmail, and the research
+ * notes behind the suggestion: what was found on the website, what was not, and where it was read.
+ */
+function mailInfo(m, row, d) {
+  const r = d && d.status === 'ready' ? d.research : null;
   return h('section', {},
     h('h4', { text: 'Import Query' }),
     h('dl', {},
       row('Subject', m.subject),
       row('From', m.customerEmail),
+      row('Model asked about', m.car),
       row('Messages', m.messages ? `${m.messages}${m.collapsed ? `, ${m.collapsed} folded in Gmail` : ''}` : ''),
       row('First message', m.firstAt ? listTime(m.firstAt) : ''),
       row('Latest', m.lastAt ? listTime(m.lastAt) : '')),
     m.collapsed ? h('p', { class: 'fine', text: 'Part of this thread could not be read because Gmail had folded it. In Gmail, press Expand all, then Send to Wheelman again.' }) : null,
     h('h4', { text: 'Research notes' }),
-    h('p', { class: 'fine', text: t('info.research.none') }));
+    !r ? h('p', { class: 'fine', text: t('info.research.none') }) : [
+      r.found?.length ? h('ul', { class: 'facts' }, r.found.map((f) => h('li', { text: f }))) : h('p', { class: 'fine', text: 'No model could be matched to this email.' }),
+      r.notFound?.length ? [h('p', { class: 'fine', text: 'Could not be found (the reply has a blank for each):' }), h('ul', { class: 'facts' }, r.notFound.map((f) => h('li', { text: f })))] : null,
+      r.notes?.length ? h('ul', { class: 'facts' }, r.notes.map((n) => h('li', { text: n }))) : null,
+      r.sources?.length ? h('p', { class: 'fine' }, 'Read from: ', r.sources.map((s, i) => [i ? ', ' : '', h('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer', text: s.label })])) : null,
+      h('p', { class: 'fine', text: `Looked up ${r.readAt ? clock(r.readAt) : ''}${r.listReadAt ? `, from the eligible-models list read ${listTime(r.listReadAt)}` : ''}.` }),
+    ]);
 }
 
 /** The auction-order part of the details panel: the order, what they asked for, the car, and what has been charged and paid. */

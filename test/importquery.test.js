@@ -7,7 +7,7 @@ import http from 'node:http';
 import { applyTestEnv } from './support/env.js';
 import { startStandins, aiBehaviour } from './support/standins.js';
 
-applyTestEnv();
+applyTestEnv({ MAIL_INTAKE: '1' });
 
 const DAY = 24 * 3600e3;
 const ADDON = `chrome-extension://${'a'.repeat(32)}`;
@@ -19,6 +19,8 @@ before(async () => {
   standins = await startStandins({ ai });
   ({ config } = await import('../src/config.js'));
   config.llm.gemini.url = `${standins.base}/chat`;
+  // The website's eligible-models list is a stand-in with nothing on it here: never the real website.
+  config.site.apiUrl = standins.base;
   config.port = 0;
   db = await import('../src/db.js');
   items = await import('../src/items.js');
@@ -215,7 +217,7 @@ test('a thread sent again adds only what is new; a folded message arriving in fu
 
 // ---- the item and the section ---------------------------------------------------------------
 
-test('a thread is an item of its own kind: waiting when the customer wrote last, answered after our reply, never drafted yet', async () => {
+test('a thread is an item of its own kind: waiting when the customer wrote last, answered after our reply', async () => {
   const two = items.itemFromKey('em:2');
   assert.equal(two.channel, 'email');
   assert.equal(two.state, 'awaiting');
@@ -226,8 +228,7 @@ test('a thread is an item of its own kind: waiting when the customer wrote last,
   assert.ok(two.timeline.every((e) => /^mm:\d+$/.test(e.key) && e.via === 'Email'));
   assert.equal(two.timeline[1].who, 'us');
   assert.equal(two.timeline[1].by, 'Sales');
-  assert.equal(two.autoDraft, false);
-  assert.match(two.autoReason, /next update/);
+  assert.equal(two.autoDraft, true, 'a recent email is written for unasked, researched first');
   assert.equal(two.mail.subject, 'A Hiace with no ids');
 
   const one = items.itemFromKey('em:1');
@@ -251,7 +252,7 @@ test('a thread is an item of its own kind: waiting when the customer wrote last,
   assert.equal(items.itemFromKey('em:4').state, 'optout');
 
   const { item } = await get('/api/items/em:2');
-  assert.deepEqual([item.channel, item.section, item.source, item.email, item.teaches, item.mail.subject, item.mail.customerEmail, item.mail.draftsOff], ['email', 'importquery', 'Email', 'priya@example.com', false, 'A Hiace with no ids', 'priya@example.com', true]);
+  assert.deepEqual([item.channel, item.section, item.source, item.email, item.teaches, item.mail.subject, item.mail.customerEmail, item.mail.draftsOff], ['email', 'importquery', 'Email', 'priya@example.com', false, 'A Hiace with no ids', 'priya@example.com', false]);
   assert.equal(item.thread[0].via, 'Email');
   assert.equal(item.thread.at(-1).who, 'customer');
   assert.equal(item.thread[1].by, 'Sales');
@@ -322,7 +323,8 @@ test('nothing from an email thread reaches what Wheelman has learned', async () 
   assert.equal(db.getDraft(id).status, 'ready');
   const bank = JSON.stringify(voicebank.buildVoiceBank({ write: false }));
   assert.ok(!bank.includes('eligible list') && !bank.includes('priya'), 'the example bank never sees an email');
-  // The worker writes nothing for a thread: suggested replies for emails come with the research step.
-  assert.equal(await worker.draftWaiting(), 0);
-  assert.equal(db.openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key LIKE 'em:%'").get().n, 1, 'only the one this test inserted');
+  // The worker writes for the waiting threads (researched against an empty stand-in list here), and still learns nothing.
+  assert.ok((await worker.draftWaiting()) >= 1);
+  assert.ok(db.openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key LIKE 'em:%' AND status = 'ready'").get().n >= 2);
+  assert.equal(db.allLearned().length, 0);
 });

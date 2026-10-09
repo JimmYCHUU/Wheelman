@@ -92,6 +92,21 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
       return json(res, 200, { content: rows.slice(page * size, page * size + size), page: { size, number: page, totalElements: rows.length, totalPages: Math.max(1, Math.ceil(rows.length / size)) } });
     }
 
+    // The website's list of import-eligible models, and one model's figures. world.siteDown takes them down.
+    if (p === '/api/import-eligible-cars') {
+      if (world?.siteDown) return json(res, 503, { error: 'Service Unavailable' });
+      const same = (a, b) => !b || String(a || '').toLowerCase() === String(b).toLowerCase();
+      const rows = (world?.eligible || []).filter((r) => same(r.make, q.make) && same(r.model, q.model) && same(r.modelCode, q.modelCode));
+      const size = Math.min(100, Number(q.size) || 12), page = Number(q.page) || 1;
+      return json(res, 200, { ok: true, content: rows.slice((page - 1) * size, page * size), page: { size, number: page, totalElements: rows.length, totalPages: Math.max(1, Math.ceil(rows.length / size)) } });
+    }
+    if (p === '/api/import-eligible-vehicle') {
+      if (world?.siteDown) return json(res, 503, { error: 'Service Unavailable' });
+      const r = (world?.eligible || []).find((x) => String(x.modelCode).toLowerCase() === String(q.modelCode || '').toLowerCase());
+      if (!r || !r.priceOnRequest) return json(res, 200, r ? { ok: true, vehicle: { id: r.id, slug: r.slug, make: r.make, model: r.model, modelCode: r.modelCode, yearRange: r.yearRange, compliancePrice: r.compliancePrice, estimatedPrice: `$${r.costing.totalLandedPriceAud}`, vehiclePrice: `$${r.costing.avgPriceAud}`, shippingCost: `$${r.costing.shippingChargeAud}`, customsCost: `$${r.costing.gstAud}`, agentFee: `$${r.costing.carbarnAgentFeeAud}`, auctionDepositAmountAud: `$${r.costing.auctionDepositAmountAud}` } } : { ok: false });
+      return json(res, 200, { ok: false });
+    }
+
     // The website's live-auction feed. The list is filtered by make and model, as the real one is.
     if (p === '/auc/api/public/auction-vehicles') {
       const make = String(q.make || '').toLowerCase(), model = String(q.model || '').toLowerCase().replace(/[^a-z0-9]/g, '');

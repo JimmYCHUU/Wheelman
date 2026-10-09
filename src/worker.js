@@ -14,6 +14,7 @@ import { similarity } from './text.js';
 import { logLine } from './log.js';
 import { pollNotifications, leadKnown } from './notifications.js';
 import { backupIfStale, lastBackup } from './backup.js';
+import { refreshEligibleModelsIfStale, eligibleModelsInfo } from './eligible.js';
 
 export const state = {
   startedAt: Date.now(),
@@ -184,7 +185,7 @@ export async function draftWaiting({ max = 25 } = {}) {
       marketplaceLeft = Math.max(0, config.marketplace.dailyDrafts - mpDraftsLastDay());
       queue.push(...listItems({ source: 'marketplace', states: ['awaiting'] }));
     }
-    // Email threads from Gmail come last. (Nothing is written for them until the research step is in.)
+    // Email threads from Gmail come last; they are few, and each is researched on the website first.
     if (config.mail.switchedOn) queue.push(...listItems({ source: 'importquery', states: ['awaiting'] }));
     for (const item of queue) {
       if (made >= max) break;
@@ -233,6 +234,8 @@ export async function cycle() {
   try { updateOutcomes(); } catch (e) { state.lastDraftError = { at: Date.now(), message: 'Comparing sent replies failed: ' + e.message }; logLine('outcomes', `${e.message} | ${String(e.stack || '').split('\n').slice(1, 4).join(' ')}`); }
   // Once a day, relearn our salespeople's genuine replies from the latest dashboard conversations.
   try { refreshVoiceBankIfStale(); } catch { /* keep the existing bank */ }
+  // Once a day, the website's list of import-eligible models, for the Import Query section.
+  if (config.mail.switchedOn) { try { await refreshEligibleModelsIfStale(); } catch { /* next time */ } }
   // A coaching note written while every AI model was busy still has its lesson to be worked out.
   try { if (providers().length && Date.now() >= state.pausedUntil) await distilPending(2); } catch { /* next time */ }
   // Auction orders: look at the live auction for the ones still searching, and write the message
@@ -353,6 +356,8 @@ export function statusReport() {
     syncMinutes: config.syncMinutes,
     // The Gmail button: whether the intake is on, and the last thread it handed in.
     mail: { on: config.mail.switchedOn, last: config.mail.switchedOn ? (state.mail || getMeta('mail_last_report', null)) : null },
+    // The website's eligible-models list: how many models, and when it was last read.
+    eligibleModels: config.mail.switchedOn ? eligibleModelsInfo() : null,
     // The notification feed: on when a poll interval is set, with the last read's outcome.
     alerts: { on: config.notificationsSeconds > 0, everySeconds: config.notificationsSeconds, ...(state.alerts || {}) },
     marketplace: {

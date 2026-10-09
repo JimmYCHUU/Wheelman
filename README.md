@@ -296,7 +296,9 @@ Enforced in code, not by convention.
   addresses (the cars coming up, one car, what similar cars sold for) and ask the website's
   cost calculator for one figure. That one request is a
   POST, because that is how the website's own page asks. It carries the bid amount and
-  nothing else, places no bid and stores nothing. Any other address or method is refused
+  nothing else, places no bid and stores nothing. The eligible-models client, also with no
+  login, can GET two addresses: the website's list of import-eligible models, and one model's
+  figures. Any other address or method is refused
   before a request is made. Reading does not mark anything as read, and never triggers the
   dashboard's own drafts or the engine's auto-reply. The phone add-on reads the list in the
   Messages tab of your own browser: it opens nothing, clicks nothing and marks nothing read,
@@ -308,7 +310,9 @@ Enforced in code, not by convention.
   check. A price that only the customer mentioned is theirs, not ours. What a person must
   decide becomes a blank: `[PRICE?]`, `[TRADE-IN VALUE?]`, `[DELIVERY COST?]`, `[DATE?]`,
   `[CHECK?]`. The same goes for a time that has passed, a day nobody mentioned, a dated
-  promise nobody on our side made, and a place the customer never said.
+  promise nobody on our side made, and a place the customer never said. An email about
+  importing never says we will check and come back: the sentence carries the exact figure
+  from the website, or its blank.
 - **RULE-4 Marketplace and the phone never teach.** Learning accepts dashboard conversations
   only. It is refused in three places: the learning code, the copy route and the database
   helper. A reply typed on the phone counts as the reply but teaches nothing, and the example
@@ -725,15 +729,59 @@ Gmail changes.
   else is the customer, named from the first such message.
 - **Copy and paste.** A reply is copied from the message box and pasted into your reply in
   Gmail. Nothing is sent from here.
-- **No suggestions yet.** Suggested replies for emails come with the research step, which
-  looks the model up on the website; until then the section lists and shows the threads.
-- **Nothing is learned** from an email thread, and the example bank never sees one.
+- **Nothing is learned** from an email thread yet, and the example bank never sees one.
+
+### The exact answer, researched
+
+An import email is answered from the website, not from memory. Before a reply is written,
+Wheelman looks the question up:
+
+- **The model.** Model codes in the email (GDH206, AGH30W, JF3) and make and model names
+  ("Alphard Welcab", "N-Box") are matched against the website's list of import-eligible
+  models, which Wheelman reads from carbarn.com.au once a day and keeps in
+  `data\eligible-models.json`. For each model found: whether it can be imported and for which
+  build years, the engines and odometer limits, the SEVS approval, the estimated landed and
+  complied cost with its parts, the refundable auction deposit, and the model's page on the
+  website. What the customer said (a year, a budget, kilometres) is set against those facts.
+- **The process.** The deposit bands, the timeline, the payment stages, VIA approval,
+  compliance and the warranty come from the saved guide pages (how importing works, how
+  compliance works, the live auction) and from the business facts.
+- **What is coming up.** The live auction is looked at for the model: how many are coming up,
+  the cheapest estimated landed cost, and the next auction date.
+
+All of it goes to the AI as the research for that email, every figure with the page it came
+from, and the reply must carry the figures and the model's page link. Two rules are enforced
+by the checks, not by hoping:
+
+- **Never "we will check and get back to you".** A sentence that puts the answer off is
+  refused and the reply is written again. The one exception is what the website itself
+  promises about the process, such as inspecting before any bid.
+- **Every model asked about is answered.** A model code the customer named must be answered:
+  eligible or not, with its figure or its page link, or with a blank.
+
+When the answer is not on the website, the reply gets a blank inside a full sentence, and the
+details panel's **Research notes** say what was looked up, where, and what was not found:
+
+| Blank | When |
+|---|---|
+| `[ELIGIBILITY?]` | A model, code or year the eligible-models list does not have |
+| `[LANDED COST?]` | A model the website shows as price on request |
+| `[DEPOSIT?]` | A deposit amount neither the model nor the deposit table gives |
+| `[TIMELINE?]` | A timeframe that is not on our pages |
+
+If the website cannot be read, the list already on this computer is used, then the saved
+importing pages (with the day they were saved); the reply is still written, marked so you
+open the page link before sending. Email replies are written by the better AI models, not
+the small one Marketplace uses.
 
 | Setting in `.env` | What it does | Default |
 |---|---|---|
 | `MAIL_INTAKE` | Set to `0` to switch the section and the intake off | `1` |
 | `MAIL_OUR_DOMAINS` | The domains whose senders are our side of a thread, comma-separated | `carbarn.com.au` |
 | `MAIL_AUTO_DRAFT_MAX_AGE_DAYS` | An email older than this is listed but not written for unasked | `7` |
+| `SITE_API_URL` | Where the eligible-models list is read from | The website |
+| `IMPORT_RESEARCH_DAILY` | Most emails researched with live website requests in a day; beyond it the list on this computer is used | `60` |
+| `IMPORT_AUCTION_SNAPSHOT` | Set to `0` to leave the live auction out of the research | `1` |
 
 ## The browser add-on
 
@@ -838,6 +886,7 @@ Wheelman only states facts it has been given.
 | The wording of messages to auction customers | `voice/auction-messages.md`, `voice/auction-offer.md` | You edit them |
 | Texts that reached the business phone but not the dashboard | The phone add-on, reading Google Messages for web in your browser | Every 30 seconds while the browser is open |
 | Import enquiries that came by email | The Send to Wheelman button in Gmail, pressed by you on an open email | When you press it |
+| Which models can be imported, and what they land for | The website's own list of import-eligible models, kept in `data\eligible-models.json` | Once a day, and when an email is researched |
 
 In `knowledge/business-facts.md` each topic is marked `CONFIRMED` (stated freely), `WORKING`
 (in use, please check) or `NEEDS ANSWER` (Wheelman says nothing and leaves a blank). Write the
@@ -1098,7 +1147,7 @@ computer. Git never sees any of it.
 npm.cmd test
 ```
 
-276 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
+286 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
 a stand-in auction feed on this computer: who counts as waiting and who does not, stock numbers matched to the right
 car however a portal writes them (a year in front, a portal code, upper or lower case), that
 no customer detail and no cost figure reaches the AI request, an invented price
@@ -1210,6 +1259,8 @@ wheelman/
 │   ├── templates.js                   reads the wording files and fills them in
 │   ├── phone.js                       the phone add-on's reports: checked, kept, matched by number
 │   ├── mail.js                        email threads from the Gmail button: checked, kept, merged
+│   ├── eligible.js                    the website's eligible-models list: read daily, kept, matched
+│   ├── importquery.js                 the research behind an import email: model, cost, deposit, blanks
 │   ├── sync.js · normalize.js         what is read, and what is kept of it
 │   ├── items.js                       who is waiting: one shape for a lead and a Marketplace chat
 │   ├── situations.js · text.js        what a message is about, by keyword rules

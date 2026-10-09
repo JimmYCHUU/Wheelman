@@ -12,6 +12,7 @@ import { config } from './config.js';
 import { dealFor } from './deal.js';
 import { namesStaff } from './voice.js';
 import { scenarioItem } from './modelreplies.js';
+import { loadEligibleModels, modelCodesIn, modelsIn } from './eligible.js';
 
 const MIN = 60 * 1000;
 
@@ -654,11 +655,23 @@ function mailEntry(r) {
   };
 }
 
+/** The model an email names, from the eligible-models list on this computer. No request is made. */
+function mailCar(text, now) {
+  try {
+    const { models } = loadEligibleModels(now);
+    if (!models.length) return '';
+    const codes = modelCodesIn(text, models);
+    if (codes.known[0]) return codes.known[0].models[0].title;
+    const fam = modelsIn(text, models)[0];
+    return fam ? `${fam.make} ${fam.model}` : '';
+  } catch { return ''; }
+}
+
 /**
  * One email thread the owner sent from Gmail, in the same shape as a dashboard item. Key em:<id>.
  * The customer is whoever first wrote from an address that is not ours. Nothing is matched to the
- * dashboard yet, and nothing is written for it unasked: suggested replies for emails come with
- * the research step.
+ * dashboard yet. A reply is researched on the website and written while the customer's latest
+ * email is recent (config.mail.autoDraftMaxAgeDays); older ones wait for Write it now.
  */
 export function buildMailItem(id, { now = Date.now() } = {}) {
   const t = getMailThread(Number(id));
@@ -673,13 +686,12 @@ export function buildMailItem(id, { now = Date.now() } = {}) {
   }, timeline, { now, autoDraftMaxAgeHours: config.mail.autoDraftMaxAgeDays * 24 });
   item.imports = null;
   item.isNewEnquiry = false;
-  // Until the research step is in, no reply is written for an email, asked or unasked.
-  item.autoDraft = false;
-  item.autoReason = 'Suggested replies for emails come with the next update. For now, reply in Gmail as usual.';
   item.mail = {
     id: t.id, subject: t.subject || '', customerName: t.customer_name || '', customerEmail: t.customer_email || '', ref: t.ref || '',
     messages: t.message_count || 0, collapsed: t.collapsed_count || 0, firstAt: t.first_at || null, lastAt: t.last_at || null,
-    car: '', draftsOff: true,
+    // The model they asked about, for the row's car line.
+    car: mailCar(`${t.subject || ''}\n${timeline.filter((e) => e.who === 'customer').map((e) => e.text).join('\n')}`, now),
+    draftsOff: false,
   };
   return item;
 }

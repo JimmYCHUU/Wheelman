@@ -113,6 +113,8 @@ function draftOf(item) {
     model: draft.model, provider: draft.provider, createdAt: draft.created_at, instruction: draft.instruction || '', error: draft.error || '', rating: draft.rating || '',
     // Marketplace only: when Send was pressed on this suggestion.
     sentHereAt: draft.sent_here_at || null,
+    // An import email: what was looked up on the website, found and not found, with its sources.
+    research: draft.research || null,
     needsHuman: (draft.needsHuman || []).filter((n) => n && n.marker && n.reason).map((n) => ({ marker: String(n.marker), reason: String(n.reason) })),
     // What the reply is for: the one next step it offers, and where the customer is on the way to a sale.
     nextStep: draft.next_step || '', rung: draft.rung || '', rungLabel: RUNG_LABELS[draft.rung] || '',

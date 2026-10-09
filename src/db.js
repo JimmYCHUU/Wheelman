@@ -275,6 +275,8 @@ export function openDb(file = config.dbPath) {
   ensureColumn(db, 'drafts', 'rung', 'TEXT');
   // When a Marketplace reply was sent from the page. The text itself is the engine's record.
   ensureColumn(db, 'drafts', 'sent_here_at', 'INTEGER');
+  // What was looked up on the website for an import email: the page's research notes.
+  ensureColumn(db, 'drafts', 'research_json', 'TEXT');
   ensureColumn(db, 'advice', 'lessons_json', 'TEXT');
   ensureColumn(db, 'leads', 'status_history_json', 'TEXT');
   ensureColumn(db, 'conversations', 'lead_platform', 'TEXT');
@@ -756,12 +758,12 @@ export function countRows(table) {
 
 export function insertDraft(d) {
   const info = stmt(`
-    INSERT INTO drafts(item_key, anchor_key, situation, reply, needs_human_json, facts_used_json, checks_json, provider, model, status, instruction, error, created_at, context_json, next_step, rung)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO drafts(item_key, anchor_key, situation, reply, needs_human_json, facts_used_json, checks_json, provider, model, status, instruction, error, created_at, context_json, next_step, rung, research_json)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(d.itemKey, d.anchorKey, d.situation || null, d.reply || null, JSON.stringify(d.needsHuman || []),
     JSON.stringify(d.factsUsed || []), JSON.stringify(d.checks || []), d.provider || null, d.model || null,
     d.status, d.instruction || null, d.error || null, Date.now(), d.context ? JSON.stringify(d.context) : null,
-    d.nextStep || null, d.rung || null);
+    d.nextStep || null, d.rung || null, d.research ? JSON.stringify(d.research) : null);
   return Number(info.lastInsertRowid);
 }
 
@@ -772,6 +774,8 @@ const parseDraft = (r) => r && ({
   checks: JSON.parse(r.checks_json || '[]'),
   // What the message was about when the suggestion was written (it reads as "general" once answered).
   context: r.context_json ? JSON.parse(r.context_json) : null,
+  // For an import email: what was looked up on the website, for the page's research notes.
+  research: r.research_json ? JSON.parse(r.research_json) : null,
 });
 
 export function latestDraft(itemKey, anchorKey) {

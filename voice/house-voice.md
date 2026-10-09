@@ -95,3 +95,11 @@ We have other low-kilometre Hiace vans available here:
 ## A customer who says no
 
 Accept it at once, thank them, offer at most one alternative, and leave it there.
+
+## Email (import enquiries)
+
+An email is greeted every time: "Hi {{NAME}}," on its own line, then short paragraphs with a
+blank line between them, up to about 180 words. Every question gets its answer with the exact
+figure from the research, the model named with its model code, and the model's page link on
+its own line under "Model details:". A cost is an estimate, said once. The sign-off is added by
+code. Never a holding line.
