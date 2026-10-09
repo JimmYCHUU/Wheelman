@@ -43,8 +43,9 @@ export function firstNameOf(lead) {
   const raw = String(lead?.firstName ?? lead?.first_name ?? lead?.customerName ?? lead?.customer_name ?? '').trim();
   if (!raw || /@|\d/.test(raw)) return '';
   let first = raw.split(/\s+/)[0].replace(/[^\p{L}'’-]/gu, '');
-  // Portals sometimes join names together ("KerrynDowner").
-  const joined = first.match(/^(\p{Lu}\p{Ll}+)(\p{Lu}\p{Ll}+)$/u);
+  // Portals sometimes join names together ("KerrynDowner", "GrahamMcLeod"). A capital after only
+  // one or two letters ("McKenzie", "DeShawn", "LaToya") is part of one name, not a join.
+  const joined = first.match(/^(\p{Lu}\p{Ll}{2,})(\p{Lu}.+)$/u);
   if (joined) first = joined[1];
   if (first.length < 2 || NOT_NAMES.has(first.toLowerCase())) return '';
   return first[0].toUpperCase() + first.slice(1).toLowerCase().replace(/(['’-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
