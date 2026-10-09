@@ -105,6 +105,10 @@ export const COPY = {
   'welcome.backup.none': 'Not backed up yet. A backup is written when Wheelman closes, and once a day.',
   'welcome.backup.off': 'Backups are switched off (BACKUPS=0 in the .env file).',
   'welcome.backup.title': 'One file with the database, the settings, the staff names and the voice files. Copy it to another computer and double-click "Restore Wheelman.cmd" there to carry Wheelman across, with everything it has learned.',
+  'welcome.shared': 'Shared with the team at',
+  'welcome.shared.title': 'Colleagues open this address in any browser and type the team password (TEAM_PASSWORD in the .env file). A trycloudflare.com address changes each time Wheelman starts.',
+  'welcome.shared.opening': 'Opening the team link ...',
+  'welcome.shared.down': 'The team link is down: {why}',
 
   'toast.phoneCopied': 'Phone number copied',
   'toast.sent': 'Sent. It is on its way to the buyer.',

@@ -6,6 +6,17 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- Sharing with the team. Double-click **Share Wheelman.cmd** (or set `SHARE=1` in `.env`) and
+  Wheelman opens a Cloudflare tunnel to the page and prints the address to give colleagues; the
+  welcome panel shows it as a link. Colleagues open it in any browser and type the team password
+  (`TEAM_PASSWORD` in `.env`) once; their browser remembers it for 30 days. The page still
+  listens on this computer only: the tunnel is cloudflared, Cloudflare's own program, which dials
+  out from here and is downloaded from Cloudflare's releases the first time. Through the tunnel,
+  a request is let in only with the signed sign-in cookie, a POST only from the shared page
+  itself, and ten wrong passwords in a row from one address lock the sign-in there for a quarter
+  of an hour. A free trycloudflare.com address changes each time Wheelman starts; a named
+  tunnel's token (`CLOUDFLARE_TUNNEL_TOKEN`, `SHARE_URL`) gives a fixed address of your own.
+  Nothing else changes: a Marketplace reply still goes only when a person presses Send.
 - Wheelman says what it reads of the team's own replies. The welcome panel's line "Reads N
   replies the team sent in the last year, whoever sent them and from wherever, and N of our
   salespeople's own replies" (or, under Import Query, "Reads N past import emails the team

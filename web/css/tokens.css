@@ -128,6 +128,7 @@
     --measure-pill: 34rem;
     --measure-prose: 28rem;
     --measure-welcome: 26rem;
+    --measure-signin: 22rem;    /* the team's sign-in card at the shared address */
     --editor-min: 4.5rem;
     --editor-max: 38dvh;
     --paste-max: 30dvh;
