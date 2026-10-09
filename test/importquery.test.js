@@ -252,7 +252,7 @@ test('a thread is an item of its own kind: waiting when the customer wrote last,
   assert.equal(items.itemFromKey('em:4').state, 'optout');
 
   const { item } = await get('/api/items/em:2');
-  assert.deepEqual([item.channel, item.section, item.source, item.email, item.teaches, item.mail.subject, item.mail.customerEmail, item.mail.draftsOff], ['email', 'importquery', 'Email', 'priya@example.com', false, 'A Hiace with no ids', 'priya@example.com', false]);
+  assert.deepEqual([item.channel, item.section, item.source, item.email, item.teaches, item.mail.subject, item.mail.customerEmail, item.mail.draftsOff], ['email', 'importquery', 'Email', 'priya@example.com', true, 'A Hiace with no ids', 'priya@example.com', false]);
   assert.equal(item.thread[0].via, 'Email');
   assert.equal(item.thread.at(-1).who, 'customer');
   assert.equal(item.thread[1].by, 'Sales');
@@ -301,30 +301,30 @@ test('dismiss, seen and put back work on a thread', async () => {
   assert.equal((await post('/api/items/em:99/dismiss')).status, 404);
 });
 
-// ---- never learned from -----------------------------------------------------------------
+// ---- what an email thread teaches ------------------------------------------------------------
 
-test('nothing from an email thread reaches what Wheelman has learned', async () => {
-  assert.equal(learn.canLearnFrom('em:2'), false);
-  assert.throws(() => db.upsertLearned({ draftId: 1, itemKey: 'em:2', finalText: 'Yes, it can be imported.', source: 'copied' }), /only dashboard/);
-  assert.throws(() => db.insertAdvice({ draftId: 1, itemKey: 'em:2', note: 'x' }), /only dashboard/);
-  // A suggestion for a thread, copied: Copy is noted, the text is not kept, nothing is learned.
+test('an email thread teaches through the same buttons as the dashboard, as email lessons; Marketplace and the phone still do not', async () => {
+  assert.equal(learn.canLearnFrom('em:2'), true);
+  for (const k of ['mp:1', 'ph:1', 'ao:1', 'tr:1']) assert.equal(learn.canLearnFrom(k), false, k);
+  assert.throws(() => db.upsertLearned({ draftId: 1, itemKey: 'mp:2', finalText: 'x', source: 'copied' }), /only dashboard/);
+  assert.throws(() => db.insertAdvice({ draftId: 1, itemKey: 'ph:2', note: 'x' }), /only dashboard/);
+  // A suggestion for a thread, changed before copying: the change is kept as an email lesson, without the name.
   const item = items.itemFromKey('em:2');
-  const id = db.insertDraft({ itemKey: item.itemKey, anchorKey: item.anchorKey, situation: 'import_sourcing', status: 'ready', reply: 'Yes, it can be imported.', needsHuman: [], factsUsed: [], checks: [], provider: 'none', model: 'test', exampleIds: [], context: { channel: 'email' } });
-  const copied = await (await post(`/api/drafts/${id}/copied`, { text: 'Yes, it can be imported, Priya.' })).json();
-  assert.equal(copied.learned, false);
-  assert.equal(db.getDraft(id).copied_text, null);
-  assert.ok(db.getDraft(id).copied_at > 0);
-  assert.equal(db.allLearned().length, 0);
-  assert.equal((await (await post(`/api/drafts/${id}/rating`, { rating: 'good' })).json()).learned, false);
-  assert.equal((await (await post(`/api/drafts/${id}/advice`, { note: 'shorter' })).json()).learned, false);
-  assert.equal(db.allLearned().length, 0);
-  assert.equal(db.allAdvice().length, 0);
-  assert.equal(worker.updateOutcomes(), 0, 'outcomes are tracked for dashboard conversations only');
-  assert.equal(db.getDraft(id).status, 'ready');
+  const id = db.insertDraft({ itemKey: item.itemKey, anchorKey: item.anchorKey, situation: 'import_sourcing', status: 'ready', reply: 'Hi {{NAME}},\n\nYes, it can be imported.', needsHuman: [], factsUsed: [], checks: [], provider: 'none', model: 'test', exampleIds: [], context: { channel: 'email', situations: ['import_sourcing'], firstReply: true } });
+  const copied = await (await post(`/api/drafts/${id}/copied`, { text: 'Hi Priya,\n\nYes, it can be imported. The refundable deposit starts the search and the whole process takes about 6 to 10 weeks.\n\nRegards,\nTeam Carbarn' })).json();
+  assert.equal(copied.learned, true, JSON.stringify(copied));
+  const row = db.getLearned(id);
+  assert.equal(row.channel, 'email');
+  assert.equal(row.source, 'copied');
+  assert.ok(!row.final_text.includes('Priya') && !row.customer_text.includes('priya@example.com'));
+  assert.equal((await (await post(`/api/drafts/${id}/rating`, { rating: 'good' })).json()).learned, true);
+  assert.equal(db.getLearned(id).source, 'approved');
+  const advice = await (await post(`/api/drafts/${id}/advice`, { note: 'Give the deposit band from the table' })).json();
+  assert.equal(advice.learned, true);
+  assert.equal(db.allAdvice()[0].channel, 'email');
   const bank = JSON.stringify(voicebank.buildVoiceBank({ write: false }));
-  assert.ok(!bank.includes('eligible list') && !bank.includes('priya'), 'the example bank never sees an email');
-  // The worker writes for the waiting threads (researched against an empty stand-in list here), and still learns nothing.
+  assert.ok(!bank.includes('eligible list') && !bank.includes('priya'), 'the SMS example bank never sees an email');
+  // The worker writes for the waiting threads (researched against an empty stand-in list here).
   assert.ok((await worker.draftWaiting()) >= 1);
   assert.ok(db.openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key LIKE 'em:%' AND status = 'ready'").get().n >= 2);
-  assert.equal(db.allLearned().length, 0);
 });

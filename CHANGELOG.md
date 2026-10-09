@@ -6,6 +6,13 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- Import Query learns from the past. The email threads sent from Gmail, including the old ones,
+  show the AI how the team really answered similar import enquiries ("How we answered similar
+  import emails" in the request), with the other customer's name, address, staff name, figures
+  and links taken out. Good reply, Could be better and a reply changed before copying teach for
+  emails as they do for the dashboard, and a reply later sent from Gmail is compared with the
+  suggestion. Every lesson carries its kind: an email's lessons serve emails only, a text's serve
+  texts and Marketplace chats only. Marketplace, the phone and auction orders still teach nothing.
 - Import Query replies are researched on the website before they are written. The model codes
   and names in an email are matched against carbarn.com.au's list of import-eligible models,
   read once a day into `data\eligible-models.json`; the reply carries the model's eligibility

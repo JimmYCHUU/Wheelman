@@ -277,6 +277,10 @@ export function openDb(file = config.dbPath) {
   ensureColumn(db, 'drafts', 'sent_here_at', 'INTEGER');
   // What was looked up on the website for an import email: the page's research notes.
   ensureColumn(db, 'drafts', 'research_json', 'TEXT');
+  // Which kind of reply a lesson came from: 'sms' (the dashboard) or 'email' (Import Query). What an
+  // email taught is used only for emails, and what a text taught only for texts and chats.
+  ensureColumn(db, 'learned', 'channel', "TEXT NOT NULL DEFAULT 'sms'");
+  ensureColumn(db, 'advice', 'channel', "TEXT NOT NULL DEFAULT 'sms'");
   ensureColumn(db, 'advice', 'lessons_json', 'TEXT');
   ensureColumn(db, 'leads', 'status_history_json', 'TEXT');
   ensureColumn(db, 'conversations', 'lead_platform', 'TEXT');
@@ -787,7 +791,7 @@ export function getDraft(id) {
 }
 
 export function draftsAwaitingOutcome() {
-  return stmt("SELECT * FROM drafts WHERE status = 'ready' AND sent_text IS NULL AND (item_key LIKE 'c:%' OR item_key LIKE 'l:%') ORDER BY id DESC LIMIT 500").all().map(parseDraft);
+  return stmt("SELECT * FROM drafts WHERE status = 'ready' AND sent_text IS NULL AND (item_key LIKE 'c:%' OR item_key LIKE 'l:%' OR item_key LIKE 'em:%') ORDER BY id DESC LIMIT 500").all().map(parseDraft);
 }
 
 export function recordOutcome(id, { sentText, sentBy, sentAt, similarity }) {
@@ -855,18 +859,24 @@ export function recordSentHere(id, now = Date.now()) {
 
 // ---- learning ------------------------------------------------------------
 
+// Only dashboard conversations (c:), leads (l:) and import emails (em:) may teach Wheelman.
+// Marketplace chats, texts seen only on the phone and auction orders never do.
+const TEACHES = /^(?:[cl]|em):\d+$/;
+/** Which kind of reply a lesson is for: an email's lessons serve emails, a text's serve texts and chats. */
+export const channelOfKey = (itemKey) => (/^em:/.test(String(itemKey || '')) ? 'email' : 'sms');
+
 export function upsertLearned(l) {
-  // Last line of defence: only dashboard conversations (c:) and leads (l:) may teach Wheelman.
-  if (!/^[cl]:\d+$/.test(String(l.itemKey || ''))) throw new Error('Refused: only dashboard conversations can be learned from.');
+  // Last line of defence.
+  if (!TEACHES.test(String(l.itemKey || ''))) throw new Error('Refused: only dashboard conversations and import emails can be learned from.');
   stmt(`
-    INSERT INTO learned(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, final_text, source, changed, similarity, at)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO learned(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, final_text, source, changed, similarity, at, channel)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(draft_id) DO UPDATE SET
       situations_json = excluded.situations_json, first_reply = excluded.first_reply, customer_text = excluded.customer_text,
       draft_text = excluded.draft_text, final_text = excluded.final_text, source = excluded.source,
-      changed = excluded.changed, similarity = excluded.similarity, at = excluded.at
+      changed = excluded.changed, similarity = excluded.similarity, at = excluded.at, channel = excluded.channel
   `).run(l.draftId, l.itemKey, JSON.stringify(l.situations || []), l.firstReply ? 1 : 0, l.customerText || '', l.draftText || '',
-    l.finalText, l.source, l.changed ? 1 : 0, l.similarity ?? null, l.at || Date.now());
+    l.finalText, l.source, l.changed ? 1 : 0, l.similarity ?? null, l.at || Date.now(), channelOfKey(l.itemKey));
 }
 
 export function deleteLearned(draftId) {
@@ -901,11 +911,11 @@ export function getLearned(draftId) {
 
 /** A note from the owner on what a suggestion should have done differently. Dashboard conversations only. */
 export function insertAdvice(a) {
-  if (!/^[cl]:\d+$/.test(String(a.itemKey || ''))) throw new Error('Refused: only dashboard conversations can be learned from.');
+  if (!TEACHES.test(String(a.itemKey || ''))) throw new Error('Refused: only dashboard conversations and import emails can be learned from.');
   // One note per suggestion: saying it again replaces what was said before.
   if (a.draftId !== null && a.draftId !== undefined) stmt('DELETE FROM advice WHERE draft_id = ?').run(a.draftId);
-  return Number(stmt('INSERT INTO advice(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, note, lessons_json, at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(a.draftId ?? null, a.itemKey, JSON.stringify(a.situations || []), a.firstReply ? 1 : 0, a.customerText || '', a.draftText || '', a.note, a.lessons ? JSON.stringify(a.lessons) : null, a.at || Date.now()).lastInsertRowid);
+  return Number(stmt('INSERT INTO advice(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, note, lessons_json, at, channel) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(a.draftId ?? null, a.itemKey, JSON.stringify(a.situations || []), a.firstReply ? 1 : 0, a.customerText || '', a.draftText || '', a.note, a.lessons ? JSON.stringify(a.lessons) : null, a.at || Date.now(), channelOfKey(a.itemKey)).lastInsertRowid);
 }
 
 /** The lessons taken from a note: what Wheelman actually keeps of it. */
@@ -958,6 +968,20 @@ export function upsertMailThread(t, now = Date.now()) {
 
 export function getMailThread(id) {
   return stmt('SELECT * FROM mail_threads WHERE id = ?').get(id) || null;
+}
+
+/** The email threads with their messages, oldest message first, for learning what the team wrote back. */
+export function mailExchanges({ since = 0 } = {}) {
+  const d = openDb();
+  const threads = d.prepare('SELECT id, subject, customer_name, customer_email FROM mail_threads WHERE last_at >= ? ORDER BY last_at DESC').all(since);
+  const messages = d.prepare('SELECT id, direction, from_name, at, text FROM mail_messages WHERE thread_id = ? ORDER BY at ASC, id ASC');
+  return threads.map((t) => ({ id: t.id, subject: t.subject, customerName: t.customer_name, customerEmail: t.customer_email, messages: messages.all(t.id) }));
+}
+
+/** Moves when an email message is added or filled in, so what was learned from the threads is rebuilt. */
+export function mailPracticeStamp() {
+  const r = stmt('SELECT COUNT(*) AS n, IFNULL(MAX(id), 0) AS top, IFNULL(MAX(updated_at), 0) AS upd FROM mail_messages').get();
+  return `${r.n}|${r.top}|${r.upd}`;
 }
 
 export function getMailThreadByKey(key) {

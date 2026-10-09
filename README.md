@@ -314,9 +314,11 @@ Enforced in code, not by convention.
   importing never says we will check and come back: the sentence carries the exact figure
   from the website, or its blank.
 - **RULE-4 Marketplace and the phone never teach.** Learning accepts dashboard conversations
-  only. It is refused in three places: the learning code, the copy route and the database
-  helper. A reply typed on the phone counts as the reply but teaches nothing, and the example
-  bank never sees it.
+  and import emails, each kept to its own kind: what an email taught is used only for emails,
+  and what a text taught only for texts and Marketplace chats. Marketplace chats, texts seen
+  only on the phone and auction orders are refused in three places: the learning code, the
+  copy route and the database helper. A reply typed on the phone counts as the reply but
+  teaches nothing, and the example bank never sees it, nor an email.
 - **RULE-5 No costs, no sale amounts.** Purchase cost, shipping cost and margin are never
   stored and never sent anywhere. From a sale record Wheelman keeps the stage and the date,
   and whether a deposit or the full amount is recorded. It keeps no amount and no buyer name,
@@ -729,7 +731,13 @@ Gmail changes.
   else is the customer, named from the first such message.
 - **Copy and paste.** A reply is copied from the message box and pasted into your reply in
   Gmail. Nothing is sent from here.
-- **Nothing is learned** from an email thread yet, and the example bank never sees one.
+- **It learns from the past.** Send the old import threads from Gmail too, one press each. What
+  the team wrote back in them becomes "how we answered similar import emails" in the request
+  for a new one: the moves, what was included, the order, the length, with the other
+  customer's name, address, figures and links taken out. Good reply, Could be better, and a
+  reply you change before copying teach the same way, as email lessons that never reach a text
+  message; and a reply you later send from Gmail and send to Wheelman again is compared with
+  the suggestion like a dashboard reply is. The SMS example bank never sees an email.
 
 ### The exact answer, researched
 
@@ -904,9 +912,11 @@ automated checks).
 
 ## How Wheelman learns
 
-Only from dashboard leads and conversations, the website and the dashboard's records. Never
-from Marketplace, and not from the Auction section: its messages come from a wording file,
-and what a customer wrote on WhatsApp is pasted in, not read from the dashboard.
+From dashboard leads and conversations, the website and the dashboard's records, and from the
+import email threads sent from Gmail, each kind kept to itself (see the Import Query section).
+Never from Marketplace, never from the phone, and not from the Auction section: its messages
+come from a wording file, and what a customer wrote on WhatsApp is pasted in, not read from
+the dashboard.
 
 Wheelman learns two different things from two different places. **What to say** comes from
 what the team really sends. **How to say it** comes from the two voices.
@@ -1147,7 +1157,7 @@ computer. Git never sees any of it.
 npm.cmd test
 ```
 
-286 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
+291 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
 a stand-in auction feed on this computer: who counts as waiting and who does not, stock numbers matched to the right
 car however a portal writes them (a year in front, a portal code, upper or lower case), that
 no customer detail and no cost figure reaches the AI request, an invented price
