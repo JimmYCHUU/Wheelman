@@ -12,7 +12,7 @@ applyTestEnv();
 const MIN = 60e3;
 const HOUR = 3600e3;
 const ADDON = `chrome-extension://${'a'.repeat(32)}`;
-let standins, app, base, config, db, items, phone, worker, parse, learn, voicebank, drafter, normalize;
+let standins, app, base, config, db, items, phone, worker, parse, learn, voicebank, drafter, normalize, recentPractice;
 const ai = aiBehaviour({ behave: () => ({ reply: 'Hi {{NAME}},\nYes, it is still available. Would you like to come and see it?', needs_human: [], facts_used: [], hold: false }) });
 
 before(async () => {
@@ -29,6 +29,7 @@ before(async () => {
   voicebank = await import('../src/voicebank.js');
   drafter = await import('../src/drafter.js');
   normalize = await import('../src/normalize.js');
+  ({ recentPractice } = await import('../src/practice.js'));
   app = await (await import('../src/server.js')).startServer();
   base = `http://127.0.0.1:${app.address().port}`;
 });
@@ -276,7 +277,7 @@ test('once the dashboard has the number, a Phone only conversation moves under t
 
 // ---- never learned from -----------------------------------------------------------------------------
 
-test('a reply sent from the phone counts as sent, after a grace period, and teaches nothing', async () => {
+test('a reply sent from the phone counts as sent after a grace period, and teaches when the add-on saw all of it', async () => {
   const now = Date.now();
   lead(303, 405, 'Sam', 'Ortiz', '0491570129');
   conv(405, 303, '+61491570129', 'Sam Ortiz', now - 30 * MIN);
@@ -291,15 +292,42 @@ test('a reply sent from the phone counts as sent, after a grace period, and teac
   const learnedBefore = db.allLearned().length;
   worker.updateOutcomes();
   assert.equal(db.latestDraft('c:405', item.anchorKey).status, 'ready', 'left open for now');
-  // Twenty minutes on, still only on the phone: closed as answered from the phone, nothing learned.
+  // Twenty minutes on, still only on the phone: closed as answered from the phone, and the reply
+  // the team sent teaches, as one sent from the dashboard would.
   db.openDb().prepare('UPDATE phone_messages SET at = ? WHERE thread_id = ?').run(now - 20 * MIN, threadId('+61 491 570 129'));
   worker.updateOutcomes();
   const after = db.latestDraft('c:405', item.anchorKey);
   assert.deepEqual([after.status, after.sent_by, after.sent_text], ['answered', 'phone', 'Hi Sam, the best we can do is $32,500 drive away.']);
-  assert.equal(db.allLearned().length, learnedBefore);
+  assert.equal(db.allLearned().length, learnedBefore + 1, 'the reply differed from the suggestion, so it was learned');
+  const row = db.getLearned(after.id);
+  assert.deepEqual([row.source, row.channel, row.item_key], ['sent', 'sms', 'c:405']);
+  assert.ok(!row.final_text.includes('Sam') && row.final_text.includes('$32,500'), row.final_text);
   assert.throws(() => db.upsertLearned({ itemKey: 'ph:1', draftId: 1, finalText: 'x', source: 'sent' }), /only dashboard/);
   const bank = voicebank.buildVoiceBank({ write: false });
-  assert.ok(!bank.examples.some((e) => /32,500/.test(e.reply)), 'the example bank never sees a reply typed on the phone');
+  assert.ok(!bank.examples.some((e) => /32,500/.test(e.reply)), 'the example bank still never sees a reply typed on the phone: whose voice it is cannot be known');
   seen = items.itemFromKey('c:405');
   assert.equal(seen.timeline.at(-1).phoneOnly, true);
+
+  // A reply the Messages list cut short is not what was said: it counts as sent, but teaches nothing.
+  lead(304, 406, 'Mia', 'Tran', '0491570130');
+  conv(406, 304, '+61491570130', 'Mia Tran', now - 40 * MIN);
+  msg(406, 'IN', 'Can you do a better price on the Noah?', now - 40 * MIN);
+  const item2 = items.itemFromKey('c:406');
+  assert.equal((await drafter.draftFor(item2)).status, 'ready');
+  store([thread('+61 491 570 130', 'You: Hi Mia, the best we can do on the Noah is $31,000 drive away and that includes the …', 'now', { now: now - 25 * MIN })], now - 25 * MIN);
+  const before2 = db.allLearned().length;
+  worker.updateOutcomes();
+  const cut = db.latestDraft('c:406', item2.anchorKey);
+  assert.equal(cut.status, 'answered');
+  assert.equal(db.allLearned().length, before2, 'cut short: not learned');
+  assert.equal(items.itemFromKey('c:406').timeline.at(-1).truncated, true);
+
+  // The page is told what the team's replies teach: the full phone reply is among the replies read
+  // for "what to say" (the cut one is not), and the counts come with the status.
+  const practice = recentPractice();
+  assert.ok(practice.some((p) => p.itemKey === 'c:405' && /\{\{NAME\}\}, the best we can do is \[amount\] drive away/.test(p.reply)), 'the phone reply is read as what the team sends, with the name and the figure as labels');
+  assert.ok(!practice.some((p) => p.itemKey === 'c:406'), 'the cut one is not');
+  const status = await get('/api/status');
+  assert.equal(status.practice.days, 365);
+  assert.ok(status.practice.dashboard >= 1 && typeof status.practice.email === 'number' && typeof status.practice.voice === 'number', JSON.stringify(status.practice));
 });

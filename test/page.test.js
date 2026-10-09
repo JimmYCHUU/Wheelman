@@ -20,6 +20,9 @@ test('the wording table fills in names and picks plurals by the number', () => {
   assert.equal(t('learned.changed', { n: 1 }), '1 reply you changed');
   assert.equal(t('learned.changed', { n: 3 }), '3 replies you changed');
   assert.equal(t('welcome.waiting', { n: 2, noun: 'buyers' }), '2 buyers waiting for a reply');
+  assert.equal(t('welcome.reads.email', { n: 1 }), 'Reads 1 past import email the team answered');
+  assert.equal(t('welcome.reads.email', { n: 12 }), 'Reads 12 past import emails the team answered');
+  assert.equal(t('welcome.reads.dashboard', { team: t('practice.team', { n: 556 }), voice: 40 }), 'Reads 556 replies the team sent in the last year, whoever sent them and from wherever, and 40 of our salespeople\'s own replies');
   assert.equal(t('status.ai', { used: 14, limit: 500 }), '14 of 500 AI requests used today');
   assert.equal(t('no.such.key'), 'no.such.key');
   assert.equal(t('status.checking', {}), 'Checking ');

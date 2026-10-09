@@ -68,8 +68,10 @@ function phoneEntry(r) {
     at: r.at,
     by: null,
     key: `pm:${r.id}`,
-    // Not on the dashboard. The page says so, and nothing is ever learned from it.
+    // Not on the dashboard. The page says so. It teaches like any reply once the add-on has seen
+    // all of it; a text the Messages list cut short does not.
     phoneOnly: true,
+    truncated: !!r.truncated,
     approx: r.precision === 'day' || r.precision === 'unknown',
   };
 }

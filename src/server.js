@@ -20,6 +20,9 @@ import { assessProposed } from './drafter.js';
 import { insertDraft } from './db.js';
 import { comparable, currentText, canLearnFrom } from './learn.js';
 import { validateMailReport, storeMailThread } from './mail.js';
+import { recentPractice, PRACTICE_DAYS } from './practice.js';
+import { recentMailPractice } from './mailpractice.js';
+import { loadExamples } from './examples.js';
 import { oldRowsStamp, messageMedia } from './db.js';
 import { logLine } from './log.js';
 import { businessFactsForPrompt, loadBusinessFacts } from './knowledge.js';
@@ -115,6 +118,8 @@ function draftOf(item) {
     sentHereAt: draft.sent_here_at || null,
     // An import email: what was looked up on the website, found and not found, with its sources.
     research: draft.research || null,
+    // How many of the team's own replies to similar messages the request showed.
+    practiceUsed: draft.context?.practice || 0,
     needsHuman: (draft.needsHuman || []).filter((n) => n && n.marker && n.reason).map((n) => ({ marker: String(n.marker), reason: String(n.reason) })),
     // What the reply is for: the one next step it offers, and where the customer is on the way to a sale.
     nextStep: draft.next_step || '', rung: draft.rung || '', rungLabel: RUNG_LABELS[draft.rung] || '',
@@ -439,7 +444,12 @@ async function api(req, res, url) {
 
   if (req.method === 'GET' && p === '/api/status') {
     const facts = businessFactsForPrompt();
-    return send(res, 200, { ...worker.statusReport(), learned: learnedStats(), facts: { ...facts.counts, unanswered: facts.unanswered, toConfirm: loadBusinessFacts().filter((t) => t.status === 'working').map((t) => t.title) } });
+    // What Wheelman reads of the team's own replies, so the page can say it learns from them:
+    // the dashboard's replies in the last year (whoever sent them), the past import emails, and
+    // the salespeople's genuine replies in the example bank.
+    let practice = { dashboard: 0, days: PRACTICE_DAYS, email: 0, voice: 0 };
+    try { practice = { dashboard: recentPractice().length, days: PRACTICE_DAYS, email: config.mail.switchedOn ? recentMailPractice().length : 0, voice: loadExamples().length }; } catch { /* the counts are a courtesy */ }
+    return send(res, 200, { ...worker.statusReport(), learned: learnedStats(), practice, facts: { ...facts.counts, unanswered: facts.unanswered, toConfirm: loadBusinessFacts().filter((t) => t.status === 'working').map((t) => t.title) } });
   }
 
   // Is Wheelman alive and able to read its database? For a watchdog, the demo check and a person.

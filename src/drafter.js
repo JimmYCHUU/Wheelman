@@ -263,6 +263,8 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
     // Where the customer was on the way to a sale, and the move asked for, so the report can read it later.
     context.rung = prompt.stage?.rung || null;
     context.move = prompt.stage?.move || null;
+    // How many of the team's own replies (texts, or past emails) the request showed, so the page can say.
+    context.practice = (prompt.practiceIds || []).length;
     const allowed = allowedMaterial(item, prompt);
     // The auction car, its link and its figures are ours to state: they came from the live auction.
     if (plan?.stage === 'offer') allowed.trusted += `\n${plan.tail}\n${plan.lines.join('\n')}`;

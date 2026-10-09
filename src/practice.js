@@ -1,8 +1,10 @@
-// What the team really sent, lately, to customers who wrote something like the message that is
-// waiting. This is where Wheelman learns WHAT to say: what our people include, leave out and how
-// long they write. HOW it is said still comes from the house voice.
+// What the team really sent, in the last year, to customers who wrote something like the message
+// that is waiting. This is where Wheelman learns WHAT to say: what our people include, leave out
+// and how long they write. HOW it is said still comes from the house voice.
 //
-// Every reply sent from the dashboard counts, whoever sent it. Marketplace chats never do.
+// Every reply in a dashboard conversation counts, whoever sent it and from wherever: the dashboard,
+// the phone relayed to the dashboard, or the phone alone (when the add-on saw all of it).
+// Marketplace chats never do, and the Import Query section has its own (mailpractice.js).
 // Customer details are removed, staff names are removed, and links and amounts are replaced by
 // labels, so nothing from another customer's deal can be carried into a new reply.
 
@@ -16,6 +18,8 @@ import { comparable } from './learn.js';
 
 const DAY = 24 * 3600 * 1000;
 const BURST_MS = 15 * 60 * 1000;
+/** How far back the team's replies are read: the last year. The most recent weeks still count for more. */
+export const PRACTICE_DAYS = 365;
 export const BLOCK_LABEL = '[then our standard address block]';
 export const OFFER_LABEL = '[then the auction car: its details, link, bid and cost breakdown]';
 
@@ -132,19 +136,20 @@ const substance = (text) => wordCount(String(text || '').replace(/\{\{NAME\}\}/g
 
 let cache = { key: '', rows: [] };
 
-/** Rebuilt only when a message has arrived or a lead has changed. */
+/** Rebuilt only when a message has arrived (on the dashboard or the phone), a text seen on the phone has grown, or a lead has changed. */
 function stamp(days) {
   const d = openDb();
   const m = d.prepare('SELECT COUNT(*) AS n, MAX(id) AS top FROM messages').get();
+  const p = d.prepare('SELECT COUNT(*) AS n, MAX(id) AS top, COALESCE(SUM(LENGTH(text)), 0) AS len FROM phone_messages').get();
   const l = d.prepare('SELECT COUNT(*) AS n, MAX(updated_at) AS top FROM leads').get();
-  return `${days}|${m.n}|${m.top}|${l.n}|${l.top}`;
+  return `${days}|${m.n}|${m.top}|${p.n}|${p.top}|${p.len}|${l.n}|${l.top}`;
 }
 
 /**
  * Every exchange of the last `days` days: what a customer wrote and what we sent straight back.
  * @returns [{ id, itemKey, at, situations, primary, firstReply, buyer, customer, reply, words, hadBlock }]
  */
-export function recentPractice({ days = 45, now = Date.now() } = {}) {
+export function recentPractice({ days = PRACTICE_DAYS, now = Date.now() } = {}) {
   const key = stamp(days);
   if (cache.key === key) return cache.rows;
   const since = now - days * DAY;
@@ -166,6 +171,8 @@ export function recentPractice({ days = 45, now = Date.now() } = {}) {
       for (let k = i - 1; k >= 0 && t[k].who === 'customer'; k--) before.unshift(t[k]);
       const burst = [];
       for (let k = i; k < t.length && t[k].who === 'us' && t[k].at - t[i].at < BURST_MS; k++) burst.push(t[k]);
+      // A text the phone's Messages list cut short teaches nothing: half a reply is not what was said.
+      if (burst.some((e) => e.truncated)) continue;
 
       const customerText = before.map((e) => e.text).filter(Boolean).join('\n').trim();
       const events = before.map((e) => e.event).filter(Boolean);

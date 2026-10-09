@@ -19,7 +19,8 @@ please report it (see below).
 - **Customer details never reach an AI service.** Names, phone numbers, emails, rego plates,
   VINs, street addresses, bank details and payment links are removed on this computer before any
   text is sent to a model, and the first name is put back afterwards. Auction amounts travel as
-  markers that code fills in. Marketplace chats and texts seen on the phone are never learned from.
+  markers that code fills in. Marketplace chats are never learned from; a text seen only on the
+  phone teaches only once the add-on has seen all of it, and never reaches the example bank.
 - **Local only.** The page is served on `127.0.0.1` and refuses any other host or origin, with a
   strict content security policy. The browser add-on may post to two routes only (the phone
   reader's reports, and an email thread from the Send to Wheelman button in Gmail), from an

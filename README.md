@@ -313,12 +313,14 @@ Enforced in code, not by convention.
   promise nobody on our side made, and a place the customer never said. An email about
   importing never says we will check and come back: the sentence carries the exact figure
   from the website, or its blank.
-- **RULE-4 Marketplace and the phone never teach.** Learning accepts dashboard conversations
-  and import emails, each kept to its own kind: what an email taught is used only for emails,
-  and what a text taught only for texts and Marketplace chats. Marketplace chats, texts seen
-  only on the phone and auction orders are refused in three places: the learning code, the
-  copy route and the database helper. A reply typed on the phone counts as the reply but
-  teaches nothing, and the example bank never sees it, nor an email.
+- **RULE-4 Marketplace never teaches.** Learning accepts dashboard conversations and import
+  emails, each kept to its own kind: what an email taught is used only for emails, and what a
+  text taught only for texts and Marketplace chats. Marketplace chats, numbers seen only on the
+  phone with no dashboard record, and auction orders are refused in three places: the learning
+  code, the copy route and the database helper. A reply the team sends from the phone to a
+  dashboard customer teaches like one sent from the dashboard once the add-on has seen all of
+  it; one the Messages list cut short does not. The example bank, which sets the voice, takes
+  only replies whose author it knows: never a text typed on the phone, never an email.
 - **RULE-5 No costs, no sale amounts.** Purchase cost, shipping cost and margin are never
   stored and never sent anywhere. From a sale record Wheelman keeps the stage and the date,
   and whether a deposit or the full amount is recorded. It keeps no amount and no buyer name,
@@ -808,9 +810,11 @@ What it does, and does not do:
 - It talks to Wheelman only, at `127.0.0.1:3210`, and to nothing else. Wheelman takes its
   reports on one route, from a browser add-on only, with the add-on's own header, so no web
   page can post anything there. `PHONE_ADDON_ID` in `.env` can pin it to one add-on.
-- The texts stay on this computer, in their own tables, apart from the dashboard's. They are
-  never learned from and never used for the example bank. A text that gets a suggestion goes
-  through the same removal of names and numbers as any other before an AI sees it.
+- The texts stay on this computer, in their own tables, apart from the dashboard's. A reply the
+  team sent from the phone to a dashboard customer teaches what to say, like one sent from the
+  dashboard, once the add-on has seen all of it; none of them is ever used for the example bank,
+  which sets the voice and takes only replies whose author it knows. A text that gets a
+  suggestion goes through the same removal of names and numbers as any other before an AI sees it.
 
 What you see:
 
@@ -825,7 +829,8 @@ What you see:
 - Login codes, couriers and short codes land under **Not customers**, as now.
 - A reply someone typed on the phone itself shows as ours, labelled **Sent from the phone,
   not on the dashboard**. After a quarter of an hour with no dashboard copy it counts as the
-  reply, but it teaches nothing.
+  reply and teaches like one sent from the dashboard, unless the Messages list cut it short
+  (shown with "…"): half a reply is not what was said, so that one teaches nothing.
 - A line at the foot of the list says when the add-on last reported and how many
   conversations are on the phone. If the browser or the tab is closed, a notice says the
   add-on has not reported since when, and Wheelman keeps working from the dashboard. When the
@@ -922,8 +927,11 @@ Wheelman learns two different things from two different places. **What to say** 
 what the team really sends. **How to say it** comes from the two voices.
 
 - **What the team sends.** For each waiting message, Wheelman looks up the replies the team
-  sent in the last 45 days to customers who wrote something similar, whoever sent them, and
-  shows itself the closest three. From those it takes what to include and leave out (the
+  sent in the last year to customers who wrote something similar, whoever sent them and from
+  wherever (the dashboard, the phone relayed to the dashboard, or the phone alone once the
+  add-on has seen all of a text), and shows itself the closest three, the most recent weeks
+  counting for more. Nothing has to go through Wheelman for this: a reply one of the
+  salespeople sends from their own phone teaches the same way. From those it takes what to include and leave out (the
   car's link, a booking link, the address, a question back), the order and the length, then
   writes the reply in the house voice. Before they are used, the customer's details and the
   sender's name are removed, and every link and dollar amount is replaced by a label such as

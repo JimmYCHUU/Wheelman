@@ -207,7 +207,8 @@ CREATE INDEX IF NOT EXISTS phone_messages_thread ON phone_messages(thread_id, at
 
 -- Email threads the owner hands in from Gmail with the add-on's "Send to Wheelman" button (the
 -- Import Query section). Kept apart from the dashboard tables. Text only: no HTML, no attachments,
--- no recipients. Nothing here is learned from or used for the example bank.
+-- no recipients. Learned from for Import Query replies only (mailpractice.js); never used for the
+-- example bank.
 CREATE TABLE IF NOT EXISTS mail_threads (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   key TEXT NOT NULL UNIQUE,            -- 'ref:<Gmail's own thread id>' or 'subj:<subject>|<customer email>'

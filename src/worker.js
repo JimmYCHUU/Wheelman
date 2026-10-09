@@ -152,18 +152,17 @@ export function updateOutcomes() {
     const sentText = burst.map((e) => e.text).join('\n');
     const sent = burst[0];
     // A reply seen only on the phone: the dashboard's copy may still be on its way, so wait a
-    // while. If it never comes, the reply counts as sent but teaches nothing (the phone never does).
-    if (sent.phoneOnly) {
-      if (Date.now() - (sent.at || 0) < 15 * 60 * 1000) continue;
-      for (const d of drafts) { recordOutcome(d.id, { sentText, sentBy: 'phone', sentAt: sent.at, similarity: similarity(comparable(d.reply), comparable(sentText)) }); n++; }
-      continue;
-    }
+    // while. If it never comes, the reply counts as sent, and teaches like any other as long as
+    // the add-on saw all of it: a text the Messages list cut short is not what was said.
+    const phoneOnly = !!sent.phoneOnly;
+    if (phoneOnly && Date.now() - (sent.at || 0) < 15 * 60 * 1000) continue;
     for (const d of drafts) {
-      recordOutcome(d.id, { sentText, sentBy: sent.by || 'phone', sentAt: sent.at, similarity: similarity(comparable(d.reply), comparable(sentText)) });
+      recordOutcome(d.id, { sentText, sentBy: phoneOnly ? 'phone' : sent.by || 'phone', sentAt: sent.at, similarity: similarity(comparable(d.reply), comparable(sentText)) });
       n++;
     }
+    if (phoneOnly && burst.some((e) => e.truncated)) continue;
     // The reply that was really sent is the best teacher: one lesson per customer message, taken
-    // from the suggestion that was copied, or else the newest. Dashboard conversations only.
+    // from the suggestion that was copied, or else the newest. Dashboard conversations and emails.
     const teacher = drafts.find((d) => d.copied_at) || drafts[0];
     try { learnFrom(item, teacher, sentText, 'sent', { at: sent.at }); } catch { /* learning must never stop the sync */ }
   }

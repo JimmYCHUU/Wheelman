@@ -6,13 +6,22 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- Wheelman says what it reads of the team's own replies. The welcome panel's line "Reads N
+  replies the team sent in the last year, whoever sent them and from wherever, and N of our
+  salespeople's own replies" (or, under Import Query, "Reads N past import emails the team
+  answered"), and under a suggestion "Written with N replies the team sent to customers who asked
+  something similar in view". The team's replies are now read from the last year rather than the
+  last 45 days, and a reply the team sends from the phone to a dashboard customer teaches like one
+  sent from the dashboard once the add-on has seen all of it (one the Messages list cut short does
+  not). The dashboard's replies teach the dashboard; the email threads teach Import Query; never
+  the other way round. Nothing has to go through Wheelman for any of it.
 - Import Query learns from the past. The email threads sent from Gmail, including the old ones,
   show the AI how the team really answered similar import enquiries ("How we answered similar
   import emails" in the request), with the other customer's name, address, staff name, figures
   and links taken out. Good reply, Could be better and a reply changed before copying teach for
   emails as they do for the dashboard, and a reply later sent from Gmail is compared with the
   suggestion. Every lesson carries its kind: an email's lessons serve emails only, a text's serve
-  texts and Marketplace chats only. Marketplace, the phone and auction orders still teach nothing.
+  texts and Marketplace chats only. Marketplace and auction orders still teach nothing.
 - Import Query replies are researched on the website before they are written. The model codes
   and names in an email are matched against carbarn.com.au's list of import-eligible models,
   read once a day into `data\eligible-models.json`; the reply carries the model's eligibility

@@ -233,6 +233,13 @@ function renderWelcome() {
     learned.approved ? t('learned.approved', { n: learned.approved }) : '',
     learned.notes ? t('learned.notes', { n: learned.notes }) : '',
   ].filter(Boolean);
+  // What it reads of the team's own replies, whoever sent them: the dashboard's in the last year
+  // (and the salespeople's own in the example bank), or the past import emails.
+  const practice = state.status?.practice || null;
+  const reads = !practice ? ''
+    : state.section === 'importquery' ? (practice.email ? t('welcome.reads.email', { n: practice.email }) : t('welcome.reads.none'))
+      : state.section === 'dashboard' ? (practice.dashboard || practice.voice ? t('welcome.reads.dashboard', { team: t('practice.team', { n: practice.dashboard }), voice: practice.voice }) : t('welcome.reads.none')) : '';
+  const readsTitle = state.section === 'importquery' ? t('welcome.reads.email.title') : t('welcome.reads.dashboard.title');
   // The last backup: when it was written and where, so a missing one is noticed before it matters.
   const backup = state.status?.backup || null;
   const backupLine = !backup ? '' : backup.last ? t('welcome.backup', { when: ago(backup.last.at), dir: backup.dir }) : backup.on ? t('welcome.backup.none') : t('welcome.backup.off');
@@ -247,6 +254,7 @@ function renderWelcome() {
       h('li', {}, h('span', {}, h('b', { text: inMarketplace() ? t('welcome.send') : t('welcome.copy') }), ' ', sec.welcome.paste))),
     // Marketplace replies are sent from here, by the Send button and nothing else. The rest is copied and pasted.
     h('p', { text: inMarketplace() ? t('welcome.sendOnly') : t('welcome.copyOnly') }),
+    reads ? h('p', { text: reads, title: readsTitle }) : null,
     bits.length ? h('p', { text: t('welcome.learned', { bits: listOf(bits) }), title: t('welcome.learned.title') }) : null,
     backupLine ? h('p', { text: backupLine, title: t('welcome.backup.title') }) : null));
   state.threadSig = '';
@@ -980,6 +988,8 @@ function renderInfo() {
         d.rungLabel ? h('p', { class: 'fine', text: `Where they are: ${d.rungLabel}.` }) : null,
         d.nextStep ? h('p', { class: 'fine', text: `The next step it offers: ${d.nextStep}.` }) : null,
         d.factsUsed.length ? h('ul', { class: 'facts' }, d.factsUsed.map((f) => h('li', { text: f }))) : h('p', { class: 'fine', text: 'No particular facts were listed.' }),
+        // The team's own replies the request showed: the suggestion was written with them in view.
+        d.practiceUsed ? h('p', { class: 'fine', text: item.channel === 'email' ? `Written with ${plural(d.practiceUsed, 'past import email')} the team answered in view.` : `Written with ${plural(d.practiceUsed, 'reply', 'replies')} the team sent to customers who asked something similar in view, whoever sent them.` }) : null,
         h('p', { class: 'fine', text: d.provider === 'none' ? `Written from ${d.model || 'your wording'} at ${clock(d.createdAt)}, with no AI.${d.instruction ? ` What you added: “${d.instruction}”.` : ''}` : `Written by ${d.model || 'the AI model'} at ${clock(d.createdAt)}.${d.instruction ? ` Your instruction: “${d.instruction}”.` : ''}` })) : null,
       item.standard ? h('section', {},
         h('h4', { text: 'Model reply' }),
