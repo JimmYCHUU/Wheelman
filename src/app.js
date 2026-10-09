@@ -11,6 +11,7 @@ import { providers } from './llm.js';
 import { businessFactsForPrompt } from './knowledge.js';
 import { backupNow, lastBackup } from './backup.js';
 import { formatSydney } from './time.js';
+import { startTunnel, stopTunnel } from './share.js';
 
 openDb();
 
@@ -45,10 +46,40 @@ try {
   console.log('Press Ctrl+C to stop.\n');
   logLine('start', `Wheelman started. AI models, in order: ${providers().map((p) => p.model).join(', ') || 'none'}`);
   worker.start();
+  shareWithTeam();
 } catch (e) {
   if (e.code === 'EADDRINUSE') console.error(`\nPort ${config.port} is already in use. The agent may already be running, or change PORT in the .env file.`);
   else { console.error('\nCould not start:', e.message); logLine('start', `Could not start: ${e.message}`); }
   process.exit(1);
+}
+
+// Sharing with the team (SHARE=1 in .env, or "Share Wheelman.cmd"): a Cloudflare tunnel to the
+// page, behind the team password. The address to give colleagues is printed here, shown on the
+// page's welcome panel, and kept in data/share-url.txt while Wheelman runs.
+const shareUrlFile = path.join(config.dataDir, 'share-url.txt');
+function shareWithTeam() {
+  if (!config.share.on) return;
+  if (!config.share.password) {
+    console.log('\nSharing is on (SHARE=1) but TEAM_PASSWORD is empty in the .env file, so the team link is not opened. Fill it in and start again.');
+    logLine('share', 'Sharing is on but TEAM_PASSWORD is empty: the tunnel was not started');
+    return;
+  }
+  console.log('\nOpening the team link ...');
+  startTunnel({
+    say: (line) => console.log(line),
+    onUrl: (url) => {
+      const line = '='.repeat(Math.max(40, url.length + 24));
+      console.log(`\n${line}\nShared with the team at:  ${url}\n${line}`);
+      console.log(config.share.tunnelToken
+        ? 'Colleagues open that address and type the team password (TEAM_PASSWORD in the .env file).'
+        : 'Colleagues open that address and type the team password (TEAM_PASSWORD in the .env file).\nIt is a free address that changes each time Wheelman starts; give them the new one each time.');
+      try { fs.mkdirSync(config.dataDir, { recursive: true }); fs.writeFileSync(shareUrlFile, `${url}\n`); } catch { /* the window shows it anyway */ }
+      logLine('share', `Shared with the team at ${url}`);
+    },
+  }).catch((e) => {
+    console.error(`\nThe team link could not be opened: ${e.message}`);
+    logLine('share', `The tunnel could not start: ${e.message}`);
+  });
 }
 
 // A fault nobody caught is written down before the window closes.
@@ -63,6 +94,8 @@ function shutdown(how) {
   if (closing) return;
   closing = true;
   worker.stop();
+  stopTunnel();
+  if (config.share.on) { try { fs.rmSync(shareUrlFile, { force: true }); } catch { /* nothing to remove */ } }
   if (config.backup.on) {
     process.stdout.write('Backing up ... ');
     try {

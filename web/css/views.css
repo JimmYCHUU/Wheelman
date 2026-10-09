@@ -271,4 +271,23 @@
     .draft { max-height: 32dvh; }
     .count { display: none; }
   }
+
+  /* ---- the team's sign-in at the shared address: one card, one field, one button. */
+  .signin-page { overflow: auto; display: grid; place-items: center; padding: var(--sp-6); }
+  .signin {
+    width: 100%; max-width: var(--measure-signin); display: grid; gap: var(--sp-3); justify-items: start;
+    padding: var(--sp-8); background: var(--sheet); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-2);
+  }
+  .signin-mark { width: var(--avatar-md); height: var(--avatar-md); color: var(--brand); }
+  .signin h1 { margin: 0; font-family: var(--wordmark); font-size: var(--fs-wordmark); font-weight: var(--fw-black); color: var(--brand); letter-spacing: -0.02em; }
+  .signin p { margin: 0; color: var(--muted); font-size: var(--fs-ui); }
+  .signin label { margin-top: var(--sp-2); font-size: var(--fs-label); font-weight: var(--fw-semibold); }
+  .signin input {
+    width: 100%; height: var(--ctl-md); padding: 0 var(--sp-3); font: inherit; font-size: var(--fs-body);
+    color: var(--text); background: var(--side); border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+  }
+  .signin input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .signin-note { color: var(--red); font-weight: var(--fw-semibold); }
+  .signin-note:empty { display: none; }
+  .signin .btn { margin-top: var(--sp-2); }
 }

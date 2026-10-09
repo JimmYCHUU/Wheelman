@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light dark">
+  <title>Wheelman: sign in</title>
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/views.css">
+  <link rel="stylesheet" href="css/utilities.css">
+</head>
+<body class="signin-page">
+  <form class="signin" method="post" action="/signin">
+    <svg class="mark signin-mark" aria-hidden="true"><use href="assets/brand.svg#mark"></use></svg>
+    <h1>Wheelman</h1>
+    <p>Carbarn's reply assistant. Type the team password to open it.</p>
+    <label for="password">Team password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+    <p class="signin-note" role="alert">{{message}}</p>
+    <button class="btn primary" type="submit">Open Wheelman</button>
+  </form>
+</body>
+</html>
