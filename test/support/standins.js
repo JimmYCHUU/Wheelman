@@ -24,7 +24,7 @@ export function aiBehaviour({ behave = null } = {}) {
   return { script: [], behave, usedUp: new Set(), down: false, seen: [] };
 }
 
-function answerAi(ai, body, res) {
+async function answerAi(ai, body, res) {
   let parsed = {};
   try { parsed = JSON.parse(body); } catch { /* not json */ }
   ai.seen.push(parsed);
@@ -32,7 +32,10 @@ function answerAi(ai, body, res) {
   if (ai.usedUp.has(parsed.model)) {
     return json(res, 429, [{ error: { code: 429, message: 'You exceeded your current quota.\nPlease retry in 17h45m56.7s.', details: [{ violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }] }, { retryDelay: '63956s' }] } }]);
   }
-  const next = ai.script.length ? ai.script.shift() : ai.behave ? ai.behave(parsed) : DEFAULT_REPLY;
+  // A scripted answer may be a promise: the model "takes its time" until the test resolves it, so a
+  // test can have two writes under way at once.
+  const next = await (ai.script.length ? ai.script.shift() : ai.behave ? ai.behave(parsed) : DEFAULT_REPLY);
+  if (ai.down) return json(res, 503, { error: { message: 'The model is overloaded.' } });
   if (next && next.status && next.status !== 200) return json(res, next.status, { error: { message: next.message || 'busy' } });
   return json(res, 200, { choices: [{ message: { content: JSON.stringify(next) }, finish_reason: 'stop' }] });
 }

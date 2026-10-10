@@ -36,6 +36,10 @@ const state = {
   busy: new Set(),       // conversation keys with a request in flight
   rewriteOpen: false,
   betterOpen: false,
+  promptOpen: null,      // the conversation whose Prompt line is open, before a suggestion exists
+  prompts: new Map(),    // conversation key -> what was typed on the Prompt line and not written yet
+  heldAt: new Map(),     // conversation key -> when Wheelman was last told the Prompt line is open for it
+  writingPoll: null,     // the one short re-check while a suggestion is being written in the background
   infoOpen: false,
   copied: null,          // draft id that was just copied
   status: null,
@@ -315,7 +319,7 @@ function renderHead(item, els) {
   const order = item.order || null;
   const mail = item.mail || null;
   const title = item.name || item.phone || item.email || (chat ? 'Marketplace buyer' : order ? 'Auction customer' : mail ? 'Email enquiry' : 'Unknown number');
-  const writing = state.busy.has(item.key);
+  const writing = state.busy.has(item.key) || !!item.writing;
   const where = mail ? ['Email', mail.subject].filter(Boolean).join(' · ') : chat ? `Marketplace${listing?.account ? `, ${listing.account}` : ''}` : (item.name ? item.phone : '');
   const sub = writing ? 'writing a suggestion…'
     : order ? [where, `Order ${order.orderNo}`, order.prefers ? `prefers ${order.prefers}` : ''].filter(Boolean).join(' · ')
@@ -512,9 +516,53 @@ function blanksIn(text) {
   return found;
 }
 
+/** When the automatic writing starts again, if it is stopped for this section: busy or used-up models. */
+const retryFor = (item) => (item.channel === 'marketplace' ? state.status?.marketplace?.retryAt : state.status?.retryAt) || 0;
+
 function composerSignature(item) {
   const d = item.draft;
-  return [item.key, item.state, item.dismissed, d?.id, d?.status, d?.rating, state.busy.has(item.key), state.rewriteOpen, state.betterOpen, state.copied === d?.id, item.anchor, item.order?.message, item.order?.handled, item.order?.replying, state.pasteOpen].join('|');
+  return [item.key, item.state, item.dismissed, d?.id, d?.status, d?.rating, state.busy.has(item.key), !!item.writing, state.rewriteOpen, state.betterOpen, state.promptOpen === item.key, retryFor(item), state.copied === d?.id, item.anchor, item.order?.message, item.order?.handled, item.order?.replying, state.pasteOpen].join('|');
+}
+
+/**
+ * Tells Wheelman the Prompt line is open for this conversation, so its automatic suggestion waits
+ * for the one written from the prompt. Renewed every half minute while typing; a hold lapses by
+ * itself. Nothing is sent for a conversation Wheelman would not write for anyway.
+ */
+function holdFor(item, { renew = false } = {}) {
+  if (!item.autoDraft || (item.draft && item.draft.status === 'ready')) return;
+  if (!renew && Date.now() - (state.heldAt.get(item.key) || 0) < 30000) return;
+  state.heldAt.set(item.key, Date.now());
+  api(`/api/items/${item.key}/hold`, { body: { on: true } }).catch(() => {});
+}
+
+/**
+ * The Prompt line: what this reply should say, typed before Wheelman writes it. Enter writes it,
+ * in one request. Pressed again or Escape closes the line; what was typed is kept for the next
+ * time, and for Try again.
+ */
+function promptControls(item, { instruction = '' } = {}) {
+  const open = state.promptOpen === item.key;
+  const input = h('input', { type: 'text', maxlength: '600', placeholder: t('composer.prompt.placeholder'), 'aria-label': t('composer.prompt.label') });
+  input.value = state.prompts.get(item.key) ?? instruction;
+  const go = () => write(item, input.value.trim());
+  const row = h('div', { class: 'rewrite', hidden: !open }, input, h('button', { class: 'btn outline', type: 'button', onclick: go }, t('composer.prompt.write')));
+  const button = h('button', { class: `btn ${open ? 'is-on' : ''}`.trim(), type: 'button', 'aria-expanded': open ? 'true' : 'false', title: t('composer.prompt.title'), onclick: () => {
+    const on = state.promptOpen !== item.key;
+    state.promptOpen = on ? item.key : null;
+    row.hidden = !on;
+    button.classList.toggle('is-on', on);
+    button.setAttribute('aria-expanded', on ? 'true' : 'false');
+    state.composerSig = composerSignature(item);
+    if (on) { input.focus(); holdFor(item, { renew: true }); }
+    else { state.heldAt.delete(item.key); if (item.autoDraft) api(`/api/items/${item.key}/hold`, { body: { on: false } }).catch(() => {}); }
+  } }, icon('pencil'), t('composer.prompt'));
+  input.addEventListener('input', () => { state.prompts.set(item.key, input.value); holdFor(item); });
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); go(); }
+    if (ev.key === 'Escape') { button.click(); button.focus(); }
+  });
+  return { button, row };
 }
 
 function renderComposer(item, els, { arriving = false } = {}) {
@@ -524,14 +572,15 @@ function renderComposer(item, els, { arriving = false } = {}) {
   state.composerSig = composerSignature(item);
   box.replaceChildren();
 
-  if (busy) {
+  // Being written now, by this page or in the background: the same three lines either way.
+  if (busy || item.writing) {
     box.append(
       h('div', { class: 'draft-head' }, h('span', { class: 'draft-tag', text: 'Writing a suggestion' })),
       h('div', { class: 'sheet', role: 'status', 'aria-label': 'Writing a suggestion' }, h('div', { class: 'writing' }, h('i'), h('i'), h('i'))));
     return;
   }
 
-  const writeBtn = (label, kind = 'primary') => h('button', { class: `btn ${kind}`, type: 'button', onclick: () => write(item, '') }, icon('pencil'), label);
+  const writeBtn = (label, kind = 'primary', instruction = '') => h('button', { class: `btn ${kind}`, type: 'button', onclick: () => write(item, instruction) }, icon('pencil'), label);
 
   if (item.order) { renderOrderComposer(box, item, d, { arriving, writeBtn }); return; }
 
@@ -551,7 +600,8 @@ function renderComposer(item, els, { arriving = false } = {}) {
     return;
   }
   if (item.state !== 'awaiting' && !(d && d.status === 'ready')) {
-    box.append(h('div', { class: 'quiet' }, h('p', { text: item.note || 'No reply needed.' }), writeBtn('Write a reply anyway', 'outline')));
+    const prompt = promptControls(item);
+    box.append(h('div', { class: 'quiet' }, h('p', { text: item.note || 'No reply needed.' }), prompt.button, writeBtn('Write a reply anyway', 'outline'), prompt.row));
     return;
   }
   // An email thread, until the research step is in: nothing is written for it, asked or unasked.
@@ -559,11 +609,22 @@ function renderComposer(item, els, { arriving = false } = {}) {
     box.append(h('div', { class: 'quiet' }, h('p', { text: item.autoReason || 'Suggested replies for emails come with the next update.' })));
     return;
   }
+  // Nothing written yet: two buttons. Prompt, to say what the reply should say first, and Write it
+  // now. A failed try is tried again with the prompt it had. While the free models are busy or
+  // used up, the line says when Wheelman tries again instead of "within a few minutes".
   if (!d || d.status !== 'ready') {
     const failed = d && d.status === 'failed';
+    const retry = retryFor(item);
+    const line = failed ? `A suggestion could not be written. ${d.error}`
+      : item.autoReason || (item.autoDraft && retry > Date.now()
+        ? t(item.channel === 'marketplace' ? 'composer.retry.marketplace' : state.status?.retryWhy === 'daily' ? 'composer.retry.daily' : 'composer.retry.busy', { time: clock(retry) })
+        : t('composer.waiting'));
+    const prompt = promptControls(item, { instruction: failed ? d.instruction || '' : '' });
     box.append(h('div', { class: `quiet ${failed ? 'bad' : ''}`.trim() },
-      h('p', { text: failed ? `A suggestion could not be written. ${d.error}` : item.autoReason || 'A suggestion will be written within a few minutes.' }),
-      writeBtn(failed ? 'Try again' : 'Write it now')));
+      h('p', { text: line }),
+      prompt.button,
+      writeBtn(failed ? 'Try again' : 'Write it now', 'primary', failed ? state.prompts.get(item.key) || d.instruction || '' : ''),
+      prompt.row));
     return;
   }
 
@@ -847,9 +908,13 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
   if (sendBtn) sendBtn.addEventListener('click', doSend);
 
   const rewriteInput = outbound
-    ? h('input', { type: 'text', maxlength: '300', placeholder: 'For example: we bid 1.2m, sold for 1.31m. Or: ETA 14 Nov, ship Hoegh Trader', 'aria-label': 'What you know that the message needs' })
-    : h('input', { type: 'text', maxlength: '300', placeholder: 'What should change? For example: offer $27,500, or make it shorter', 'aria-label': 'What should change in the reply' });
-  rewriteInput.value = d.instruction || '';
+    ? h('input', { type: 'text', maxlength: '600', placeholder: 'For example: we bid 1.2m, sold for 1.31m. Or: ETA 14 Nov, ship Hoegh Trader', 'aria-label': 'What you know that the message needs' })
+    : h('input', { type: 'text', maxlength: '600', placeholder: 'What should change? For example: offer $27,500, or make it shorter', 'aria-label': 'What should change in the reply' });
+  // A prompt typed while a plain suggestion landed in the background is not lost: the Rewrite row
+  // opens with it, ready to write again.
+  const pendingPrompt = state.prompts.get(item.key) || '';
+  if (pendingPrompt) { state.prompts.delete(item.key); state.rewriteOpen = true; }
+  rewriteInput.value = pendingPrompt || d.instruction || '';
   const rewriteRow = h('div', { class: 'rewrite', hidden: !state.rewriteOpen },
     rewriteInput,
     h('button', { class: 'btn outline', type: 'button', onclick: () => write(item, rewriteInput.value) }, outbound ? 'Fill it in' : 'Write it again'));
@@ -1191,10 +1256,14 @@ async function write(item, instruction) {
   state.busy.add(item.key);
   state.rewriteOpen = false;
   state.betterOpen = false;
+  if (state.promptOpen === item.key) state.promptOpen = null;
+  state.heldAt.delete(item.key);
   if (state.selected === item.key) { renderHead(state.detail, chatFrame()); renderComposer(state.detail, chatFrame()); }
   try {
     const out = await api(`/api/items/${item.key}/draft`, { body: { instruction, message: item.order ? state.message || item.order.message || '' : '' } });
     state.busy.delete(item.key);
+    // The prompt did its work. A failed try keeps it, for Try again.
+    if (out.ok) state.prompts.delete(item.key);
     if (state.selected === item.key) {
       state.detail = out.item;
       state.copied = null;
@@ -1418,6 +1487,9 @@ async function refreshDetail() {
     if (state.selected !== key) return;
     const previous = state.detail;
     state.detail = item;
+    // A suggestion being written in the background: look again in a few seconds, not at the next
+    // twenty-second check, so it appears as soon as it is ready.
+    if (item.writing && !state.writingPoll) state.writingPoll = setTimeout(() => { state.writingPoll = null; refreshDetail(); }, 4000);
     // A new message in the conversation on screen counts as read, as long as the page is being looked at.
     if (document.visibilityState === 'visible') markRead(item);
     const els = chatFrame();

@@ -169,6 +169,24 @@ test('if the second attempt also invents a figure, the suggestion is shown with 
   assert.ok(d.checks.some((c) => c.level === 'fail' && c.code === 'figure'));
 });
 
+test('a staff instruction reaches the AI last, with customer details removed, and is kept as typed', async () => {
+  const { items, drafter } = await load();
+  seen.length = 0;
+  script = [{ status: 200, reply: { reply: 'Hi {{NAME}},\nWe have none of those at the moment. The lowest on the Noah is $27,500. If you have a model in mind, we can source one for you.', needs_human: [], facts_used: [], hold: false } }];
+  const instruction = 'Tell Priya Raman we have none at the moment, lowest on the Noah $27,500, she can call 0400 111 222. Offer to source one if she names a model.';
+  const d = await drafter.draftFor(items.buildItem({ conversationId: 201 }), { instruction, save: false });
+  const sent = JSON.stringify(seen[0].body);
+  const user = seen[0].body.messages[1].content;
+  assert.ok(user.includes('=== INSTRUCTION FROM OUR STAFF FOR THIS DRAFT ==='));
+  assert.ok(user.indexOf('=== INSTRUCTION FROM OUR STAFF FOR THIS DRAFT ===') > user.indexOf('=== THE CUSTOMER IS WAITING FOR A REPLY TO ==='), 'the instruction comes last');
+  for (const secret of ['Priya', 'Raman', '0400 111 222']) assert.ok(!sent.includes(secret), `leaked: ${secret}`);
+  assert.ok(user.includes('Tell {{NAME}} [NAME] we have none') && user.includes('[PHONE]'), user.slice(user.indexOf('=== INSTRUCTION')));
+  assert.ok(user.includes('$27,500'), 'a figure from staff stays');
+  assert.equal(d.status, 'ready');
+  assert.ok(!d.checks.some((c) => c.level === 'fail'), JSON.stringify(d.checks));
+  assert.equal(d.instruction, instruction, 'kept as typed, for the page and for Rewrite');
+});
+
 test('a figure given by staff in a rewrite instruction is accepted', async () => {
   const { items, drafter } = await load();
   script = [{ status: 200, reply: { reply: 'Hi {{NAME}},\nThe lowest we can do is $27,500.', needs_human: [], facts_used: [], hold: false } }];

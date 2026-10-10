@@ -8,7 +8,7 @@ import { listItems, itemFromKey } from './items.js';
 import { latestDraft, getDraft, dismiss, undismiss, isDismissed, setDraftRating, markSeen, isSeen, dataStamp, uncopy, addOrderMessage, removeOrderMessage } from './db.js';
 import { listOrderRows, MESSAGES, messagesFor, wantedText, carTitle, lotName, lotPageUrl, cleanPaste } from './orders.js';
 import { draftOrderMessage } from './ordermessages.js';
-import { draftFor } from './drafter.js';
+import { draftFor, writingNow } from './drafter.js';
 import { availability } from './normalize.js';
 import { firstNameOf, isPlaceholderName, redact } from './redact.js';
 import { maskGreetingNames } from './voice.js';
@@ -323,6 +323,7 @@ function presentOrder(item) {
     thread: threadOf(item, shown),
     earlier: item.timeline.length - shown.length,
     draft: draftOf(item),
+    writing: writingNow(item.itemKey, item.anchorKey),
   };
 }
 
@@ -353,6 +354,8 @@ function present(item) {
     thread: threadOf(item, shown),
     earlier: item.timeline.length - shown.length,
     draft: draftOf(item),
+    // A suggestion is being written for this message right now, by the page or in the background.
+    writing: writingNow(item.itemKey, item.anchorKey),
     standard: item.standard ? { id: item.standard.id, title: item.standard.title, status: item.standard.status, note: item.standard.note, rung: item.standard.rung, situation: item.standard.situation } : null,
   };
 }
@@ -590,6 +593,8 @@ async function api(req, res, url) {
     const item = itemFromKey(m[1], picked);
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
     const instruction = String(body.instruction || '').slice(0, 600);
+    // The page is writing it now, with or without a prompt: nothing to wait for any more.
+    worker.releaseItem(item.itemKey);
     let draft;
     if (item.order && !(item.orderStatus.kind === 'reply' && !picked.message)) {
       // A message to an auction customer is written from its template. No AI is asked.
@@ -653,6 +658,18 @@ async function api(req, res, url) {
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
     markSeen(item.itemKey, item.anchorKey);
     return send(res, 200, { ok: true });
+  }
+
+  // The Prompt line is open for this conversation: its automatic suggestion waits a minute and a
+  // half, so the one request made is the one from the prompt. { on: false } when the line is
+  // closed without writing. The hold lapses by itself either way.
+  m = p.match(itemRoute('/hold'));
+  if (req.method === 'POST' && m) {
+    const body = await readBody(req);
+    const item = itemFromKey(m[1]);
+    if (!item) return send(res, 404, { error: 'That conversation was not found.' });
+    if (body.on === false) { worker.releaseItem(item.itemKey); return send(res, 200, { ok: true, until: null }); }
+    return send(res, 200, { ok: true, until: worker.holdItem(item.itemKey) });
   }
 
   // Undo for Dismiss: the conversation goes back to Waiting. For an auction order it also undoes

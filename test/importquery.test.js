@@ -325,6 +325,11 @@ test('an email thread teaches through the same buttons as the dashboard, as emai
   const bank = JSON.stringify(voicebank.buildVoiceBank({ write: false }));
   assert.ok(!bank.includes('eligible list') && !bank.includes('priya'), 'the SMS example bank never sees an email');
   // The worker writes for the waiting threads (researched against an empty stand-in list here).
-  assert.ok((await worker.draftWaiting()) >= 1);
+  // The invented threads carry fixed October 2026 dates, so the worker's three-day window and the
+  // seven-day limit on writing unasked are widened for this run.
+  const windows = { hours: config.draftMaxAgeHours, days: config.mail.autoDraftMaxAgeDays };
+  config.draftMaxAgeHours = 24 * 3650;
+  config.mail.autoDraftMaxAgeDays = 3650;
+  try { assert.ok((await worker.draftWaiting()) >= 1); } finally { config.draftMaxAgeHours = windows.hours; config.mail.autoDraftMaxAgeDays = windows.days; }
   assert.ok(db.openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key LIKE 'em:%' AND status = 'ready'").get().n >= 2);
 });

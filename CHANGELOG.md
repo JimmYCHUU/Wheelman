@@ -6,6 +6,20 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- **Prompt** in the message box, before a suggestion exists. Next to **Write it now** sits
+  **Prompt**: one line of what the reply should say, for example `we have none of that model,
+  we can source one`, and Enter writes the reply from it, in Carbarn's voice, in one request,
+  instead of Wheelman's own version first. While the line is open the automatic suggestion for
+  that conversation waits a minute and a half, so there is only ever the one request; closed
+  unused, it carries on as before. A prompt that failed is kept for **Try again** and for the
+  background retry. The three shimmering lines now show whenever a suggestion is being written
+  for the open conversation, started from the page or in the background, and the sentence above
+  the buttons says when Wheelman tries again while the free models are busy or used up. Nothing
+  new is learned from a prompt. (The owner's words: "There should be two buttons: 1 is prompt,
+  second is write. I'll use prompt when it's needed, otherwise it'll write.")
+- A text the phone add-on sees before the dashboard has it sets off a dashboard check and its
+  suggestion at once, as a new lead does, instead of waiting for the next three-minute check.
+  `PHONE_WRITE_AT_ONCE=0` leaves it to that check.
 - Sharing with the team. Double-click **Share Wheelman.cmd** (or set `SHARE=1` in `.env`) and
   Wheelman opens a Cloudflare tunnel to the page and prints the address to give colleagues; the
   welcome panel shows it as a link. Colleagues open it in any browser and type the team password
@@ -103,6 +117,14 @@ and versions follow `MAJOR.MINOR.PATCH`.
   the name the customer signed in a text (shown only; never given to the AI).
 
 ### Changed
+- One suggestion is written at a time for one customer message. **Write it now** pressed while
+  one is being written in the background joins it instead of asking the AI again, and the other
+  way round; a reply written from a prompt or an instruction is never overwritten by a plain one
+  that finishes after it.
+- A staff instruction, typed into Prompt or Rewrite, has the customer's name, number and other
+  details removed before it reaches the AI, as every other text does, and the request says it
+  decides what the reply says, over the examples and the selling moves, while the rules on
+  figures, links, days and promises still hold.
 - RULE-0 "never sends" is now "sends nothing by itself": the one send is the Marketplace Send
   button. The Marketplace client keeps its three read addresses and gains the one reply address.
 - Marketplace suggestions carry links: the car's page on a first reply, and the inspection
@@ -130,6 +152,9 @@ and versions follow `MAJOR.MINOR.PATCH`.
   brings the tab back.
 
 ### Fixed
+- A suggestion written from an instruction that failed because the free models were busy was
+  tried again without the instruction, both by **Try again** and by the background retry, and
+  so came out as the plain reply the instruction was meant to replace.
 - A lead announced by the notification feed while a suggestion was being written for someone
   else, or while a check was already under way, was not checked for until the next three-minute
   check, and that check waited for its own drafting to finish first: a new lead could take ten

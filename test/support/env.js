@@ -36,6 +36,7 @@ export const BASE_ENV = {
   VOICE_PEOPLE_FILE: 'voice/people.example.json',
   PHONE_ADDON: '1',
   PHONE_ADDON_ID: '',
+  PHONE_WRITE_AT_ONCE: '0', // a test switches it on when it is what the test is about: a background write would otherwise take other tests' scripted answers
   PORT: '0',
   // Sharing with the team is off, with no password, unless a test switches it on. No test ever
   // starts a tunnel.
