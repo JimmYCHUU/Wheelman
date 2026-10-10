@@ -99,6 +99,9 @@ export const config = {
     addonId: (env.PHONE_ADDON_ID || '').trim().toLowerCase(),
     // After this many minutes without a report the page says the add-on has gone quiet.
     staleMinutes: num(env.PHONE_STALE_MINUTES, 10),
+    // A new text seen on the phone sets off a dashboard check and the suggestion at once, instead
+    // of waiting for the next few-minute check. PHONE_WRITE_AT_ONCE=0 leaves it to that check.
+    writeAtOnce: !/^(0|false|no|off)$/i.test((env.PHONE_WRITE_AT_ONCE ?? '1').trim()),
   },
 
   // Email threads the owner hands in from Gmail with the add-on's "Send to Wheelman" button: the

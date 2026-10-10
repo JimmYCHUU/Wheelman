@@ -9,7 +9,7 @@ import { config } from './config.js';
 import { redact, restore } from './redact.js';
 import { planImport, auctionNote, bidBasisLine } from './imports.js';
 import { planOrderReply, restoreAmounts } from './ordermessages.js';
-import { insertDraft } from './db.js';
+import { insertDraft, latestDraft } from './db.js';
 import { sydneyHour } from './time.js';
 import { standardBlock, repeatsBlock, tidyOpening } from './firstreply.js';
 import { LEFTOVER_LABEL } from './practice.js';
@@ -197,11 +197,54 @@ export function assessProposed(item, reply, { now = Date.now() } = {}) {
   return { ...out, prompt };
 }
 
+// One write at a time for one customer message. A second plain write while one is under way (the
+// page's Write it now during a background write, or the other way round) joins it instead of asking
+// the AI again. A write from the owner's own words (the Prompt line, Rewrite, Could be better)
+// starts its own, and a plain write that finishes after it is not kept: the owner's stands.
+const inFlight = new Map(); // 'itemKey|anchorKey' -> { promise, instruction, directed, startedAt }
+const flightKey = (item) => `${item.itemKey}|${item.anchorKey}`;
+/** Is a suggestion being written for this message right now? The page shows the shimmering lines. */
+export const writingNow = (itemKey, anchorKey) => inFlight.has(`${itemKey}|${anchorKey}`);
+
 /**
- * @param coaching  { note, draft } from "Could be better": what the owner said about the last
+ * @param instruction what our staff typed for this one reply: the Prompt line before it is written,
+ *                    or Rewrite after. Its figures and promises count as staff-given.
+ * @param coaching  { note, draft } given under Could be better: what the owner said about the last
  *                  draft, and that draft. It guides the rewrite; it is not wording to send.
  */
-export async function draftFor(item, { instruction = '', coaching = null, save = true, holdOutConversation = true, now = Date.now() } = {}) {
+export function draftFor(item, opts = {}) {
+  const { instruction = '', coaching = null, save = true } = opts;
+  if (!save) return writeDraft(item, opts, null);
+  const key = flightKey(item);
+  const directed = !!instruction || !!coaching;
+  const current = inFlight.get(key);
+  if (current && (!directed || (!coaching && current.instruction === instruction))) {
+    logLine('suggestion', `${item.itemKey}: a suggestion is already being written for this message; joined it instead of asking again`);
+    return current.promise;
+  }
+  const flight = { instruction, directed, startedAt: Date.now(), promise: null };
+  flight.promise = writeDraft(item, opts, flight).finally(() => { if (inFlight.get(key) === flight) inFlight.delete(key); });
+  inFlight.set(key, flight);
+  return flight.promise;
+}
+
+async function writeDraft(item, { instruction = '', coaching = null, save = true, holdOutConversation = true, now = Date.now() } = {}, flight) {
+  // Keeps the finished draft, unless it is a plain write that finished after a reply from the
+  // owner's own words was written for the same message: then the owner's stands and this one goes,
+  // whether it came out ready or failed.
+  const persist = (d) => {
+    if (!save) return d;
+    if (flight && !flight.directed) {
+      const newest = latestDraft(item.itemKey, item.anchorKey);
+      if (newest && newest.instruction && newest.created_at >= flight.startedAt) {
+        d.dropped = true;
+        logLine('suggestion', `${item.itemKey}: a suggestion written without an instruction was dropped; one from the owner's instruction was written meanwhile`);
+        return d;
+      }
+    }
+    d.id = insertDraft(d);
+    return d;
+  };
   // What the message was about when the suggestion was written. Once it is answered the item no
   // longer says, so learning and the report read it from here.
   const context = {
@@ -219,8 +262,7 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
 
   if (item.state === 'optout') {
     const d = { ...base, status: 'blocked', reply: '', checks: [{ level: 'fail', code: 'optout', message: 'Customer asked not to be contacted. No reply suggested.' }] };
-    if (save) d.id = insertDraft(d);
-    return d;
+    return persist(d);
   }
 
   try {
@@ -249,8 +291,7 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
     if (plan?.stage === 'ask' && plan.ready) {
       const reply = [restore(plan.ready, item.lead), plan.tail].filter(Boolean).join('\n\n');
       const d = { ...base, status: 'ready', reply, needsHuman: [], factsUsed: [], nextStep: 'asked what they are looking for', checks: [{ level: 'ok', code: 'ok', message: 'Standard wording for a new import enquiry.', tokens: [] }], provider: 'none', model: 'standard wording', exampleIds: [] };
-      if (save) d.id = insertDraft(d);
-      return d;
+      return persist(d);
     }
 
     // An import email: the model, its eligibility and cost are looked up on our website first.
@@ -318,11 +359,10 @@ export async function draftFor(item, { instruction = '', coaching = null, save =
       model: result.model,
       exampleIds: prompt.exampleIds,
     };
-    if (save) draft.id = insertDraft(draft);
-    return draft;
+    return persist(draft);
   } catch (e) {
     const d = { ...base, status: 'failed', reply: '', error: e.message, checks: [{ level: 'fail', code: 'error', message: e.message }] };
-    if (save) d.id = insertDraft(d);
+    persist(d);
     d.daily = !!e.daily;
     // Busy or used-up free models sort themselves out. A rejected key, or a fault in the app, does not.
     d.temporary = e instanceof LlmError && e.status !== 401 && e.status !== 403 && !/No AI key/.test(e.message);
