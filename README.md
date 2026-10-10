@@ -119,6 +119,7 @@ shape with invented names. The tone guide is `voice/house-voice.md`.
         │                     our salespeople's real replies   │
         │                     what the team sent lately        │
         │                     what you changed last time       │
+        │                     your prompt, when you gave one   │
         └──────────────────────────┬──────────────────────────┘
         ┌──────────────────────────▼──────────────────────────┐
         │ 5. FREE AI MODEL    six models, tried in order       │──► PAUSED (day's allowance used)
@@ -197,8 +198,9 @@ nobody agreed to. It is sent back for one rewrite when it:
 - names a state or city the customer never mentioned.
 
 A promise with no time attached ("we will send it shortly") shows one quiet note. An
-instruction typed into **Rewrite** still decides what to say, but it no longer overrides these
-rules.
+instruction typed into **Prompt** or **Rewrite** still decides what to say, and a figure,
+link or promise in it counts as given by staff, but it never overrides these rules. A
+customer's name or number typed into it is removed before the AI sees it, like everything else.
 
 ### What gets no suggestion
 
@@ -407,7 +409,10 @@ npm.cmd test                :: the automated checks, no internet needed
 1. Double-click **Start Wheelman.cmd** and leave the black window open.
 2. The browser tab shows a number when a customer has sent something new: `(2) Wheelman`.
 3. Pick a customer from the list. Their number clears once you have opened the conversation.
-4. Read the suggestion in the message box. Fill in anything highlighted.
+4. Read the suggestion in the message box. Fill in anything highlighted. If nothing is written
+   yet and you already know what the reply should say, press **Prompt**, type it in one line and
+   press Enter: Wheelman writes the reply from your words in one request, instead of its own
+   version first. Otherwise leave it, or press **Write it now**.
 5. Press **Copy reply**, paste it into the dashboard, and send it. In a Marketplace chat, press
    **Send reply** instead and it goes to the buyer from here (Copy still works there too).
 6. The customer leaves **Waiting** by themselves once the reply appears in the conversation.
@@ -419,6 +424,9 @@ it off). A new lead announced there sets off a check at once, so the lead's text
 within about a minute without anyone pressing "Check for new messages now", even while a
 suggestion is being written for someone else or a check is already under way; its own suggestion
 follows as soon as the AI is free. A price change or a sale refreshes the car list straight away.
+A text the phone add-on sees before the dashboard has it sets off a check and the suggestion
+the same way, so it is answered within a minute rather than at the next check
+(`PHONE_WRITE_AT_ONCE=0` leaves it to the next check).
 Each announced lead is noted in `data\wheelman.log` with how long the check took. The feed covers every Carbarn site, but the
 Sydney lead list that the dashboard and Wheelman both read is filtered to the Australian
 platform, so an enquiry from another site (a bare phone number from "Lead Service", say) is
@@ -551,6 +559,18 @@ A switch at the top chooses the section: **Dashboard** for leads and text messag
 
 The suggestion waits in the message box, marked **not sent**. The box is an editor.
 
+- **Prompt**, before a suggestion exists. When nothing has been written yet, the box shows two
+  buttons: **Prompt** and **Write it now**. If you already know what the reply should say,
+  press **Prompt**, type it in one line, for example `we have none of that model, we can source
+  one if they tell us which`, and press Enter. Wheelman writes the reply from your words, in
+  Carbarn's voice, in one request, instead of writing its own version first for you to redo.
+  While the line is open the automatic suggestion for that conversation waits a minute and a
+  half, so there is only ever the one request; close the line and it carries on as before.
+  **Write it now** writes without a prompt. A try that failed is tried again with the prompt it
+  had. The sentence above the buttons says when Wheelman will try again by itself if the free
+  models are busy or used up. The three shimmering lines show whenever a suggestion is being
+  written for the open conversation, whether you or Wheelman started it, and only one is ever
+  written at a time for one message.
 - **Change it.** Click in the text and type. What you type is saved a moment after you stop,
   so it is still there after a reload, a restart or a look at another conversation. The top
   right of the box says when it was saved.
@@ -561,7 +581,8 @@ The suggestion waits in the message box, marked **not sent**. The box is an edit
   the whole text and pressing `Ctrl + C`. When you had changed the text, Wheelman learns from
   the change.
 - **Rewrite** takes an instruction, for example `offer $27,500` or `make it shorter`. It
-  changes this reply only, and replaces what is in the box.
+  changes this reply only, and replaces what is in the box. A prompt you typed while a
+  suggestion landed by itself is waiting here, ready to write again.
 - **Good reply** approves the reply as it stands in the box: the suggestion as written, or
   with your changes. Wheelman keeps it as the model for similar messages. If you change the
   text afterwards, the model follows. Press the button again to take the approval back.
@@ -929,6 +950,7 @@ of `extension/mail.js` with.
 | `PHONE_ADDON` | Set to `0` to stop taking the phone reader's reports | `1` |
 | `PHONE_ADDON_ID` | The add-on's id as `chrome://extensions` shows it, so no other add-on is listened to, on either of its routes | Empty: any add-on on this computer |
 | `PHONE_STALE_MINUTES` | After this long without a report, the page says the add-on has gone quiet | `10` |
+| `PHONE_WRITE_AT_ONCE` | A new text seen on the phone sets off a dashboard check and its suggestion at once, as a new lead does; `0` leaves it to the next few-minute check | `1` |
 | `IGNORED_SENDERS` | Senders that are never customers and are never listed: a contact saved on the phone under a label, a finance company, a courier. Comma-separated; spaces and case are ignored | `Not customer, OTP, Delivery Service, Autotrader, CreditOne` |
 
 ## What Wheelman knows
@@ -1224,12 +1246,16 @@ computer. Git never sees any of it.
 npm.cmd test
 ```
 
-291 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
+307 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
 a stand-in auction feed on this computer: who counts as waiting and who does not, stock numbers matched to the right
 car however a portal writes them (a year in front, a portal code, upper or lower case), that
 no customer detail and no cost figure reaches the AI request, an invented price
 rejected and retried, a customer's own price never accepted as ours, a staff figure in a
-rewrite accepted, nothing drafted for an opt-out, a sold car bringing a similar one into the
+rewrite accepted, a prompt reaching the AI last with the customer's details removed, one
+suggestion written at a time for a message with a plain write joining the one under way and
+never overwriting a prompted one, a failed prompt kept for the retry, the automatic write
+waiting while the Prompt line is open, a text from the phone written for at once,
+nothing drafted for an opt-out, a sold car bringing a similar one into the
 request, a message that tries to give orders passed as data, busy models and the daily cap,
 learning from copied and sent replies with details removed, that blanks and bank details are
 never learned, the greeting and sign-off once a day, the in-person and online inspection links
