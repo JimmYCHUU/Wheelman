@@ -26,38 +26,77 @@ export const providerLabel = (id) => PROVIDERS[id]?.label || String(id);
 
 const plain = (message) => Object.assign(new Error(message), { status: 400 });
 
-// ---- the choice ------------------------------------------------------------------------------
+// ---- the choice: which model does which job -------------------------------------------------
+
+/**
+ * The jobs a model can be given. write: the suggestions for dashboard customers, import emails and
+ * auction orders, on the best model. The other three need no better model: the customer read, the
+ * Marketplace chats and the lessons taken from the owner's notes keep to the small model and the
+ * free ones after it unless the page chose one for the job.
+ */
+export const ROLES = ['write', 'read', 'marketplace', 'lessons'];
+export const ROLE_LABELS = { write: 'Dashboard, import and auction replies', read: 'The customer read', marketplace: 'Marketplace chats', lessons: 'Lessons from your notes' };
 
 // A model's name as the providers write them: gemini-3.8-flash, gpt-5.6, google/gemma-4-31b-it:free.
 const MODEL_NAME = /^[\w.:/-]{1,120}$/;
-let cached; // the choice, read from the database once; undefined until then
+let cached; // the choices by job, read from the database once; undefined until then
 
-/** The provider and model chosen on the page, with whether Marketplace uses it too. Null when nothing has been chosen. */
-export function aiChoice() {
+const valid = (c) => (c && PROVIDERS[c.provider] && MODEL_NAME.test(String(c.model || '')) ? { provider: c.provider, model: String(c.model), at: Number(c.at) || 0 } : null);
+
+function roles() {
   if (cached === undefined) {
-    const c = getMeta('ai_choice', null);
-    cached = c && PROVIDERS[c.provider] && MODEL_NAME.test(String(c.model || ''))
-      ? { provider: c.provider, model: String(c.model), marketplace: !!c.marketplace, at: Number(c.at) || 0 }
-      : null;
+    let r = getMeta('ai_roles', null);
+    if (!r || typeof r !== 'object') {
+      // Before the jobs there was one choice, for the dashboard, with a tick for Marketplace too.
+      const old = getMeta('ai_choice', null);
+      const w = valid(old);
+      r = w ? { write: w, ...(old.marketplace ? { marketplace: w } : {}) } : {};
+      if (w) setMeta('ai_roles', r);
+    }
+    cached = Object.fromEntries(ROLES.map((role) => [role, valid(r[role])]).filter(([, v]) => v));
   }
   return cached;
 }
 
-/** Keeps the page's choice. Refuses, in plain words, a provider Wheelman does not know, one without a key, or no model. */
-export function setAiChoice({ provider, model, marketplace = false } = {}) {
+/** The provider and model chosen on the page for a job, or null when none was. */
+export function roleChoice(role) { return roles()[role] || null; }
+
+/** Every job's choice, by job. */
+export function allRoleChoices() { return { ...roles() }; }
+
+/** Keeps the page's choice for a job. Refuses, in plain words, a job or provider Wheelman does not know, a provider without a key, or no model. */
+export function setRoleChoice(role, { provider, model } = {}) {
+  if (!ROLES.includes(role)) throw plain('That is not a job Wheelman gives a model.');
   if (!PROVIDERS[provider]) throw plain('That AI provider is not one Wheelman knows.');
   if (!config.llm[provider].apiKey) throw plain(`No ${providerLabel(provider)} key is filled in yet. Paste one first.`);
   const name = String(model || '').trim();
   if (!MODEL_NAME.test(name)) throw plain('Pick a model, or type its name as the provider writes it.');
-  cached = { provider, model: name, marketplace: !!marketplace, at: Date.now() };
-  setMeta('ai_choice', cached);
-  return cached;
+  const next = { ...roles(), [role]: { provider, model: name, at: Date.now() } };
+  cached = next;
+  setMeta('ai_roles', next);
+  return next[role];
+}
+
+/** The dashboard's choice as the page first offered it: the write job, with whether Marketplace was given the same model. Null when nothing has been chosen. */
+export function aiChoice() {
+  const w = roleChoice('write');
+  if (!w) return null;
+  const m = roleChoice('marketplace');
+  return { ...w, marketplace: !!m && m.provider === w.provider && m.model === w.model };
+}
+
+/** The dashboard's choice, with Marketplace given the same model when ticked and left to the small ones when not. */
+export function setAiChoice({ provider, model, marketplace = false } = {}) {
+  const w = setRoleChoice('write', { provider, model });
+  if (marketplace) setRoleChoice('marketplace', { provider, model });
+  else if (roleChoice('marketplace')) { const next = { ...roles() }; delete next.marketplace; cached = next; setMeta('ai_roles', next); }
+  return { ...w, marketplace: !!marketplace };
 }
 
 /** Forgets what was read from the database, so the next look reads it again. For tests. */
 export function forgetAiChoice() { cached = undefined; }
-/** Takes the choice away, in the database too. For tests. */
-export function clearAiChoice() { setMeta('ai_choice', null); cached = undefined; }
+/** Takes every choice away, in the database too. For tests. */
+export function clearAiChoice() { setMeta('ai_choice', null); setMeta('ai_roles', null); cached = undefined; }
 
 // ---- the models each provider offers ---------------------------------------------------------
 

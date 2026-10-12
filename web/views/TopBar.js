@@ -25,6 +25,9 @@ export function statusWords(s, section) {
   else if (last) text = t('status.notReached', { place: sec.placeShort });
   else text = t('status.notChecked', { place: sec.placeShort });
   const parts = [text, t('status.ai', { used: s.ai.usedToday, limit: s.ai.limit })];
+  // The month's spend against the budget, once any model has a price.
+  const b = s.ai.budget;
+  if (b?.priced && b.budgetAud > 0) parts.push(t(b.level === 'over' ? 'status.budget.over' : b.level === 'warn' ? 'status.budget.warn' : 'status.budget', { spent: Number(b.spentAud).toFixed(2), budget: Number(b.budgetAud).toFixed(2) }));
   // The dashboard's notification feed, read for a new lead between checks.
   const al = s.alerts;
   if (!chat && al?.on && al.at) parts.push(al.ok ? t('status.alerts.checked', { ago: ago(al.at) }) : t('status.alerts.notReached'));

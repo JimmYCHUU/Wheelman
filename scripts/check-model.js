@@ -4,6 +4,8 @@
 
 import { config } from '../src/config.js';
 import { providers, callModel, parseJsonReply } from '../src/llm.js';
+import { ROLES, ROLE_LABELS } from '../src/aimodels.js';
+import { budgetStatus } from '../src/budget.js';
 
 const list = providers();
 if (!list.length) {
@@ -31,6 +33,11 @@ for (const p of list) {
   }
 }
 
+console.log('');
+console.log('Which model each job asks first:');
+for (const role of ROLES) console.log(`  ${ROLE_LABELS[role].padEnd(40)} ${providers({ role })[0]?.model || 'nothing'}`);
+const b = budgetStatus();
+console.log(`This month: about A$${b.spentAud.toFixed(2)} of the A$${b.budgetAud} budget${b.unpriced.length ? `; ${b.unpriced.length} model${b.unpriced.length === 1 ? ' has' : 's have'} no price in ${config.aiPricesPath}` : ''}.`);
 console.log('');
 if (badKey.size) console.log(`The key for ${[...badKey].join(' and ')} was rejected. Check it in the .env file.`);
 if (answering) console.log(`${answering} of ${list.length} models are answering. The agent can write suggestions. Daily cap: ${config.llm.dailyLimit} requests.`);

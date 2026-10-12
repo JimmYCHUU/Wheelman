@@ -12,13 +12,15 @@
 
 import { config } from './config.js';
 import { addUsage, usageToday, usageByModel } from './db.js';
-import { sydneyDay, formatSydney } from './time.js';
-import { aiChoice, PROVIDER_ORDER, PROVIDERS, providerLabel } from './aimodels.js';
+import { sydneyDay, formatSydney, formatDay } from './time.js';
+import { roleChoice, ROLES, ROLE_LABELS, PROVIDER_ORDER, PROVIDERS, providerLabel } from './aimodels.js';
+import { budgetStatus, isFree } from './budget.js';
 
 export class LlmError extends Error {
-  constructor(message, { status = 0, provider = '', model = '', retryAfter = 0, daily = false, detail = '' } = {}) {
+  constructor(message, { status = 0, provider = '', model = '', retryAfter = 0, daily = false, budget = false, detail = '' } = {}) {
     super(message);
     this.status = status; this.provider = provider; this.model = model; this.retryAfter = retryAfter; this.daily = daily;
+    this.budget = budget; // the month's budget is used, and no free model is set up for the job
     this.detail = detail; // what the AI services actually answered, for the log
   }
 }
@@ -49,48 +51,58 @@ export function isDailyLimit(text, seconds = 0) {
 export function resetModelState() { resting.clear(); exhausted.clear(); lastCallAt = 0; }
 
 /**
- * Every provider + model the app may use, in the order they are tried. The model chosen on the
- * page comes first, whether or not the .env file names it; the rest follow in their usual order,
- * asked only when it does not answer.
- * For Marketplace chats the list starts at the small model and keeps to the free models: the
- * better models before it are never asked, so their daily allowance is kept for dashboard
- * customers, and nothing paid is spent on Marketplace. The chosen model is asked for Marketplace
- * too only when the page said so (or when it is one of the small free ones already). With no free
- * model at all, Marketplace uses what there is.
+ * Every provider + model one job may use, in the order they are tried.
+ * write (the dashboard, import emails, auction orders): the model chosen on the page comes first,
+ * whether or not the .env file names it; the rest follow in their usual order, asked only when it
+ * does not answer.
+ * read, marketplace, lessons: the model chosen for that job first, if any, then the small chain:
+ * from the small model onward, free providers only, so the better models are kept for dashboard
+ * customers and nothing paid is spent unasked. The dashboard's model joins a small job only when it
+ * is one of the small ones already. With no small model named, the whole list. Once the month's
+ * budget is used, a small job keeps to models known to be free (src/budget.js).
+ * A model pinned by a script ({ provider, model }) is asked alone.
  */
-export function providers({ marketplace = false } = {}) {
+export function providers({ role = 'write', marketplace = false, pin = null } = {}) {
+  if (marketplace) role = 'marketplace';
+  const entry = (name, model) => { const p = config.llm[name]; return p?.apiKey ? { name, model, url: p.url, apiKey: p.apiKey } : null; };
+  if (pin) { const one = pin.provider && pin.model ? entry(pin.provider, pin.model) : null; return one ? [one] : []; }
   const all = [];
   for (const name of PROVIDER_ORDER) {
     const p = config.llm[name];
     if (!p?.apiKey) continue;
     for (const model of p.models) all.push({ name, model, url: p.url, apiKey: p.apiKey });
   }
-  const choice = aiChoice();
-  let chosen = null;
-  if (choice && config.llm[choice.provider]?.apiKey) {
-    const p = config.llm[choice.provider];
-    chosen = all.find((x) => x.name === choice.provider && x.model === choice.model) || { name: choice.provider, model: choice.model, url: p.url, apiKey: p.apiKey };
+  const same = (x, c) => !!x && !!c && x.name === c.name && x.model === c.model;
+  const pick = (c) => (c && config.llm[c.provider]?.apiKey ? all.find((x) => x.name === c.provider && x.model === c.model) || entry(c.provider, c.model) : null);
+  const after = (list, c) => list.filter((x) => !same(x, c));
+  const writer = pick(roleChoice('write'));
+  if (role === 'write' || !ROLES.includes(role)) return writer ? [writer, ...after(all, writer)] : all;
+  let small = all;
+  if (config.llm.smallModel) {
+    const from = all.findIndex((x) => x.model === config.llm.smallModel);
+    const tail = from > 0 ? all.slice(from) : all;
+    const free = tail.filter((x) => PROVIDERS[x.name].free);
+    small = free.length ? free : tail;
   }
-  const after = (list) => list.filter((x) => x !== chosen);
-  if (!marketplace || !config.llm.marketplaceModel) return chosen ? [chosen, ...after(all)] : all;
-  const from = all.findIndex((x) => x.model === config.llm.marketplaceModel);
-  const tail = from > 0 ? all.slice(from) : all;
-  const free = tail.filter((x) => PROVIDERS[x.name].free);
-  const small = free.length ? free : tail;
-  if (chosen && (choice.marketplace || small.includes(chosen))) return [chosen, ...after(small)];
-  return small;
+  const own = pick(roleChoice(role));
+  let list = own ? [own, ...after(small, own)] : writer && small.some((x) => same(x, writer)) ? [writer, ...after(small, writer)] : small;
+  if (budgetStatus().level === 'over') list = list.filter((x) => isFree(x.name, x.model));
+  return list;
 }
 
 export function modelStatus() {
   const now = Date.now();
   const all = providers();
   const forChats = new Set(providers({ marketplace: true }).map(keyOf));
+  // Which jobs ask this model first.
+  const firstFor = ROLES.map((role) => [role, providers({ role })[0]]).filter(([, p]) => p);
   return all.map((p) => {
     const out = exhausted.get(keyOf(p)) || 0;
     return {
       name: p.name, model: p.model,
       // False for a model kept for dashboard customers only.
       marketplace: forChats.has(keyOf(p)),
+      roles: firstFor.filter(([, f]) => keyOf(f) === keyOf(p)).map(([role]) => role),
       restingMinutes: Math.max(0, Math.ceil(((resting.get(keyOf(p)) || 0) - now) / 60000)),
       // Set while the model's daily allowance is used up: when it says the allowance returns.
       usedUpUntil: out > now ? out : null,
@@ -218,13 +230,22 @@ export async function callModel(p, system, user, { maxTokens = config.llm.maxOut
 const isBusy = (status) => [408, 429, 500, 502, 503, 504, 529].includes(status);
 
 /**
- * Sends one request. Respects the per-minute gap and the daily cap. Works down the list of
- * models until one answers; if all are busy it waits briefly and goes round once more.
- * With `marketplace`, only the models Marketplace chats may use are asked.
+ * Sends one request for a job (write, read, marketplace, lessons; `marketplace: true` is the old
+ * way of saying the Marketplace job). Respects the per-minute gap and the daily cap. Works down
+ * the job's list of models until one answers; if all are busy it waits briefly and goes round
+ * once more. The customer read does not count against the daily cap of suggestions. A model
+ * pinned by a script is asked alone.
  */
-export async function complete(system, user, { marketplace = false } = {}) {
-  const list = providers({ marketplace });
-  if (!list.length) throw new LlmError('No AI key is filled in. Choose the AI on the page (the cog at the top right) and paste a key there, or add GEMINI_API_KEY, OPENAI_API_KEY or OPENROUTER_API_KEY to the .env file.');
+export async function complete(system, user, { role = 'write', marketplace = false, pin = null, maxTokens = config.llm.maxOutputTokens } = {}) {
+  if (marketplace) role = 'marketplace';
+  const list = providers({ role, pin });
+  if (!list.length) {
+    const b = role !== 'write' && !pin ? budgetStatus() : null;
+    if (b && b.level === 'over' && providers({ role: 'write' }).length) {
+      throw new LlmError(`This month's AI budget of A$${b.budgetAud} is used, and no free model is set up for ${(ROLE_LABELS[role] || role).toLowerCase()}. Dashboard suggestions continue; this starts again on ${formatDay(b.resetsOn)}.`, { budget: true, daily: true });
+    }
+    throw new LlmError('No AI key is filled in. Choose the AI on the page (the cog at the top right) and paste a key there, or add GEMINI_API_KEY, OPENAI_API_KEY or OPENROUTER_API_KEY to the .env file.');
+  }
   if (usage().remaining <= 0) throw new LlmError(`Daily limit of ${config.llm.dailyLimit} AI requests reached. It resets at midnight Sydney time.`, { daily: true });
 
   const errors = [];
@@ -243,9 +264,9 @@ export async function complete(system, user, { marketplace = false } = {}) {
       lastCallAt = Date.now();
       tried++;
       try {
-        const out = await callModel(p, system, user);
+        const out = await callModel(p, system, user, { maxTokens });
         const json = parseJsonReply(out.content);
-        addUsage(sydneyDay(), p.name, p.model, out.usage);
+        addUsage(sydneyDay(), p.name, p.model, out.usage, { cap: role !== 'read' });
         resting.delete(key);
         exhausted.delete(key);
         Object.assign(lastAnswered, { provider: p.name, model: p.model, at: Date.now() });
@@ -271,7 +292,7 @@ export async function complete(system, user, { marketplace = false } = {}) {
     throw new LlmError(`The AI service rejected the key in the .env file (${[...badKey].map(providerLabel).join(' and ')}). ${detail}`, { status: 401, detail });
   }
   const now = Date.now();
-  const split = marketplace && list.length < providers().length;
+  const split = role !== 'write' && list.length < providers().length;
   if (usable.every((p) => (exhausted.get(keyOf(p)) || 0) > now)) {
     const back = Math.min(...usable.map((p) => exhausted.get(keyOf(p))));
     if (split) throw new LlmError(`The AI models used for Marketplace have used up their allowance for today. Marketplace suggestions start again by themselves around ${formatSydney(back)}.`, { daily: true, detail });

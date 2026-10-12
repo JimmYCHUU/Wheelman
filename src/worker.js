@@ -8,6 +8,7 @@ import { prepareOrders } from './ordermessages.js';
 import { draftFor } from './drafter.js';
 import { latestDraft, isDismissed, draftsAwaitingOutcome, recordOutcome, markSuperseded, setMeta, getMeta, openDb, mpDraftsLastDay, rekeyPhoneThreads } from './db.js';
 import { providers, usage, modelStatus, lastModel } from './llm.js';
+import { budgetStatus } from './budget.js';
 import { learnFrom, canLearnFrom, comparable, distilPending } from './learn.js';
 import { refreshVoiceBankIfStale } from './voicebank.js';
 import { similarity } from './text.js';
@@ -368,6 +369,14 @@ function phoneStatus() {
   };
 }
 
+/** The month's AI spend against the budget, for the status bar and the notices. */
+function budgetSummary() {
+  try {
+    const b = budgetStatus();
+    return { spentAud: b.spentAud, budgetAud: b.budgetAud, level: b.level, resetsOn: b.resetsOn, priced: b.priced, unpriced: b.unpriced.length };
+  } catch { return null; }
+}
+
 export function statusReport() {
   const u = providers().length ? usage() : { total: 0, limit: config.llm.dailyLimit, remaining: config.llm.dailyLimit };
   const stats = openDb().prepare(`
@@ -387,7 +396,7 @@ export function statusReport() {
     // busy ones ('busy'). The page says so in the message box instead of "within a few minutes".
     retryAt: Date.now() < state.pausedUntil ? state.pausedUntil : Date.now() < state.holdUntil ? state.holdUntil : null,
     retryWhy: Date.now() < state.pausedUntil ? 'daily' : Date.now() < state.holdUntil ? 'busy' : null,
-    ai: { providers: modelStatus(), lastModel: lastModel().model, usedToday: u.total, limit: u.limit },
+    ai: { providers: modelStatus(), lastModel: lastModel().model, usedToday: u.total, limit: u.limit, budget: budgetSummary() },
     syncMinutes: config.syncMinutes,
     // The Gmail button: whether the intake is on, and the last thread it handed in.
     mail: { on: config.mail.switchedOn, last: config.mail.switchedOn ? (state.mail || getMeta('mail_last_report', null)) : null },

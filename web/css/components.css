@@ -385,6 +385,7 @@
   .judged .link-btn { color: inherit; }
   .rulings { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
   /* "Used so far" in the AI panel: each model's requests and tokens, today and this month. */
+  .roles { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--sp-05); }
   .usage { display: grid; gap: var(--sp-2); }
   .usage h4 { margin: 0; font-size: var(--fs-label); font-weight: var(--fw-semibold); color: var(--text); }
   .usage table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--fs-label); color: var(--text); }

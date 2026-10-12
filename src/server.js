@@ -38,7 +38,8 @@ import { storeMpConversation } from './sync.js';
 import { appendMpMessage, recordSentHere } from './db.js';
 import { blankMatcher } from '../web/lib/blank.js';
 import { share, viaTunnel, signedIn, checkPassword, signinToken, signinCookie, tooManyTries, noteWrong, clearWrong } from './share.js';
-import { PROVIDERS, PROVIDER_ORDER, aiChoice, setAiChoice, listModels, saveKey } from './aimodels.js';
+import { PROVIDERS, PROVIDER_ORDER, aiChoice, setAiChoice, listModels, saveKey, ROLES, ROLE_LABELS, roleChoice, setRoleChoice, allRoleChoices } from './aimodels.js';
+import { budgetStatus } from './budget.js';
 import { providers as aiProviders, usageDetail } from './llm.js';
 
 const TYPES = { '.woff2': 'font/woff2', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
@@ -499,6 +500,11 @@ async function api(req, res, url) {
       writing: first(aiProviders()),
       marketplaceWriting: first(aiProviders({ marketplace: true })),
       marketplaceModel: config.llm.marketplaceModel,
+      smallModel: config.llm.smallModel,
+      // Each job, the model chosen for it (if any) and what writes for it right now.
+      roles: ROLES.map((role) => ({ role, label: ROLE_LABELS[role], choice: roleChoice(role), writing: first(aiProviders({ role })) })),
+      // The month's spend against the budget, from the owner's price file.
+      budget: budgetStatus(),
       marketplaceOn: config.marketplace.enabled,
       dailyLimit: config.llm.dailyLimit,
       // What has been asked so far: requests and tokens by model, today and this month.
@@ -515,6 +521,12 @@ async function api(req, res, url) {
   if (req.method === 'POST' && p === '/api/ai/choice') {
     const body = await readBody(req);
     try {
+      if (body.role !== undefined) {
+        const role = String(body.role);
+        const choice = setRoleChoice(role, { provider: body.provider, model: body.model });
+        logLine('ai', `The page chose ${choice.model} (${choice.provider}) for ${(ROLE_LABELS[role] || role).toLowerCase()}`);
+        return send(res, 200, { ok: true, choice, roles: allRoleChoices(), status: worker.statusReport() });
+      }
       const choice = setAiChoice({ provider: body.provider, model: body.model, marketplace: body.marketplace === true });
       logLine('ai', `The page chose ${choice.model} (${choice.provider}) to write the suggestions${choice.marketplace ? ', for Marketplace too' : ''}`);
       return send(res, 200, { ok: true, choice, status: worker.statusReport() });

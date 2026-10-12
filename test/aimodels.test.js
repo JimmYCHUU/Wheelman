@@ -150,10 +150,10 @@ test('the model chosen on the page is asked first and the others follow; Marketp
   ai.forgetAiChoice();
   assert.equal(ai.aiChoice().model, 'model-b');
   // Something unreadable left in the database is ignored, not trusted.
-  db.setMeta('ai_choice', { provider: 'nobody', model: 'x' });
+  db.setMeta('ai_roles', { write: { provider: 'nobody', model: 'x' } });
   ai.forgetAiChoice();
   assert.equal(ai.aiChoice(), null);
-  db.setMeta('ai_choice', { provider: 'gemini', model: 'bad name with spaces' });
+  db.setMeta('ai_roles', { write: { provider: 'gemini', model: 'bad name with spaces' } });
   ai.forgetAiChoice();
   assert.equal(ai.aiChoice(), null);
 
@@ -384,4 +384,120 @@ test('every answer is counted by model with the tokens it used, and the panel re
   assert.equal(count(offer.json.usage.today, 'model-a').tokensOut, today.tokensOut, 'the panel reads the same numbers');
   assert.equal(offer.json.usage.usedToday, after.usedToday);
   assert.equal(offer.json.providers.find((p) => p.id === 'gemini').usageUrl, 'https://aistudio.google.com/usage');
+});
+
+test('each job has its own model: a job\'s choice comes first, the small jobs keep to the small chain, and the choice made before jobs existed is carried over', () => {
+  // Nothing chosen: the dashboard gets the whole list, the small jobs the small chain.
+  assert.deepEqual(models(llm.providers({ role: 'read' })), ['model-b']);
+  assert.deepEqual(models(llm.providers({ role: 'lessons' })), ['model-b']);
+  assert.deepEqual(models(llm.providers({ role: 'marketplace' })), models(llm.providers({ marketplace: true })), 'the old flag still means the Marketplace job');
+  // A job's own choice goes first and the small chain follows; the other jobs are not moved.
+  ai.setRoleChoice('read', { provider: 'openai', model: 'gpt-test' });
+  assert.deepEqual(models(llm.providers({ role: 'read' })), ['gpt-test', 'model-b']);
+  assert.deepEqual(models(llm.providers({ role: 'lessons' })), ['model-b']);
+  assert.deepEqual(models(llm.providers()), ['gpt-test', 'model-a', 'model-b'], 'the dashboard list is its own');
+  assert.equal(ai.roleChoice('read').model, 'gpt-test');
+  assert.equal(ai.roleChoice('lessons'), null);
+  assert.deepEqual(Object.keys(ai.allRoleChoices()), ['read']);
+  assert.throws(() => ai.setRoleChoice('driving', { provider: 'gemini', model: 'model-a' }), /not a job/);
+  // A model pinned by a script is asked alone; one with no key is nothing.
+  assert.deepEqual(models(llm.providers({ pin: { provider: 'gemini', model: 'model-b' } })), ['model-b']);
+  assert.deepEqual(llm.providers({ pin: { provider: 'openrouter', model: 'x' } }), []);
+  // The choice made before jobs existed becomes the dashboard's, and Marketplace's when it was ticked.
+  ai.clearAiChoice();
+  db.setMeta('ai_choice', { provider: 'openai', model: 'gpt-test', marketplace: true, at: 1 });
+  ai.forgetAiChoice();
+  assert.equal(ai.roleChoice('write').model, 'gpt-test');
+  assert.equal(ai.roleChoice('marketplace').model, 'gpt-test');
+  assert.equal(ai.roleChoice('read'), null);
+  assert.deepEqual(models(llm.providers({ role: 'marketplace' })), ['gpt-test', 'model-b']);
+  assert.deepEqual(llm.modelStatus().find((m) => m.model === 'gpt-test').roles, ['write', 'marketplace']);
+  assert.deepEqual(llm.modelStatus().find((m) => m.model === 'model-b').roles, ['read', 'lessons']);
+});
+
+test("the month's budget: an estimate from the owner's price file, a warning at 80%, and free models only for the small jobs at 100%", async () => {
+  const budget = await import('../src/budget.js');
+  const file = config.aiPricesPath;
+  fs.rmSync(file, { force: true });
+  budget.forgetPrices();
+  // No file: one is written with every known model and no price, so nothing can be costed yet.
+  let b = budget.budgetStatus();
+  const written = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.deepEqual(written.models['openai/gpt-test'], { in: null, out: null });
+  assert.deepEqual(written.models['gemini/model-a'], { in: null, out: null });
+  assert.deepEqual(written.models['openrouter/google/gemma-4-31b-it:free'], { in: 0, out: 0 }, 'named free, so free');
+  assert.equal(written.audPerUsd, 1.55);
+  assert.ok(/openai.com\/api\/pricing/.test(written._note), 'the note says where the prices are');
+  assert.equal(b.level, 'ok');
+  assert.equal(b.budgetAud, 50);
+  // The owner fills in two prices: ChatGPT at US$2 in and US$10 out per million tokens, the small model free.
+  fs.writeFileSync(file, JSON.stringify({ audPerUsd: 1.5, models: { 'openai/gpt-test': { in: 2, out: 10 }, 'gemini/model-b': { in: 0, out: 0 } } }));
+  budget.forgetPrices();
+  assert.equal(budget.isFree('gemini', 'model-b'), true);
+  assert.equal(budget.isFree('openai', 'gpt-test'), false);
+  assert.equal(budget.isFree('gemini', 'model-a'), false, 'no price is not free');
+  assert.equal(budget.isPriced('gemini', 'model-a'), false);
+  assert.equal(budget.costAud({ provider: 'openai', model: 'gpt-test', tokensIn: 1_000_000, tokensOut: 100_000 }, 1.5), 4.5, '(2 + 1) US dollars at 1.5');
+  assert.equal(budget.costAud({ provider: 'gemini', model: 'model-a', tokensIn: 10 }), null);
+  assert.equal(budget.nextMonthStart('2026-12-03'), '2027-01-01');
+  assert.equal(budget.nextMonthStart('2026-10-12'), '2026-11-01');
+
+  const kept = config.llm.monthlyBudgetAud;
+  config.llm.monthlyBudgetAud = 2.5;
+  try {
+    // One request: 500,000 tokens in and 50,000 out on ChatGPT is US$1.50, A$2.25: past four fifths of A$2.50.
+    const before = budget.budgetStatus().spentAud;
+    ai.setRoleChoice('write', { provider: 'openai', model: 'gpt-test' });
+    chatAnswer = () => ({ status: 200, json: { ...OK_REPLY, usage: { prompt_tokens: 500_000, completion_tokens: 50_000, total_tokens: 550_000 } } });
+    await llm.complete('s', 'u');
+    b = budget.budgetStatus();
+    assert.equal(Math.round((b.spentAud - before) * 100) / 100, 2.25);
+    assert.equal(b.level, 'warn');
+    assert.ok(b.byModel.find((r) => r.model === 'gpt-test').aud >= 2.25);
+    assert.ok(b.unpriced.includes('gemini/model-a'), 'a model asked this month with no price is listed, so the owner fills it in');
+    assert.equal(b.priced, true);
+    assert.equal(b.resetsOn, budget.nextMonthStart(b.month + '-01'));
+
+    // Over the budget: the small jobs keep to models known to be free; the dashboard carries on.
+    config.llm.monthlyBudgetAud = 1;
+    ai.setRoleChoice('marketplace', { provider: 'openai', model: 'gpt-test' });
+    assert.deepEqual(models(llm.providers({ role: 'marketplace' })), ['model-b'], 'the paid model is left out while the budget is used');
+    seen.length = 0;
+    const chat = await llm.complete('s', 'u', { role: 'marketplace' });
+    assert.equal(chat.model, 'model-b');
+    assert.deepEqual(chats().map((c) => c.body.model), ['model-b']);
+    seen.length = 0;
+    assert.equal((await llm.complete('s', 'u')).model, 'gpt-test', 'dashboard suggestions continue');
+    // With no free model for a small job, a plain message says so, and when it starts again.
+    const keptGemini = config.llm.gemini.apiKey;
+    config.llm.gemini.apiKey = '';
+    try {
+      await assert.rejects(() => llm.complete('s', 'u', { role: 'read' }), (e) => e.budget === true && e.daily === true && /budget of A\$1 is used/.test(e.message) && /starts again on/.test(e.message));
+    } finally { config.llm.gemini.apiKey = keptGemini; }
+
+    // The page and the status bar read the same figures, and a job's choice is kept through the route.
+    const offer = await call('GET', '/api/ai');
+    assert.equal(offer.json.budget.level, 'over');
+    assert.equal(offer.json.budget.budgetAud, 1);
+    assert.equal(offer.json.smallModel, 'model-b');
+    assert.deepEqual(offer.json.roles.map((r) => r.role), ['write', 'read', 'marketplace', 'lessons']);
+    const mp = offer.json.roles.find((r) => r.role === 'marketplace');
+    assert.equal(mp.choice.model, 'gpt-test');
+    assert.deepEqual(mp.writing, { provider: 'gemini', model: 'model-b' }, 'what writes for the job while the budget is used');
+    const chosen = await call('POST', '/api/ai/choice', { role: 'lessons', provider: 'gemini', model: 'model-a' });
+    assert.equal(chosen.status, 200);
+    assert.equal(chosen.json.roles.lessons.model, 'model-a');
+    assert.equal(chosen.json.status.ai.budget.level, 'over');
+    assert.equal(chosen.json.status.ai.budget.spentAud, budget.budgetStatus().spentAud, 'the status bar reads the same figure as the panel');
+    assert.equal((await call('POST', '/api/ai/choice', { role: 'driving', provider: 'gemini', model: 'model-a' })).status, 400);
+    // The customer read is counted by model, not against the day's cap of suggestions.
+    config.llm.monthlyBudgetAud = 50;
+    const cap = llm.usage().total;
+    const byModel = llm.usageDetail().today.find((r) => r.model === 'model-b')?.requests || 0;
+    seen.length = 0;
+    await llm.complete('s', 'u', { role: 'read', maxTokens: 300 });
+    assert.equal(chats()[0].body.max_tokens, 300, 'a short answer is all a read needs');
+    assert.equal(llm.usage().total, cap, 'not counted against the cap');
+    assert.equal(llm.usageDetail().today.find((r) => r.model === 'model-b').requests, byModel + 1, 'but counted by model');
+  } finally { config.llm.monthlyBudgetAud = kept; fs.rmSync(file, { force: true }); budget.forgetPrices(); }
 });
