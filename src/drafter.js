@@ -228,7 +228,7 @@ export function draftFor(item, opts = {}) {
   return flight.promise;
 }
 
-async function writeDraft(item, { instruction = '', coaching = null, save = true, holdOutConversation = true, now = Date.now() } = {}, flight) {
+async function writeDraft(item, { instruction = '', coaching = null, save = true, holdOutConversation = true, now = Date.now(), pin = null } = {}, flight) {
   // Keeps the finished draft, unless it is a plain write that finished after a reply from the
   // owner's own words was written for the same message: then the owner's stands and this one goes,
   // whether it came out ready or failed.
@@ -326,7 +326,8 @@ async function writeDraft(item, { instruction = '', coaching = null, save = true
     const standardOpening = () => ({ json: { reply: plan.opening, needs_human: [], facts_used: [], hold: false }, provider: 'none', model: 'standard wording' });
     const usable = (e) => plan?.stage === 'offer' && e instanceof LlmError && e.status !== 401 && e.status !== 403;
     // Marketplace chats are the Marketplace job: the small model, so the better ones stay with dashboard customers.
-    const which = { role: chat ? 'marketplace' : 'write' };
+    // A script (the review) may pin one model; otherwise the job's own list.
+    const which = { role: chat ? 'marketplace' : 'write', pin };
     let result;
     try { result = await complete(prompt.system, prompt.user, which); }
     catch (e) { if (!usable(e)) throw e; logLine('suggestion', `${item.itemKey}: no AI model for the opening of an auction offer, standard opening used. ${e.detail || e.message}`); result = standardOpening(); }
@@ -362,6 +363,8 @@ async function writeDraft(item, { instruction = '', coaching = null, save = true
       checks: best.checks,
       provider: result.provider,
       model: result.model,
+      // The tokens the answer used, for the review's cost line. Not kept in the database.
+      usage: result.usage || null,
       exampleIds: prompt.exampleIds,
     };
     return persist(draft);

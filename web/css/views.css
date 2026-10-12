@@ -293,3 +293,26 @@
   .signin-note:empty { display: none; }
   .signin .btn { margin-top: var(--sp-2); }
 }
+
+/* The Review page: a run of real conversations written two ways, Left and Right, rated blind. */
+@layer views {
+  .review { display: grid; gap: var(--sp-6); align-content: start; margin: 0 auto; padding: var(--sp-6) var(--sp-4); max-width: 1200px; }
+  .review h1 { margin: 0; font-size: var(--fs-headline); }
+  .review .k { font-size: var(--fs-caption); font-weight: var(--fw-semibold); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .review-strip { display: grid; gap: var(--sp-1); font-size: var(--fs-ui); color: var(--text); }
+  .review-strip p { margin: 0; }
+  .review-case { display: grid; gap: var(--sp-3); padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--sheet); }
+  .review-head { display: flex; flex-wrap: wrap; gap: var(--sp-3); font-size: var(--fs-label); color: var(--muted); }
+  .review-customer { display: grid; gap: var(--sp-1); padding: var(--sp-3); border-radius: var(--r-sm); background: var(--bubble-in); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .review-actual { font-size: var(--fs-ui); }
+  .review-actual summary { cursor: pointer; color: var(--muted); }
+  .review-sides { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-4); }
+  .review-side { display: grid; gap: var(--sp-2); align-content: start; }
+  .review-side p { margin: 0; }
+  .review-reply { padding: var(--sp-3); border-radius: var(--r-sm); background: var(--bubble-out); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .review-side.is-picked .review-reply { outline: 2px solid var(--accent); }
+  .review-checks { display: grid; gap: var(--sp-05); margin: 0; padding: 0; list-style: none; font-size: var(--fs-caption); color: var(--muted); }
+  .review-checks .fail { color: var(--red); }
+  .review-vote { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
+  @media (max-width: 800px) { .review-sides { grid-template-columns: minmax(0, 1fr); } }
+}

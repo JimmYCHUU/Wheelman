@@ -44,6 +44,7 @@ purpose.
 - [How Wheelman learns](#how-wheelman-learns)
 - [Rules as Carbarn confirmed them](#rules-as-carbarn-confirmed-them)
 - [AI models and budget](#ai-models-and-budget)
+- [Reviewing changes side by side](#reviewing-changes-side-by-side)
 - [Privacy](#privacy)
 - [Commands](#commands)
 - [Where your files live](#where-your-files-live)
@@ -1227,6 +1228,40 @@ US$10 credit purchase raises that to 1,000.
 | `AI_PRICES_PATH` | Where the price file is | `data\ai-prices.json` |
 | `DAILY_DRAFT_LIMIT` | Wheelman's own cap on requests a day | `200` |
 
+## Reviewing changes side by side
+
+Before a change to the voice, the playbook or the model is merged, it is judged on real
+conversations, blind. In a terminal:
+
+```bat
+npm.cmd run review -- --b-voice voice-next --n 30 --confirm
+npm.cmd run review -- --a-model openai/gpt-5.6 --b-model gemini/gemini-3.8-flash --n 40 --confirm
+```
+
+Side A is the current voice on the dashboard's model unless `--a-voice` or `--a-model` says
+otherwise; side B must differ in its voice files (a folder holding `house-voice.md` and
+`sales-playbook.md`), its model (`provider/model`, as the cog panel lists them), or both. The
+script takes the last past exchanges that one of our people answered (`--n`, 20 unless set;
+`--first`, `--buyers`, `--since 60` and `--situation price_negotiation` narrow them), writes each
+one both ways as if the real answer had not been sent, and saves the run under `data\review\`.
+When a paid model is in the run it prints the requests it will make and the estimated cost from
+`data\ai-prices.json`, caps the run at 40 cases, refuses a run that would pass the month's budget,
+and needs `--confirm`.
+
+Then open http://localhost:3210/review. Each case shows what the customer wrote, the team's real
+reply folded away, and the two suggestions as Left and Right, shuffled on every case so the rating
+is blind, with their checks and their sales score. **Left is better**, **Right is better** or
+**Both poor** (keys 1, 2 and 3 for the next unrated case) saves the vote to the run file at once
+and then says which side was A. The top of the page keeps the tally: wins per side, both poor, the
+sales score out of 6, hard-check failures, median words and the estimated cost, and the wins by
+kind of message. The runs hold real customer text, so they live under `data\` and the page is
+refused through the team link.
+
+The sales score, out of six, is what the review, `npm run replay` and `npm run report` judge a
+reply by: a next step; a question only when one was needed; the right length for the channel; the
+brand register (no slang, no apologising, no emoji, at most one exclamation mark); no urgency or
+claim outside what the records allow; and the block or the proof that was due.
+
 ## Privacy
 
 - Customer details are removed before any text goes to an AI service (RULE-2). Free AI
@@ -1270,6 +1305,7 @@ US$10 credit purchase raises that to 1,000.
 | `npm run check-login` | Tests the dashboard login |
 | `npm run check-model` | Tests the AI keys and shows which models answer |
 | `npm run replay` | Compares suggestions with real past replies. `-- 60` for 60 cases, `-- --buyers` or `-- --first` for one kind |
+| `npm run review` | Writes the same real conversations two ways for the Review page. `-- --b-voice <folder>` or `-- --b-model provider/model`; `-- --n 40`; `-- --confirm` when a paid model is in the run |
 | `npm run report` | Counts how suggestions were used and which checks fired. `-- 30` for 30 days |
 | `npm run check-private` | Before a commit: makes sure no setting from `.env`, staff name or key is in a file git would publish |
 | `npm run build-voice` | Rebuilds the example bank from stored conversations |

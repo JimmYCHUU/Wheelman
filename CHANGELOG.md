@@ -6,6 +6,17 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- **Reviewing changes side by side.** `npm run review` writes the same real past conversations
+  two ways, with two voice folders or two models, and the Review page at `/review` shows each
+  pair as Left and Right, shuffled, with **Left is better**, **Right is better** and **Both
+  poor** (keys 1, 2, 3). A vote is saved to the run under `data\review\` and then says which
+  side was A; the top of the page keeps the wins, the sales score, the hard-check failures, the
+  median words and the estimated cost per side. A paid model in the run means the cost is
+  printed first, the run is capped at 40 cases, a run past the month's budget is refused, and
+  `--confirm` is needed. The page is refused through the team link. The sales score is now six
+  points in the brand register: a next step, a question only when needed, the length, the
+  register, no urgency, and the block or proof that was due; `npm run replay` and `npm run
+  report` judge by it too. (The owner, 12 Oct 2026: he judges changes by seeing them side by side.)
 - **One model per job, and a monthly budget.** The AI has four jobs: the dashboard, import
   and auction replies; the customer read; Marketplace chats; and the lessons taken from your
   notes. Each has its own model, chosen on the page from the cog: pick the job, then the

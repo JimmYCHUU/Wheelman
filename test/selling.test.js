@@ -132,11 +132,11 @@ test('the checks refuse pressure and unbacked claims, and warn on filler, two qu
 test('the replay score', () => {
   const good = selling.salesScore({ body: 'Yes, the Noah is here with the auction sheet to match. You are welcome to come and see it any day.', rung: 'interest', situations: ['availability'], firstReply: true });
   assert.equal(good.score, 6, JSON.stringify(good.parts));
-  const poor = selling.salesScore({ body: 'Yes, it is available. Other buyers are interested. Let us know if you have any questions. Cash? Finance?', rung: 'interest', situations: ['availability'] });
-  assert.ok(poor.score <= 3);
-  assert.ok(poor.notes.includes('filler') && poor.notes.includes('urgency') && poor.notes.includes('more than one question'));
+  const poor = selling.salesScore({ body: 'No worries mate, it is available. Other buyers are interested. Cash? Finance?', rung: 'interest', situations: ['availability'] });
+  assert.ok(poor.score <= 3, JSON.stringify(poor.parts));
+  assert.ok(poor.notes.includes('informal or apologetic wording') && poor.notes.includes('urgency or a claim') && poor.notes.includes('a question that was not needed, or a needed one missing'), poor.notes.join(' | '));
   const proofless = selling.salesScore({ body: 'It has done 60,000 km. You are welcome to come and see it.', rung: 'proof', situations: ['history_kms'] });
-  assert.equal(proofless.parts.proof, false);
+  assert.equal(proofless.parts.dueBlocks, false);
 });
 
 // ---- through the drafter, with the stand-in AI ------------------------------------------------------

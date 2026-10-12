@@ -40,6 +40,7 @@ import { blankMatcher } from '../web/lib/blank.js';
 import { share, viaTunnel, signedIn, checkPassword, signinToken, signinCookie, tooManyTries, noteWrong, clearWrong } from './share.js';
 import { PROVIDERS, PROVIDER_ORDER, aiChoice, setAiChoice, listModels, saveKey, ROLES, ROLE_LABELS, roleChoice, setRoleChoice, allRoleChoices } from './aimodels.js';
 import { budgetStatus } from './budget.js';
+import { listRuns, readRun, vote as reviewVote, summarise } from './review.js';
 import { providers as aiProviders, usageDetail } from './llm.js';
 
 const TYPES = { '.woff2': 'font/woff2', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
@@ -866,6 +867,21 @@ async function api(req, res, url) {
     return send(res, 200, { item: present(itemFromKey(draft.item_key) || item), ok: next.status === 'ready', error: next.error || '', learned: true, lessons: result.lessons || [], pending: !!result.pending });
   }
 
+  // The Review page's runs: real conversations written two ways, and the owner's votes. The runs
+  // hold real customer text, so they are never served through the team link.
+  if (p === '/api/review' || p.startsWith('/api/review/')) {
+    if (viaTunnel(req)) return send(res, 403, { error: 'The Review page can only be used on the computer Wheelman runs on.' });
+    if (req.method === 'GET' && p === '/api/review') return send(res, 200, { runs: listRuns() });
+    const m = p.match(/^\/api\/review\/([\w.-]+)(\/vote)?$/);
+    if (!m) return send(res, 404, { error: 'Not found' });
+    if (req.method === 'GET' && !m[2]) { const run = readRun(m[1]); return run ? send(res, 200, { ...run, summary: summarise(run) }) : send(res, 404, { error: 'That review run is not here.' }); }
+    if (req.method === 'POST' && m[2]) {
+      const body = await readBody(req);
+      try { return send(res, 200, reviewVote(m[1], body.case, String(body.pick || ''))); } catch (e) { return send(res, e.status || 500, { error: e.message }); }
+    }
+    return send(res, 405, { error: 'Not allowed' });
+  }
+
   return send(res, 404, { error: 'Not found' });
 }
 
@@ -937,6 +953,11 @@ export function startServer() {
       const url = new URL(req.url, 'http://127.0.0.1');
       if (viaTunnel(req) && await gate(req, res, url)) return;
       if (!allowed(req, url.pathname)) return send(res, 403, { error: 'This page can only be used from this computer.' });
+      // The Review page itself: on this computer only, like the runs it shows.
+      if (/^\/review(\.html)?$/.test(url.pathname)) {
+        if (viaTunnel(req)) return send(res, 403, { error: 'The Review page can only be used on the computer Wheelman runs on.' });
+        url.pathname = '/review.html';
+      }
       if (url.pathname.startsWith('/api/')) return await api(req, res, url);
       if (req.method !== 'GET') return send(res, 405, { error: 'Not allowed' });
       return serveStatic(res, url);

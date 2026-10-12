@@ -25,6 +25,8 @@ export const config = {
   // The prices of the AI models, in the owner's hand: what each provider charges per million
   // tokens, for the month's estimate on the page. Written with blanks on first start.
   aiPricesPath: env.AI_PRICES_PATH || path.join(root, 'data', 'ai-prices.json'),
+  // The review runs (scripts/review.js): real customer text, so under data/, which git never sees.
+  reviewDir: env.REVIEW_DIR || path.join(root, 'data', 'review'),
 
   dashboard: {
     // The address of the dashboard's data service. Set in .env; it is not written in the code.
