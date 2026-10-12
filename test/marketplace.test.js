@@ -234,8 +234,9 @@ test('a long Marketplace reply is flagged, and a price difference with the Faceb
 
 test('on Marketplace the booking link and the car\'s page link go in the reply itself, and pass the checks', async () => {
   const { items, drafter } = await load();
-  // 503: "Can I come and see it on Saturday?" No standard block follows a Marketplace reply, so
-  // the AI is asked to write the booking link itself, and a reply that carries it passes.
+  // 503: "Can I come and see it on Saturday?" No standard block follows a Marketplace reply, but
+  // the invitation with the booking link is added under the lines, in the owner's words, so a
+  // reply that carries the link itself passes with the AI's own link line dropped.
   const item = items.itemFromKey('mp:503');
   const url = item.vehicles[0].url;
   assert.ok(url, 'the listing is matched to a car with a page');
@@ -245,8 +246,7 @@ test('on Marketplace the booking link and the car\'s page link go in the reply i
   assert.equal(aiSeen.length, 1, 'accepted first time');
   const asked = aiSeen[0].messages[1].content;
   assert.match(asked, /=== INSPECTION ===/);
-  assert.match(asked, /give this in-person booking link/);
-  assert.ok(!/added under your text automatically/.test(asked), 'the AI writes the link itself');
+  assert.match(asked, /The invitation and the booking link are added under your text automatically/);
   assert.ok(!/=== STANDARD FIRST REPLY ===/.test(asked));
   assert.match(aiSeen[0].messages[0].content, /Links are given here as they are in a text message/);
   assert.equal(d.status, 'ready');

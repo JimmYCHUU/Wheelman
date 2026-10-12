@@ -265,7 +265,7 @@ function askedEarlier(item, now, online = false) {
  * must: the reply is expected to carry the link (the customer asked now, or our staff asked for it).
  */
 export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction = '', now = Date.now() } = {}) {
-  const none = { kind: null, url: '', urls: [], lines: [], must: false };
+  const none = { kind: null, url: '', urls: [], lines: [], must: false, block: false };
   if (item.deal) return none; // a buyer is not asking to inspect a car on offer
   const said = item.timeline.filter((e) => e.who === 'customer').slice(-8).map((e) => `${e.text || ''} ${e.event || ''}`).join('\n');
   // 'said': the customer wrote that they are far away. 'record': only their lead record says so.
@@ -283,11 +283,11 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
   const must = asksNow || staffAsked || farNow;
   const why = asksNow ? 'The customer wants to see this vehicle.'
     : staffAsked ? 'Our staff asked, in their instruction for this draft, for the inspection booking link.'
-      : visiting ? 'The customer asked where we are or when we are open, which usually means they plan to visit. Answer their question first, then offer the inspection booking link as well, so they can choose a time.'
+      : visiting ? 'The customer asked where we are or when we are open, which usually means they plan to visit. Answer their question first; the invitation to inspect, with the booking link, follows your text.'
       : saidFar ? 'Earlier in this conversation the customer asked to see this vehicle.'
-        : 'Earlier in this conversation the customer asked to see this vehicle, and we have not sent them the booking link yet. Add it to this reply, in one line, so they can choose a time.';
+        : 'Earlier in this conversation the customer asked to see this vehicle, and we have not sent them the booking link yet. The invitation with the link is added under your text.';
   // On a brand-new dashboard enquiry the standard block follows the reply, so the address is not
-  // typed again. A Marketplace chat has no block: the booking link goes in the reply itself.
+  // typed again. On Marketplace there is no block, but the invitation is still added under the lines.
   const chat = item.channel === 'marketplace';
   const blockFollows = !!item.isNewEnquiry && !chat;
   if (!vehicle || !vehicle.url) {
@@ -305,33 +305,55 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
     return { ...none, lines: ['The customer wants to see this vehicle, but it is not ready at the Lidcombe yard yet (see Availability). It cannot be inspected in person or by video yet. Do not give a booking link. Say we will let them know as soon as it can be inspected.'] };
   }
   const links = inspectionLinks(vehicle);
-  // On a first reply the standard block carries the booking link, when it has a place for one.
-  const inBlock = blockFollows && blockCarries('inspection_url');
+  // The invitation is always open and in the owner's words: code adds it under the AI's lines.
+  const added = '- The invitation and the booking link are added under your text automatically, in our own words: do not write the link, a day, a time or a slot, and do not point to them.';
   if (saidFar) {
-    return { kind: 'online', url: links.online, urls: [links.online], must, lines: [
+    return { kind: 'online', url: links.online, urls: [links.online], must, block: true, lines: [
       `${why} They have said they are far from Sydney, or cannot come.`,
-      inBlock
-        ? '- Offer an online video inspection: a live video call on WhatsApp or FaceTime where we walk around the vehicle with them. Say they can book a day and time that suits them. The link itself is added under your text automatically ("Book your inspection:"), so do not write it and do not point to it.'
-        : `- Offer an online video inspection: a live video call on WhatsApp or FaceTime where we walk around the vehicle with them. Give this booking link so they can choose a day and time: ${links.online}`,
+      '- Offer an online video inspection: a live video call on WhatsApp or FaceTime where we walk around the vehicle with them.',
+      added,
       '- Do not ask them to come to Lidcombe, and do not give the in-person booking link.',
       '- If it helps, add that we deliver Australia-wide. A delivery price is quoted by a person.',
     ] };
   }
-  return { kind: 'onsite', url: links.onsite, urls: [links.onsite, links.online], must, lines: [
+  return { kind: 'onsite', url: links.onsite, urls: [links.onsite, links.online], must, block: true, lines: [
     why,
-    inBlock
-      ? '- Tell them they are welcome to inspect it at our Lidcombe yard and can book a time that suits them. The link itself is added under your text automatically ("Book your inspection:"), so do not write it and do not point to it.'
-      : `- Tell them they are welcome to inspect it at our Lidcombe yard, and give this in-person booking link so they can choose a day and time: ${links.onsite}`,
-    inBlock
-      ? '- If they have already named a day, say that day is fine. If they also named a time inside our opening hours, confirm it in a line ("See you ...").'
-      : '- If they have already named a day and a time inside our opening hours, confirm it in a line ("See you ...") instead; the link is then optional. If they named only a day, say that day is fine and still give the link so they can choose a time.',
-    blockFollows
-      ? '- Our address and opening hours follow your text automatically (see STANDARD FIRST REPLY). Do not write them.'
-      : chat ? '- Ask them to message or call before visiting.' : '- Ask them to call or text before visiting.',
+    '- Tell them they are welcome to inspect it at our Lidcombe yard.',
+    added,
+    '- If they have already named a day and a time inside our opening hours, confirm it in a line ("See you ..."); the invitation is then left out. If they named only a day, say that day is fine.',
+    blockFollows ? '- Our address and opening hours follow your text automatically (see STANDARD FIRST REPLY). Do not write them.' : '',
     where.source === 'record'
       ? `- They may not be near Sydney. Add, as an option only, that if they cannot make it to Lidcombe they can book an online video inspection (a video call on WhatsApp or FaceTime): ${links.online} Do not say or imply where the customer lives.`
-      : `- Only if they say they live far away or cannot come, give the online video inspection link instead: ${links.online}`,
-  ] };
+      : '',
+  ].filter(Boolean) };
+}
+
+/**
+ * The price question: the best price, a discount, or an offer. The owner's standard price reply
+ * (voice/price-reply.md) is added under the AI's lines by code: what the price includes from the
+ * car's own Included list, that government charges are extra, that we may offer a small discount
+ * to a serious buyer, and the invitation with the booking link when the car can be seen. The AI
+ * writes only the greeting and one or two sentences around it, with no figure.
+ */
+export function pricePlan(item, vehicle = item.vehicles[0], { gone = false, owner = false } = {}) {
+  const off = { on: false, inspectionUrl: '', online: false, lines: [] };
+  if (!item.situation.all.includes('price_negotiation') || item.deal || item.channel === 'email' || !vehicle?.url || gone || owner) return off;
+  const a = availability(vehicle);
+  if (a.code === 'sold') return off;
+  const canInspect = a.code === 'available' && !reservedByAnother(vehicle);
+  const said = item.timeline.filter((e) => e.who === 'customer').slice(-8).map((e) => `${e.text || ''} ${e.event || ''}`).join('\n');
+  const where = farAway(said, item.lead?.state);
+  const online = where.far && where.source === 'said';
+  const links = inspectionLinks(vehicle);
+  return {
+    on: true, online, inspectionUrl: canInspect ? (online ? links.online : links.onsite) : '',
+    lines: [
+      'The customer asked about the price: the best price, a discount, or an offer. Our standard price reply is added under your text automatically, in our own words: what the price includes, that government charges are extra, that we may offer a small discount to a serious buyer, and the invitation with the booking link and how to arrange a time.',
+      'Write only the greeting, when one is due, and one or two sentences that answer anything else they asked and place the vehicle: that it is available for inspection at Lidcombe, with one fact that matters. Do not repeat the advertised price, do not name any figure, and do not accept or refuse an offer. Do not write inclusions, a discount, an invitation or a link: the block says them.',
+      'If they named a figure of their own, neither accept nor refuse it: write that we will come back to them on it, with [PRICE?], and list it under needs_human.',
+      canInspect ? '' : 'This vehicle cannot be inspected yet, so the price reply carries no booking link. Say we will let them know as soon as it can be seen.',
+    ].filter(Boolean),
+  };
 }
 
 /**
@@ -352,8 +374,8 @@ export function writtenToday(item, now = Date.now()) {
 export function standardPlan(item, vehicle, { gone = false, owner = false, inspection = null } = {}) {
   if (!item.isNewEnquiry || item.channel === 'marketplace') return { on: false, vehicleUrl: '', inspectionUrl: '', lines: [] };
   const vehicleUrl = vehicle?.url && !gone && !owner ? vehicle.url : '';
-  const inspectionUrl = inspection?.url && blockCarries('inspection_url') ? inspection.url : '';
-  const holds = [vehicleUrl ? "this vehicle's page link" : '', inspectionUrl ? 'the inspection booking link' : '', 'our address', 'the opening hours', 'our phone number'].filter(Boolean);
+  const inspectionUrl = inspection?.url && blockCarries('inspection_invite') ? inspection.url : '';
+  const holds = [vehicleUrl ? "this vehicle's page link" : '', inspectionUrl ? 'the inspection invitation and its booking link' : '', 'our address', 'the opening hours', 'our phone number'].filter(Boolean);
   const atYard = vehicle ? availability(vehicle).code === 'available' : true;
   const lines = [
     'This is a brand-new enquiry. Our standard block is added below your text automatically, exactly as we always send it:',
@@ -369,7 +391,7 @@ export function standardPlan(item, vehicle, { gone = false, owner = false, inspe
   ];
   if (vehicle && !gone && !atYard) lines.push('This vehicle is not at the Lidcombe yard yet (see Availability). Say so in your answer, so the address below is not read as an invitation to come and see it now.');
   lines.push('If you set "hold" to true, the block is not added.');
-  return { on: true, vehicleUrl, inspectionUrl, lines: lines.filter(Boolean) };
+  return { on: true, vehicleUrl, inspectionUrl, online: inspection?.kind === 'online', lines: lines.filter(Boolean) };
 }
 
 const slug = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -494,11 +516,19 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   P.push(`\nFull stock list: ${config.site.baseUrl}/used-cars`);
 
   // Which inspection booking link to offer: in person, or online video for a customer who is far away.
-  const noPlan = { kind: null, url: '', urls: [], lines: [], must: false };
+  const noPlan = { kind: null, url: '', urls: [], lines: [], must: false, block: false };
   const inspection = importPlan || email ? noPlan : inspectionPlan(item, primary, { instruction: [instruction, coaching?.note].filter(Boolean).join('\n'), now });
+  // The price question: the owner's standard price reply is added under the AI's lines by code,
+  // with the invitation inside it, so the inspection plan adds no invitation of its own then.
+  const price = importPlan || email ? { on: false, inspectionUrl: '', online: false, lines: [] } : pricePlan(item, primary, { gone: !!primaryGone, owner: !!primaryOpts.owner });
+  if (price.on) inspection.block = false;
   if (inspection.lines.length) {
     P.push('\n=== INSPECTION ===');
     P.push(inspection.lines.join('\n'));
+  }
+  if (price.on) {
+    P.push('\n=== PRICE REPLY ===');
+    P.push(price.lines.join('\n'));
   }
 
   // The rung the customer is on, the move to make, and the one question allowed.
@@ -508,7 +538,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   }
 
   // An import enquiry has its own closing lines, added by the drafter, in place of the standard block.
-  const standard = importPlan || email ? { on: false, vehicleUrl: '', inspectionUrl: '', lines: [] } : standardPlan(item, primary, { gone: !!primaryGone, owner: !!primaryOpts.owner, inspection });
+  const standard = importPlan || email ? { on: false, vehicleUrl: '', inspectionUrl: '', lines: [] } : standardPlan(item, primary, { gone: !!primaryGone, owner: !!primaryOpts.owner, inspection: price.on ? null : inspection });
   if (standard.on) {
     P.push('\n=== STANDARD FIRST REPLY ===');
     P.push(standard.lines.join('\n'));
@@ -685,6 +715,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     unconfirmedText,
     inspection,
     standard,
+    price,
     stage,
     user: P.join('\n'),
     exampleIds: examples.map((e) => e.id),

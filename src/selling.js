@@ -70,8 +70,8 @@ export const MOVES = {
     question: 'What is your postcode, so we can quote the delivery?',
   },
   invite_before_price: {
-    text: 'Do not repeat the advertised price and never name a lower one. Say in one line what the price includes, from VEHICLE FACTS under Included, and that government charges are extra. Say the price is talked about once they have seen the car, and invite them to see it.',
-    question: 'Are you paying cash, or going through finance?',
+    text: 'The price question. Our standard price reply is added under your text by code (see PRICE REPLY): what the price includes, that government charges are extra, that we may offer a small discount to a serious buyer, and the invitation with the booking link. Write only the greeting when one is due and one or two sentences that answer anything else asked and place the vehicle. Do not repeat the advertised price, name no figure, and neither accept nor refuse an offer: a figure is [PRICE?] for a person.',
+    question: '',
   },
   ask_trade_in_details: {
     text: 'Say we take trade-ins against a car from our stock, and list what we need so a figure is ready before they come: the rego number and state, the kilometres, the condition, and a few clear photos. The value is confirmed on inspection and a person decides it: [TRADE-IN VALUE?] if a figure is asked for.',

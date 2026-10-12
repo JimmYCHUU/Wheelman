@@ -66,8 +66,7 @@ Customer:
 What's your best price on the Hiace?
 Reply:
 Hi {{NAME}},
-The price includes 6 months NSW rego, a fresh blue slip, CTP, a full service and delivery within Greater Sydney. Government charges are extra.
-We talk price once you have seen the van. Are you paying cash, or going through finance?
+The Hiace is here at Lidcombe and ready to see any day.
 
 ## 4. History and the auction sheet
 Situation: history_kms
@@ -235,8 +234,7 @@ Customer:
 Can you do $31,000?
 Reply:
 Hi {{NAME}},
-We talk price once you have seen the van, so come and have a look first.
-It comes with 6 months rego, a fresh blue slip, CTP, a full service and delivery within Greater Sydney. Would a weekday after work or Saturday morning suit you?
+Thank you for the offer. The listed price reflects everything that comes with the van, and we would be pleased to go through it with you when you see it.
 
 ## 17. Hold it for me
 Situation: deposit_hold
@@ -329,7 +327,6 @@ Actually I'm in Melbourne so can't come up. Any other way to see it?
 Reply:
 Hi {{NAME}},
 No worries. Most of our interstate buyers do a live video inspection on WhatsApp or FaceTime, where we walk around the car with you, and then we send it down by car carrier.
-Book a time here: {online_link}
 What is your postcode, so we can quote the delivery?
 
 ## 23. Kilometres seem high
@@ -374,8 +371,7 @@ Customer:
 Is the price negotiable if I pay cash?
 Reply:
 Hi {{NAME}},
-We prefer bank transfer, and we talk price once you have seen the car. It comes with 6 months rego, a fresh blue slip, CTP, a full service and the 5-year warranty.
-Would a weekday after work or Saturday morning suit you?
+We accept bank transfer, card and cash, and bank transfer is preferred. The N-Box is here at Lidcombe and you are welcome to see it any day.
 
 ## 26. Interstate rego
 Situation: rego_roadworthy delivery_interstate
@@ -466,8 +462,7 @@ Customer:
 Can I come Saturday morning to see it?
 Reply:
 Hi {{NAME}},
-Saturday morning is fine. Book a time here so it is out the front for you: {onsite_link}
-Please text before you set off, and bring your licence if you would like to drive it.
+Saturday morning is fine, and the car will be out the front for you. Bring your licence if you would like to drive it.
 
 ## 32. Marketplace: still available
 Situation: availability
@@ -489,7 +484,7 @@ Name: Remy
 Customer:
 Best price?
 Reply:
-The price includes 6 months rego, a fresh blue slip, CTP, a full service and delivery within Sydney. We talk price once you have seen the van. Cash or finance?
+It is available, and you are welcome to see it any day.
 
 ## 34. Marketplace: come tomorrow
 Situation: inspection_booking
@@ -500,7 +495,7 @@ Name: Nina
 Customer:
 Can I come see it tomorrow?
 Reply:
-Yes, tomorrow is fine. Book a time here and it will be out the front for you: {onsite_link}
+Yes, tomorrow is fine, and it will be out the front for you.
 
 ## 35. Marketplace: far away
 Situation: delivery_interstate inspection_booking
@@ -511,7 +506,7 @@ Name: Dana
 Customer:
 I'm in Newcastle, can you do a video call so I can see it?
 Reply:
-Yes, we do live video inspections on WhatsApp or FaceTime and deliver by car carrier. Book a time here: {online_link}
+Yes, we do live video inspections on WhatsApp or FaceTime and deliver by car carrier.
 
 ## 36. Marketplace: accident history
 Situation: history_kms

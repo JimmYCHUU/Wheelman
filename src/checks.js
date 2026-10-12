@@ -210,7 +210,7 @@ function figureProblems(replyBody, trustedText, customerText = '', policyText = 
  *   nextStep     what the model said its next step was
  *   now          when the reply would be sent
  */
-export function checkDraft({ reply, body, needsHuman = [], allowedText = '', policyText = '', customerText = '', instruction = '', situation = null, hold = false, examples = [], inConversation = false, channel = 'sms', said = null, stage = null, nextStep = '', now = Date.now() }) {
+export function checkDraft({ reply, body, needsHuman = [], allowedText = '', policyText = '', customerText = '', instruction = '', situation = null, hold = false, examples = [], inConversation = false, channel = 'sms', said = null, stage = null, nextStep = '', now = Date.now(), advertisedPrice = 0, blockNextStep = false }) {
   const results = [];
   const add = (level, code, message, tokens = []) => results.push({ level, code, message, tokens });
   const allowed = `${allowedText}\n${instruction}\n${config.site.phone}\n${config.signOff}`;
@@ -220,6 +220,12 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   const figures = figureProblems(body, allowed, customerText, policyText);
   if (figures.unknown.length) add('fail', 'figure', figures.unknown.length === 1 ? `Check this figure: ${figures.unknown[0]} is not in your records.` : `Check these figures: ${figures.unknown.join(', ')} are not in your records.`, figures.unknown);
   if (figures.customerOnly.length) add('fail', 'customer-figure', `${figures.customerOnly.join(', ')} is a figure only the customer mentioned. It is not a price from your records.`, figures.customerOnly);
+  // A dollar figure below the advertised price that the records do not back is a discount the AI made up.
+  if (advertisedPrice > 0 && figures.unknown.length) {
+    const value = (raw) => { let n = normNum(raw); if (/k$/.test(n)) n = String(Math.round(parseFloat(n) * 1000)); return Number(n); };
+    const low = figures.unknown.filter((raw) => /^\$|k$/i.test(raw) && value(raw) >= advertisedPrice * 0.5 && value(raw) < advertisedPrice);
+    if (low.length) add('fail', 'price-floor', `${low.join(', ')} is below the advertised price. Never name a lower figure: the standard price reply is added under your text, and a counter-offer is [PRICE?] for a person.`, low);
+  }
 
   const allowedUrls = new Set(findUrls(`${allowed}\n${policyText}\n${customerText}`).map((u) => u.toLowerCase().replace(/\/$/, '')));
   const badUrls = findUrls(body).filter((u) => !allowedUrls.has(u.toLowerCase().replace(/\/$/, '')));
@@ -275,7 +281,8 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   if (urgency) add('fail', 'urgency', `"${urgency[0]}": never say that other people are interested, that the car is selling fast or that the price will change.`, [urgency[0]]);
   const stays = String(body).match(STAYS_FOR_SALE);
   if (stays && !stage?.allowsUrgency) add('warn', 'urgency', 'Says the deposit takes the car off the market. Say this only once the customer has shown real interest: booked to see it, seen it, or asked to hold it.', [stays[0]]);
-  if (stage && !hold && stage.rung !== 'buyer' && stage.move !== 'hold' && stage.move !== 'accept_no' && !/\?/.test(body) && !findUrls(body).length && !NEXT_STEP_SIGNS.test(body)) {
+  // A price reply or an invitation under the text is a next step in itself (blockNextStep).
+  if (stage && !hold && !blockNextStep && stage.rung !== 'buyer' && stage.move !== 'hold' && stage.move !== 'accept_no' && !/\?/.test(body) && !findUrls(body).length && !NEXT_STEP_SIGNS.test(body)) {
     add('warn', 'next-step', `No next step offered${String(nextStep || '').trim() ? ` (the model called its next step "${String(nextStep).trim().slice(0, 60)}")` : ''}. Aim for: ${stage.aim}.`);
   }
 
@@ -306,6 +313,7 @@ export function retryNote(checks, { channel = 'sms' } = {}) {
       : '\nDo not swap one day or time for another. Where the day or time of something we will do is not given by our staff, write "shortly" or use [DATE?]. Where nobody on our side agreed to do something, say we will check and come back to them.') : '')
     + (fails.some((c) => c.code === 'vague-answer' || c.code === 'model-unanswered') ? '\nNever write that we will check, look into, confirm, get back to them or update them later. Give the answer from RESEARCH FOR THIS IMPORT QUESTION. Where RESEARCH has no answer, write the sentence anyway with the matching blank ([ELIGIBILITY?], [LANDED COST?], [DEPOSIT?], [TIMELINE?] or [CHECK?]) and say what it stands for. Every model code the customer named must be answered: eligible or not, with its figure or its blank.' : '')
     + (fails.some((c) => c.code === 'urgency') ? '\nDo not say or imply that other people are interested, that the car is selling fast, or that the price will change. If the request allows urgency, the one true fact is that a $1,000 refundable holding deposit takes the car off the market; otherwise say nothing about urgency.' : '')
+    + (fails.some((c) => c.code === 'price-floor') ? '\nNever name a figure below the advertised price. The standard price reply is added under your text; a counter-offer is [PRICE?] for a person.' : '')
     + (fails.some((c) => c.code === 'old-address') ? `\nNever write our old address or a map link. Our address is ${CURRENT_ADDRESS}. The block gives it on a first reply; write it yourself only when the customer asked where we are.` : '')
     + (fails.some((c) => c.code === 'claim') ? '\nSay nothing about accidents, condition, approval, cooling-off or warranty beyond what VEHICLE FACTS and BUSINESS FACTS state, in their words.' : '');
 }
