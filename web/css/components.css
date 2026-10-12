@@ -356,6 +356,45 @@
     text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
   }
 
+  /* ---- a dialog over the page: the panel that chooses which AI writes. One card, a few fields, two buttons. */
+  .dialog {
+    width: min(var(--measure-prose), calc(100vw - var(--sp-8))); margin: auto; padding: 0; border: 0;
+    border-radius: var(--r-lg); background: var(--sheet); color: var(--text); box-shadow: var(--shadow-2);
+  }
+  .dialog::backdrop { background: var(--scrim); }
+  .dialog-body { display: grid; gap: var(--sp-4); padding: var(--sp-5); }
+  .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+  .dialog-head h3 { font-size: var(--fs-title); font-weight: var(--fw-semibold); }
+  .dialog-body > p, .dialog .fine { color: var(--muted); font-size: var(--fs-label); }
+  .field { display: grid; gap: var(--sp-1); font-size: var(--fs-label); font-weight: var(--fw-semibold); color: var(--text); }
+  .field .pick { width: 100%; font-weight: var(--fw-medium); }
+  .field input.pick { padding: 0 var(--sp-4); }
+  .check { display: flex; align-items: start; gap: var(--sp-2); font-size: var(--fs-ui); color: var(--text); }
+  .check input { margin-top: var(--sp-1); accent-color: var(--accent); }
+  .check .fine { display: block; margin-top: var(--sp-05); }
+  .keybox { display: grid; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-md); background: var(--blue-soft); color: var(--blue); font-size: var(--fs-ui); }
+  .keybox input { background: var(--sheet); }
+  .dialog-note { font-size: var(--fs-label); font-weight: var(--fw-semibold); color: var(--accent-text); }
+  .dialog-note.bad { color: var(--red); }
+  .dialog-note:empty { display: none; }
+  .dialog-foot { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); flex-wrap: wrap; }
+  .dialog-foot .fine { flex: 1; min-width: 0; }
+  /* An enquiry read as an import enquiry: the line above the message box, and the ruling buttons in the details panel. */
+  .judged { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); padding: var(--sp-2) var(--sp-4); border-radius: var(--r-md); background: var(--blue-soft); color: var(--blue); font-size: var(--fs-label); }
+  .judged p { flex: 1; min-width: 14rem; margin: 0; }
+  .judged .link-btn { color: inherit; }
+  .rulings { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+  /* "Used so far" in the AI panel: each model's requests and tokens, today and this month. */
+  .usage { display: grid; gap: var(--sp-2); }
+  .usage h4 { margin: 0; font-size: var(--fs-label); font-weight: var(--fw-semibold); color: var(--text); }
+  .usage table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--fs-label); color: var(--text); }
+  .usage th, .usage td { padding: var(--sp-1) 0; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+  .usage th { color: var(--muted); font-weight: var(--fw-medium); }
+  .usage th:first-child { width: 36%; }
+  .usage th + th, .usage td + td { padding-left: var(--sp-3); }
+  .usage td .fine { display: block; }
+  .usage .model { font-family: var(--mono); font-size: var(--fs-caption); overflow-wrap: anywhere; }
+
   /* ---- hover, only where there is a real pointer ---------------------------------- */
 
   @media (hover: hover) and (pointer: fine) {

@@ -3,7 +3,7 @@
 [![CI](https://github.com/JimmYCHUU/Wheelman/actions/workflows/ci.yml/badge.svg)](https://github.com/JimmYCHUU/Wheelman/actions/workflows/ci.yml)
 ![Node.js 22.13 or newer](https://img.shields.io/badge/node-%E2%89%A522.13-339933)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-lightgrey)
-![Free AI models](https://img.shields.io/badge/AI-free%20models%20only-blue)
+![AI models](https://img.shields.io/badge/AI-free%20models%2C%20or%20ChatGPT-blue)
 ![Sends only on Send](https://img.shields.io/badge/sending-Marketplace%20Send%20button%20only-orange)
 
 Carbarn's reply assistant. Wheelman reads new enquiries from the Carbarn dashboard and new
@@ -19,7 +19,7 @@ The whole thing is one page in the browser, laid out like a messaging app: conve
 left, one open chat, and the suggestion waiting in the message box. It looks like Carbarn on
 purpose.
 
-`Node.js 24` · `node:sqlite` · `No dependencies` · `Gemini free tier` · `OpenRouter free models`
+`Node.js 24` · `node:sqlite` · `No dependencies` · `Gemini free tier` · `OpenRouter free models` · `ChatGPT (OpenAI), if chosen`
 
 ---
 
@@ -221,6 +221,31 @@ Wheelman reads that list too. For each one it also reads the auction request our
 for that customer (which car, which years, the budget, a target bid), and the conversation as
 usual. The details panel shows it under **Looking for, from Japan**.
 
+### An ordinary enquiry read as an import enquiry
+
+Not every import enquiry arrives on that list. A customer may write in from the contact page,
+or text the yard's number, about a car we bring from Japan. Wheelman reads their own words
+for three signs, in this order: a model code from the website's import-eligible list (JZS161,
+GDH206); a make and model from that list when no such car is on the yard; or the words
+themselves ("can you import", "from Japan", JDM, auction, landed cost, compliance). A customer
+asking about a car in stock is never read this way, and a model name alone is not enough
+("Note" and "March" are models too): the make must be there as well. The list is the one the
+Import Query section reads from the website once a day; without it, only the words count.
+
+When Wheelman reads one, the reply is written the import way, a line above the message box
+says why, and the details panel has an **Import enquiry** section. You have the last word:
+
+- **Not an import enquiry** writes the reply the ordinary way.
+- **Treat as an import enquiry** does the opposite for one Wheelman missed. The details panel
+  offers it on every dashboard conversation.
+- **Move to Import Query** lists the conversation in that section instead, with **Move back
+  to Dashboard** there. It keeps its key, and the reply still goes out from the dashboard.
+
+A ruling is kept with the lead, so it follows into the text conversation that starts later.
+After a ruling the suggestion is written again the new way, unless you had already changed its
+text. The AI is also asked whether an ordinary enquiry looks like an import one; when it thinks
+so, the line offers the same buttons, and nothing changes until you choose.
+
 What the reply is depends on how much we know.
 
 ### We do not know what they are after yet
@@ -357,7 +382,7 @@ needs.
 |---|---|
 | Node.js | 24 (22.13 or newer works) |
 | Dashboard login | Your own Carbarn dashboard username and password |
-| AI key | A free Gemini key from https://aistudio.google.com/apikey |
+| AI key | A free Gemini key from https://aistudio.google.com/apikey, or a ChatGPT (OpenAI) key from https://platform.openai.com/api-keys, which is paid by the request |
 | Backup AI key | Optional. A free OpenRouter key from https://openrouter.ai/keys |
 
 ### One-time setup
@@ -371,6 +396,7 @@ the `=` with no spaces and no quote marks, save, then start Wheelman.
 | `DASHBOARD_USERNAME` | Your dashboard username |
 | `DASHBOARD_PASSWORD` | Your dashboard password |
 | `GEMINI_API_KEY` | The free Gemini key |
+| `OPENAI_API_KEY` | A ChatGPT (OpenAI) key, if you use it. The page can also take one: see [Free AI models](#free-ai-models) |
 | `OPENROUTER_API_KEY` | Optional backup key |
 | `MARKETPLACE_URL` | The address of the Marketplace inbox. Leave empty to keep that section off |
 | `DASHBOARD_ORIGIN` | The address of the dashboard's own website, sent as the origin of each read. Leave empty to use the data service's address |
@@ -1098,27 +1124,68 @@ The business facts themselves are in `knowledge/business-facts.md`.
 
 ## Free AI models
 
-Tried in order; the first that answers is used.
+Three providers can write: Gemini (Google, free tier), ChatGPT (OpenAI, paid by the request)
+and OpenRouter (free models). ChatGPT writes first whenever it has a key; which one writes can
+be chosen on the page.
 
-1. `gemini-3.8-flash`
-2. `gemini-3.7-flash`
-3. `gemini-3.5-flash`
-4. `gemini-3.5-flash-lite`
-5. `google/gemma-4-31b-it:free` (OpenRouter)
-6. `google/gemma-4-26b-a4b-it:free` (OpenRouter)
+### Choosing the AI on the page
 
-Free models are often busy. A busy model is rested for five minutes and the next one is
-tried. Models lower in the list write less polished replies.
+The cog at the top right opens **Which AI writes**. Pick the provider, then the model from the
+list the provider itself offers right now (read with your key and kept for an hour; **Read it
+again** refreshes it), or type a model's name under **Another model…**. **Use this model** keeps
+the choice in the database, so it survives a restart, and the next suggestion comes from it.
+The welcome panel says which model writes, with a **Change** link to the same panel, and the
+tooltip on the status line shows the whole order.
 
-Dashboard customers are asked of the whole list, best first. Marketplace chats start at the
-fourth model, so the first three are kept for dashboard customers. Hovering over the status
-line shows which models are for dashboard customers only.
+A provider without a key is listed as "no key yet". Choosing it shows where to create a key
+and a box to paste it into. The key is tried on the provider first; one the provider rejects
+is not kept. An accepted key is written into the `.env` file on this computer and used at
+once, with no restart. A key can be pasted only on the computer Wheelman runs on, not through
+the team link; the model can be chosen from anywhere the page is open.
+
+ChatGPT has no free allowance: every request is paid for. Wheelman's own cap
+(`DAILY_DRAFT_LIMIT`, 200 a day) is the only limit on it. ChatGPT is asked in its own request
+shape: a reasoning model keeps its own temperature and is given room to think before it
+answers, and a field a model refuses is dropped and the request sent again.
+
+**Used so far**, lower in the same panel, is what the AI has been asked: for each model, the
+requests and tokens today and this month, and the day's count against the cap. Tokens are
+what the paid providers charge for, roughly four letters each; a model's thinking counts as
+tokens out. Wheelman does not know the prices, so what it has cost is on the provider's own
+usage page, linked from the panel. A Gemini key from a project with billing switched on is paid
+by the token too, even though Gemini is listed as a free provider.
+
+### The order models are tried in
+
+The chosen model goes first. With nothing chosen, and after the chosen model when it does not
+answer, the rest follow in this order:
+
+1. `gpt-5.6` (ChatGPT, when it has a key)
+2. `gemini-3.8-flash`
+3. `gemini-3.7-flash`
+4. `gemini-3.5-flash`
+5. `gemini-3.5-flash-lite`
+6. `google/gemma-4-31b-it:free` (OpenRouter)
+7. `google/gemma-4-26b-a4b-it:free` (OpenRouter)
+
+`GEMINI_MODEL`, `OPENAI_MODEL` and `OPENROUTER_MODEL` in `.env` set each provider's first
+model, and `GEMINI_FALLBACK_MODELS`, `OPENAI_FALLBACK_MODELS` and `OPENROUTER_FALLBACK_MODELS`
+the ones after it. Free models are often busy. A busy model is rested for five minutes and the
+next one is tried. Models lower in the list write less polished replies.
+
+Dashboard customers and import emails are asked of the whole list, best first. Marketplace
+chats start at the small model (`MARKETPLACE_MODEL`) and keep to the free models
+after it, so the better ones are kept for dashboard customers and nothing paid is spent on
+Marketplace. Ticking **Use it for Marketplace too** on the panel puts the chosen model first
+for Marketplace as well. Hovering over the status line shows which models are for dashboard
+customers only.
 
 Each free model also has its own daily allowance, and it is small. On 3 October 2026 Gemini
-allowed 20 requests a day to each of the first three models; the fourth has a larger
-allowance. A model that says its day is used up is left alone until the time it gives, and
+allowed 20 requests a day to each of its three better models; the Flash-Lite model has a
+larger allowance. A model that says its day is used up is left alone until the time it gives, and
 the next model carries on, so on a busy day the later suggestions come from the smaller
-models. Hover over the status line at the top of the list to see which models are used up.
+models. A ChatGPT account with no credit left is set aside for an hour in the same way.
+Hover over the status line at the top of the list to see which models are used up.
 When no model can answer, the suggestion is tried again by itself a few minutes later, up to
 three times an hour; nothing red is shown for that. When every model is used up for the day,
 the page says suggestions are paused and when they resume.

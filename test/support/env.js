@@ -18,7 +18,10 @@ export const BASE_ENV = {
   ELIGIBLE_MODELS_PATH: path.join(os.tmpdir(), `wheelman-test-eligible-${process.pid}.json`),
   SIGN_OFF: 'Regards,\\nTeam Carbarn',
   GEMINI_API_KEY: 'test-key',
+  OPENAI_API_KEY: '',
   OPENROUTER_API_KEY: '',
+  // A key pasted on the page is written to the .env file: in tests, a scratch file, never the real one.
+  ENV_PATH: path.join(os.tmpdir(), `wheelman-test-env-${process.pid}`),
   GEMINI_MODEL: 'model-a',
   GEMINI_FALLBACK_MODELS: '',
   SECONDS_BETWEEN_DRAFTS: '0',

@@ -257,6 +257,8 @@ async function writeDraft(item, { instruction = '', coaching = null, save = true
     dealSource: item.deal?.source || null,
     stage: item.deal?.stage || null,
     coached: !!coaching,
+    // An ordinary enquiry read as an import enquiry: why (src/importjudge.js), or the owner's ruling.
+    judged: item.judged ? item.judged.why : null,
   };
   const base = { itemKey: item.itemKey, anchorKey: item.anchorKey, situation: item.situation.primary, instruction, context };
 
@@ -340,6 +342,9 @@ async function writeDraft(item, { instruction = '', coaching = null, save = true
       if (plan?.stage === 'offer' && worst(best.checks) === 'fail') { result = standardOpening(); best = assess(result.json); }
     }
 
+    // The AI's own reading of an ordinary enquiry: it may think the customer wants a car found in
+    // Japan. The page then offers to treat it as an import enquiry; nothing changes by itself.
+    context.aiImport = !chat && !email && !item.order && !item.imports && result.json.import_enquiry === true;
     const draft = {
       ...base,
       status: 'ready',

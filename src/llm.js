@@ -1,5 +1,7 @@
-// Talks to the AI model. Gemini (free tier) is the main provider; OpenRouter is the backup.
-// Both are called through the same chat format.
+// Talks to the AI model. Three providers: Gemini (free tier), ChatGPT (OpenAI, paid) and OpenRouter
+// (free models). All are called through the same chat format, with OpenAI's own names for two of
+// the fields. The page chooses which provider and model write (src/aimodels.js); the others are
+// asked only when it does not answer.
 //
 // Free models are often busy. Each provider has a list of models, best first. A model that
 // reports it is busy is rested for a few minutes and the next one is tried.
@@ -9,8 +11,9 @@
 // until the time it says the allowance returns, and the next model carries on.
 
 import { config } from './config.js';
-import { addUsage, usageToday } from './db.js';
+import { addUsage, usageToday, usageByModel } from './db.js';
 import { sydneyDay, formatSydney } from './time.js';
+import { aiChoice, PROVIDER_ORDER, PROVIDERS, providerLabel } from './aimodels.js';
 
 export class LlmError extends Error {
   constructor(message, { status = 0, provider = '', model = '', retryAfter = 0, daily = false, detail = '' } = {}) {
@@ -46,20 +49,36 @@ export function isDailyLimit(text, seconds = 0) {
 export function resetModelState() { resting.clear(); exhausted.clear(); lastCallAt = 0; }
 
 /**
- * Every provider + model the app may use, in the order they are tried.
- * For Marketplace chats the list starts at the small model: the better models before it are
- * never asked, so their daily allowance is kept for dashboard customers.
+ * Every provider + model the app may use, in the order they are tried. The model chosen on the
+ * page comes first, whether or not the .env file names it; the rest follow in their usual order,
+ * asked only when it does not answer.
+ * For Marketplace chats the list starts at the small model and keeps to the free models: the
+ * better models before it are never asked, so their daily allowance is kept for dashboard
+ * customers, and nothing paid is spent on Marketplace. The chosen model is asked for Marketplace
+ * too only when the page said so (or when it is one of the small free ones already). With no free
+ * model at all, Marketplace uses what there is.
  */
 export function providers({ marketplace = false } = {}) {
-  const out = [];
-  for (const name of ['gemini', 'openrouter']) {
+  const all = [];
+  for (const name of PROVIDER_ORDER) {
     const p = config.llm[name];
-    if (!p.apiKey) continue;
-    for (const model of p.models) out.push({ name, model, url: p.url, apiKey: p.apiKey });
+    if (!p?.apiKey) continue;
+    for (const model of p.models) all.push({ name, model, url: p.url, apiKey: p.apiKey });
   }
-  if (!marketplace || !config.llm.marketplaceModel) return out;
-  const from = out.findIndex((p) => p.model === config.llm.marketplaceModel);
-  return from > 0 ? out.slice(from) : out;
+  const choice = aiChoice();
+  let chosen = null;
+  if (choice && config.llm[choice.provider]?.apiKey) {
+    const p = config.llm[choice.provider];
+    chosen = all.find((x) => x.name === choice.provider && x.model === choice.model) || { name: choice.provider, model: choice.model, url: p.url, apiKey: p.apiKey };
+  }
+  const after = (list) => list.filter((x) => x !== chosen);
+  if (!marketplace || !config.llm.marketplaceModel) return chosen ? [chosen, ...after(all)] : all;
+  const from = all.findIndex((x) => x.model === config.llm.marketplaceModel);
+  const tail = from > 0 ? all.slice(from) : all;
+  const free = tail.filter((x) => PROVIDERS[x.name].free);
+  const small = free.length ? free : tail;
+  if (chosen && (choice.marketplace || small.includes(chosen))) return [chosen, ...after(small)];
+  return small;
 }
 
 export function modelStatus() {
@@ -86,6 +105,30 @@ export function usage() {
   return { ...u, limit: config.llm.dailyLimit, remaining: Math.max(0, config.llm.dailyLimit - u.total) };
 }
 
+/**
+ * What the AI has been asked so far, for the panel on the page: requests and tokens by provider
+ * and model, today and this month (Sydney days), and the day's count against the cap. What the
+ * tokens cost is on each provider's own page; Wheelman does not know the prices.
+ */
+export function usageDetail() {
+  const day = sydneyDay();
+  const month = day.slice(0, 7);
+  return { day, month, usedToday: usageToday(day).total, limit: config.llm.dailyLimit, today: usageByModel({ day }), thisMonth: usageByModel({ prefix: month }) };
+}
+
+/**
+ * The tokens one request used, from the provider's own count: what went in, and what came out
+ * including the model's thinking, which the paid providers charge as output. Gemini folds the
+ * thinking into the total only; OpenAI counts it inside the completion. Null when the provider
+ * gave no count.
+ */
+export function tokenCounts(u) {
+  if (!u || typeof u !== 'object') return null;
+  const n = (v) => Math.max(0, Math.round(Number(v) || 0));
+  const tin = n(u.prompt_tokens);
+  return { in: tin, out: Math.max(n(u.completion_tokens), n(u.total_tokens) - tin) };
+}
+
 /** Finds the JSON object in a model reply, tolerating code fences and stray text. */
 export function parseJsonReply(content) {
   let t = String(content || '').trim();
@@ -99,7 +142,13 @@ export function parseJsonReply(content) {
   throw new LlmError('The AI model did not return a readable answer.');
 }
 
-export async function callModel(p, system, user, { maxTokens = config.llm.maxOutputTokens, timeoutMs = 60000 } = {}) {
+/**
+ * The request one model is sent. Gemini and OpenRouter take the plain chat form. OpenAI's current
+ * models take max_completion_tokens instead of max_tokens; its reasoning ones (the o-series, GPT-5
+ * and later) think before they answer out of the same allowance, keep their own temperature, and
+ * are asked to think briefly, since a text message does not need more.
+ */
+export function requestBody(p, system, user, maxTokens = config.llm.maxOutputTokens) {
   const body = {
     model: p.model,
     messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
@@ -108,31 +157,62 @@ export async function callModel(p, system, user, { maxTokens = config.llm.maxOut
     response_format: { type: 'json_object' },
   };
   if (p.name === 'gemini') body.reasoning_effort = 'low';
+  if (p.name === 'openai') {
+    delete body.max_tokens;
+    const reasoning = /^(o\d|gpt-5)/.test(p.model);
+    body.max_completion_tokens = reasoning ? maxTokens + 4000 : maxTokens;
+    if (reasoning) { delete body.temperature; body.reasoning_effort = 'low'; }
+  }
+  return body;
+}
 
+/**
+ * The field a model's 400 answer names as one it does not take, when the request has it. OpenAI
+ * names the field ("param"); other services only say so in the message.
+ */
+export function unsupportedField(text, body) {
+  const fields = Object.keys(body).filter((k) => k !== 'model' && k !== 'messages');
+  let param = '';
+  try { param = String(JSON.parse(text)?.error?.param || ''); } catch { /* not json */ }
+  if (!param && /unsupported|not supported|does not support|unknown (parameter|field)/i.test(text)) param = fields.find((k) => new RegExp(`\\b${k}\\b`).test(text)) || '';
+  return fields.includes(param) ? param : '';
+}
+
+export async function callModel(p, system, user, { maxTokens = config.llm.maxOutputTokens, timeoutMs = 60000 } = {}) {
+  const body = requestBody(p, system, user, maxTokens);
   const headers = { 'content-type': 'application/json', authorization: `Bearer ${p.apiKey}` };
   if (p.name === 'openrouter') headers['x-title'] = 'Wheelman (Carbarn)';
 
-  let res, text;
-  try {
-    res = await fetch(p.url, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs) });
-    text = await res.text();
-  } catch (e) {
-    throw new LlmError(`${p.model} did not answer in time (${e.name === 'TimeoutError' ? 'timed out' : e.message}).`, { status: 504, provider: p.name, model: p.model });
-  }
-  if (!res.ok) {
+  for (let attempt = 0; ; attempt++) {
+    let res, text;
+    try {
+      res = await fetch(p.url, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs) });
+      text = await res.text();
+    } catch (e) {
+      throw new LlmError(`${p.model} did not answer in time (${e.name === 'TimeoutError' ? 'timed out' : e.message}).`, { status: 504, provider: p.name, model: p.model });
+    }
+    if (res.ok) {
+      let json;
+      try { json = JSON.parse(text); } catch { throw new LlmError(`${p.model} returned an unreadable response.`, { status: 502, provider: p.name, model: p.model }); }
+      const content = json.choices?.[0]?.message?.content;
+      if (!content || !String(content).trim() || /^\s*\{\s*\}\s*$/.test(content)) {
+        throw new LlmError(`${p.model} returned an empty answer (finish reason: ${json.choices?.[0]?.finish_reason || 'unknown'}).`, { status: 502, provider: p.name, model: p.model });
+      }
+      return { content, provider: p.name, model: p.model, usage: tokenCounts(json.usage) };
+    }
+    // A model that does not take one of the fields (a newer or an older one than the request
+    // expects) says which. The request goes again without it, up to twice.
+    if (res.status === 400 && attempt < 2) {
+      const field = unsupportedField(text, body);
+      if (field) { delete body[field]; continue; }
+    }
     const retryAfter = res.status === 429 ? retrySeconds(text, res.headers.get('retry-after')) : Number(res.headers.get('retry-after')) || 0;
     let detail = text.slice(0, 300);
     try { const j = JSON.parse(text); const e = (Array.isArray(j) ? j[0] : j)?.error; detail = [e?.message, e?.metadata?.raw].filter(Boolean).join(' — ').replace(/\s+/g, ' ').slice(0, 300) || detail; } catch { /* keep raw */ }
-    const daily = res.status === 429 && isDailyLimit(text, retryAfter);
+    // An account with no credit left (OpenAI's "insufficient_quota") is set aside like a used-up allowance.
+    const daily = res.status === 429 && (isDailyLimit(text, retryAfter) || /insufficient_quota/i.test(text));
     throw new LlmError(`${p.model} returned ${res.status}: ${detail}`, { status: res.status, provider: p.name, model: p.model, retryAfter, daily });
   }
-  let json;
-  try { json = JSON.parse(text); } catch { throw new LlmError(`${p.model} returned an unreadable response.`, { status: 502, provider: p.name, model: p.model }); }
-  const content = json.choices?.[0]?.message?.content;
-  if (!content || !String(content).trim() || /^\s*\{\s*\}\s*$/.test(content)) {
-    throw new LlmError(`${p.model} returned an empty answer (finish reason: ${json.choices?.[0]?.finish_reason || 'unknown'}).`, { status: 502, provider: p.name, model: p.model });
-  }
-  return { content, provider: p.name, model: p.model };
 }
 
 const isBusy = (status) => [408, 429, 500, 502, 503, 504, 529].includes(status);
@@ -144,7 +224,7 @@ const isBusy = (status) => [408, 429, 500, 502, 503, 504, 529].includes(status);
  */
 export async function complete(system, user, { marketplace = false } = {}) {
   const list = providers({ marketplace });
-  if (!list.length) throw new LlmError('No AI key is filled in. Add GEMINI_API_KEY (or OPENROUTER_API_KEY) to the .env file.');
+  if (!list.length) throw new LlmError('No AI key is filled in. Choose the AI on the page (the cog at the top right) and paste a key there, or add GEMINI_API_KEY, OPENAI_API_KEY or OPENROUTER_API_KEY to the .env file.');
   if (usage().remaining <= 0) throw new LlmError(`Daily limit of ${config.llm.dailyLimit} AI requests reached. It resets at midnight Sydney time.`, { daily: true });
 
   const errors = [];
@@ -165,7 +245,7 @@ export async function complete(system, user, { marketplace = false } = {}) {
       try {
         const out = await callModel(p, system, user);
         const json = parseJsonReply(out.content);
-        addUsage(sydneyDay(), p.name);
+        addUsage(sydneyDay(), p.name, p.model, out.usage);
         resting.delete(key);
         exhausted.delete(key);
         Object.assign(lastAnswered, { provider: p.name, model: p.model, at: Date.now() });
@@ -188,7 +268,7 @@ export async function complete(system, user, { marketplace = false } = {}) {
   const detail = [...new Set(errors)].slice(-4).join(' | ');
   const usable = list.filter((p) => !badKey.has(p.name));
   if (!usable.length) {
-    throw new LlmError(`The AI service rejected the key in the .env file (${[...badKey].join(' and ')}). ${detail}`, { status: 401, detail });
+    throw new LlmError(`The AI service rejected the key in the .env file (${[...badKey].map(providerLabel).join(' and ')}). ${detail}`, { status: 401, detail });
   }
   const now = Date.now();
   const split = marketplace && list.length < providers().length;

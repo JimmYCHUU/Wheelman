@@ -41,6 +41,7 @@ const names = (() => {
 const SHAPES = [
   ['a Google key', /AIza[0-9A-Za-z_\-]{30,}/],
   ['an OpenRouter key', /sk-or-[0-9A-Za-z\-]{20,}/],
+  ['an OpenAI key', /sk-(?!or-)[0-9A-Za-z_\-]{20,}/],
   ['a GitHub token', /gh[pousr]_[0-9A-Za-z]{30,}/],
   ['a password written out', /password\s*[:=]\s*['"][^'"\s]{4,}['"]/i],
 ];

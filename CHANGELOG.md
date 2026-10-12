@@ -6,6 +6,44 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- **Which AI writes**, chosen on the page. The cog at the top right opens a panel with the
+  provider (Gemini, ChatGPT from OpenAI, or OpenRouter) and the model, picked from the list the
+  provider itself offers right now, or typed by name. The choice is kept in the database and
+  survives a restart; the chosen model is asked first and the others follow only when it does not
+  answer. A provider without a key is offered with a box to paste one into: the key is tried on
+  the provider, written into the `.env` file on this computer when accepted, and used at once,
+  with no restart. ChatGPT (`OPENAI_API_KEY`, `OPENAI_MODEL`) is new as a provider and writes
+  first whenever it has a key, asked in its own request shape (a reasoning model's own temperature and room to think; a field a model
+  refuses is dropped and the request sent again), and an account with no credit left is set aside
+  like a used-up allowance. Marketplace keeps to the small free model and never a paid one unless
+  **Use it for Marketplace too** is ticked. The welcome panel says which model writes, with a
+  **Change** link. (The owner's words: "I want to be able to switch the models from wheelman
+  dashboard … it should ask for api key if isn't provided one.")
+- **Used so far**, lower in the same panel. Every answer is counted by model, with the tokens
+  it used: what went in, and what came out including the model's thinking, which the paid
+  providers charge as output. The panel shows each model's requests and tokens today and this
+  month, the day's count against Wheelman's cap, and a link to each provider's own usage page,
+  where the cost is. `npm run check-model` gives each model its full allowance, so a thinking
+  model is no longer cut off mid-answer, and shows the tokens each answer took. (The owner's
+  words: "I want a usage details in the dashboard as well.")
+- **An ordinary enquiry read as an import enquiry.** Import leads from the dashboard's own list
+  and the website's import form were already answered the import way; a customer who wrote in
+  from the contact page, or texted, about a car we bring from Japan was answered as if they
+  asked about a car on the yard. Now Wheelman reads their words: a model code from the website's
+  import list (JZS161, GDH206), a make and model from that list when no such car is on the yard,
+  or the words themselves ("can you import", "from Japan", JDM, auction, landed cost). A customer
+  asking about a car in stock is never read this way. When it reads one, the reply is written the
+  import way (what they are looking for is asked, then the Japan auctions are searched), a line
+  above the message box says why, and the details panel has an **Import enquiry** section. The
+  owner has the last word: **Not an import enquiry** writes the reply the ordinary way, **Treat
+  as an import enquiry** does the opposite for one Wheelman missed, and **Move to Import Query**
+  lists the conversation in that section (with **Move back to Dashboard**). A ruling is kept with
+  the lead, so it follows into the text conversation that starts later, and the suggestion is
+  written again the new way unless its text was already changed. The AI is also asked whether an
+  ordinary enquiry looks like an import one; when it thinks so, the line offers the same buttons
+  and nothing changes by itself. (The owner's words, 12 Oct 2026: "I want the system to understand
+  that the query should be treated as the import query. Also there should be a button, after
+  judgement, if I want to move that to import query section.")
 - **Prompt** in the message box, before a suggestion exists. Next to **Write it now** sits
   **Prompt**: one line of what the reply should say, for example `we have none of that model,
   we can source one`, and Enter writes the reply from it, in Carbarn's voice, in one request,

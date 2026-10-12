@@ -69,9 +69,23 @@ CREATE TABLE IF NOT EXISTS seen (
   PRIMARY KEY (item_key, anchor_key)
 );
 
+-- The owner's ruling on an ordinary dashboard conversation: that it is an import enquiry (or is
+-- not), and whether it sits in the Import Query section. Kept by the lead too, so the ruling
+-- follows a lead into the text conversation that starts later.
+CREATE TABLE IF NOT EXISTS item_rulings (
+  item_key TEXT PRIMARY KEY, lead_id INTEGER, kind TEXT NOT NULL, section TEXT NOT NULL DEFAULT 'dashboard', at INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS llm_usage (
   day TEXT NOT NULL, provider TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (day, provider)
+);
+
+-- The same requests by model, with the tokens they used: what the page shows as "Used so far".
+CREATE TABLE IF NOT EXISTS llm_usage_models (
+  day TEXT NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL,
+  requests INTEGER NOT NULL DEFAULT 0, tokens_in INTEGER NOT NULL DEFAULT 0, tokens_out INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, provider, model)
 );
 
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -347,6 +361,7 @@ export function oldRowsStamp() {
       (SELECT COUNT(*) || ':' || IFNULL(MAX(id), 0) || ':' || IFNULL(MAX(sent_at), 0) || ':' || IFNULL(SUM(LENGTH(status)), 0) FROM drafts) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(rowid), 0) || ':' || IFNULL(MAX(at), 0) FROM dismissed) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(at), 0) FROM seen) || '/' ||
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(at), 0) FROM item_rulings) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(changed_at), 0) || ':' || IFNULL(SUM(conversation_id), 0) FROM phone_threads) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(last_message_at), 0) FROM mp_conversations) || '/' ||
       (SELECT COUNT(*) FROM mp_messages) || '/' ||
@@ -836,6 +851,44 @@ export function undismiss(itemKey) {
   stmt('DELETE FROM dismissed WHERE item_key = ?').run(itemKey);
 }
 
+// ---- the owner's rulings: an import enquiry or not, and which section -------------------------
+
+/** The ruling on a conversation, by its key or by its lead: { itemKey, leadId, kind, section, at }, or null. */
+export function itemRuling(itemKey, leadId = null) {
+  return stmt('SELECT item_key AS itemKey, lead_id AS leadId, kind, section, at FROM item_rulings WHERE item_key = ? OR (lead_id IS NOT NULL AND lead_id = ?) ORDER BY at DESC LIMIT 1').get(itemKey, leadId ?? null) || null;
+}
+
+/** Keeps the owner's ruling: kind 'import' or 'general', section 'dashboard' or 'importquery'. One per lead. */
+export function setItemRuling(itemKey, leadId, { kind, section = 'dashboard' }) {
+  if (leadId) stmt('DELETE FROM item_rulings WHERE lead_id = ? AND item_key != ?').run(leadId, itemKey);
+  stmt(`
+    INSERT INTO item_rulings(item_key, lead_id, kind, section, at) VALUES(?, ?, ?, ?, ?)
+    ON CONFLICT(item_key) DO UPDATE SET lead_id = excluded.lead_id, kind = excluded.kind, section = excluded.section, at = excluded.at
+  `).run(itemKey, leadId ?? null, kind, section, Date.now());
+}
+
+/** Takes the ruling away: Wheelman's own reading applies again, and the conversation lists where it did before. */
+export function clearItemRuling(itemKey, leadId = null) {
+  stmt('DELETE FROM item_rulings WHERE item_key = ? OR (lead_id IS NOT NULL AND lead_id = ?)').run(itemKey, leadId ?? null);
+}
+
+/** The keys of the conversations the owner moved into a section, latest ruling first. */
+export function movedItemKeys(section) {
+  return stmt('SELECT item_key AS itemKey FROM item_rulings WHERE section = ? ORDER BY at DESC').all(section).map((r) => r.itemKey);
+}
+
+/** Cars of this make and model that are not sold: on the yard, arrived, or on their way. The model's first word is enough ("Alphard" for "Alphard Welcab"). */
+export function vehiclesOnYard(make, model) {
+  const first = String(model || '').toLowerCase().split(/\s+/)[0] || '';
+  if (!make || !first) return [];
+  return stmt(`
+    SELECT id, stock_no AS stockNo, make, model FROM vehicles
+    WHERE lower(make) = ? AND lower(model) LIKE ?
+      AND NOT (lower(IFNULL(sold_status, '')) LIKE '%sold%' AND lower(IFNULL(sold_status, '')) NOT LIKE '%unsold%')
+      AND lower(IFNULL(stock_in, '')) != 'sold'
+  `).all(String(make).toLowerCase(), `${first}%`);
+}
+
 export function recordCopied(id, text) {
   stmt('UPDATE drafts SET copied_text = ?, copied_at = ? WHERE id = ?').run(text, Date.now(), id);
 }
@@ -942,11 +995,32 @@ export function usageToday(day) {
   return out;
 }
 
-export function addUsage(day, provider) {
+/** Counts one answered request: against the day's cap, and by model with the tokens it used (when the provider said). */
+export function addUsage(day, provider, model = '', tokens = null) {
   stmt(`
     INSERT INTO llm_usage(day, provider, count) VALUES(?, ?, 1)
     ON CONFLICT(day, provider) DO UPDATE SET count = count + 1
   `).run(day, provider);
+  const n = (v) => Math.max(0, Math.round(Number(v) || 0));
+  stmt(`
+    INSERT INTO llm_usage_models(day, provider, model, requests, tokens_in, tokens_out) VALUES(?, ?, ?, 1, ?, ?)
+    ON CONFLICT(day, provider, model) DO UPDATE SET
+      requests = requests + 1, tokens_in = tokens_in + excluded.tokens_in, tokens_out = tokens_out + excluded.tokens_out
+  `).run(day, provider, String(model || ''), n(tokens?.in), n(tokens?.out));
+}
+
+/**
+ * Requests and tokens by provider and model: for one day, or added up over every day that
+ * starts with `prefix` (a month, "2026-10"). Rows: { provider, model, requests, tokensIn, tokensOut }.
+ */
+export function usageByModel({ day = '', prefix = '' } = {}) {
+  if (day) {
+    return stmt('SELECT provider, model, requests, tokens_in AS tokensIn, tokens_out AS tokensOut FROM llm_usage_models WHERE day = ? ORDER BY provider, model').all(day);
+  }
+  return stmt(`
+    SELECT provider, model, SUM(requests) AS requests, SUM(tokens_in) AS tokensIn, SUM(tokens_out) AS tokensOut
+    FROM llm_usage_models WHERE day LIKE ? GROUP BY provider, model ORDER BY provider, model
+  `).all(`${prefix}%`);
 }
 
 // ---- the phone (the browser add-on) -------------------------------------------

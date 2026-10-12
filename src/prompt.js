@@ -96,9 +96,9 @@ Return one JSON object and nothing else:
   "rung": "where this customer is, exactly as given under THIS CUSTOMER'S NEXT STEP: interest, proof, fit, commit or buyer; empty when that section is absent",
   "facts_used": ["each fact you relied on, as a short statement including the figure"],
   "needs_human": [{"marker": "[PRICE?]", "reason": "why a person must decide this"}],
-  "hold": false
+  "hold": false${!chat && !email && !order ? ',\n  "import_enquiry": false' : ''}
 }
-Set "hold" to true only for complaints, disputes and refund requests: a person decides those before anything is sent.
+Set "hold" to true only for complaints, disputes and refund requests: a person decides those before anything is sent.${!chat && !email && !order ? '\nSet "import_enquiry" to true only when the customer wants a car found and brought from Japan for them, not one we have on the yard.' : ''}
 "needs_human" must list every marker that appears in "reply". Use an empty list when there are none.`;
 }
 
