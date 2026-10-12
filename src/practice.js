@@ -9,6 +9,7 @@
 // labels, so nothing from another customer's deal can be carried into a new reply.
 
 import { openDb, draftTextsFor } from './db.js';
+import { labelAddress } from './address.js';
 import { buildItem } from './items.js';
 import { stripLocationBlock, stripSignature, maskGreetingNames, maskCustomerSignOff, loadExclusions, namesStaff } from './voice.js';
 import { redact } from './redact.js';
@@ -36,11 +37,11 @@ const LINK_LABELS = [
   [/https?:\/\/\S+/gi, '[link]'],
 ];
 /** A label left in a finished reply means the AI copied an example instead of using the real thing. */
-export const LEFTOVER_LABEL = /\[(?:online video inspection link|inspection booking link|vehicle page link|model page link|guide page link|photo album link|Google Maps link|live auction link|link|amount|then our standard address block|then the auction car: its details, link, bid and cost breakdown)\]/i;
+export const LEFTOVER_LABEL = /\[(?:online video inspection link|inspection booking link|vehicle page link|model page link|guide page link|photo album link|Google Maps link|our address|live auction link|link|amount|then our standard address block|then the auction car: its details, link, bid and cost breakdown)\]/i;
 
 /** Links and dollar amounts belong to the other customer's deal: only what kind of thing it was is kept. */
 export function labelled(text) {
-  let t = String(text || '');
+  let t = labelAddress(String(text || ''));
   for (const [re, label] of LINK_LABELS) t = t.replace(re, label);
   return t.replace(/\$\s?\d[\d,]*(?:\.\d+)?(?:\s?k\b)?/gi, '[amount]').replace(/¥\s?\d[\d,]*/g, '[amount]');
 }

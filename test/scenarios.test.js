@@ -225,7 +225,7 @@ test('a long conversation keeps its first message and what we already told the c
   assert.match(asked, /=== WHAT WE HAVE ALREADY TOLD THIS CUSTOMER ===/);
   assert.match(asked, /- We quoted: "The lowest we can do on the Noah is \$20,500\."/);
   assert.match(asked, /- We said: "We will send you the export certificate shortly\."/);
-  assert.match(asked, /Our address, map link and opening hours were sent on/);
+  assert.match(asked, /Our address and opening hours were sent on/);
   assert.ok(!/Question number 3 about/.test(asked), 'the middle of the conversation is left out');
   assert.match(asked, /Question number 24 about/);
   assert.ok(asked.length < 60000);
@@ -241,8 +241,7 @@ const NOAH = 'https://www.carbarn.com.au/vehicles/toyota/noah/abc10/1300';
 const block = (url, booking = '') => [
   ...(url ? [`Vehicle details:\n${url}`] : []),
   ...(booking ? [`Book your inspection:\n${booking}`] : []),
-  'Our location:\n📍 Unit D3, 128-130 Frances Street, Lidcombe NSW 2141',
-  'Google Maps:\nhttps://maps.app.goo.gl/EQfdkTE7FYDF4DTT8',
+  'Our location:\n📍 136 Frances Street, Lidcombe NSW 2141',
   '🕛 Open 7 days, 8 AM–5 PM.',
   'Feel free to visit us or call\n📞 0423 840 130\nTeam Carbarn',
 ].join('\n\n');
@@ -255,15 +254,15 @@ test('a new enquiry asking where we are gets a short answer and then the exact s
   assert.equal(item(220).isNewEnquiry, true);
 
   // Asked where we are, the AI answers in its own sentence. This is the one case where it may give the address and hours itself.
-  const answer = 'Hi {{NAME}},\nWe are at 128 Frances Street, Lidcombe, and we are open until 5 PM every day.';
+  const answer = 'Hi {{NAME}},\nWe are at 136 Frances Street, Lidcombe, and we are open until 5 PM every day.';
   const { d, asked, attempts } = await draft(220, answer);
   assert.match(asked, /=== STANDARD FIRST REPLY ===\nThis is a brand-new enquiry\. Our standard block is added below your text automatically/);
-  assert.match(asked, /this vehicle's page link, the inspection booking link, our address, the Google Maps link, the opening hours and our phone number\./);
+  assert.match(asked, /this vehicle's page link, the inspection booking link, our address, the opening hours and our phone number\./);
   assert.match(asked, /Never point at the block: no "below", "see below" or "details are below"/);
   assert.match(asked, /They asked where we are or when we are open, so answer that in your own sentence/);
   // Someone asking where we are is planning to visit, so the block carries the booking link as well.
   assert.match(asked, /=== INSPECTION ===\nThe customer asked where we are or when we are open, which usually means they plan to visit/);
-  assert.equal(d.reply, `Hi Wren,\nWe are at 128 Frances Street, Lidcombe, and we are open until 5 PM every day.\n\n${block(NOAH, `${NOAH}#inspection=onsite`)}`, 'exact to the character, symbols included');
+  assert.equal(d.reply, `Hi Wren,\nWe are at 136 Frances Street, Lidcombe, and we are open until 5 PM every day.\n\n${block(NOAH, `${NOAH}#inspection=onsite`)}`, 'exact to the character, symbols included');
   assert.ok(!/Regards/.test(d.reply), 'the block takes the place of the sign-off');
   assert.equal(attempts, 1);
   assert.deepEqual(fails(d), []);
@@ -301,7 +300,7 @@ test('a customer who asks where we are, later in a conversation, is offered the 
   const plan = promptModule.inspectionPlan(item(248));
   assert.equal(plan.kind, 'onsite');
   assert.equal(plan.must, false, 'it is offered, not required');
-  const { d } = await draft(248, `We are at 128 Frances Street, Lidcombe, and we are open on Sunday from 8 AM to 5 PM.\nYou can book a time here:\n${NOAH}#inspection=onsite`);
+  const { d } = await draft(248, `We are at 136 Frances Street, Lidcombe, and we are open on Sunday from 8 AM to 5 PM.\nYou can book a time here:\n${NOAH}#inspection=onsite`);
   assert.deepEqual(fails(d), [], JSON.stringify(d.checks));
 
   // A car that is sold or not here yet gets no booking link for a "where are you" question.
@@ -358,9 +357,9 @@ test('a new enquiry asking to inspect gets the booking link inside the block, on
   msg(221, 'IN', 'Can I come and inspect the Noah this weekend?', 5 * MIN);
   // The AI types the link anyway. The line is dropped, with its lead-in, because the block gives it.
   const { d, asked } = await draft(221, `Hi {{NAME}},\nYou are welcome to inspect the Noah. Please choose a time here:\n${NOAH}#inspection=onsite`);
-  assert.match(asked, /Our address, map link and opening hours follow your text automatically/);
+  assert.match(asked, /Our address and opening hours follow your text automatically/);
   assert.match(asked, /this vehicle's page link, the inspection booking link, our address/);
-  assert.ok(!/add the address, the Google Maps link/.test(asked));
+  assert.ok(!/Google Maps/.test(asked), 'no map link is mentioned anywhere in the request');
   assert.equal(d.reply, `Hi Xavi,\nYou are welcome to inspect the Noah.\n\n${block(NOAH, `${NOAH}#inspection=onsite`)}`);
   assert.deepEqual(fails(d), [], JSON.stringify(d.checks));
 
@@ -681,7 +680,8 @@ test('a reply that is only the standard block teaches nothing, and the block is 
   msg(237, 'IN', 'Are you open on Sunday? Where do I find you?', DAY);
   msg(237, 'OUT', `Hi Ned,\nYes, we are open on Sundays. You are welcome to drop in.\n\n${block(NOAH, `${NOAH}#inspection=onsite`)}`, DAY - 5 * MIN);
 
-  // A name the record does not have, tacked onto a chatty line, is masked; an address is left alone.
+  // A name the record does not have, tacked onto a chatty line, is masked. The yard's old address,
+  // typed by the team before the move, becomes a label so the AI never copies it.
   lead(25, 238, 'Pat', '0421 000 019', { stocks: ['1300'], leadAt: now - 2 * DAY, updatedAt: now - DAY });
   conv(238, 25, 'Pat Test', '+61421000019');
   msg(238, 'IN', 'Can I drop in around noon to drop off the paperwork?', DAY);
@@ -692,7 +692,7 @@ test('a reply that is only the standard block teaches nothing, and the block is 
   const ned = rows.find((r) => r.itemKey === 'c:237');
   assert.equal(ned.reply, 'Hi {{NAME}},\nYes, we are open on Sundays. You are welcome to drop in.\n[then our standard address block]');
   assert.equal(ned.hadBlock, true);
-  assert.equal(rows.find((r) => r.itemKey === 'c:238').reply, 'No worries {{NAME}}\nWe are at Unit D3, 128 Frances Street');
+  assert.equal(rows.find((r) => r.itemKey === 'c:238').reply, 'No worries {{NAME}}\nWe are at [our address]');
 });
 
 test('a customer who asked to inspect and then says he is far away gets the online link', async () => {

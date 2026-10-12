@@ -14,6 +14,8 @@ const { checkDraft, finishReply, stripModelSignOff, numbersIn, worst } = checksM
 const { attribute, stripSignature, stripLocationBlock, looksMachineWritten, maskGreetingNames } = await import('../src/voice.js');
 const { parseJsonReply } = await import('../src/llm.js');
 const { normalizeVehicle, availability, vehicleUrl } = await import('../src/normalize.js');
+const { labelAddress, oldAddressIn } = await import('../src/address.js');
+const { labelled, LEFTOVER_LABEL } = await import('../src/practice.js');
 
 // ---- time ------------------------------------------------------------------
 
@@ -62,8 +64,30 @@ test('plates are removed in the wordings customers actually use', () => {
 });
 
 test('Carbarn\'s own phone, email and address survive', () => {
-  const s = 'Call us on 0423 840 130 or info@carbarn.com.au. Unit D3, 128–130 Frances Street, Lidcombe NSW 2141';
+  const s = 'Call us on 0423 840 130 or info@carbarn.com.au. 136 Frances Street, Lidcombe NSW 2141';
   assert.equal(redact(s, lead), s);
+});
+
+test('the old address and the old map link are labelled before the AI sees a past reply, and refused in a new one', () => {
+  // The yard moved to 136 Frances Street. The team's past replies still carry the old address.
+  const old = 'We are at Unit D3, 128–130 Frances Street, Lidcombe NSW 2141. Map: https://maps.app.goo.gl/EQfdkTE7FYDF4DTT8';
+  assert.equal(labelAddress(old), 'We are at [our address]. Map: [Google Maps link]');
+  assert.equal(labelAddress('We are at 136 Frances Street, Lidcombe NSW 2141 from 8 to 5.'), 'We are at [our address] from 8 to 5.');
+  assert.equal(labelAddress('Unit D3 is ours'), '[our address] is ours');
+  assert.equal(labelled('See us at 128 Frances Street, Lidcombe for $20,000'), 'See us at [our address] for [amount]');
+  assert.match('[our address]', LEFTOVER_LABEL);
+  assert.equal(oldAddressIn('We moved to 136 Frances Street, Lidcombe.'), '');
+  assert.equal(oldAddressIn('Come to 128 Frances St, Lidcombe'), '128 Frances St, Lidcombe');
+  assert.ok(oldAddressIn('Unit D3, 128-130 Frances Street'));
+  assert.ok(oldAddressIn('https://maps.app.goo.gl/abc'));
+  const body = 'Hi Sam,\nWe are at Unit D3, 128-130 Frances Street, Lidcombe.';
+  const r = checkDraft({ reply: body, body, allowedText: '' });
+  const bad = r.find((c) => c.code === 'old-address');
+  assert.ok(bad && bad.level === 'fail', JSON.stringify(r));
+  assert.match(bad.message, /136 Frances Street, Lidcombe NSW 2141/);
+  assert.match(checksModule.retryNote(r), /Never write our old address or a map link/);
+  const fine = 'We are at 136 Frances Street, Lidcombe.';
+  assert.ok(!checkDraft({ reply: fine, body: fine, allowedText: fine }).some((c) => c.code === 'old-address'));
 });
 
 test('a customer street address is removed', () => {

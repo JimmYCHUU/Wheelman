@@ -14,6 +14,7 @@ import { pickExamples } from './examples.js';
 import { learnedExamples, corrections, ownerGuidance } from './learn.js';
 import { practiceFor, labelled } from './practice.js';
 import { blockCarries } from './firstreply.js';
+import { labelAddress } from './address.js';
 import { allVehicles } from './db.js';
 import { saleStage, stageLines } from './selling.js';
 import { modelReplies } from './modelreplies.js';
@@ -113,7 +114,7 @@ function ago(ms) {
 }
 
 const maskCustomerSignOffIf = (e, text) => (e.who === 'customer' ? maskCustomerSignOff(text) : text);
-const BLOCK_NOTE = '[then our standard block: address, map link and opening hours]';
+const BLOCK_NOTE = '[then our standard block: address and opening hours]';
 
 /** One line of the conversation, with customer details removed. */
 function entryLine(e, item) {
@@ -199,7 +200,7 @@ function alreadyTold(item, start, maxChars = 900) {
   say('We said', promises, 4);
   say('We arranged', meetings, 2);
   if (links.size) out.push(`- Already sent: ${[...links].join(', ')}.`);
-  if (blockSent) out.push(`- Our address, map link and opening hours were sent on ${day(blockSent)}. Do not send them again unless asked.`);
+  if (blockSent) out.push(`- Our address and opening hours were sent on ${day(blockSent)}. Do not send them again unless asked.`);
   for (const n of notes) out.push(`- Staff note (internal): "${redact(n.text, item.lead).slice(0, 160)}" (${day(n.at)})`);
   let text = '';
   for (const line of out) { if (text.length + line.length > maxChars) break; text += (text ? '\n' : '') + line; }
@@ -325,7 +326,7 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
       ? '- If they have already named a day, say that day is fine. If they also named a time inside our opening hours, confirm it in a line ("See you ...").'
       : '- If they have already named a day and a time inside our opening hours, confirm it in a line ("See you ...") instead; the link is then optional. If they named only a day, say that day is fine and still give the link so they can choose a time.',
     blockFollows
-      ? '- Our address, map link and opening hours follow your text automatically (see STANDARD FIRST REPLY). Do not write them.'
+      ? '- Our address and opening hours follow your text automatically (see STANDARD FIRST REPLY). Do not write them.'
       : chat ? '- Ask them to message or call before visiting.' : '- Ask them to call or text before visiting.',
     where.source === 'record'
       ? `- They may not be near Sydney. Add, as an option only, that if they cannot make it to Lidcombe they can book an online video inspection (a video call on WhatsApp or FaceTime): ${links.online} Do not say or imply where the customer lives.`
@@ -344,7 +345,7 @@ export function writtenToday(item, now = Date.now()) {
 
 /**
  * The standard first reply: on a brand-new dashboard enquiry the AI writes only the opening
- * lines, and our block (the car's page, the booking link, address, map link, hours, phone) is
+ * lines, and our block (the car's page, the booking link, address, hours, phone) is
  * added below. vehicleUrl is empty when there is no car on offer to point to; inspectionUrl is
  * empty unless the customer asked to see the car and the block has a place for the link.
  */
@@ -352,7 +353,7 @@ export function standardPlan(item, vehicle, { gone = false, owner = false, inspe
   if (!item.isNewEnquiry || item.channel === 'marketplace') return { on: false, vehicleUrl: '', inspectionUrl: '', lines: [] };
   const vehicleUrl = vehicle?.url && !gone && !owner ? vehicle.url : '';
   const inspectionUrl = inspection?.url && blockCarries('inspection_url') ? inspection.url : '';
-  const holds = [vehicleUrl ? "this vehicle's page link" : '', inspectionUrl ? 'the inspection booking link' : '', 'our address', 'the Google Maps link', 'the opening hours', 'our phone number'].filter(Boolean);
+  const holds = [vehicleUrl ? "this vehicle's page link" : '', inspectionUrl ? 'the inspection booking link' : '', 'our address', 'the opening hours', 'our phone number'].filter(Boolean);
   const atYard = vehicle ? availability(vehicle).code === 'available' : true;
   const lines = [
     'This is a brand-new enquiry. Our standard block is added below your text automatically, exactly as we always send it:',
@@ -360,10 +361,10 @@ export function standardPlan(item, vehicle, { gone = false, owner = false, inspe
     'So write only:',
     '- the greeting line, then',
     "- one or two short sentences that answer what the customer asked, then one sentence that offers the next step named under THIS CUSTOMER'S NEXT STEP, in words. Under 45 words in all.",
-    `Do not write ${item.situation.all.includes('location_hours') ? '' : 'the address, the suburb, the opening hours, '}the Google Maps link${vehicleUrl ? ", the vehicle's page link" : ''}${inspectionUrl ? ', the booking link' : ''} or a phone number: the block gives them. Do not add a closing line after the next step: no "let us know", no "feel free", no "any questions".`,
+    `Do not write ${item.situation.all.includes('location_hours') ? '' : 'the address, the suburb, the opening hours, '}a map link${vehicleUrl ? ", the vehicle's page link" : ''}${inspectionUrl ? ', the booking link' : ''} or a phone number: the block gives them. Do not add a closing line after the next step: no "let us know", no "feel free", no "any questions".`,
     'Never point at the block: no "below", "see below" or "details are below". Each sentence must stand on its own.',
     item.situation.all.includes('location_hours')
-      ? 'They asked where we are or when we are open, so answer that in your own sentence: the suburb and street ("128 Frances Street, Lidcombe"), or the day and hours they asked about. This is the one case where your lines may give the address or the hours.'
+      ? `They asked where we are or when we are open, so answer that in your own sentence: the suburb and street ("${config.site.address.replace(/\s+NSW\b.*$/, '')}"), or the day and hours they asked about. This is the one case where your lines may give the address or the hours.`
       : '',
   ];
   if (vehicle && !gone && !atYard) lines.push('This vehicle is not at the Lidcombe yard yet (see Availability). Say so in your answer, so the address below is not read as an invitation to come and see it now.');
@@ -581,7 +582,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     if (email) P.push('They were SMS replies. Borrow the tone and the directness, not the length or the layout: an email has a greeting line, paragraphs and room for the figures.');
     examples.forEach((e, n) => {
       const asked = [e.events.join(' '), e.customer].filter(Boolean).join(' ').replace(/\s*\n\s*/g, ' / ').slice(0, 320);
-      P.push(`Example ${n + 1}\n  Customer: ${asked}\n  We replied: ${e.reply.replace(/\n+/g, ' / ')}`);
+      P.push(`Example ${n + 1}\n  Customer: ${asked}\n  We replied: ${labelAddress(e.reply).replace(/\n+/g, ' / ')}`);
     });
   }
 
@@ -597,7 +598,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     P.push('\n=== HOW OUR STAFF CHANGED EARLIER SUGGESTIONS ===');
     P.push('For similar messages you drafted one thing and our staff used something else. Learn from the difference in length, wording and what they left out. Do not reuse the figures.');
     fixes.forEach((f, n) => {
-      P.push(`Case ${n + 1}\n  Customer: ${f.customer.replace(/\s*\n\s*/g, ' / ').slice(0, 260)}\n  You drafted: ${f.drafted.replace(/\n+/g, ' / ').slice(0, 360)}\n  Staff used: ${f.used.replace(/\n+/g, ' / ').slice(0, 360)}`);
+      P.push(`Case ${n + 1}\n  Customer: ${f.customer.replace(/\s*\n\s*/g, ' / ').slice(0, 260)}\n  You drafted: ${labelAddress(f.drafted).replace(/\n+/g, ' / ').slice(0, 360)}\n  Staff used: ${labelAddress(f.used).replace(/\n+/g, ' / ').slice(0, 360)}`);
     });
   }
 

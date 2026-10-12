@@ -339,7 +339,7 @@ Your {car} is ready.
 
 You can collect it from our yard, or we can arrange delivery to you. Please let us know which you prefer, and a day that suits.
 
-📍 Unit D3, 128-130 Frances Street, Lidcombe NSW 2141
+📍 136 Frances Street, Lidcombe NSW 2141
 📞 0423 840 130
 🕛 Open 7 days, 8 AM–5 PM
 

@@ -123,8 +123,7 @@ test('customer details never reach the AI service, and cost figures are never se
   // typed is dropped, because the block gives it.
   assert.equal(d.reply, 'Hi Priya,\nYes, the Noah is still available at $28,900. You are welcome to come and see it any day.\n\n'
     + 'Vehicle details:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159\n\n'
-    + 'Our location:\n📍 Unit D3, 128-130 Frances Street, Lidcombe NSW 2141\n\n'
-    + 'Google Maps:\nhttps://maps.app.goo.gl/EQfdkTE7FYDF4DTT8\n\n'
+    + 'Our location:\n📍 136 Frances Street, Lidcombe NSW 2141\n\n'
     + '🕛 Open 7 days, 8 AM–5 PM.\n\n'
     + 'Feel free to visit us or call\n📞 0423 840 130\nTeam Carbarn');
   assert.ok(d.checks.every((c) => c.level === 'ok'), JSON.stringify(d.checks));

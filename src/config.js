@@ -53,7 +53,8 @@ export const config = {
     // Where the website's own data (the eligible-models list) is read from. The website itself
     // unless set otherwise; tests point it at a stand-in. Page links always use baseUrl.
     apiUrl: (env.SITE_API_URL || '').trim().replace(/\/+$/, '') || 'https://www.carbarn.com.au',
-    mapsUrl: 'https://maps.app.goo.gl/EQfdkTE7FYDF4DTT8',
+    // The address of the yard, as written in every message. No map link is sent anywhere.
+    address: '136 Frances Street, Lidcombe NSW 2141',
     phone: '0423 840 130',
     // Other numbers of ours that may appear in a text (a staff mobile, say). They are not customer
     // details and are left as they are when a text goes to the AI. Set in .env; never in the code.
