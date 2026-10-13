@@ -5,10 +5,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 import { listItems, itemFromKey } from './items.js';
-import { latestDraft, getDraft, dismiss, undismiss, isDismissed, setDraftRating, markSeen, isSeen, dataStamp, uncopy, addOrderMessage, removeOrderMessage } from './db.js';
+import { latestDraft, getDraft, dismiss, undismiss, isDismissed, setDraftRating, markSeen, isSeen, dataStamp, uncopy, addOrderMessage, removeOrderMessage, setItemRuling, clearItemRuling } from './db.js';
 import { listOrderRows, MESSAGES, messagesFor, wantedText, carTitle, lotName, lotPageUrl, cleanPaste } from './orders.js';
 import { draftOrderMessage } from './ordermessages.js';
-import { draftFor } from './drafter.js';
+import { draftFor, writingNow } from './drafter.js';
 import { availability } from './normalize.js';
 import { firstNameOf, isPlaceholderName, redact } from './redact.js';
 import { maskGreetingNames } from './voice.js';
@@ -38,6 +38,8 @@ import { storeMpConversation } from './sync.js';
 import { appendMpMessage, recordSentHere } from './db.js';
 import { blankMatcher } from '../web/lib/blank.js';
 import { share, viaTunnel, signedIn, checkPassword, signinToken, signinCookie, tooManyTries, noteWrong, clearWrong } from './share.js';
+import { PROVIDERS, PROVIDER_ORDER, aiChoice, setAiChoice, listModels, saveKey } from './aimodels.js';
+import { providers as aiProviders, usageDetail } from './llm.js';
 
 const TYPES = { '.woff2': 'font/woff2', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(config.root, 'package.json'), 'utf8')).version || ''; } catch { return ''; } })();
@@ -131,6 +133,8 @@ function draftOf(item) {
     research: draft.research || null,
     // How many of the team's own replies to similar messages the request showed.
     practiceUsed: draft.context?.practice || 0,
+    // The AI thought an ordinary enquiry might be an import one: the page offers to treat it so.
+    aiImport: !!draft.context?.aiImport,
     needsHuman: (draft.needsHuman || []).filter((n) => n && n.marker && n.reason).map((n) => ({ marker: String(n.marker), reason: String(n.reason) })),
     // What the reply is for: the one next step it offers, and where the customer is on the way to a sale.
     nextStep: draft.next_step || '', rung: draft.rung || '', rungLabel: RUNG_LABELS[draft.rung] || '',
@@ -154,7 +158,7 @@ function summary(item) {
   const lastShown = [...item.timeline].reverse().find((e) => !e.internal) || last;
   return {
     key: item.itemKey,
-    section: item.standard ? 'standards' : item.channel === 'marketplace' ? 'marketplace' : item.channel === 'email' ? 'importquery' : 'dashboard',
+    section: item.standard ? 'standards' : item.channel === 'marketplace' ? 'marketplace' : item.channel === 'email' || item.moved === 'importquery' ? 'importquery' : 'dashboard',
     // A model reply's scenario: its title and where it stands with the owner.
     standardStatus: item.standard?.status || null,
     account: item.marketplace?.account || '',
@@ -323,6 +327,7 @@ function presentOrder(item) {
     thread: threadOf(item, shown),
     earlier: item.timeline.length - shown.length,
     draft: draftOf(item),
+    writing: writingNow(item.itemKey, item.anchorKey),
   };
 }
 
@@ -349,10 +354,19 @@ function present(item) {
     autoReason: item.autoReason,
     firstReply: item.isFirstReply,
     looking: lookingFor(item),
+    // An ordinary enquiry read as an import enquiry (why, and the car), the owner's ruling on it,
+    // whether it was moved to Import Query, and which of those this conversation allows.
+    judged: item.judged ? { sign: item.judged.sign, why: item.judged.why, car: item.judged.car?.title || '' } : null,
+    ruling: item.ruling ? { kind: item.ruling.kind, section: item.ruling.section } : null,
+    moved: item.moved || null,
+    canRule: /^[cl]:/.test(item.itemKey) && !item.standard,
+    canMove: config.mail.switchedOn && /^[cl]:/.test(item.itemKey) && !item.standard,
     vehicle: v ? { title: v.title, stockNo: v.stockNo, price: v.price, odometer: v.odometer, availability: shownAvailability(item, v), url: v.url, year: v.year, fuel: v.fuel, transmission: v.transmission, seats: v.seats, colour: v.color, included: v.outline || [] } : null,
     thread: threadOf(item, shown),
     earlier: item.timeline.length - shown.length,
     draft: draftOf(item),
+    // A suggestion is being written for this message right now, by the page or in the background.
+    writing: writingNow(item.itemKey, item.anchorKey),
     standard: item.standard ? { id: item.standard.id, title: item.standard.title, status: item.standard.status, note: item.standard.note, rung: item.standard.rung, situation: item.standard.situation } : null,
   };
 }
@@ -474,6 +488,46 @@ async function api(req, res, url) {
     return send(res, ok ? 200 : 503, { ok, version: VERSION, startedAt: worker.state.startedAt, uptimeSeconds: Math.round((Date.now() - worker.state.startedAt) / 1000), db, lastSyncOk: !!(s.lastSync && s.lastSync.ok), lastSyncAt: s.lastSync?.at || null });
   }
 
+  // Which AI writes the suggestions: the providers and whether each has a key, what the page has
+  // chosen, and what writes right now. A key can be pasted only from this computer, where the
+  // .env file it goes into is.
+  if (req.method === 'GET' && p === '/api/ai') {
+    const first = (list) => (list[0] ? { provider: list[0].name, model: list[0].model } : null);
+    return send(res, 200, {
+      providers: PROVIDER_ORDER.map((id) => ({ id, label: PROVIDERS[id].label, hasKey: !!config.llm[id].apiKey, keyName: PROVIDERS[id].keyName, keyUrl: PROVIDERS[id].keyUrl, usageUrl: PROVIDERS[id].usageUrl, free: PROVIDERS[id].free, known: config.llm[id].models })),
+      choice: aiChoice(),
+      writing: first(aiProviders()),
+      marketplaceWriting: first(aiProviders({ marketplace: true })),
+      marketplaceModel: config.llm.marketplaceModel,
+      marketplaceOn: config.marketplace.enabled,
+      dailyLimit: config.llm.dailyLimit,
+      // What has been asked so far: requests and tokens by model, today and this month.
+      usage: usageDetail(),
+      canSaveKey: !viaTunnel(req),
+    });
+  }
+  // The models one provider offers right now, read from the provider and kept for an hour; fresh=1 reads again.
+  if (req.method === 'GET' && p === '/api/ai/models') {
+    const provider = String(url.searchParams.get('provider') || '');
+    if (!PROVIDERS[provider]) return send(res, 400, { error: 'That AI provider is not one Wheelman knows.' });
+    return send(res, 200, await listModels(provider, { fresh: url.searchParams.get('fresh') === '1' }));
+  }
+  if (req.method === 'POST' && p === '/api/ai/choice') {
+    const body = await readBody(req);
+    try {
+      const choice = setAiChoice({ provider: body.provider, model: body.model, marketplace: body.marketplace === true });
+      logLine('ai', `The page chose ${choice.model} (${choice.provider}) to write the suggestions${choice.marketplace ? ', for Marketplace too' : ''}`);
+      return send(res, 200, { ok: true, choice, status: worker.statusReport() });
+    } catch (e) { return send(res, e.status || 500, { error: e.message }); }
+  }
+  if (req.method === 'POST' && p === '/api/ai/key') {
+    if (viaTunnel(req)) return send(res, 403, { error: 'A key can only be pasted on the computer Wheelman runs on.' });
+    const body = await readBody(req);
+    try {
+      return send(res, 200, { ok: true, ...(await saveKey(body.provider, body.key)) });
+    } catch (e) { return send(res, e.status || 500, { error: e.message }); }
+  }
+
   // The phone add-on reports what the Google Messages list shows. See allowed() for who may call this.
   if (req.method === 'POST' && p === '/api/phone/messages') {
     if (!config.phone.switchedOn) return send(res, 403, { error: 'The phone add-on is switched off (PHONE_ADDON=0 in the .env file).' });
@@ -590,6 +644,8 @@ async function api(req, res, url) {
     const item = itemFromKey(m[1], picked);
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
     const instruction = String(body.instruction || '').slice(0, 600);
+    // The page is writing it now, with or without a prompt: nothing to wait for any more.
+    worker.releaseItem(item.itemKey);
     let draft;
     if (item.order && !(item.orderStatus.kind === 'reply' && !picked.message)) {
       // A message to an auction customer is written from its template. No AI is asked.
@@ -646,6 +702,32 @@ async function api(req, res, url) {
     return send(res, 200, { ok: true });
   }
 
+  // The owner's ruling on a dashboard conversation: an import enquiry or not, and whether it sits
+  // in the Import Query section. { kind: 'import' | 'general' | '', section: 'importquery' | 'dashboard' }.
+  // An empty kind takes the ruling away, so Wheelman's own reading applies again. The suggestion
+  // is written again the new way, unless the owner has already changed its text.
+  m = p.match(itemRoute('/ruling'));
+  if (req.method === 'POST' && m) {
+    const body = await readBody(req);
+    const item = itemFromKey(m[1]);
+    if (!item) return send(res, 404, { error: 'That conversation was not found.' });
+    if (!/^[cl]:/.test(item.itemKey) || item.standard) return send(res, 400, { error: 'Only a dashboard conversation can be ruled on or moved.' });
+    const kind = ['import', 'general', ''].includes(body.kind) ? body.kind : null;
+    const section = body.section === 'importquery' ? 'importquery' : 'dashboard';
+    if (kind === null) return send(res, 400, { error: 'Say whether it is an import enquiry.' });
+    if (section === 'importquery' && kind !== 'import') return send(res, 400, { error: 'Only an import enquiry can be moved to Import Query.' });
+    if (section === 'importquery' && !config.mail.switchedOn) return send(res, 400, { error: 'The Import Query section is switched off.' });
+    if (kind) setItemRuling(item.itemKey, item.lead?.id || null, { kind, section });
+    else clearItemRuling(item.itemKey, item.lead?.id || null);
+    const fresh = itemFromKey(m[1]) || item;
+    const d = latestDraft(fresh.itemKey, fresh.anchorKey);
+    const untouched = !d || (['ready', 'failed'].includes(d.status) && typeof d.edited_text !== 'string' && !d.copied_at && !d.sent_here_at);
+    const writing = fresh.state === 'awaiting' && untouched && !fresh.dismissed;
+    if (writing) draftFor(fresh, { instruction: '' }).catch(() => {});
+    logLine('rulings', `${fresh.itemKey}: ${kind ? `${kind === 'import' ? 'an import enquiry' : 'not an import enquiry'}${section === 'importquery' ? ', moved to Import Query' : ''}` : 'the ruling was taken away'}${writing ? '; the suggestion is written again' : ''}`);
+    return send(res, 200, { ok: true, item: present(itemFromKey(m[1]) || fresh), writing });
+  }
+
   // The conversation was opened on the page: its number badge goes away until a new message arrives.
   m = p.match(itemRoute('/seen'));
   if (req.method === 'POST' && m) {
@@ -653,6 +735,18 @@ async function api(req, res, url) {
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
     markSeen(item.itemKey, item.anchorKey);
     return send(res, 200, { ok: true });
+  }
+
+  // The Prompt line is open for this conversation: its automatic suggestion waits a minute and a
+  // half, so the one request made is the one from the prompt. { on: false } when the line is
+  // closed without writing. The hold lapses by itself either way.
+  m = p.match(itemRoute('/hold'));
+  if (req.method === 'POST' && m) {
+    const body = await readBody(req);
+    const item = itemFromKey(m[1]);
+    if (!item) return send(res, 404, { error: 'That conversation was not found.' });
+    if (body.on === false) { worker.releaseItem(item.itemKey); return send(res, 200, { ok: true, until: null }); }
+    return send(res, 200, { ok: true, until: worker.holdItem(item.itemKey) });
   }
 
   // Undo for Dismiss: the conversation goes back to Waiting. For an auction order it also undoes

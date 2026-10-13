@@ -30,6 +30,21 @@ export function importContext(lead) {
   return { kind: forms[forms.length - 1]?.kind || (order ? 'auction' : 'import'), forms, order };
 }
 
+/**
+ * The import context for an ordinary lead that was read as an import enquiry (src/importjudge.js),
+ * or that the owner said is one: the car that was read stands in for the website's form, so the
+ * asking reply names it and the auction search knows what to look for.
+ */
+export function judgedContext(lead, judged) {
+  const car = judged?.car;
+  const forms = car?.make ? [{
+    kind: 'import', make: car.make, model: car.model || '', modelCode: car.modelCode || '', car: [car.make, car.model].filter(Boolean).join(' '),
+    grade: '', maxKm: 0, budgetText: '', ceilingAud: 0, viewing: '', pathway: '', contact: '', notes: '', judged: true,
+  }] : [];
+  const order = lead ? getAuctionOrder(lead.id, lead.phone) : null;
+  return { kind: order ? 'auction' : 'import', forms, order, judged: judged?.sign || 'owner' };
+}
+
 // ---- what they are looking for ----------------------------------------------------------------
 
 const AMOUNT = String.raw`\d{1,3}(?:[,.]\d{3})+|\d{4,7}|\d{1,3}(?:\.\d)?\s?k\b`;

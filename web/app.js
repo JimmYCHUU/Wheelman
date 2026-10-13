@@ -12,6 +12,7 @@ import { t, listOf } from './lib/copy.js';
 import { SECTIONS as REGISTRY, sectionOf } from './sections/registry.js';
 import { newCount } from './lib/counts.js';
 import { Avatar } from './components/avatar.js';
+import { IconButton } from './components/iconButton.js';
 import { mountTopBar } from './views/TopBar.js';
 import { mountListColumn, visibleRows } from './views/ListColumn.js';
 
@@ -36,6 +37,10 @@ const state = {
   busy: new Set(),       // conversation keys with a request in flight
   rewriteOpen: false,
   betterOpen: false,
+  promptOpen: null,      // the conversation whose Prompt line is open, before a suggestion exists
+  prompts: new Map(),    // conversation key -> what was typed on the Prompt line and not written yet
+  heldAt: new Map(),     // conversation key -> when Wheelman was last told the Prompt line is open for it
+  writingPoll: null,     // the one short re-check while a suggestion is being written in the background
   infoOpen: false,
   copied: null,          // draft id that was just copied
   status: null,
@@ -250,6 +255,10 @@ function renderWelcome() {
   const sharedLine = !shared?.on ? null
     : shared.url ? h('p', { title: t('welcome.shared.title') }, t('welcome.shared'), ' ', h('a', { href: shared.url, target: '_blank', rel: 'noopener', text: shared.url }))
       : h('p', { text: shared.error ? t('welcome.shared.down', { why: shared.error }) : t('welcome.shared.opening') });
+  // Which AI writes: the first model in the list, and the way to the panel that changes it.
+  const first = state.status?.ai?.providers?.[0] || null;
+  const aiLine = !state.status ? null
+    : h('p', {}, first ? t('welcome.ai', { model: first.model }) : t('welcome.ai.none'), ' ', h('button', { class: 'link-btn', type: 'button', text: t('welcome.ai.change'), onclick: openAiPanel }));
   chat.replaceChildren(h('div', { class: 'welcome' },
     h('div', { class: 'welcome-mark' }, wheelMark()),
     h('h2', { text: inAuction()
@@ -264,7 +273,8 @@ function renderWelcome() {
     reads ? h('p', { text: reads, title: readsTitle }) : null,
     bits.length ? h('p', { text: t('welcome.learned', { bits: listOf(bits) }), title: t('welcome.learned.title') }) : null,
     backupLine ? h('p', { text: backupLine, title: t('welcome.backup.title') }) : null,
-    sharedLine));
+    sharedLine,
+    aiLine));
   state.threadSig = '';
   state.composerSig = '';
 }
@@ -315,7 +325,7 @@ function renderHead(item, els) {
   const order = item.order || null;
   const mail = item.mail || null;
   const title = item.name || item.phone || item.email || (chat ? 'Marketplace buyer' : order ? 'Auction customer' : mail ? 'Email enquiry' : 'Unknown number');
-  const writing = state.busy.has(item.key);
+  const writing = state.busy.has(item.key) || !!item.writing;
   const where = mail ? ['Email', mail.subject].filter(Boolean).join(' · ') : chat ? `Marketplace${listing?.account ? `, ${listing.account}` : ''}` : (item.name ? item.phone : '');
   const sub = writing ? 'writing a suggestion…'
     : order ? [where, `Order ${order.orderNo}`, order.prefers ? `prefers ${order.prefers}` : ''].filter(Boolean).join(' · ')
@@ -512,9 +522,129 @@ function blanksIn(text) {
   return found;
 }
 
+/** When the automatic writing starts again, if it is stopped for this section: busy or used-up models. */
+const retryFor = (item) => (item.channel === 'marketplace' ? state.status?.marketplace?.retryAt : state.status?.retryAt) || 0;
+
 function composerSignature(item) {
   const d = item.draft;
-  return [item.key, item.state, item.dismissed, d?.id, d?.status, d?.rating, state.busy.has(item.key), state.rewriteOpen, state.betterOpen, state.copied === d?.id, item.anchor, item.order?.message, item.order?.handled, item.order?.replying, state.pasteOpen].join('|');
+  return [item.key, item.state, item.dismissed, d?.id, d?.status, d?.rating, state.busy.has(item.key), !!item.writing, state.rewriteOpen, state.betterOpen, state.promptOpen === item.key, retryFor(item), state.copied === d?.id, item.anchor, item.order?.message, item.order?.handled, item.order?.replying, state.pasteOpen].join('|');
+}
+
+/**
+ * Tells Wheelman the Prompt line is open for this conversation, so its automatic suggestion waits
+ * for the one written from the prompt. Renewed every half minute while typing; a hold lapses by
+ * itself. Nothing is sent for a conversation Wheelman would not write for anyway.
+ */
+function holdFor(item, { renew = false } = {}) {
+  if (!item.autoDraft || (item.draft && item.draft.status === 'ready')) return;
+  if (!renew && Date.now() - (state.heldAt.get(item.key) || 0) < 30000) return;
+  state.heldAt.set(item.key, Date.now());
+  api(`/api/items/${item.key}/hold`, { body: { on: true } }).catch(() => {});
+}
+
+/**
+ * The Prompt line: what this reply should say, typed before Wheelman writes it. Enter writes it,
+ * in one request. Pressed again or Escape closes the line; what was typed is kept for the next
+ * time, and for Try again.
+ */
+function promptControls(item, { instruction = '' } = {}) {
+  const open = state.promptOpen === item.key;
+  const input = h('input', { type: 'text', maxlength: '600', placeholder: t('composer.prompt.placeholder'), 'aria-label': t('composer.prompt.label') });
+  input.value = state.prompts.get(item.key) ?? instruction;
+  const go = () => write(item, input.value.trim());
+  const row = h('div', { class: 'rewrite', hidden: !open }, input, h('button', { class: 'btn outline', type: 'button', onclick: go }, t('composer.prompt.write')));
+  const button = h('button', { class: `btn ${open ? 'is-on' : ''}`.trim(), type: 'button', 'aria-expanded': open ? 'true' : 'false', title: t('composer.prompt.title'), onclick: () => {
+    const on = state.promptOpen !== item.key;
+    state.promptOpen = on ? item.key : null;
+    row.hidden = !on;
+    button.classList.toggle('is-on', on);
+    button.setAttribute('aria-expanded', on ? 'true' : 'false');
+    state.composerSig = composerSignature(item);
+    if (on) { input.focus(); holdFor(item, { renew: true }); }
+    else { state.heldAt.delete(item.key); if (item.autoDraft) api(`/api/items/${item.key}/hold`, { body: { on: false } }).catch(() => {}); }
+  } }, icon('pencil'), t('composer.prompt'));
+  input.addEventListener('input', () => { state.prompts.set(item.key, input.value); holdFor(item); });
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); go(); }
+    if (ev.key === 'Escape') { button.click(); button.focus(); }
+  });
+  return { button, row };
+}
+
+/**
+ * The line above the message box when a dashboard enquiry was read as an import enquiry, or the
+ * AI thought it might be one: what was read, and the owner's answers to it.
+ */
+function importNotice(item) {
+  if (!item.canRule || item.moved || item.ruling?.kind === 'general') return null;
+  const link = (label, kind, section) => h('button', { class: 'link-btn', type: 'button', onclick: () => rule(item, kind, section) }, label);
+  if (item.judged && item.judged.sign !== 'owner') {
+    return h('div', { class: 'judged' },
+      h('p', { text: t('judged.read', { why: item.judged.why }) }),
+      item.canMove ? link(t('judged.move'), 'import', 'importquery') : null,
+      link(t('judged.not'), 'general'));
+  }
+  if (!item.judged && item.draft?.aiImport) {
+    return h('div', { class: 'judged' },
+      h('p', { text: t('judged.ai') }),
+      link(t('judged.treat'), 'import'),
+      item.canMove ? link(t('judged.move'), 'import', 'importquery') : null);
+  }
+  return null;
+}
+
+/** The sentence in the details panel about an import reading or ruling. */
+function rulingWords(item) {
+  if (item.moved) return t('judged.info.moved');
+  if (item.ruling?.kind === 'general') return t('judged.info.general');
+  if (item.ruling?.kind === 'import') return t('judged.info.owner');
+  if (item.judged) return t('judged.info.read', { why: item.judged.why });
+  if (item.draft?.aiImport) return t('judged.ai');
+  return t('judged.info.none');
+}
+
+/** The buttons under that sentence: each one the owner's answer to where things stand. */
+function rulingButtons(item) {
+  const btn = (label, kind, section) => h('button', { class: 'btn outline', type: 'button', onclick: () => rule(item, kind, section) }, label);
+  if (item.moved) return [btn(t('judged.back'), 'import', 'dashboard'), btn(t('judged.not'), 'general')];
+  if (item.ruling?.kind === 'general') return [btn(t('judged.treat'), 'import')];
+  if (item.ruling?.kind === 'import' || item.judged) return [item.canMove ? btn(t('judged.move'), 'import', 'importquery') : null, btn(t('judged.not'), 'general')];
+  return [btn(t('judged.treat'), 'import'), item.canMove && item.draft?.aiImport ? btn(t('judged.move'), 'import', 'importquery') : null];
+}
+
+/**
+ * The owner's ruling on a dashboard conversation: an import enquiry or not, and whether it sits
+ * in Import Query. The suggestion is written again the new way when it was not yet touched. A
+ * conversation that now belongs to another section leaves this list, with Undo on the toast.
+ */
+async function rule(item, kind, section = 'dashboard') {
+  try {
+    const out = await api(`/api/items/${item.key}/ruling`, { body: { kind, section } });
+    if (state.selected === item.key) state.detail = out.item;
+    if (out.item.section === state.section) {
+      renderChat();
+      toast((kind === 'general' ? t('toast.ruledGeneral') : t('toast.ruledImport')) + (out.writing ? t('toast.rewriting') : ''));
+      refreshList();
+      refreshStatus();
+      return;
+    }
+    const rows = visibleRows(state);
+    const i = rows.findIndex((r) => r.key === item.key);
+    const next = rows[i + 1] || rows[i - 1] || null;
+    state.list = state.list.filter((r) => r.key !== item.key);
+    state.listTotal = Math.max(0, state.listTotal - 1);
+    repaint();
+    const toImport = out.item.section === 'importquery';
+    toast(toImport ? t('toast.movedToImport') : t('toast.movedToDashboard'), { label: 'Undo', run: async () => {
+      try { await api(`/api/items/${item.key}/ruling`, { body: { kind: 'import', section: toImport ? 'dashboard' : 'importquery' } }); } catch (e) { toast(e.message); return; }
+      await refreshList();
+      if (!narrow()) { state.selected = null; state.detail = null; await open(item.key); }
+    } });
+    if (next && !narrow()) { state.selected = null; state.detail = null; await open(next.key); }
+    else { state.selected = null; state.detail = null; repaint(); renderChat(); $('#app').dataset.view = 'list'; }
+    refreshList();
+    refreshStatus();
+  } catch (e) { toast(e.message); }
 }
 
 function renderComposer(item, els, { arriving = false } = {}) {
@@ -523,15 +653,19 @@ function renderComposer(item, els, { arriving = false } = {}) {
   const busy = state.busy.has(item.key);
   state.composerSig = composerSignature(item);
   box.replaceChildren();
+  // A dashboard enquiry read as an import enquiry: the line says so, with the owner's answers.
+  const notice = importNotice(item);
+  if (notice) box.append(notice);
 
-  if (busy) {
+  // Being written now, by this page or in the background: the same three lines either way.
+  if (busy || item.writing) {
     box.append(
       h('div', { class: 'draft-head' }, h('span', { class: 'draft-tag', text: 'Writing a suggestion' })),
       h('div', { class: 'sheet', role: 'status', 'aria-label': 'Writing a suggestion' }, h('div', { class: 'writing' }, h('i'), h('i'), h('i'))));
     return;
   }
 
-  const writeBtn = (label, kind = 'primary') => h('button', { class: `btn ${kind}`, type: 'button', onclick: () => write(item, '') }, icon('pencil'), label);
+  const writeBtn = (label, kind = 'primary', instruction = '') => h('button', { class: `btn ${kind}`, type: 'button', onclick: () => write(item, instruction) }, icon('pencil'), label);
 
   if (item.order) { renderOrderComposer(box, item, d, { arriving, writeBtn }); return; }
 
@@ -551,7 +685,8 @@ function renderComposer(item, els, { arriving = false } = {}) {
     return;
   }
   if (item.state !== 'awaiting' && !(d && d.status === 'ready')) {
-    box.append(h('div', { class: 'quiet' }, h('p', { text: item.note || 'No reply needed.' }), writeBtn('Write a reply anyway', 'outline')));
+    const prompt = promptControls(item);
+    box.append(h('div', { class: 'quiet' }, h('p', { text: item.note || 'No reply needed.' }), prompt.button, writeBtn('Write a reply anyway', 'outline'), prompt.row));
     return;
   }
   // An email thread, until the research step is in: nothing is written for it, asked or unasked.
@@ -559,11 +694,22 @@ function renderComposer(item, els, { arriving = false } = {}) {
     box.append(h('div', { class: 'quiet' }, h('p', { text: item.autoReason || 'Suggested replies for emails come with the next update.' })));
     return;
   }
+  // Nothing written yet: two buttons. Prompt, to say what the reply should say first, and Write it
+  // now. A failed try is tried again with the prompt it had. While the free models are busy or
+  // used up, the line says when Wheelman tries again instead of "within a few minutes".
   if (!d || d.status !== 'ready') {
     const failed = d && d.status === 'failed';
+    const retry = retryFor(item);
+    const line = failed ? `A suggestion could not be written. ${d.error}`
+      : item.autoReason || (item.autoDraft && retry > Date.now()
+        ? t(item.channel === 'marketplace' ? 'composer.retry.marketplace' : state.status?.retryWhy === 'daily' ? 'composer.retry.daily' : 'composer.retry.busy', { time: clock(retry) })
+        : t('composer.waiting'));
+    const prompt = promptControls(item, { instruction: failed ? d.instruction || '' : '' });
     box.append(h('div', { class: `quiet ${failed ? 'bad' : ''}`.trim() },
-      h('p', { text: failed ? `A suggestion could not be written. ${d.error}` : item.autoReason || 'A suggestion will be written within a few minutes.' }),
-      writeBtn(failed ? 'Try again' : 'Write it now')));
+      h('p', { text: line }),
+      prompt.button,
+      writeBtn(failed ? 'Try again' : 'Write it now', 'primary', failed ? state.prompts.get(item.key) || d.instruction || '' : ''),
+      prompt.row));
     return;
   }
 
@@ -847,9 +993,13 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
   if (sendBtn) sendBtn.addEventListener('click', doSend);
 
   const rewriteInput = outbound
-    ? h('input', { type: 'text', maxlength: '300', placeholder: 'For example: we bid 1.2m, sold for 1.31m. Or: ETA 14 Nov, ship Hoegh Trader', 'aria-label': 'What you know that the message needs' })
-    : h('input', { type: 'text', maxlength: '300', placeholder: 'What should change? For example: offer $27,500, or make it shorter', 'aria-label': 'What should change in the reply' });
-  rewriteInput.value = d.instruction || '';
+    ? h('input', { type: 'text', maxlength: '600', placeholder: 'For example: we bid 1.2m, sold for 1.31m. Or: ETA 14 Nov, ship Hoegh Trader', 'aria-label': 'What you know that the message needs' })
+    : h('input', { type: 'text', maxlength: '600', placeholder: 'What should change? For example: offer $27,500, or make it shorter', 'aria-label': 'What should change in the reply' });
+  // A prompt typed while a plain suggestion landed in the background is not lost: the Rewrite row
+  // opens with it, ready to write again.
+  const pendingPrompt = state.prompts.get(item.key) || '';
+  if (pendingPrompt) { state.prompts.delete(item.key); state.rewriteOpen = true; }
+  rewriteInput.value = pendingPrompt || d.instruction || '';
   const rewriteRow = h('div', { class: 'rewrite', hidden: !state.rewriteOpen },
     rewriteInput,
     h('button', { class: 'btn outline', type: 'button', onclick: () => write(item, rewriteInput.value) }, outbound ? 'Fill it in' : 'Write it again'));
@@ -1004,6 +1154,11 @@ function renderInfo() {
         h('p', { class: 'fine', text: `${item.standard.title}. ${STANDARD_WORDS[item.standard.status] || ''}` }),
         item.standard.note ? h('p', { class: 'fine', text: `Your note: “${item.standard.note}”` }) : null,
         h('button', { class: 'btn outline', type: 'button', onclick: () => setStandard(item, item.standard.status === 'REJECTED' ? 'PROPOSED' : 'REJECTED') }, item.standard.status === 'REJECTED' ? 'Put it back to rate' : 'Set this one aside')) : null,
+      // An ordinary enquiry read as an import enquiry, or not: what Wheelman read, and the owner's say.
+      item.canRule ? h('section', {},
+        h('h4', { text: t('judged.title') }),
+        h('p', { class: 'fine', text: rulingWords(item) }),
+        h('div', { class: 'rulings' }, ...rulingButtons(item))) : null,
       item.state === 'awaiting' && !item.dismissed && !item.standard ? h('section', {},
         h('h4', { text: 'Dismiss' }),
         h('p', { class: 'fine', text: item.order
@@ -1132,6 +1287,186 @@ function toggleInfo() {
   if (state.infoOpen) $('#info .icon-btn')?.focus({ preventScroll: true });
 }
 
+// ---- which AI writes: the panel behind the cog in the top bar ---------------------------------
+
+const usageNumber = (n) => Number(n || 0).toLocaleString('en-AU');
+
+/** "Used so far": a table of each model asked this month, with its requests and tokens today and over the month. */
+function usageTable(info) {
+  const label = Object.fromEntries(info.providers.map((p) => [p.id, p.label]));
+  const rows = new Map();
+  const add = (list, when) => {
+    for (const r of list || []) {
+      const k = `${r.provider}/${r.model}`;
+      if (!rows.has(k)) rows.set(k, { provider: r.provider, model: r.model, today: null, thisMonth: null });
+      rows.get(k)[when] = r;
+    }
+  };
+  add(info.usage?.thisMonth, 'thisMonth');
+  add(info.usage?.today, 'today');
+  if (!rows.size) return h('p', { class: 'fine', text: t('ai.usage.nothing') });
+  const cell = (r) => (r
+    ? h('td', {}, t('ai.usage.requests', { n: r.requests }), h('span', { class: 'fine', text: t('ai.usage.tokens', { in: usageNumber(r.tokensIn), out: usageNumber(r.tokensOut) }) }))
+    : h('td', { class: 'fine', text: t('ai.usage.none') }));
+  const sorted = [...rows.values()].sort((a, b) => (b.thisMonth?.requests || 0) - (a.thisMonth?.requests || 0) || a.model.localeCompare(b.model));
+  return h('table', {},
+    h('thead', {}, h('tr', {}, h('th', { text: t('ai.usage.model') }), h('th', { text: t('ai.usage.today') }), h('th', { text: t('ai.usage.month') }))),
+    h('tbody', {}, sorted.map((r) => h('tr', {},
+      h('td', {}, h('span', { class: 'model', text: r.model }), h('span', { class: 'fine', text: label[r.provider] || r.provider })),
+      cell(r.today), cell(r.thisMonth)))));
+}
+
+/**
+ * The panel: the provider, the model (read from the provider's own list), whether Marketplace
+ * uses it too, and a place to paste a key when the provider has none. "Use this model" keeps the
+ * choice; the other models stay behind it for when it does not answer.
+ */
+async function openAiPanel() {
+  if ($('#ai-panel')) return;
+  const head = () => h('div', { class: 'dialog-head' }, h('h3', { id: 'ai-title', text: t('ai.title') }), IconButton({ icon: 'x', label: t('ai.close'), onClick: () => dlg.close() }));
+  const dlg = h('dialog', { class: 'dialog', id: 'ai-panel', 'aria-labelledby': 'ai-title' });
+  const body = h('div', { class: 'dialog-body' }, head(), h('p', { text: t('ai.reading') }));
+  dlg.append(body);
+  document.body.append(dlg);
+  dlg.addEventListener('close', () => dlg.remove());
+  dlg.showModal();
+
+  let info;
+  try { info = await api('/api/ai'); } catch (e) { body.lastChild.textContent = e.message; return; }
+  const byId = Object.fromEntries(info.providers.map((p) => [p.id, p]));
+  let provider = info.choice?.provider || info.writing?.provider || info.providers[0].id;
+  let model = '';   // the model shown as picked
+  let models = [];  // what the provider on screen offers
+  let asked = 0;    // the number of the latest list request, so a slow one cannot land late
+
+  const note = h('p', { class: 'dialog-note', role: 'status' });
+  const say = (text, bad = false) => { note.textContent = text; note.classList.toggle('bad', bad); };
+  const providerPick = h('select', { class: 'pick', id: 'ai-provider', onchange: () => { provider = providerPick.value; model = ''; say(''); loadModels(); } },
+    info.providers.map((p) => h('option', { value: p.id, selected: p.id === provider || null, text: p.hasKey ? p.label : t('ai.provider.noKey', { label: p.label }) })));
+  const paidNote = h('p', { class: 'fine' });
+  const otherInput = h('input', { class: 'pick', type: 'text', id: 'ai-other', maxlength: '120', autocomplete: 'off', placeholder: t('ai.other.placeholder'), 'aria-label': t('ai.other.label') });
+  const otherRow = h('div', { class: 'field', hidden: true }, otherInput);
+  const modelPick = h('select', { class: 'pick', id: 'ai-model', onchange: () => { otherRow.hidden = modelPick.value !== '__other'; if (!otherRow.hidden) otherInput.focus(); } });
+  const refreshBtn = h('button', { class: 'link-btn', type: 'button', text: t('ai.refresh'), onclick: () => loadModels({ fresh: true }) });
+  const listNote = h('p', { class: 'fine' });
+  const mpBox = h('input', { type: 'checkbox', id: 'ai-mp', checked: info.choice?.marketplace || null });
+  const mpRow = h('label', { class: 'check', for: 'ai-mp', hidden: !(info.marketplaceOn && info.marketplaceModel) }, mpBox,
+    h('span', {}, t('ai.marketplace'), h('span', { class: 'fine', text: t('ai.marketplace.note', { model: info.marketplaceModel }) })));
+  const keyText = h('p', {});
+  const keyInput = h('input', { type: 'password', autocomplete: 'off', spellcheck: 'false', placeholder: t('ai.key.placeholder'), 'aria-label': t('ai.key.label') });
+  const keySave = h('button', { class: 'btn outline', type: 'button', text: t('ai.key.save'), onclick: () => saveKey() });
+  const keyRow = h('div', { class: 'rewrite' }, keyInput, keySave);
+  const keyBox = h('div', { class: 'keybox', hidden: true }, keyText, keyRow);
+  // "Used so far": each model's requests and tokens, the day's count against the cap, and where the cost is.
+  const costLinks = info.providers.filter((p) => p.hasKey && p.usageUrl).flatMap((p, i) => [i ? ', ' : '', h('a', { href: p.usageUrl, target: '_blank', rel: 'noopener', text: p.label })]);
+  const usageBox = h('div', { class: 'usage' },
+    h('h4', { text: t('ai.usage.title') }),
+    usageTable(info),
+    h('p', { class: 'fine', text: t('ai.usage.cap', { used: usageNumber(info.usage?.usedToday), limit: usageNumber(info.usage?.limit ?? info.dailyLimit) }) }),
+    costLinks.length ? h('p', { class: 'fine' }, t('ai.usage.intro'), ' ', costLinks, '.') : null);
+  const useBtn = h('button', { class: 'btn primary', type: 'button', text: t('ai.use'), onclick: () => use() });
+  keyInput.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); saveKey(); } });
+  otherInput.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); use(); } });
+
+  body.replaceChildren(
+    head(),
+    h('p', { text: t('ai.intro') }),
+    h('label', { class: 'field', for: 'ai-provider' }, t('ai.provider'), providerPick),
+    paidNote,
+    h('label', { class: 'field', for: 'ai-model' }, t('ai.model'), modelPick),
+    otherRow,
+    listNote,
+    mpRow,
+    keyBox,
+    usageBox,
+    note,
+    h('div', { class: 'dialog-foot' },
+      h('span', { class: 'fine', text: info.writing ? t('ai.writing', { model: info.writing.model }) : t('ai.writing.none') }),
+      h('button', { class: 'btn', type: 'button', text: t('ai.cancel'), onclick: () => dlg.close() }),
+      useBtn));
+
+  const pickedModel = () => (modelPick.value === '__other' ? otherInput.value.trim() : modelPick.value);
+
+  /** Paints the models of the provider on screen, and the key box when it has no key. */
+  function paint() {
+    const p = byId[provider];
+    paidNote.hidden = !!p.free;
+    paidNote.textContent = p.free ? '' : t('ai.paid', { label: p.label, limit: info.dailyLimit });
+    modelPick.replaceChildren(...models.map((m) => h('option', { value: m.id, text: m.label })), h('option', { value: '__other', text: t('ai.other') }));
+    const listed = models.some((m) => m.id === model);
+    modelPick.value = listed ? model : '__other';
+    otherRow.hidden = listed;
+    otherInput.value = listed ? '' : model;
+    modelPick.disabled = !p.hasKey;
+    useBtn.disabled = !p.hasKey;
+    keyBox.hidden = p.hasKey;
+    if (!p.hasKey) {
+      keyText.replaceChildren();
+      if (info.canSaveKey) put(keyText, t('ai.key.missing', { label: p.label }), ' ', h('a', { href: p.keyUrl, target: '_blank', rel: 'noopener', text: p.keyUrl.replace(/^https:\/\//, '') }), ' ', t('ai.key.kept'));
+      else put(keyText, t('ai.key.remote', { name: p.keyName }));
+      keyRow.hidden = !info.canSaveKey;
+    }
+  }
+
+  /** Reads the provider's list of models. Without a key, the models the .env file names. */
+  async function loadModels({ fresh = false } = {}) {
+    const p = byId[provider];
+    const mine = ++asked;
+    // Shown as picked: the choice for this provider, else what writes now, else the first listed.
+    if (!model) model = info.choice?.provider === provider ? info.choice.model : info.writing?.provider === provider ? info.writing.model : '';
+    if (!p.hasKey) { models = p.known.map((id) => ({ id, label: id })); model = model || models[0]?.id || ''; listNote.textContent = ''; paint(); return; }
+    listNote.textContent = t('ai.list.loading');
+    try {
+      const out = await api(`/api/ai/models?provider=${encodeURIComponent(provider)}${fresh ? '&fresh=1' : ''}`);
+      if (mine !== asked) return;
+      models = out.models;
+      listNote.replaceChildren(out.live ? t('ai.list.live', { label: p.label }) : t('ai.list.known', { label: p.label, why: out.error }), ' ', refreshBtn);
+    } catch (e) {
+      if (mine !== asked) return;
+      models = p.known.map((id) => ({ id, label: id }));
+      listNote.replaceChildren(t('ai.list.known', { label: p.label, why: e.message }), ' ', refreshBtn);
+    }
+    model = model || models[0]?.id || '';
+    paint();
+  }
+
+  /** "Use this model": the choice is kept, and the suggestions from now on come from it. */
+  async function use() {
+    const name = pickedModel();
+    if (!name) { say(t('ai.other.empty'), true); otherInput.focus(); return; }
+    useBtn.disabled = true;
+    try {
+      const out = await api('/api/ai/choice', { body: { provider, model: name, marketplace: mpBox.checked } });
+      state.status = out.status;
+      store.notify();
+      dlg.close();
+      if (!state.detail) renderWelcome();
+      toast(t('toast.aiChosen', { model: name }));
+    } catch (e) { say(e.message, true); useBtn.disabled = false; }
+  }
+
+  /** A key pasted for the provider on screen: tried, then kept in the .env file. The list is read with it. */
+  async function saveKey() {
+    const key = keyInput.value.trim();
+    if (!key) { keyInput.focus(); return; }
+    keySave.disabled = true;
+    say(t('ai.key.checking'));
+    try {
+      const out = await api('/api/ai/key', { body: { provider, key } });
+      const p = byId[provider];
+      p.hasKey = true;
+      keyInput.value = '';
+      providerPick.querySelector(`option[value="${provider}"]`).textContent = p.label;
+      say(out.checked ? t('ai.key.saved', { label: p.label }) : t('ai.key.savedUnchecked', { label: p.label }));
+      model = '';
+      await loadModels();
+    } catch (e) { say(e.message, true); }
+    finally { keySave.disabled = false; }
+  }
+
+  loadModels();
+}
+
 // ---- actions ---------------------------------------------------------------------
 
 function renderChat({ toBottom = false, arriving = false } = {}) {
@@ -1152,7 +1487,8 @@ function markRead(item) {
   const row = state.list.find((r) => r.key === item.key);
   if (row) row.unread = 0;
   // One fewer conversation with new messages: the numbers on the chip, the switch and the browser tab drop.
-  const section = sectionOf(item.key);
+  // A dashboard conversation moved to Import Query counts there, so the server's word on the section comes first.
+  const section = item.section || sectionOf(item.key);
   if (item.state === 'awaiting' && !item.dismissed && state.unread[section]) state.unread[section] -= 1;
   repaint();
   api(`/api/items/${item.key}/seen`, { body: {} }).catch(() => {});
@@ -1191,10 +1527,14 @@ async function write(item, instruction) {
   state.busy.add(item.key);
   state.rewriteOpen = false;
   state.betterOpen = false;
+  if (state.promptOpen === item.key) state.promptOpen = null;
+  state.heldAt.delete(item.key);
   if (state.selected === item.key) { renderHead(state.detail, chatFrame()); renderComposer(state.detail, chatFrame()); }
   try {
     const out = await api(`/api/items/${item.key}/draft`, { body: { instruction, message: item.order ? state.message || item.order.message || '' : '' } });
     state.busy.delete(item.key);
+    // The prompt did its work. A failed try keeps it, for Try again.
+    if (out.ok) state.prompts.delete(item.key);
     if (state.selected === item.key) {
       state.detail = out.item;
       state.copied = null;
@@ -1293,7 +1633,7 @@ async function restoreItem(key, reopen = false) {
   try {
     const out = await api(`/api/items/${key}/restore`, { body: {} });
     await refreshList();
-    const here = sectionOf(key) === state.section;
+    const here = (out.item?.section || sectionOf(key)) === state.section;
     if (state.selected === key) { state.detail = out.item; renderChat(); }
     else if (reopen && here && !narrow()) { state.selected = null; state.detail = null; await open(key); }
     toast(sectionOf(key) === 'auction' ? 'Back in To do' : 'Back in Waiting');
@@ -1418,6 +1758,9 @@ async function refreshDetail() {
     if (state.selected !== key) return;
     const previous = state.detail;
     state.detail = item;
+    // A suggestion being written in the background: look again in a few seconds, not at the next
+    // twenty-second check, so it appears as soon as it is ready.
+    if (item.writing && !state.writingPoll) state.writingPoll = setTimeout(() => { state.writingPoll = null; refreshDetail(); }, 4000);
     // A new message in the conversation on screen counts as read, as long as the page is being looked at.
     if (document.visibilityState === 'visible') markRead(item);
     const els = chatFrame();
@@ -1487,7 +1830,7 @@ async function loadMore() {
 // The search box asks the server for the matches among every row, a moment after the typing stops.
 let searchTimer = null;
 
-mountTopBar($('#topbar'), store, { sync: syncNow });
+mountTopBar($('#topbar'), store, { sync: syncNow, aiModel: openAiPanel });
 mountListColumn($('#side'), store, {
   open,
   showSection,
@@ -1499,6 +1842,7 @@ mountListColumn($('#side'), store, {
 document.addEventListener('keydown', (e) => {
   const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
   if (e.key === 'Escape') {
+    if ($('dialog[open]')) return; // the AI panel closes itself
     if (state.infoOpen && (window.matchMedia('(max-width: 1180px)').matches || $('#info').contains(document.activeElement))) { toggleInfo(); $('.who')?.focus(); return; }
     if (!typing && narrow() && $('#app').dataset.view === 'chat') closeChat();
     return;

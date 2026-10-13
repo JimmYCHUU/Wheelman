@@ -18,7 +18,10 @@ export const BASE_ENV = {
   ELIGIBLE_MODELS_PATH: path.join(os.tmpdir(), `wheelman-test-eligible-${process.pid}.json`),
   SIGN_OFF: 'Regards,\\nTeam Carbarn',
   GEMINI_API_KEY: 'test-key',
+  OPENAI_API_KEY: '',
   OPENROUTER_API_KEY: '',
+  // A key pasted on the page is written to the .env file: in tests, a scratch file, never the real one.
+  ENV_PATH: path.join(os.tmpdir(), `wheelman-test-env-${process.pid}`),
   GEMINI_MODEL: 'model-a',
   GEMINI_FALLBACK_MODELS: '',
   SECONDS_BETWEEN_DRAFTS: '0',
@@ -36,6 +39,7 @@ export const BASE_ENV = {
   VOICE_PEOPLE_FILE: 'voice/people.example.json',
   PHONE_ADDON: '1',
   PHONE_ADDON_ID: '',
+  PHONE_WRITE_AT_ONCE: '0', // a test switches it on when it is what the test is about: a background write would otherwise take other tests' scripted answers
   PORT: '0',
   // Sharing with the team is off, with no password, unless a test switches it on. No test ever
   // starts a tunnel.

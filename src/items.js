@@ -1,12 +1,13 @@
 // Builds the list of "work items": customers who have said something and are waiting for a reply.
 
-import { openDb, getLead, getLeadByConversation, getLeadByPhone, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor, getMailThread, getMailMessages, listMailThreads } from './db.js';
+import { openDb, getLead, getLeadByConversation, getLeadByPhone, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor, getMailThread, getMailMessages, listMailThreads, itemRuling, movedItemKeys } from './db.js';
 import { orderKey, orderMarks, orderStatus, orderRow, occasionFor, MESSAGES } from './orders.js';
 import { sameMessage, windowFor } from './phone.js';
 import { phoneKeys } from './normalize.js';
 import { readInquiry, isSilentInquiry, isReaction, isAcknowledgement, isOptOut, menuReply, sameText, squash, resolveStock, stockFromUrl, findUrls, unwrapRelay } from './text.js';
 import { classify, labelFor } from './situations.js';
-import { importContext } from './imports.js';
+import { importContext, judgedContext } from './imports.js';
+import { judgeImport } from './importjudge.js';
 import { firstNameOf, isPlaceholderName } from './redact.js';
 import { config } from './config.js';
 import { dealFor } from './deal.js';
@@ -417,6 +418,23 @@ export function buildItem({ conversationId = null, leadId = null }) {
 
   // An import or auction enquiry: what they asked us to find travels with the item.
   item.imports = importContext(lead);
+  // An ordinary enquiry whose words ask for a car from Japan is read as an import enquiry too
+  // (src/importjudge.js). The owner's ruling on the page wins either way, and says whether the
+  // conversation sits in Import Query instead of the dashboard.
+  const ruling = itemRuling(item.itemKey, lead?.id || null);
+  item.ruling = ruling;
+  item.judged = null;
+  if (ruling?.kind === 'general') item.imports = null;
+  else if (!item.imports) {
+    const stockAttached = !!(lead?.stocks?.length || (lead?.inquiries || []).some((i) => i.stockNo));
+    const texts = [...(lead?.inquiries || []).map((i) => i.text), ...timeline.filter((e) => e.who === 'customer').map((e) => e.text)];
+    const judged = ruling?.kind === 'import' || !item.deal ? judgeImport(texts, { stockAttached: stockAttached && ruling?.kind !== 'import' }) : null;
+    if (judged || ruling?.kind === 'import') {
+      item.judged = judged || { sign: 'owner', car: null, why: 'you said so' };
+      item.imports = judgedContext(lead, item.judged);
+    }
+  }
+  item.moved = ruling?.section === 'importquery' && config.mail.switchedOn ? 'importquery' : null;
   if (item.imports && !item.deal && !item.situation.all.includes('import_sourcing')) {
     const rest = item.situation.all.filter((s) => s !== 'general');
     item.situation.all = item.situation.primary === 'complaint' ? [...rest, 'import_sourcing'] : ['import_sourcing', ...rest];
@@ -742,6 +760,14 @@ export function listItems({ maxAgeHours = config.draftMaxAgeHours, olderThanHour
   if (source === 'importquery') {
     if (!config.mail.switchedOn) return [];
     for (const r of listMailThreads({ cutoff, before })) keep(buildMailItem(r.id));
+    // Dashboard conversations the owner moved here. They keep their keys and their replies still
+    // go out from the dashboard; only the list they sit on changes.
+    for (const key of movedItemKeys('importquery')) {
+      const item = itemFromKey(key);
+      if (!item?.moved || items.some((x) => x.itemKey === item.itemKey)) continue;
+      if ((item.lastInboundAt || item.lastActivityAt || 0) >= before) continue;
+      keep(item);
+    }
     items.sort(newest);
     return items.slice(0, limit);
   }
@@ -758,7 +784,11 @@ export function listItems({ maxAgeHours = config.draftMaxAgeHours, olderThanHour
   if (config.phone.switchedOn) {
     for (const t of listPhoneThreads({ cutoff })) if (!t.conversation_id && !t.lead_id && t.latest_at < before) keys.set(`ph:${t.id}`, { phoneThreadId: t.id });
   }
-  for (const ref of keys.values()) keep(ref.phoneThreadId ? buildPhoneItem(ref.phoneThreadId) : buildItem(ref));
+  for (const ref of keys.values()) {
+    const item = ref.phoneThreadId ? buildPhoneItem(ref.phoneThreadId) : buildItem(ref);
+    if (item?.moved) continue; // moved into Import Query by the owner: listed there
+    keep(item);
+  }
   items.sort(newest);
   return items.slice(0, limit);
 }

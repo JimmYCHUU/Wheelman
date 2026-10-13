@@ -44,7 +44,21 @@ export function notePhoneReport(r) {
   state.phone = { at, threads: r.threads || 0, stored: r.stored || 0, signedOut: !!r.signedOut, found: r.found || null, hidden: !!r.hidden, lastStoredAt: r.stored ? at : before?.lastStoredAt || null };
   const persisted = getMeta('phone_last_report', null);
   if (r.stored || !persisted || at - (persisted.at || 0) >= PHONE_NOTE_GAP_MS) setMeta('phone_last_report', state.phone);
+  // A new text seen on the phone: check the dashboard for its copy and write the suggestion now,
+  // as a lead alert does, instead of at the next few-minute check. At most once per half minute,
+  // so the add-on's heartbeat never stacks checks.
+  if (r.stored && config.phone.writeAtOnce && providers().length && at - phoneCheckAt >= PHONE_CHECK_GAP_MS) {
+    phoneCheckAt = at;
+    state.draftRun = (async () => {
+      await runSync();
+      const made = await draftWaiting();
+      logLine('phone', `${r.stored} new text(s) seen on the phone; the dashboard was checked in ${Math.round((Date.now() - at) / 1000)} s and ${made} suggestion(s) written`);
+      return made;
+    })().catch((e) => { logLine('phone', `Writing suggestions after a phone report failed: ${e.message}`); return 0; });
+  }
 }
+let phoneCheckAt = 0;
+const PHONE_CHECK_GAP_MS = 30 * 1000;
 
 /** Notes an email thread handed in from Gmail. These are rare, so each one is written down. */
 export function noteMailReport(out) {
@@ -55,6 +69,19 @@ export function noteMailReport(out) {
 const RETRY_FAILED_AFTER_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 3; // in any hour, for one customer message
 const HOLD_AFTER_BUSY_MS = 4 * 60 * 1000;
+
+// The owner has the Prompt line open for a conversation: its automatic write waits, so the one
+// request made is the one from the prompt. A hold lapses by itself when nothing follows it.
+const HOLD_WHILE_TYPING_MS = 90 * 1000;
+const held = new Map(); // itemKey -> until (ms)
+export function holdItem(itemKey, ms = HOLD_WHILE_TYPING_MS) { const until = Date.now() + ms; held.set(itemKey, until); return until; }
+export function releaseItem(itemKey) { held.delete(itemKey); }
+export function isHeld(itemKey, now = Date.now()) {
+  const until = held.get(itemKey);
+  if (until === undefined) return false;
+  if (until <= now) { held.delete(itemKey); return false; }
+  return true;
+}
 
 /** Failed tries for one customer message in the last hour. Older ones no longer count, so it is tried again later. */
 function attemptsFor(itemKey, anchorKey, now = Date.now()) {
@@ -193,6 +220,7 @@ export async function draftWaiting({ max = 25 } = {}) {
       const chat = item.channel === 'marketplace';
       if (chat && (marketplaceLeft <= 0 || Date.now() < state.mpHoldUntil)) continue;
       if (!item.autoDraft) continue;
+      if (isHeld(item.itemKey)) continue; // the owner is typing a prompt for it: that write comes from the page
       if (isDismissed(item.itemKey, item.anchorKey)) continue;
       const existing = latestDraft(item.itemKey, item.anchorKey);
       if (existing && existing.status !== 'failed') continue;
@@ -201,7 +229,9 @@ export async function draftWaiting({ max = 25 } = {}) {
         if (attemptsFor(item.itemKey, item.anchorKey) >= MAX_ATTEMPTS) continue;
       }
       if (usage().remaining <= 0) { state.pausedUntil = Date.now() + 30 * 60 * 1000; break; }
-      const d = await draftFor(item);
+      // A failed write from the owner's prompt is tried again with the prompt, not without it.
+      const d = await draftFor(item, { instruction: existing?.status === 'failed' ? existing.instruction || '' : '' });
+      if (d.dropped) continue; // the owner's own write for this message landed first; nothing was kept
       if (d.status === 'failed') {
         // Only a problem that needs somebody (a rejected key, a fault) is put on the page.
         // Busy or used-up free models are tried again without bothering anyone.
@@ -353,6 +383,10 @@ export function statusReport() {
     lastSync: state.lastSync || getMeta('last_sync_status', null),
     lastDraftError: state.lastDraftError,
     paused: Date.now() < state.pausedUntil,
+    // When the automatic writing starts again, if it is stopped: after used-up models ('daily') or
+    // busy ones ('busy'). The page says so in the message box instead of "within a few minutes".
+    retryAt: Date.now() < state.pausedUntil ? state.pausedUntil : Date.now() < state.holdUntil ? state.holdUntil : null,
+    retryWhy: Date.now() < state.pausedUntil ? 'daily' : Date.now() < state.holdUntil ? 'busy' : null,
     ai: { providers: modelStatus(), lastModel: lastModel().model, usedToday: u.total, limit: u.limit },
     syncMinutes: config.syncMinutes,
     // The Gmail button: whether the intake is on, and the last thread it handed in.
@@ -367,6 +401,7 @@ export function statusReport() {
       lastSync: config.marketplace.enabled ? state.mpSync || getMeta('mp_sync_status', null) : null,
       draftsLastDay: mpDraftsLastDay(),
       dailyDrafts: config.marketplace.dailyDrafts,
+      retryAt: Date.now() < state.mpHoldUntil ? state.mpHoldUntil : null,
     },
     phone: phoneStatus(),
     // Backups: whether they run by themselves, where they go, and the last one written.

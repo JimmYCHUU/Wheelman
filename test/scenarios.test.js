@@ -450,7 +450,7 @@ test('"this afternoon" at 8:44 pm is rejected, even when the instruction asked f
   const { d, asked, retry, attempts } = await draftAt(226, at, instruction,
     'Hi {{NAME}},\nNo worries. We will send the blue slip through this afternoon.',
     'Hi {{NAME}},\nNo worries. We will send the blue slip through shortly.');
-  assert.match(asked, /Follow it for what to say\..*It does not override the rules on facts and times/);
+  assert.match(asked, /Our staff have decided what this reply says\..*It does not override the rules on facts, figures, links, days and promises/);
   assert.equal(attempts, 2, 'sent back once');
   assert.match(asked, /This was written 8 hours ago/);
   assert.match(retry, /"this afternoon" has already passed: it is 8:44\spm in Sydney/);

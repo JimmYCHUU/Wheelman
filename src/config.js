@@ -20,6 +20,8 @@ export const config = {
   importPagesDir: path.join(root, 'knowledge', 'website', 'importing'),
   voiceDir: path.join(root, 'voice'),
   webDir: path.join(root, 'web'),
+  // The .env file itself: where a key pasted on the page is written. Tests point this at a scratch file.
+  envPath: env.ENV_PATH || path.join(root, '.env'),
 
   dashboard: {
     // The address of the dashboard's data service. Set in .env; it is not written in the code.
@@ -59,16 +61,31 @@ export const config = {
   },
 
   llm: {
-    // Free models are often busy. Each list is tried in order, best first, until one answers.
+    // Three providers, each with the models the .env file names, best first. The page chooses
+    // which provider and model write (src/aimodels.js); the rest are tried in this order when it
+    // does not answer. Free models are often busy. Each provider also has a models address, where
+    // the page reads what the provider offers right now.
     gemini: {
       apiKey: (env.GEMINI_API_KEY || '').trim(),
       models: list(env.GEMINI_MODEL || 'gemini-3.8-flash', env.GEMINI_FALLBACK_MODELS ?? 'gemini-3.7-flash,gemini-3.5-flash,gemini-3.5-flash-lite'),
       url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+      modelsUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
+    },
+    // ChatGPT: OpenAI's own service, paid by the request. gpt-5.6 is OpenAI's name for its current
+    // model; the page lists the ones the key can use.
+    openai: {
+      apiKey: (env.OPENAI_API_KEY || '').trim(),
+      models: list(env.OPENAI_MODEL || 'gpt-5.6', env.OPENAI_FALLBACK_MODELS ?? ''),
+      url: 'https://api.openai.com/v1/chat/completions',
+      modelsUrl: 'https://api.openai.com/v1/models',
     },
     openrouter: {
       apiKey: (env.OPENROUTER_API_KEY || '').trim(),
       models: list(env.OPENROUTER_MODEL || 'google/gemma-4-31b-it:free', env.OPENROUTER_FALLBACK_MODELS ?? 'google/gemma-4-26b-a4b-it:free'),
       url: 'https://openrouter.ai/api/v1/chat/completions',
+      modelsUrl: 'https://openrouter.ai/api/v1/models',
+      // The models list is public, so a pasted key is checked here.
+      keyCheckUrl: 'https://openrouter.ai/api/v1/auth/key',
     },
     // Marketplace chats are written by this model and the ones after it in the list, so the
     // small daily allowance of the better models is kept for dashboard customers. Empty: no split.
@@ -99,6 +116,9 @@ export const config = {
     addonId: (env.PHONE_ADDON_ID || '').trim().toLowerCase(),
     // After this many minutes without a report the page says the add-on has gone quiet.
     staleMinutes: num(env.PHONE_STALE_MINUTES, 10),
+    // A new text seen on the phone sets off a dashboard check and the suggestion at once, instead
+    // of waiting for the next few-minute check. PHONE_WRITE_AT_ONCE=0 leaves it to that check.
+    writeAtOnce: !/^(0|false|no|off)$/i.test((env.PHONE_WRITE_AT_ONCE ?? '1').trim()),
   },
 
   // Email threads the owner hands in from Gmail with the add-on's "Send to Wheelman" button: the
@@ -172,6 +192,6 @@ export function missingSettings() {
   const missing = [];
   if (!config.dashboard.baseUrl) missing.push('dashboard address (DASHBOARD_API_URL)');
   if (!config.dashboard.username || !config.dashboard.password) missing.push('dashboard login (DASHBOARD_USERNAME and DASHBOARD_PASSWORD)');
-  if (!config.llm.gemini.apiKey && !config.llm.openrouter.apiKey) missing.push('an AI key (GEMINI_API_KEY or OPENROUTER_API_KEY)');
+  if (!config.llm.gemini.apiKey && !config.llm.openai.apiKey && !config.llm.openrouter.apiKey) missing.push('an AI key (GEMINI_API_KEY, OPENAI_API_KEY or OPENROUTER_API_KEY)');
   return missing;
 }

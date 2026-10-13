@@ -24,6 +24,8 @@ test('the wording table fills in names and picks plurals by the number', () => {
   assert.equal(t('welcome.reads.email', { n: 12 }), 'Reads 12 past import emails the team answered');
   assert.equal(t('welcome.reads.dashboard', { team: t('practice.team', { n: 556 }), voice: 40 }), 'Reads 556 replies the team sent in the last year, whoever sent them and from wherever, and 40 of our salespeople\'s own replies');
   assert.equal(t('status.ai', { used: 14, limit: 500 }), '14 of 500 AI requests used today');
+  assert.equal(t('composer.retry.busy', { time: '10:42 am' }), 'The free AI models are busy. Wheelman tries again at 10:42 am, or you can write it now.');
+  assert.equal(t('composer.prompt'), 'Prompt');
   assert.equal(t('no.such.key'), 'no.such.key');
   assert.equal(t('status.checking', {}), 'Checking ');
   assert.equal(listOf(['a', 'b', 'c']), 'a, b and c');

@@ -195,6 +195,8 @@
   .paste-foot .grow { flex: 1; }
 
   .rewrite { display: flex; gap: var(--sp-2); }
+  /* The Prompt line under the two buttons, before a suggestion exists: a row of its own. */
+  .quiet .rewrite { flex-basis: 100%; }
 
   .after {
     display: flex; align-items: center; gap: var(--sp-2) var(--sp-2); flex-wrap: wrap;

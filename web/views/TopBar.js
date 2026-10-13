@@ -35,21 +35,24 @@ export function statusWords(s, section) {
 }
 
 /**
- * mountTopBar(root, store, { sync }): paints once and after every change to the status, the
- * section, or the counts. Returns nothing; the bar repaints itself.
+ * mountTopBar(root, store, { sync, aiModel }): paints once and after every change to the status,
+ * the section, or the counts. Returns nothing; the bar repaints itself. aiModel opens the panel
+ * that chooses which AI writes.
  */
 export function mountTopBar(root, store, actions) {
   const dot = h('span', { class: 'dot' });
   const text = h('span', { class: 'status-text' });
   const status = h('p', { class: 'topbar-status', title: '' }, dot, text);
   const sync = IconButton({ icon: 'refresh', label: t('action.checkNow'), id: 'sync', onClick: () => actions.sync(sync) });
+  // The cog: which AI writes the suggestions.
+  const ai = IconButton({ icon: 'settings', label: t('action.aiModel'), id: 'ai-model', onClick: () => actions.aiModel?.() });
 
   root.replaceChildren(
     h('div', { class: 'topbar-brand' },
       h('span', { class: 'brand-mark' }, mark()),
       h('span', { class: 'brand-words' }, h('h1', { text: t('app.name') }), h('span', { class: 'brand-by', text: t('app.by') }))),
     status,
-    h('div', { class: 'topbar-actions' }, sync));
+    h('div', { class: 'topbar-actions' }, ai, sync));
 
   const paint = () => {
     const s = store.state.status;

@@ -3,7 +3,7 @@
 [![CI](https://github.com/JimmYCHUU/Wheelman/actions/workflows/ci.yml/badge.svg)](https://github.com/JimmYCHUU/Wheelman/actions/workflows/ci.yml)
 ![Node.js 22.13 or newer](https://img.shields.io/badge/node-%E2%89%A522.13-339933)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-lightgrey)
-![Free AI models](https://img.shields.io/badge/AI-free%20models%20only-blue)
+![AI models](https://img.shields.io/badge/AI-free%20models%2C%20or%20ChatGPT-blue)
 ![Sends only on Send](https://img.shields.io/badge/sending-Marketplace%20Send%20button%20only-orange)
 
 Carbarn's reply assistant. Wheelman reads new enquiries from the Carbarn dashboard and new
@@ -19,7 +19,7 @@ The whole thing is one page in the browser, laid out like a messaging app: conve
 left, one open chat, and the suggestion waiting in the message box. It looks like Carbarn on
 purpose.
 
-`Node.js 24` · `node:sqlite` · `No dependencies` · `Gemini free tier` · `OpenRouter free models`
+`Node.js 24` · `node:sqlite` · `No dependencies` · `Gemini free tier` · `OpenRouter free models` · `ChatGPT (OpenAI), if chosen`
 
 ---
 
@@ -119,6 +119,7 @@ shape with invented names. The tone guide is `voice/house-voice.md`.
         │                     our salespeople's real replies   │
         │                     what the team sent lately        │
         │                     what you changed last time       │
+        │                     your prompt, when you gave one   │
         └──────────────────────────┬──────────────────────────┘
         ┌──────────────────────────▼──────────────────────────┐
         │ 5. FREE AI MODEL    six models, tried in order       │──► PAUSED (day's allowance used)
@@ -197,8 +198,9 @@ nobody agreed to. It is sent back for one rewrite when it:
 - names a state or city the customer never mentioned.
 
 A promise with no time attached ("we will send it shortly") shows one quiet note. An
-instruction typed into **Rewrite** still decides what to say, but it no longer overrides these
-rules.
+instruction typed into **Prompt** or **Rewrite** still decides what to say, and a figure,
+link or promise in it counts as given by staff, but it never overrides these rules. A
+customer's name or number typed into it is removed before the AI sees it, like everything else.
 
 ### What gets no suggestion
 
@@ -218,6 +220,31 @@ and live auction pages. The dashboard keeps them on a separate list from the car
 Wheelman reads that list too. For each one it also reads the auction request our staff keep
 for that customer (which car, which years, the budget, a target bid), and the conversation as
 usual. The details panel shows it under **Looking for, from Japan**.
+
+### An ordinary enquiry read as an import enquiry
+
+Not every import enquiry arrives on that list. A customer may write in from the contact page,
+or text the yard's number, about a car we bring from Japan. Wheelman reads their own words
+for three signs, in this order: a model code from the website's import-eligible list (JZS161,
+GDH206); a make and model from that list when no such car is on the yard; or the words
+themselves ("can you import", "from Japan", JDM, auction, landed cost, compliance). A customer
+asking about a car in stock is never read this way, and a model name alone is not enough
+("Note" and "March" are models too): the make must be there as well. The list is the one the
+Import Query section reads from the website once a day; without it, only the words count.
+
+When Wheelman reads one, the reply is written the import way, a line above the message box
+says why, and the details panel has an **Import enquiry** section. You have the last word:
+
+- **Not an import enquiry** writes the reply the ordinary way.
+- **Treat as an import enquiry** does the opposite for one Wheelman missed. The details panel
+  offers it on every dashboard conversation.
+- **Move to Import Query** lists the conversation in that section instead, with **Move back
+  to Dashboard** there. It keeps its key, and the reply still goes out from the dashboard.
+
+A ruling is kept with the lead, so it follows into the text conversation that starts later.
+After a ruling the suggestion is written again the new way, unless you had already changed its
+text. The AI is also asked whether an ordinary enquiry looks like an import one; when it thinks
+so, the line offers the same buttons, and nothing changes until you choose.
 
 What the reply is depends on how much we know.
 
@@ -355,7 +382,7 @@ needs.
 |---|---|
 | Node.js | 24 (22.13 or newer works) |
 | Dashboard login | Your own Carbarn dashboard username and password |
-| AI key | A free Gemini key from https://aistudio.google.com/apikey |
+| AI key | A free Gemini key from https://aistudio.google.com/apikey, or a ChatGPT (OpenAI) key from https://platform.openai.com/api-keys, which is paid by the request |
 | Backup AI key | Optional. A free OpenRouter key from https://openrouter.ai/keys |
 
 ### One-time setup
@@ -369,6 +396,7 @@ the `=` with no spaces and no quote marks, save, then start Wheelman.
 | `DASHBOARD_USERNAME` | Your dashboard username |
 | `DASHBOARD_PASSWORD` | Your dashboard password |
 | `GEMINI_API_KEY` | The free Gemini key |
+| `OPENAI_API_KEY` | A ChatGPT (OpenAI) key, if you use it. The page can also take one: see [Free AI models](#free-ai-models) |
 | `OPENROUTER_API_KEY` | Optional backup key |
 | `MARKETPLACE_URL` | The address of the Marketplace inbox. Leave empty to keep that section off |
 | `DASHBOARD_ORIGIN` | The address of the dashboard's own website, sent as the origin of each read. Leave empty to use the data service's address |
@@ -407,7 +435,10 @@ npm.cmd test                :: the automated checks, no internet needed
 1. Double-click **Start Wheelman.cmd** and leave the black window open.
 2. The browser tab shows a number when a customer has sent something new: `(2) Wheelman`.
 3. Pick a customer from the list. Their number clears once you have opened the conversation.
-4. Read the suggestion in the message box. Fill in anything highlighted.
+4. Read the suggestion in the message box. Fill in anything highlighted. If nothing is written
+   yet and you already know what the reply should say, press **Prompt**, type it in one line and
+   press Enter: Wheelman writes the reply from your words in one request, instead of its own
+   version first. Otherwise leave it, or press **Write it now**.
 5. Press **Copy reply**, paste it into the dashboard, and send it. In a Marketplace chat, press
    **Send reply** instead and it goes to the buyer from here (Copy still works there too).
 6. The customer leaves **Waiting** by themselves once the reply appears in the conversation.
@@ -419,6 +450,9 @@ it off). A new lead announced there sets off a check at once, so the lead's text
 within about a minute without anyone pressing "Check for new messages now", even while a
 suggestion is being written for someone else or a check is already under way; its own suggestion
 follows as soon as the AI is free. A price change or a sale refreshes the car list straight away.
+A text the phone add-on sees before the dashboard has it sets off a check and the suggestion
+the same way, so it is answered within a minute rather than at the next check
+(`PHONE_WRITE_AT_ONCE=0` leaves it to the next check).
 Each announced lead is noted in `data\wheelman.log` with how long the check took. The feed covers every Carbarn site, but the
 Sydney lead list that the dashboard and Wheelman both read is filtered to the Australian
 platform, so an enquiry from another site (a bare phone number from "Lead Service", say) is
@@ -551,6 +585,18 @@ A switch at the top chooses the section: **Dashboard** for leads and text messag
 
 The suggestion waits in the message box, marked **not sent**. The box is an editor.
 
+- **Prompt**, before a suggestion exists. When nothing has been written yet, the box shows two
+  buttons: **Prompt** and **Write it now**. If you already know what the reply should say,
+  press **Prompt**, type it in one line, for example `we have none of that model, we can source
+  one if they tell us which`, and press Enter. Wheelman writes the reply from your words, in
+  Carbarn's voice, in one request, instead of writing its own version first for you to redo.
+  While the line is open the automatic suggestion for that conversation waits a minute and a
+  half, so there is only ever the one request; close the line and it carries on as before.
+  **Write it now** writes without a prompt. A try that failed is tried again with the prompt it
+  had. The sentence above the buttons says when Wheelman will try again by itself if the free
+  models are busy or used up. The three shimmering lines show whenever a suggestion is being
+  written for the open conversation, whether you or Wheelman started it, and only one is ever
+  written at a time for one message.
 - **Change it.** Click in the text and type. What you type is saved a moment after you stop,
   so it is still there after a reload, a restart or a look at another conversation. The top
   right of the box says when it was saved.
@@ -561,7 +607,8 @@ The suggestion waits in the message box, marked **not sent**. The box is an edit
   the whole text and pressing `Ctrl + C`. When you had changed the text, Wheelman learns from
   the change.
 - **Rewrite** takes an instruction, for example `offer $27,500` or `make it shorter`. It
-  changes this reply only, and replaces what is in the box.
+  changes this reply only, and replaces what is in the box. A prompt you typed while a
+  suggestion landed by itself is waiting here, ready to write again.
 - **Good reply** approves the reply as it stands in the box: the suggestion as written, or
   with your changes. Wheelman keeps it as the model for similar messages. If you change the
   text afterwards, the model follows. Press the button again to take the approval back.
@@ -929,6 +976,7 @@ of `extension/mail.js` with.
 | `PHONE_ADDON` | Set to `0` to stop taking the phone reader's reports | `1` |
 | `PHONE_ADDON_ID` | The add-on's id as `chrome://extensions` shows it, so no other add-on is listened to, on either of its routes | Empty: any add-on on this computer |
 | `PHONE_STALE_MINUTES` | After this long without a report, the page says the add-on has gone quiet | `10` |
+| `PHONE_WRITE_AT_ONCE` | A new text seen on the phone sets off a dashboard check and its suggestion at once, as a new lead does; `0` leaves it to the next few-minute check | `1` |
 | `IGNORED_SENDERS` | Senders that are never customers and are never listed: a contact saved on the phone under a label, a finance company, a courier. Comma-separated; spaces and case are ignored | `Not customer, OTP, Delivery Service, Autotrader, CreditOne` |
 
 ## What Wheelman knows
@@ -1076,27 +1124,68 @@ The business facts themselves are in `knowledge/business-facts.md`.
 
 ## Free AI models
 
-Tried in order; the first that answers is used.
+Three providers can write: Gemini (Google, free tier), ChatGPT (OpenAI, paid by the request)
+and OpenRouter (free models). ChatGPT writes first whenever it has a key; which one writes can
+be chosen on the page.
 
-1. `gemini-3.8-flash`
-2. `gemini-3.7-flash`
-3. `gemini-3.5-flash`
-4. `gemini-3.5-flash-lite`
-5. `google/gemma-4-31b-it:free` (OpenRouter)
-6. `google/gemma-4-26b-a4b-it:free` (OpenRouter)
+### Choosing the AI on the page
 
-Free models are often busy. A busy model is rested for five minutes and the next one is
-tried. Models lower in the list write less polished replies.
+The cog at the top right opens **Which AI writes**. Pick the provider, then the model from the
+list the provider itself offers right now (read with your key and kept for an hour; **Read it
+again** refreshes it), or type a model's name under **Another model…**. **Use this model** keeps
+the choice in the database, so it survives a restart, and the next suggestion comes from it.
+The welcome panel says which model writes, with a **Change** link to the same panel, and the
+tooltip on the status line shows the whole order.
 
-Dashboard customers are asked of the whole list, best first. Marketplace chats start at the
-fourth model, so the first three are kept for dashboard customers. Hovering over the status
-line shows which models are for dashboard customers only.
+A provider without a key is listed as "no key yet". Choosing it shows where to create a key
+and a box to paste it into. The key is tried on the provider first; one the provider rejects
+is not kept. An accepted key is written into the `.env` file on this computer and used at
+once, with no restart. A key can be pasted only on the computer Wheelman runs on, not through
+the team link; the model can be chosen from anywhere the page is open.
+
+ChatGPT has no free allowance: every request is paid for. Wheelman's own cap
+(`DAILY_DRAFT_LIMIT`, 200 a day) is the only limit on it. ChatGPT is asked in its own request
+shape: a reasoning model keeps its own temperature and is given room to think before it
+answers, and a field a model refuses is dropped and the request sent again.
+
+**Used so far**, lower in the same panel, is what the AI has been asked: for each model, the
+requests and tokens today and this month, and the day's count against the cap. Tokens are
+what the paid providers charge for, roughly four letters each; a model's thinking counts as
+tokens out. Wheelman does not know the prices, so what it has cost is on the provider's own
+usage page, linked from the panel. A Gemini key from a project with billing switched on is paid
+by the token too, even though Gemini is listed as a free provider.
+
+### The order models are tried in
+
+The chosen model goes first. With nothing chosen, and after the chosen model when it does not
+answer, the rest follow in this order:
+
+1. `gpt-5.6` (ChatGPT, when it has a key)
+2. `gemini-3.8-flash`
+3. `gemini-3.7-flash`
+4. `gemini-3.5-flash`
+5. `gemini-3.5-flash-lite`
+6. `google/gemma-4-31b-it:free` (OpenRouter)
+7. `google/gemma-4-26b-a4b-it:free` (OpenRouter)
+
+`GEMINI_MODEL`, `OPENAI_MODEL` and `OPENROUTER_MODEL` in `.env` set each provider's first
+model, and `GEMINI_FALLBACK_MODELS`, `OPENAI_FALLBACK_MODELS` and `OPENROUTER_FALLBACK_MODELS`
+the ones after it. Free models are often busy. A busy model is rested for five minutes and the
+next one is tried. Models lower in the list write less polished replies.
+
+Dashboard customers and import emails are asked of the whole list, best first. Marketplace
+chats start at the small model (`MARKETPLACE_MODEL`) and keep to the free models
+after it, so the better ones are kept for dashboard customers and nothing paid is spent on
+Marketplace. Ticking **Use it for Marketplace too** on the panel puts the chosen model first
+for Marketplace as well. Hovering over the status line shows which models are for dashboard
+customers only.
 
 Each free model also has its own daily allowance, and it is small. On 3 October 2026 Gemini
-allowed 20 requests a day to each of the first three models; the fourth has a larger
-allowance. A model that says its day is used up is left alone until the time it gives, and
+allowed 20 requests a day to each of its three better models; the Flash-Lite model has a
+larger allowance. A model that says its day is used up is left alone until the time it gives, and
 the next model carries on, so on a busy day the later suggestions come from the smaller
-models. Hover over the status line at the top of the list to see which models are used up.
+models. A ChatGPT account with no credit left is set aside for an hour in the same way.
+Hover over the status line at the top of the list to see which models are used up.
 When no model can answer, the suggestion is tried again by itself a few minutes later, up to
 three times an hour; nothing red is shown for that. When every model is used up for the day,
 the page says suggestions are paused and when they resume.
@@ -1224,12 +1313,16 @@ computer. Git never sees any of it.
 npm.cmd test
 ```
 
-291 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
+307 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
 a stand-in auction feed on this computer: who counts as waiting and who does not, stock numbers matched to the right
 car however a portal writes them (a year in front, a portal code, upper or lower case), that
 no customer detail and no cost figure reaches the AI request, an invented price
 rejected and retried, a customer's own price never accepted as ours, a staff figure in a
-rewrite accepted, nothing drafted for an opt-out, a sold car bringing a similar one into the
+rewrite accepted, a prompt reaching the AI last with the customer's details removed, one
+suggestion written at a time for a message with a plain write joining the one under way and
+never overwriting a prompted one, a failed prompt kept for the retry, the automatic write
+waiting while the Prompt line is open, a text from the phone written for at once,
+nothing drafted for an opt-out, a sold car bringing a similar one into the
 request, a message that tries to give orders passed as data, busy models and the daily cap,
 learning from copied and sent replies with details removed, that blanks and bank details are
 never learned, the greeting and sign-off once a day, the in-person and online inspection links

@@ -96,9 +96,9 @@ Return one JSON object and nothing else:
   "rung": "where this customer is, exactly as given under THIS CUSTOMER'S NEXT STEP: interest, proof, fit, commit or buyer; empty when that section is absent",
   "facts_used": ["each fact you relied on, as a short statement including the figure"],
   "needs_human": [{"marker": "[PRICE?]", "reason": "why a person must decide this"}],
-  "hold": false
+  "hold": false${!chat && !email && !order ? ',\n  "import_enquiry": false' : ''}
 }
-Set "hold" to true only for complaints, disputes and refund requests: a person decides those before anything is sent.
+Set "hold" to true only for complaints, disputes and refund requests: a person decides those before anything is sent.${!chat && !email && !order ? '\nSet "import_enquiry" to true only when the customer wants a car found and brought from Japan for them, not one we have on the yard.' : ''}
 "needs_human" must list every marker that appears in "reply". Use an empty list when there are none.`;
 }
 
@@ -670,10 +670,12 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     P.push('Write the reply again so that it does what the note teaches. Say it to the customer in our voice, in your own words: do not repeat the note\'s wording. Where the note quotes a line and says not to use it, leave out that line and what it says. Do not tell the customer anything the note calls internal, and do not mention the note. Figures and links given in the note may be used.');
   }
 
+  // What our staff typed for this one reply, in the Prompt line before it was written or in Rewrite
+  // after. Customer details are removed from it as from everything else the AI is shown.
   if (instruction) {
     P.push('\n=== INSTRUCTION FROM OUR STAFF FOR THIS DRAFT ===');
-    P.push(instruction.slice(0, 600));
-    P.push('Follow it for what to say. Figures given here by staff may be used in the reply. It does not override the rules on facts and times: if it names a time that has already passed (see NOW), do not repeat that time and do not pick another one. Write "shortly", or use [DATE?].');
+    P.push(redact(instruction, lead).slice(0, 600));
+    P.push('Our staff have decided what this reply says. Say it to the customer in our voice and in your own words; the customer never sees this instruction, so do not mention it. On what to say, it outranks the examples, the model replies, what the team sent before and the moves in SELLING. It does not override the rules on facts, figures, links, days and promises: a figure or link given here by staff may be used, anything else still comes from this request, and if it names a time that has already passed (see NOW), do not repeat that time and do not pick another one. Write "shortly", or use [DATE?].');
   }
 
   P.push(`\nWrite the reply now as the JSON object described.${owner.lessons.length ? ' Before you answer, check it against each of the owner\'s lessons above.' : ''}`);
