@@ -325,8 +325,8 @@ async function writeDraft(item, { instruction = '', coaching = null, save = true
     // answer, or it will not keep figures out of its lines, the opening is the standard one.
     const standardOpening = () => ({ json: { reply: plan.opening, needs_human: [], facts_used: [], hold: false }, provider: 'none', model: 'standard wording' });
     const usable = (e) => plan?.stage === 'offer' && e instanceof LlmError && e.status !== 401 && e.status !== 403;
-    // Marketplace chats are written by the small model, so the better ones stay free for dashboard customers.
-    const which = { marketplace: chat };
+    // Marketplace chats are the Marketplace job: the small model, so the better ones stay with dashboard customers.
+    const which = { role: chat ? 'marketplace' : 'write' };
     let result;
     try { result = await complete(prompt.system, prompt.user, which); }
     catch (e) { if (!usable(e)) throw e; logLine('suggestion', `${item.itemKey}: no AI model for the opening of an auction offer, standard opening used. ${e.detail || e.message}`); result = standardOpening(); }

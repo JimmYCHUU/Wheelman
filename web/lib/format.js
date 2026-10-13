@@ -64,3 +64,6 @@ export function hue(name) {
   for (const ch of String(name || '').trim().toLowerCase()) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
   return hash % 8;
 }
+
+/** A day written as YYYY-MM-DD, in words: "1 November". */
+export const dateWords = (iso) => { const [y, m, d] = String(iso || '').split('-').map(Number); return y && m && d ? new Date(y, m - 1, d).toLocaleDateString('en-AU', { day: 'numeric', month: 'long' }) : ''; };

@@ -6,13 +6,14 @@
 import { blankMatcher } from './lib/blank.js';
 import { $, h, put } from './lib/h.js';
 import { icon, mark as wheelMark } from './lib/icons.js';
-import { clock, dayKey, dayLabel, listTime, ago, money, plural } from './lib/format.js';
+import { clock, dayKey, dayLabel, listTime, ago, money, plural, dateWords } from './lib/format.js';
 import { createStore } from './lib/store.js';
 import { t, listOf } from './lib/copy.js';
 import { SECTIONS as REGISTRY, sectionOf } from './sections/registry.js';
 import { newCount } from './lib/counts.js';
 import { Avatar } from './components/avatar.js';
 import { IconButton } from './components/iconButton.js';
+import { Segmented } from './components/segmented.js';
 import { mountTopBar } from './views/TopBar.js';
 import { mountListColumn, visibleRows } from './views/ListColumn.js';
 
@@ -1290,10 +1291,14 @@ function toggleInfo() {
 // ---- which AI writes: the panel behind the cog in the top bar ---------------------------------
 
 const usageNumber = (n) => Number(n || 0).toLocaleString('en-AU');
+const aud = (n) => Number(n || 0).toFixed(2);
+const PRICES_FILE = 'data\\ai-prices.json';
+const lowerFirst = (s) => String(s || '').charAt(0).toLowerCase() + String(s || '').slice(1);
 
-/** "Used so far": a table of each model asked this month, with its requests and tokens today and over the month. */
+/** "Used so far": a table of each model asked this month, with its requests and tokens today and over the month, and what the month cost. */
 function usageTable(info) {
   const label = Object.fromEntries(info.providers.map((p) => [p.id, p.label]));
+  const costs = new Map((info.budget?.byModel || []).map((r) => [`${r.provider}/${r.model}`, r]));
   const rows = new Map();
   const add = (list, when) => {
     for (const r of list || []) {
@@ -1308,18 +1313,37 @@ function usageTable(info) {
   const cell = (r) => (r
     ? h('td', {}, t('ai.usage.requests', { n: r.requests }), h('span', { class: 'fine', text: t('ai.usage.tokens', { in: usageNumber(r.tokensIn), out: usageNumber(r.tokensOut) }) }))
     : h('td', { class: 'fine', text: t('ai.usage.none') }));
+  const cost = (k) => {
+    const c = costs.get(k);
+    if (!c) return h('td', { class: 'fine', text: t('ai.usage.none') });
+    if (c.aud === null) return h('td', { class: 'fine', text: t('ai.usage.cost.none') });
+    return h('td', { text: c.aud === 0 ? t('ai.usage.cost.free') : t('ai.usage.aud', { aud: aud(c.aud) }) });
+  };
   const sorted = [...rows.values()].sort((a, b) => (b.thisMonth?.requests || 0) - (a.thisMonth?.requests || 0) || a.model.localeCompare(b.model));
   return h('table', {},
-    h('thead', {}, h('tr', {}, h('th', { text: t('ai.usage.model') }), h('th', { text: t('ai.usage.today') }), h('th', { text: t('ai.usage.month') }))),
+    h('thead', {}, h('tr', {}, h('th', { text: t('ai.usage.model') }), h('th', { text: t('ai.usage.today') }), h('th', { text: t('ai.usage.month') }), h('th', { text: t('ai.usage.cost') }))),
     h('tbody', {}, sorted.map((r) => h('tr', {},
       h('td', {}, h('span', { class: 'model', text: r.model }), h('span', { class: 'fine', text: label[r.provider] || r.provider })),
-      cell(r.today), cell(r.thisMonth)))));
+      cell(r.today), cell(r.thisMonth), cost(`${r.provider}/${r.model}`)))));
+}
+
+/** Under the table: the month's estimate against the budget, the warning, and what the price file still lacks. */
+function budgetLines(info) {
+  const b = info.budget;
+  if (!b) return [];
+  const out = [];
+  if (b.budgetAud > 0 && (b.priced || b.unpriced.length)) out.push(h('p', { class: 'fine', text: t('ai.budget', { spent: aud(b.spentAud), budget: aud(b.budgetAud) }) }));
+  if (b.level === 'warn') out.push(h('p', { class: 'dialog-note bad', text: t('ai.budget.warn') }));
+  if (b.level === 'over') out.push(h('p', { class: 'dialog-note bad', text: t('ai.budget.over', { date: dateWords(b.resetsOn) }) }));
+  if (b.unpriced.length) out.push(h('p', { class: 'fine', text: t('ai.budget.unpriced', { n: b.unpriced.length, models: b.unpriced.join(', '), file: PRICES_FILE }) }));
+  out.push(h('p', { class: 'fine', text: `${t('ai.budget.rate', { file: PRICES_FILE, rate: aud(b.audPerUsd) })} ${t('ai.budget.setting')}` }));
+  return out;
 }
 
 /**
- * The panel: the provider, the model (read from the provider's own list), whether Marketplace
- * uses it too, and a place to paste a key when the provider has none. "Use this model" keeps the
- * choice; the other models stay behind it for when it does not answer.
+ * The panel: the job, the provider, the model (read from the provider's own list), and a place to
+ * paste a key when the provider has none. "Use this model" keeps the choice for that job; the other
+ * models stay behind it for when it does not answer.
  */
 async function openAiPanel() {
   if ($('#ai-panel')) return;
@@ -1334,49 +1358,61 @@ async function openAiPanel() {
   let info;
   try { info = await api('/api/ai'); } catch (e) { body.lastChild.textContent = e.message; return; }
   const byId = Object.fromEntries(info.providers.map((p) => [p.id, p]));
-  let provider = info.choice?.provider || info.writing?.provider || info.providers[0].id;
+  const roles = info.roles || [];
+  const roleInfo = (id) => roles.find((r) => r.role === id) || { role: id, label: t(`ai.role.${id}`), choice: null, writing: null };
+  let role = 'write'; // the job on screen
+  const startProvider = () => { const r = roleInfo(role); return r.choice?.provider || r.writing?.provider || info.providers[0].id; };
+  const startModel = () => { const r = roleInfo(role); return r.choice?.provider === provider ? r.choice.model : r.writing?.provider === provider ? r.writing.model : ''; };
+  let provider = startProvider();
   let model = '';   // the model shown as picked
   let models = [];  // what the provider on screen offers
   let asked = 0;    // the number of the latest list request, so a slow one cannot land late
 
   const note = h('p', { class: 'dialog-note', role: 'status' });
   const say = (text, bad = false) => { note.textContent = text; note.classList.toggle('bad', bad); };
+  // What writes for each job right now.
+  const roleList = h('ul', { class: 'fine roles' });
+  const paintRoles = () => roleList.replaceChildren(...roles.map((r) => h('li', { text: t('ai.role.line', { label: r.label, model: r.writing ? `${r.writing.model}${r.choice ? '' : ` ${t('ai.role.default')}`}` : t('ai.writing.none') }) })));
+  paintRoles();
   const providerPick = h('select', { class: 'pick', id: 'ai-provider', onchange: () => { provider = providerPick.value; model = ''; say(''); loadModels(); } },
     info.providers.map((p) => h('option', { value: p.id, selected: p.id === provider || null, text: p.hasKey ? p.label : t('ai.provider.noKey', { label: p.label }) })));
+  const useBtn = h('button', { class: 'btn primary', type: 'button', text: t('ai.use.role', { role: lowerFirst(roleInfo(role).label) }), onclick: () => use() });
+  const rolePick = Segmented({
+    kind: 'chips', label: t('ai.roles.title'), items: roles.map((r) => ({ id: r.role, label: r.label })), value: role,
+    onChange: (id) => { role = id; rolePick.update({ value: role }); provider = startProvider(); providerPick.value = provider; model = ''; say(''); useBtn.textContent = t('ai.use.role', { role: lowerFirst(roleInfo(role).label) }); loadModels(); },
+  });
   const paidNote = h('p', { class: 'fine' });
   const otherInput = h('input', { class: 'pick', type: 'text', id: 'ai-other', maxlength: '120', autocomplete: 'off', placeholder: t('ai.other.placeholder'), 'aria-label': t('ai.other.label') });
   const otherRow = h('div', { class: 'field', hidden: true }, otherInput);
   const modelPick = h('select', { class: 'pick', id: 'ai-model', onchange: () => { otherRow.hidden = modelPick.value !== '__other'; if (!otherRow.hidden) otherInput.focus(); } });
   const refreshBtn = h('button', { class: 'link-btn', type: 'button', text: t('ai.refresh'), onclick: () => loadModels({ fresh: true }) });
   const listNote = h('p', { class: 'fine' });
-  const mpBox = h('input', { type: 'checkbox', id: 'ai-mp', checked: info.choice?.marketplace || null });
-  const mpRow = h('label', { class: 'check', for: 'ai-mp', hidden: !(info.marketplaceOn && info.marketplaceModel) }, mpBox,
-    h('span', {}, t('ai.marketplace'), h('span', { class: 'fine', text: t('ai.marketplace.note', { model: info.marketplaceModel }) })));
   const keyText = h('p', {});
   const keyInput = h('input', { type: 'password', autocomplete: 'off', spellcheck: 'false', placeholder: t('ai.key.placeholder'), 'aria-label': t('ai.key.label') });
   const keySave = h('button', { class: 'btn outline', type: 'button', text: t('ai.key.save'), onclick: () => saveKey() });
   const keyRow = h('div', { class: 'rewrite' }, keyInput, keySave);
   const keyBox = h('div', { class: 'keybox', hidden: true }, keyText, keyRow);
-  // "Used so far": each model's requests and tokens, the day's count against the cap, and where the cost is.
+  // "Used so far": each model's requests, tokens and cost, the month against the budget, the day's count against the cap, and where the providers show the bill.
   const costLinks = info.providers.filter((p) => p.hasKey && p.usageUrl).flatMap((p, i) => [i ? ', ' : '', h('a', { href: p.usageUrl, target: '_blank', rel: 'noopener', text: p.label })]);
   const usageBox = h('div', { class: 'usage' },
     h('h4', { text: t('ai.usage.title') }),
     usageTable(info),
+    ...budgetLines(info),
     h('p', { class: 'fine', text: t('ai.usage.cap', { used: usageNumber(info.usage?.usedToday), limit: usageNumber(info.usage?.limit ?? info.dailyLimit) }) }),
     costLinks.length ? h('p', { class: 'fine' }, t('ai.usage.intro'), ' ', costLinks, '.') : null);
-  const useBtn = h('button', { class: 'btn primary', type: 'button', text: t('ai.use'), onclick: () => use() });
   keyInput.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); saveKey(); } });
   otherInput.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); use(); } });
 
   body.replaceChildren(
     head(),
-    h('p', { text: t('ai.intro') }),
+    h('p', { text: t('ai.roles.intro') }),
+    roleList,
+    rolePick,
     h('label', { class: 'field', for: 'ai-provider' }, t('ai.provider'), providerPick),
     paidNote,
     h('label', { class: 'field', for: 'ai-model' }, t('ai.model'), modelPick),
     otherRow,
     listNote,
-    mpRow,
     keyBox,
     usageBox,
     note,
@@ -1412,8 +1448,8 @@ async function openAiPanel() {
   async function loadModels({ fresh = false } = {}) {
     const p = byId[provider];
     const mine = ++asked;
-    // Shown as picked: the choice for this provider, else what writes now, else the first listed.
-    if (!model) model = info.choice?.provider === provider ? info.choice.model : info.writing?.provider === provider ? info.writing.model : '';
+    // Shown as picked: the job's choice for this provider, else what writes for the job now, else the first listed.
+    if (!model) model = startModel();
     if (!p.hasKey) { models = p.known.map((id) => ({ id, label: id })); model = model || models[0]?.id || ''; listNote.textContent = ''; paint(); return; }
     listNote.textContent = t('ai.list.loading');
     try {
@@ -1430,18 +1466,22 @@ async function openAiPanel() {
     paint();
   }
 
-  /** "Use this model": the choice is kept, and the suggestions from now on come from it. */
+  /** "Use this model": the choice is kept for the job on screen, and that job's requests come from it from now on. */
   async function use() {
     const name = pickedModel();
     if (!name) { say(t('ai.other.empty'), true); otherInput.focus(); return; }
     useBtn.disabled = true;
     try {
-      const out = await api('/api/ai/choice', { body: { provider, model: name, marketplace: mpBox.checked } });
+      const out = await api('/api/ai/choice', { body: { role, provider, model: name } });
       state.status = out.status;
       store.notify();
+      const r = roleInfo(role);
+      r.choice = out.choice;
+      r.writing = { provider: out.choice.provider, model: out.choice.model };
+      paintRoles();
       dlg.close();
       if (!state.detail) renderWelcome();
-      toast(t('toast.aiChosen', { model: name }));
+      toast(t('toast.aiChosen.role', { role: r.label, model: name }));
     } catch (e) { say(e.message, true); useBtn.disabled = false; }
   }
 

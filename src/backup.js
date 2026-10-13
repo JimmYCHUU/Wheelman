@@ -25,7 +25,7 @@ const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(confi
 
 /** The files that live only on this computer, relative to the Wheelman folder. Missing ones are skipped. */
 export function filesToBackUp(root = config.root) {
-  const out = ['.env', 'Auction.txt', 'PLAN.md', 'knowledge/business-facts.md', 'knowledge/how-carbarn-works.md', 'knowledge/business-facts-evidence.md'];
+  const out = ['.env', 'Auction.txt', 'PLAN.md', 'data/ai-prices.json', 'knowledge/business-facts.md', 'knowledge/how-carbarn-works.md', 'knowledge/business-facts-evidence.md'];
   try {
     for (const f of fs.readdirSync(path.join(root, 'voice')).sort()) if (fs.statSync(path.join(root, 'voice', f)).isFile()) out.push(`voice/${f}`);
   } catch { /* no voice folder */ }

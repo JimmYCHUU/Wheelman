@@ -996,11 +996,13 @@ export function usageToday(day) {
 }
 
 /** Counts one answered request: against the day's cap, and by model with the tokens it used (when the provider said). */
-export function addUsage(day, provider, model = '', tokens = null) {
-  stmt(`
-    INSERT INTO llm_usage(day, provider, count) VALUES(?, ?, 1)
-    ON CONFLICT(day, provider) DO UPDATE SET count = count + 1
-  `).run(day, provider);
+export function addUsage(day, provider, model = '', tokens = null, { cap = true } = {}) {
+  if (cap) {
+    stmt(`
+      INSERT INTO llm_usage(day, provider, count) VALUES(?, ?, 1)
+      ON CONFLICT(day, provider) DO UPDATE SET count = count + 1
+    `).run(day, provider);
+  }
   const n = (v) => Math.max(0, Math.round(Number(v) || 0));
   stmt(`
     INSERT INTO llm_usage_models(day, provider, model, requests, tokens_in, tokens_out) VALUES(?, ?, ?, 1, ?, ?)

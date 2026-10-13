@@ -6,6 +6,17 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- **One model per job, and a monthly budget.** The AI has four jobs: the dashboard, import
+  and auction replies; the customer read; Marketplace chats; and the lessons taken from your
+  notes. Each has its own model, chosen on the page from the cog: pick the job, then the
+  provider and the model. The small jobs start at `SMALL_MODEL` (the old `MARKETPLACE_MODEL` is
+  still read) and keep to the free models after it unless told otherwise. Wheelman writes
+  `data\ai-prices.json` with every model it knows and no price; fill in what each provider
+  charges per million tokens and **Used so far** shows what the month has cost, by model and
+  in all, against `AI_MONTHLY_BUDGET_AUD` (A$50). At 80% the panel and the status line warn; at
+  100% the small jobs keep to models known to be free until the first of the month, a notice says
+  so, and dashboard suggestions continue. `npm run check-model` shows which model each job asks
+  first and the month's estimate. (The owner's decision, 12 Oct 2026: about A$50 a month.)
 - **Which AI writes**, chosen on the page. The cog at the top right opens a panel with the
   provider (Gemini, ChatGPT from OpenAI, or OpenRouter) and the model, picked from the list the
   provider itself offers right now, or typed by name. The choice is kept in the database and

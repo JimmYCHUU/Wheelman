@@ -255,7 +255,7 @@ export async function distilLessons({ customerText = '', draftText = '', note = 
     "The owner's coaching note:",
     note,
   ].join('\n');
-  const { json } = await complete(LESSON_SYSTEM, user);
+  const { json } = await complete(LESSON_SYSTEM, user, { role: 'lessons' });
   const list = Array.isArray(json?.lessons) ? json.lessons : [];
   return list
     .map((l) => ({

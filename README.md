@@ -43,7 +43,7 @@ purpose.
 - [What Wheelman knows](#what-wheelman-knows)
 - [How Wheelman learns](#how-wheelman-learns)
 - [Rules as Carbarn confirmed them](#rules-as-carbarn-confirmed-them)
-- [Free AI models](#free-ai-models)
+- [AI models and budget](#ai-models-and-budget)
 - [Privacy](#privacy)
 - [Commands](#commands)
 - [Where your files live](#where-your-files-live)
@@ -1125,43 +1125,76 @@ often you asked for a rewrite. Counts only; no customer text.
 
 The business facts themselves are in `knowledge/business-facts.md`.
 
-## Free AI models
+## AI models and budget
 
-Three providers can write: Gemini (Google, free tier), ChatGPT (OpenAI, paid by the request)
-and OpenRouter (free models). ChatGPT writes first whenever it has a key; which one writes can
-be chosen on the page.
+Three providers can write: Gemini (Google), ChatGPT (OpenAI, paid by the request) and OpenRouter
+(free models). Which model does which job is chosen on the page, and the month's spend is
+estimated against a budget.
 
-### Choosing the AI on the page
+### One model per job
 
-The cog at the top right opens **Which AI writes**. Pick the provider, then the model from the
-list the provider itself offers right now (read with your key and kept for an hour; **Read it
-again** refreshes it), or type a model's name under **Another model…**. **Use this model** keeps
-the choice in the database, so it survives a restart, and the next suggestion comes from it.
-The welcome panel says which model writes, with a **Change** link to the same panel, and the
-tooltip on the status line shows the whole order.
+Wheelman gives the AI four jobs, and each has its own model:
 
-A provider without a key is listed as "no key yet". Choosing it shows where to create a key
-and a box to paste it into. The key is tried on the provider first; one the provider rejects
-is not kept. An accepted key is written into the `.env` file on this computer and used at
-once, with no restart. A key can be pasted only on the computer Wheelman runs on, not through
-the team link; the model can be chosen from anywhere the page is open.
+| Job | What it is | Where its list starts |
+|---|---|---|
+| Dashboard, import and auction replies | The suggestions that matter most | The model chosen for it, then the whole list, best first |
+| The customer read | How each customer is read before a reply is written (from pull request 7 of the sales programme) | The small model and the free ones after it |
+| Marketplace chats | Many, short | The small model and the free ones after it |
+| Lessons from your notes | A few a day, from **Could be better** | The small model and the free ones after it |
 
-ChatGPT has no free allowance: every request is paid for. Wheelman's own cap
-(`DAILY_DRAFT_LIMIT`, 200 a day) is the only limit on it. ChatGPT is asked in its own request
-shape: a reasoning model keeps its own temperature and is given room to think before it
-answers, and a field a model refuses is dropped and the request sent again.
+The small model is `SMALL_MODEL` in `.env` (`gemini-3.5-flash-lite` unless set; `MARKETPLACE_MODEL`,
+the old name of the setting, is still read). A small job uses the dashboard's model only when the
+page chose it for that job, or when the dashboard's model is one of the small ones already. Nothing
+paid is spent on a small job unasked.
 
-**Used so far**, lower in the same panel, is what the AI has been asked: for each model, the
-requests and tokens today and this month, and the day's count against the cap. Tokens are
-what the paid providers charge for, roughly four letters each; a model's thinking counts as
-tokens out. Wheelman does not know the prices, so what it has cost is on the provider's own
-usage page, linked from the panel. A Gemini key from a project with billing switched on is paid
-by the token too, even though Gemini is listed as a free provider.
+### Choosing on the page
+
+The cog at the top right opens **Which AI writes**. The top of the panel lists what writes for
+each job right now. Pick the job, then the provider, then the model from the list the provider
+itself offers (read with your key and kept for an hour; **Read it again** refreshes it), or type a
+model's name under **Another model…**. **Use this model for …** keeps the choice in the database,
+so it survives a restart, and that job's next request comes from it. The welcome panel says which
+model writes the suggestions, with a **Change** link, and the tooltip on the status line shows the
+whole order.
+
+A provider without a key is listed as "no key yet". Choosing it shows where to create a key and a
+box to paste it into. The key is tried on the provider first; one the provider rejects is not kept.
+An accepted key is written into the `.env` file on this computer and used at once, with no restart.
+A key can be pasted only on the computer Wheelman runs on, not through the team link; a model can
+be chosen from anywhere the page is open.
+
+ChatGPT is asked in its own request shape: a reasoning model keeps its own temperature and is given
+room to think before it answers, and a field a model refuses is dropped and the request sent again.
+
+### The monthly budget
+
+Wheelman counts every request and its tokens by model. What a token costs is the provider's to
+say, so the prices are yours to fill in: on first start Wheelman writes `data\ai-prices.json` with
+every model it knows and no price, and a note on where each provider publishes its prices (US
+dollars per million tokens, in and out). A model that is asked but has no row is added to the file
+with blanks, so you can see what to fill in. `audPerUsd` in the same file is the exchange rate used
+for the estimate.
+
+From the counts and the prices, **Used so far** in the panel shows each model's requests, tokens
+and estimated cost this month, and the month's total against the budget (`AI_MONTHLY_BUDGET_AUD`
+in `.env`, A$50 unless set). The status line at the top of the list carries the same figure once
+any model has a price. At 80% the panel and the status line warn. At 100% the three small jobs keep
+to models known to be free (a 0/0 row in the file, or an OpenRouter model named `:free`) until the
+first of the next month, a notice in the list column says so, and the dashboard suggestions
+continue on the chosen model. A model with no price counts as paid for that stop, so a missing
+price can only make Wheelman more careful. The customer read is counted by model but not against
+the daily cap of suggestions (`DAILY_DRAFT_LIMIT`).
+
+The estimate is an upper bound: cached-input discounts are not modelled, and a model's thinking is
+counted as tokens out, which is how the paid providers charge it. The provider's own usage page,
+linked from the panel, has the bill.
+
+`npm run check-model` prints which model each job asks first and the month's estimate.
 
 ### The order models are tried in
 
-The chosen model goes first. With nothing chosen, and after the chosen model when it does not
-answer, the rest follow in this order:
+For the dashboard job the chosen model goes first. With nothing chosen, and after the chosen model
+when it does not answer, the rest follow in this order:
 
 1. `gpt-5.6` (ChatGPT, when it has a key)
 2. `gemini-3.8-flash`
@@ -1171,30 +1204,28 @@ answer, the rest follow in this order:
 6. `google/gemma-4-31b-it:free` (OpenRouter)
 7. `google/gemma-4-26b-a4b-it:free` (OpenRouter)
 
-`GEMINI_MODEL`, `OPENAI_MODEL` and `OPENROUTER_MODEL` in `.env` set each provider's first
-model, and `GEMINI_FALLBACK_MODELS`, `OPENAI_FALLBACK_MODELS` and `OPENROUTER_FALLBACK_MODELS`
-the ones after it. Free models are often busy. A busy model is rested for five minutes and the
-next one is tried. Models lower in the list write less polished replies.
+`GEMINI_MODEL`, `OPENAI_MODEL` and `OPENROUTER_MODEL` in `.env` set each provider's first model,
+and `GEMINI_FALLBACK_MODELS`, `OPENAI_FALLBACK_MODELS` and `OPENROUTER_FALLBACK_MODELS` the ones
+after it. Free models are often busy. A busy model is rested for five minutes and the next one is
+tried. Models lower in the list write less polished replies. Hovering over the status line shows
+which models are for dashboard customers only.
 
-Dashboard customers and import emails are asked of the whole list, best first. Marketplace
-chats start at the small model (`MARKETPLACE_MODEL`) and keep to the free models
-after it, so the better ones are kept for dashboard customers and nothing paid is spent on
-Marketplace. Ticking **Use it for Marketplace too** on the panel puts the chosen model first
-for Marketplace as well. Hovering over the status line shows which models are for dashboard
-customers only.
+Each free model also has its own daily allowance. A model that says its day is used up is left
+alone until the time it gives, and the next model carries on. A ChatGPT account with no credit
+left is set aside for an hour in the same way. Hover over the status line at the top of the list
+to see which models are used up. When no model can answer, the suggestion is tried again by itself
+a few minutes later, up to three times an hour; nothing red is shown for that. When every model is
+used up for the day, the page says suggestions are paused and when they resume.
 
-Each free model also has its own daily allowance, and it is small. On 3 October 2026 Gemini
-allowed 20 requests a day to each of its three better models; the Flash-Lite model has a
-larger allowance. A model that says its day is used up is left alone until the time it gives, and
-the next model carries on, so on a busy day the later suggestions come from the smaller
-models. A ChatGPT account with no credit left is set aside for an hour in the same way.
-Hover over the status line at the top of the list to see which models are used up.
-When no model can answer, the suggestion is tried again by itself a few minutes later, up to
-three times an hour; nothing red is shown for that. When every model is used up for the day,
-the page says suggestions are paused and when they resume.
+Wheelman's own cap is 200 AI requests a day. OpenRouter allows 50 free requests a day; a one-off
+US$10 credit purchase raises that to 1,000.
 
-Wheelman's own cap is 200 AI requests a day. OpenRouter allows 50 free requests a day; a
-one-off US$10 credit purchase raises that to 1,000.
+| Setting in `.env` | What it does | Default |
+|---|---|---|
+| `SMALL_MODEL` | Where the list starts for the small jobs; the free models after it follow | `gemini-3.5-flash-lite` |
+| `AI_MONTHLY_BUDGET_AUD` | The month's budget for the paid models, in Australian dollars; a warning at 80%, free models for the small jobs at 100% | `50` |
+| `AI_PRICES_PATH` | Where the price file is | `data\ai-prices.json` |
+| `DAILY_DRAFT_LIMIT` | Wheelman's own cap on requests a day | `200` |
 
 ## Privacy
 

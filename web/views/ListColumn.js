@@ -4,7 +4,7 @@
 import { h } from '../lib/h.js';
 import { icon } from '../lib/icons.js';
 import { t } from '../lib/copy.js';
-import { clock } from '../lib/format.js';
+import { clock, dateWords } from '../lib/format.js';
 import { Segmented } from '../components/segmented.js';
 import { Notice } from '../components/notice.js';
 import { Row } from '../components/row.js';
@@ -58,6 +58,7 @@ export function noticesFor(s, section) {
   if (chat && s.marketplace?.enabled && s.marketplace.lastSync && !s.marketplace.lastSync.ok) out.push({ tone: 'danger', title: t('notice.marketplace.title'), body: t('notice.marketplace.body', { message: s.marketplace.lastSync.message }) });
   if (s.lastDraftError) out.push({ tone: 'danger', title: t('notice.draft.title'), body: s.lastDraftError.message });
   if (s.paused) out.push({ tone: 'warning', title: t('notice.paused.title'), body: t('notice.paused.body') });
+  if (s.ai?.budget?.level === 'over') out.push({ tone: 'warning', title: t('notice.budget.title'), body: t('notice.budget.body', { date: dateWords(s.ai.budget.resetsOn) }) });
   const ph = s.phone;
   if (section === 'dashboard' && ph?.on && ph.lastReportAt) {
     if (ph.stale) out.push({ tone: 'warning', title: t('notice.phone.stale.title', { time: clock(ph.lastReportAt) }), body: t('notice.phone.stale.body') });

@@ -22,6 +22,9 @@ export const BASE_ENV = {
   OPENROUTER_API_KEY: '',
   // A key pasted on the page is written to the .env file: in tests, a scratch file, never the real one.
   ENV_PATH: path.join(os.tmpdir(), `wheelman-test-env-${process.pid}`),
+  // The AI price file and the month's budget: a scratch file, never data/, and the usual budget.
+  AI_PRICES_PATH: path.join(os.tmpdir(), `wheelman-test-prices-${process.pid}.json`),
+  AI_MONTHLY_BUDGET_AUD: '50',
   GEMINI_MODEL: 'model-a',
   GEMINI_FALLBACK_MODELS: '',
   SECONDS_BETWEEN_DRAFTS: '0',

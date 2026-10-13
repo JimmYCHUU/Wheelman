@@ -22,6 +22,9 @@ export const config = {
   webDir: path.join(root, 'web'),
   // The .env file itself: where a key pasted on the page is written. Tests point this at a scratch file.
   envPath: env.ENV_PATH || path.join(root, '.env'),
+  // The prices of the AI models, in the owner's hand: what each provider charges per million
+  // tokens, for the month's estimate on the page. Written with blanks on first start.
+  aiPricesPath: env.AI_PRICES_PATH || path.join(root, 'data', 'ai-prices.json'),
 
   dashboard: {
     // The address of the dashboard's data service. Set in .env; it is not written in the code.
@@ -88,9 +91,15 @@ export const config = {
       // The models list is public, so a pasted key is checked here.
       keyCheckUrl: 'https://openrouter.ai/api/v1/auth/key',
     },
-    // Marketplace chats are written by this model and the ones after it in the list, so the
-    // small daily allowance of the better models is kept for dashboard customers. Empty: no split.
-    marketplaceModel: (env.MARKETPLACE_MODEL ?? 'gemini-3.5-flash-lite').trim(),
+    // The small model: where the list starts for the jobs that need no better one (the customer
+    // read, Marketplace chats, lessons from the owner's notes), keeping to the free models after
+    // it unless the page chose one for the job. Empty: no split. MARKETPLACE_MODEL is the old
+    // name of the same setting and is still read.
+    marketplaceModel: (env.SMALL_MODEL ?? env.MARKETPLACE_MODEL ?? 'gemini-3.5-flash-lite').trim(),
+    get smallModel() { return this.marketplaceModel; },
+    // The month's budget for the paid models, in Australian dollars. The page warns at 80%; at
+    // 100% the small jobs keep to free models while dashboard suggestions continue.
+    monthlyBudgetAud: num(env.AI_MONTHLY_BUDGET_AUD, 50),
     busyCooldownMinutes: num(env.BUSY_COOLDOWN_MINUTES, 5),
     temperature: 0.4,
     maxOutputTokens: 1500,
