@@ -7,12 +7,12 @@
 # only filled in the website form. When they also wrote something of their own, Wheelman writes
 # the message so it can answer them, and still ends with the part below the dashes.
 #
-#   {{NAME}}   the customer's first name. "Hi {{NAME}}," becomes "Hi," when no name is known.
+#   {{NAME}}   the customer's first name. "Hello {{NAME}}," becomes "Hello," when no name is known.
 #   {car}      the car they enquired about, such as "Subaru XV Hybrid"
 #   {details}  the things we still need to know, such as "your preferred year range, maximum odometer, ..."
 #   {sender}   the name on the last line (FIRST_REPLY_SENDER in the .env file; "Team Carbarn" when not set)
 
-Hi {{NAME}}, thanks for your {car} enquiry.
+Hello {{NAME}}, thank you for your {car} enquiry.
 
 To help us narrow down the right car from Japan auctions, could you please let us know {details}?
 

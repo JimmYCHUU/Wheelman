@@ -12,7 +12,7 @@ One person: the owner, who answers customer enquiries for Carbarn by SMS. He wor
 
 ## Product Purpose
 
-Wheelman is Carbarn’s customer representative assistant. It suggests a reply to each customer who is waiting for one, written the way our two lead salespeople write (one brisk and factual, one courteous and a little warmer), and informed by how the business actually runs. The owner reads the suggestion, edits it if needed, copies it, and sends it from the dashboard himself. The product never sends anything.
+Wheelman is Carbarn’s customer representative assistant. It suggests a reply to each customer who is waiting for one, written in Carbarn's own voice (formal, courteous and exact, as the owner settled it on 12 October 2026) and informed by how the business actually runs. The owner reads the suggestion, edits it if needed, copies it, and sends it from the dashboard himself. The product never sends anything.
 
 A separate Marketplace section does the same for buyers on Facebook Marketplace, whose chats are read from Carbarn’s content engine. The owner sends the reply to the buyer from the page with the Send button, through the content engine, or copies it and pastes it into the Marketplace chat himself. Marketplace is the only section that sends. (User’s instructions, 1 and 9 Oct 2026: "Just the marketplace replies, nothing else".)
 
@@ -20,7 +20,7 @@ Success is the owner answering each waiting customer faster, with a reply that i
 
 ## Positioning
 
-The suggestions are written in the blended voice of the dealership's two lead salespeople, learned from their real past replies, and every figure in a suggestion is checked against the dealership's own stock and policy records before it is shown.
+The suggestions are written in one brand voice, Carbarn's: what to say is learned from the team's real past replies, how to say it is fixed by the voice guide, and every figure in a suggestion is checked against the dealership's own stock and policy records before it is shown.
 
 ## Operating Context
 

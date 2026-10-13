@@ -184,7 +184,7 @@ test('an email reply carries the exact figures and the page link, is greeted and
   const d = await drafter.draftFor(item, { now });
   assert.equal(d.status, 'ready', d.error);
   assert.equal(aiSeen.length, 1, 'accepted first time');
-  assert.ok(d.reply.startsWith('Hi Priya,\n'), d.reply);
+  assert.ok(d.reply.startsWith('Hello Priya,\n'), d.reply);
   assert.ok(d.reply.endsWith('\n\nRegards,\nTeam Carbarn'), d.reply);
   assert.ok(d.reply.includes('$57,781') && d.reply.includes('$4,545') && d.reply.includes(page('toyota-hiace-gdh206')));
   assert.ok(!d.checks.some((c) => c.level === 'fail'), JSON.stringify(d.checks));

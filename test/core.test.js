@@ -310,7 +310,7 @@ test('the model\'s own sign-off is replaced by the configured one, once', () => 
   assert.equal(stripModelSignOff('See you soon.\n\nRegards,\nTeam Carbarn'), 'See you soon.');
   assert.equal(stripModelSignOff('See you soon.\nKind regards,\nCarbarn Team'), 'See you soon.');
   const out = finishReply('Hi {{NAME}},\\nSee you soon.\\n\\nRegards,\\nTeam Carbarn', lead);
-  assert.equal(out, 'Hi Priya,\nSee you soon.\n\nRegards,\nTeam Carbarn');
+  assert.equal(out, 'Hello Priya,\nSee you soon.\n\nRegards,\nTeam Carbarn');
   assert.equal((out.match(/Team Carbarn/g) || []).length, 1);
 });
 
@@ -405,13 +405,19 @@ test('a policy figure only counts when used about its own subject', () => {
   assert.equal(worst(checkDraft({ reply: deposit, body: deposit, allowedText: vehicle, policyText })), 'ok');
 });
 
-test('"Good morning" is only kept in the morning', () => {
-  const { fixGreeting } = checksModule;
+test('the greeting follows the hour, and "Hi" becomes "Hello"', () => {
+  const { fixGreeting, greetingFor } = checksModule;
   assert.equal(fixGreeting('Good morning, {{NAME}}.\nYes.', 9), 'Good morning, {{NAME}}.\nYes.');
-  assert.equal(fixGreeting('Good morning, {{NAME}}.\nYes.', 20), 'Hi {{NAME}},\nYes.');
-  assert.equal(fixGreeting('Good morning,\nYes.', 14), 'Hi,\nYes.');
-  assert.equal(fixGreeting('Good afternoon {{NAME}},\nYes.', 9), 'Hi {{NAME}},\nYes.');
-  assert.equal(fixGreeting('Hi {{NAME}},\nGood morning is when we open.', 20), 'Hi {{NAME}},\nGood morning is when we open.');
+  assert.equal(fixGreeting('Good morning, {{NAME}}.\nYes.', 20), 'Good evening {{NAME}},\nYes.');
+  assert.equal(fixGreeting('Good morning,\nYes.', 14), 'Good afternoon,\nYes.');
+  assert.equal(fixGreeting('Good afternoon {{NAME}},\nYes.', 9), 'Good morning {{NAME}},\nYes.');
+  // "Hi" is not in the brand register. A word that merely starts with "hi" is left alone.
+  assert.equal(fixGreeting('Hi {{NAME}},\nGood morning is when we open.', 20), 'Hello {{NAME}},\nGood morning is when we open.');
+  assert.equal(fixGreeting('Hi,\nYes.', 10), 'Hello,\nYes.');
+  assert.equal(fixGreeting('Hey {{NAME}}, yes it is.', 10), 'Hello {{NAME}}, yes it is.');
+  assert.equal(fixGreeting('Hiace vans are in stock.', 10), 'Hiace vans are in stock.');
+  assert.equal(fixGreeting('Hello {{NAME}},\nYes.', 10), 'Hello {{NAME}},\nYes.');
+  assert.deepEqual([greetingFor(9), greetingFor(13), greetingFor(19), greetingFor(3)], ['Good morning', 'Good afternoon', 'Good evening', 'Hello']);
 });
 
 test('a reply copied from an example is rejected', () => {

@@ -1,13 +1,14 @@
 // What a reply is for. Every customer who writes about a car is somewhere on a ladder that ends
 // in a sale: interested, wanting proof, working out fit and cost, ready to commit, a buyer. A reply
-// answers what was asked and then moves them one rung up, in one concrete next step, with at most
-// one question. This module works out the rung and the move from the records; the words come from
+// answers what was asked and then moves them one rung up, in one concrete next step, with a
+// question only when the answer is needed. This module works out the rung and the move from the records; the words come from
 // voice/sales-playbook.md and the two voices. Nothing here reads customer details.
 
 import { SITUATIONS, farAway } from './situations.js';
 import { availability } from './normalize.js';
 import { reservedByAnother } from './deal.js';
 import { findUrls, hasEmoji } from './text.js';
+import { config } from './config.js';
 
 const DAY = 24 * 3600 * 1000;
 
@@ -24,7 +25,7 @@ export const RUNG_LABELS = {
 
 /** The one next step to aim for from each rung. */
 export const AIMS = {
-  interest: 'get them to see the car: an inspection at Lidcombe, or the online video inspection when they are far away',
+  interest: `get them to see the car: an inspection at ${config.site.showroom}, or the online video inspection when they are far away`,
   proof: 'give the proof, then get them to see the car',
   fit: 'settle the cost question in one line, then get them to see the car or to the finance application',
   commit: 'the $1,000 refundable holding deposit, with what it needs and what happens next',
@@ -41,8 +42,9 @@ export const DECLINED = /\b(not interested|no longer (interested|looking|need)|a
 export const CANNOT_COME = /\b(can'?t|cannot|can not|unable to|not able to|won'?t be able to|will not be able to) (come|make it|get (there|down|up|in|over)|get to|travel|drive)\b/i;
 
 /**
- * The moves. Each is what the reply does after answering, and the one question it may ask.
- * The AI is told the move in words; the question is the only one it may ask unprompted.
+ * The moves. Each is what the reply does after answering, and the one question it may ask, which
+ * exists only where the reply cannot proceed without the answer (a postcode for a delivery quote,
+ * the details of a trade-in). The AI is told the move in words.
  */
 export const MOVES = {
   accept_no: {
@@ -50,20 +52,20 @@ export const MOVES = {
     question: '',
   },
   invite_inspection: {
-    text: 'Answer, then invite them to come and see it at Lidcombe, in words. The booking link is governed by INSPECTION: give it only if that section supplies it. If it helps them decide, offer the walkaround video and the auction sheet.',
-    question: 'Would a weekday after work or Saturday morning suit you to see it?',
+    text: `Answer, then invite them to see it at ${config.site.showroom}, in words. The booking link is governed by INSPECTION: give it only if that section supplies it. If it helps them decide, offer the walkaround video and the auction sheet.`,
+    question: '',
   },
   answer_then_invite: {
     text: 'Answer the question from the facts, add the one detail that matters for what they asked, then invite them to see the car in words. No booking link unless INSPECTION supplies it.',
     question: '',
   },
   confirm_or_link: {
-    text: 'They want to see it: follow INSPECTION for the link or the confirmation. If the day and time they named work, confirm them in a line and say the car will be out the front for them.',
+    text: 'They want to see it: follow INSPECTION for the link or the confirmation. If the day and time they named work, confirm them in a line and say the vehicle will be ready for them.',
     question: '',
   },
   offer_proof: {
     text: 'Give the proof the records hold: the auction grade and sheet, the export certificate with the odometer history, PPSR, the service done. If VEHICLE FACTS list a flaw, name it before they ask. Offer the walkaround video and underbody photos. Then invite them to see it, or to have their own mechanic look at it.',
-    question: 'Would you like the auction sheet and the export certificate sent through?',
+    question: '',
   },
   offer_online_inspection: {
     text: 'Say that most of our interstate buyers do a live video inspection on WhatsApp or FaceTime and we deliver Australia-wide by car carrier. The online video inspection link is governed by INSPECTION. A delivery price is quoted by a person: [DELIVERY COST?] if one is needed.',
@@ -79,11 +81,11 @@ export const MOVES = {
   },
   send_finance_link: {
     text: 'Say finance is arranged through our lenders: the application is on the car\'s page or the finance page, takes a few minutes, starts with a soft check that does not affect their credit score, and our finance partner then contacts them. Never a rate, a repayment or a likelihood of approval.',
-    question: 'Have you started the application yet?',
+    question: '',
   },
   propose_deposit: {
     text: 'Propose the $1,000 refundable holding deposit as the next step: it takes the car off the market for them; it is refundable if they do not go ahead after inspecting it, or if their finance is not approved; to send the invoice we need a photo of their driver licence and their email address; then registration and preparation start. Two or three short sentences.',
-    question: 'Would you like to secure it with the deposit?',
+    question: '',
   },
   confirm_step: {
     text: 'The deposit has already been proposed. Answer, and confirm the step they are on without proposing it again.',
@@ -125,7 +127,7 @@ const MOVE_BY_SITUATION = {
 // ---- the wording the checks and the replay score look for ------------------------------------
 
 /** Reads as a reply for the sake of replying. */
-export const FILLER = /\b(i hope (this|you|that)|hope (you'?re|you are) (well|doing well)|let (me|us) know if you (have any|would like|want|'?d like|need)|if you have any (questions|queries)|just (following up|checking in|touching base|reaching out)|following up on|checking in (on|to)|touch(ing)? base|great question|as per my (last|previous)|thank(s| you) for (your interest|reaching out|getting in touch|contacting)|(feel free|don'?t hesitate|do not hesitate) to)\b|\?\?/i;
+export const FILLER = /\b(i hope (this|you|that)|hope (you'?re|you are) (well|doing well)|let (me|us) know if you (have any|would like|want|'?d like|need)|if you have any (questions|queries)|just (following up|checking in|touching base|reaching out)|following up on|checking in (on|to)|touch(ing)? base|great question|as per my (last|previous)|thank(s| you) for (your interest|reaching out|getting in touch|contacting)|(feel free|don'?t hesitate|do not hesitate) to|hope (it|this|that) helps)\b|\?\?/i;
 
 /** Pressure, or interest from other buyers that the records cannot show. */
 export const URGENCY = /\b(other (buyers?|people|customers?|parties)|others? (are |is )?(also )?(interested|asking|looking|keen)|(a )?lot of interest|(a lot|plenty|lots|heaps) of (people|enquiries|interest|buyers)|selling fast|(won'?t|will not|wont) last|only one left|last one left|price (goes|will go|is going) up|don'?t miss out|act (now|fast)|hurry|limited time|before (it'?s gone|someone else)|once in a lifetime)\b/i;
@@ -208,7 +210,6 @@ export function saleStage(item, { now = Date.now() } = {}) {
   if (move === 'invite_before_price' && sit.includes('finance')) question = '';
   if (move === 'offer_online_inspection' && /\b\d{4}\b/.test(item.pendingText || '')) question = '';
   if (move === 'send_finance_link' && events.some((e) => /finance application/i.test(e))) question = '';
-  if (channel === 'marketplace' && move === 'invite_inspection') question = 'Would you like to come and see it?';
 
   return {
     rung,
@@ -249,7 +250,7 @@ export function stageLines(stage) {
 // ---- the register, and the sales score ---------------------------------------------------------
 
 /** Slang and chat shorthand: not in the brand register. */
-export const SLANG = /\b(no worries|no problem|no probs|cheers|mate|heaps|arvo|yep|yeah|nope|nah|hope (it|this|that) helps|awesome|cool|guys|gonna|wanna|kinda|sorta|okay|ok|lol|btw|asap)\b/i;
+export const SLANG = /\b(no worries|no problem|no probs|no dramas?|too easy|all good|cheers|mate|heaps|arvo|yep|yeah|nope|nah|awesome|cool|guys|gonna|wanna|kinda|sorta|okay|ok|lol|btw|asap|pls|thx)\b/i;
 /** Apologising for existing, or asking permission to be useful: servile, not courteous. */
 export const SERVILE = /\b(sorry to (bother|trouble|disturb)|if that('s| is) (okay|ok|alright|fine) with you|if that works for you|apologies for|so sorry|i apologi[sz]e|just (checking|wondering|following)|hope you don'?t mind|whenever you get a chance|no rush|no pressure)\b/i;
 

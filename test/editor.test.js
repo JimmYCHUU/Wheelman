@@ -11,7 +11,7 @@ applyTestEnv({ DAILY_DRAFT_LIMIT: '200' });
 const now = Date.now();
 const MIN = 60e3, HOUR = 3600e3;
 let standins, app, base, db, items, promptModule, worker;
-const ai = aiBehaviour({ behave: () => ({ reply: 'No worries.', needs_human: [], facts_used: [], hold: false }) });
+const ai = aiBehaviour({ behave: () => ({ reply: 'Certainly.', needs_human: [], facts_used: [], hold: false }) });
 
 before(async () => {
   standins = await startStandins({ ai });
@@ -96,14 +96,14 @@ test('Good reply approves the text as it stands, changes and all, and the approv
   let kept = db.getLearned(d.id);
   assert.deepEqual([kept.source, kept.changed], ['approved', 1]);
   assert.match(kept.final_text, /Send us a text before you come and we will have the people movers out the front\./);
-  assert.match(kept.draft_text, /^Hi[^\n]*\nYes, we are open on Sunday\.$/, 'what Wheelman wrote is kept beside it');
+  assert.match(kept.draft_text, /^Hello[^\n]*\nYes, we are open on Sunday\.$/, 'what Wheelman wrote is kept beside it');
   assert.ok(!/Jon/.test(kept.final_text + kept.customer_text), 'no customer name is kept');
 
   // A similar message from someone else: the owner's version is shown as the model, as a correction.
   const other = customer(3, 'Kim', 'Are you open on Sunday? I want to look at a people mover.');
   const asked = promptModule.buildPrompt(items.itemFromKey(other), { now }).user;
   assert.match(asked, /Corrected by the owner and approved, for a similar message/);
-  assert.match(asked, /You wrote: Hi[^\n]*Yes, we are open on Sunday\.\n  The owner changed it to: Hi[^\n]*Send us a text before you come/);
+  assert.match(asked, /You wrote: Hello[^\n]*Yes, we are open on Sunday\.\n  The owner changed it to: Hi[^\n]*Send us a text before you come/);
   assert.match(asked, /Handle this one the way the owner's version does/);
 
   // Changed again after approving: the model follows the text.

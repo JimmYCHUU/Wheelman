@@ -62,7 +62,7 @@ test('every way a portal writes a stock number finds the same car', () => {
 test('a car that has arrived and is listed on the website is at the yard; one not yet listed is still being prepared', () => {
   const where = (stockIn, status) => normalize.availability({ stockIn, status, soldStatus: 'UnSold' });
   assert.equal(where('Arrived', 'PUBLISHED').code, 'available');
-  assert.equal(where('Arrived', 'PUBLISHED').text, 'Available now at the Lidcombe yard');
+  assert.equal(where('Arrived', 'PUBLISHED').text, 'Available now at our Lidcombe showroom');
   assert.equal(where('Arrived', 'UNPUBLISHED').code, 'arrived');
   assert.equal(where('Online', 'PUBLISHED').code, 'available');
   assert.equal(where('Transit', 'PUBLISHED').code, 'transit', 'a car still on the water cannot be inspected, listed or not');

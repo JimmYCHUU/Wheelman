@@ -196,7 +196,7 @@ test('a car with somebody else\'s deposit on it is not offered as available', as
   assert.equal(deal.reservedByAnother(it.vehicles[0]), true);
   const asked = ask(210);
   assert.match(asked, /Availability: Reserved\. Another customer has paid a deposit on this vehicle/);
-  assert.ok(!/Available now at the Lidcombe yard\n/.test(asked.split('=== SIMILAR')[0].split('=== VEHICLE FACTS ===')[1]));
+  assert.ok(!/Available now at our Lidcombe showroom\n/.test(asked.split('=== SIMILAR')[0].split('=== VEHICLE FACTS ===')[1]));
   assert.ok(!asked.includes('1400#inspection='), 'no booking link for a reserved car');
   assert.match(asked, /=== SIMILAR VEHICLES AVAILABLE NOW ===\n- 2018 Toyota Alphard G/);
   // The buyer of that car is not told their own car is reserved.
@@ -265,7 +265,7 @@ test('a new enquiry asking where we are gets a short answer and then the exact s
   assert.match(asked, /They asked where we are or when we are open, so answer that in your own sentence/);
   // Someone asking where we are is planning to visit, so the block carries the booking link as well.
   assert.match(asked, /=== INSPECTION ===\nThe customer asked where we are or when we are open, which usually means they plan to visit/);
-  assert.equal(d.reply, `Hi Wren,\nWe are at 136 Frances Street, Lidcombe, and we are open until 5 PM every day.\n\n${block(NOAH, `${NOAH}#inspection=onsite`)}`, 'exact to the character, symbols included');
+  assert.equal(d.reply, `Hello Wren,\nWe are at 136 Frances Street, Lidcombe, and we are open until 5 PM every day.\n\n${block(NOAH, `${NOAH}#inspection=onsite`)}`, 'exact to the character, symbols included');
   assert.ok(!/Regards/.test(d.reply), 'the block takes the place of the sign-off');
   assert.equal(attempts, 1);
   assert.deepEqual(fails(d), []);
@@ -290,7 +290,7 @@ test('a new enquiry asking where we are gets a short answer and then the exact s
 
   // The car's page link on a line of its own is simply dropped: the block gives it.
   const linked = await draft(247, `Hi {{NAME}},\nYes, the Noah is available.\nMore details here:\n${NOAH}`);
-  assert.equal(linked.d.reply, `Hi Yuki,\nYes, the Noah is available.\n\n${block(NOAH)}`);
+  assert.equal(linked.d.reply, `Hello Yuki,\nYes, the Noah is available.\n\n${block(NOAH)}`);
   assert.equal(linked.attempts, 1);
 });
 
@@ -363,7 +363,7 @@ test('a new enquiry asking to inspect gets the booking link inside the block, on
   assert.match(asked, /Our address and opening hours follow your text automatically/);
   assert.match(asked, /this vehicle's page link, the inspection invitation and its booking link, our address/);
   assert.ok(!/Google Maps/.test(asked), 'no map link is mentioned anywhere in the request');
-  assert.equal(d.reply, `Hi Xavi,\nYou are welcome to inspect the Noah.\n\n${block(NOAH, `${NOAH}#inspection=onsite`)}`);
+  assert.equal(d.reply, `Hello Xavi,\nYou are welcome to inspect the Noah.\n\n${block(NOAH, `${NOAH}#inspection=onsite`)}`);
   assert.deepEqual(fails(d), [], JSON.stringify(d.checks));
 
   // Typed inside a sentence it cannot be dropped cleanly, so the reply is sent back.
@@ -377,7 +377,7 @@ test('the block leaves out the car and booking parts when there is nothing to po
   conv(222, 9, 'Yara Test', '+61421000003');
   msg(222, 'IN', 'Is the Prius still available?', 5 * MIN);
   const sold = await draft(222, 'Hi {{NAME}},\nUnfortunately, that Prius has been sold.');
-  assert.equal(sold.d.reply, `Hi Yara,\nUnfortunately, that Prius has been sold.\n\n${block('')}`);
+  assert.equal(sold.d.reply, `Hello Yara,\nUnfortunately, that Prius has been sold.\n\n${block('')}`);
   assert.ok(!/Vehicle details|book an inspection/.test(sold.d.reply));
 
   lead(10, 223, 'Zane', '0421 000 004');
@@ -741,7 +741,7 @@ test('"Good reply" makes a suggestion the model for similar messages; taking it 
   assert.equal(out.learned, true);
   const row = db.getLearned(d.id);
   assert.equal(row.source, 'approved');
-  assert.equal(row.final_text, 'Hi {{NAME}},\nThe Noah has 5 seats.', 'the name and the address block are not part of what is kept');
+  assert.equal(row.final_text, 'Hello {{NAME}},\nThe Noah has 5 seats.', 'the name and the address block are not part of what is kept');
   assert.equal((await (await fetch(`${base}/api/status`)).json()).learned.approved, 1);
 
   // Copying it and sending it unchanged does not undo the approval.
@@ -754,7 +754,7 @@ test('"Good reply" makes a suggestion the model for similar messages; taking it 
   msg(242, 'IN', 'Hi, how many seats does the Noah have?', 4 * MIN);
   const asked = ask(242);
   assert.match(asked, /=== HOW THE OWNER WANTS THIS HANDLED ===/);
-  assert.match(asked, /Approved as written, for a similar message\n  Customer: How many seats does the Noah have\?\n  You wrote: Hi \{\{NAME\}\}, \/ The Noah has 5 seats\.\n  Handle this one the same way/);
+  assert.match(asked, /Approved as written, for a similar message\n  Customer: How many seats does the Noah have\?\n  You wrote: Hello \{\{NAME\}\}, \/ The Noah has 5 seats\.\n  Handle this one the same way/);
   const section = asked.split('=== HOW THE OWNER WANTS THIS HANDLED ===')[1].split('\n===')[0];
   assert.ok(!/Sia|📍|Frances/.test(section));
 
@@ -792,7 +792,7 @@ test('"Could be better" is coaching: a lesson is taken from it, and the lesson, 
   assert.ok(lessonAsk.includes('Too short for {{NAME}}.') && !lessonAsk.includes('Sia'));
   // The rewrite request: the note is coaching, not wording.
   const rewriteAsk = seen[1].messages[1].content;
-  assert.match(rewriteAsk, /=== THE OWNER'S COACHING ON YOUR LAST DRAFT ===\nYour last draft for this message was:\nHi \{\{NAME\}\},\nThe Noah has 5 seats\./);
+  assert.match(rewriteAsk, /=== THE OWNER'S COACHING ON YOUR LAST DRAFT ===\nYour last draft for this message was:\nHello \{\{NAME\}\},\nThe Noah has 5 seats\./);
   assert.match(rewriteAsk, /It is written to you, about how to handle this message\. It is not text for the customer/);
   assert.match(rewriteAsk, /do not repeat the note's wording/);
 
@@ -928,7 +928,7 @@ test("on a first reply the price reply sits between the AI's lines and the stand
   conv(261, 41, 'Omar Test', '+61421000041');
   msg(261, 'IN', 'Hi, what is your best price on the Vellfire?', 5 * MIN);
   const { d } = await draft(261, 'Hi {{NAME}},\nThe Vellfire is available for inspection at our Lidcombe showroom.');
-  assert.equal(d.reply, 'Hi Omar,\nThe Vellfire is available for inspection at our Lidcombe showroom.\n\n'
+  assert.equal(d.reply, 'Hello Omar,\nThe Vellfire is available for inspection at our Lidcombe showroom.\n\n'
     + `${PRICE_LINES}\n\n`
     + `${INVITE(`${VELL}#inspection=onsite`)}\n\n`
     + `${block(VELL)}`);

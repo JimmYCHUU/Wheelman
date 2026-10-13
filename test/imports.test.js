@@ -86,7 +86,7 @@ before(async () => {
       const json = (status, data, headers = {}) => { res.writeHead(status, { 'content-type': 'application/json', ...headers }); res.end(JSON.stringify(data)); };
       if (p === '/chat') {
         if (aiDown) return json(503, { error: { message: 'The model is overloaded.' } });
-        const next = aiScript.shift() || { reply: 'Hi {{NAME}},\nNo worries.', needs_human: [], facts_used: [], hold: false };
+        const next = aiScript.shift() || { reply: 'Hello {{NAME}},\nCertainly.', needs_human: [], facts_used: [], hold: false };
         return json(200, { choices: [{ message: { content: JSON.stringify(next) }, finish_reason: 'stop' }] });
       }
       if (p === '/carbarnau/auth/v1/api/user/signin') return json(200, { username: 'tester' }, { 'set-cookie': 'carbarn_session=stand-in; Path=/' });
@@ -310,7 +310,7 @@ test('a new import enquiry with only the form gets the standard asking reply, wo
   assert.equal(ai().length, 0, 'no AI request is spent on it');
   assert.equal(feed().length, 0, 'and nothing is searched until we know what they want');
   assert.equal(d.model, 'standard wording');
-  assert.equal(d.reply, 'Hi Nina, thanks for your Subaru XV Hybrid enquiry.\n\n'
+  assert.equal(d.reply, 'Hello Nina, thank you for your Subaru XV Hybrid enquiry.\n\n'
     + 'To help us narrow down the right car from Japan auctions, could you please let us know your preferred year range, maximum odometer, preferred grade or specification, approximate landed budget in Australia, and any colour or feature preferences you have?\n\n'
     + 'If you’re interested in a particular one that comes up, you can also send us your target bid or overall budget and we can work out an estimated landed cost before placing anything.\n\n'
     + 'Once we have those details, we can keep the search focused and let you know when a suitable one becomes available.\n\n'
@@ -319,11 +319,11 @@ test('a new import enquiry with only the form gets the standard asking reply, wo
   // No name on the record: "Hi," as the team writes it.
   lead(9002, null, '', { phone: '0491 570 002' });
   const anon = await drafter.draftFor(items.buildItem({ leadId: 9002 }), { save: false, now });
-  assert.ok(anon.reply.startsWith('Hi, thanks for your Subaru XV Hybrid enquiry.\n\n'), anon.reply.slice(0, 80));
+  assert.ok(anon.reply.startsWith('Hello, thank you for your Subaru XV Hybrid enquiry.\n\n'), anon.reply.slice(0, 80));
 
   // What they want was said on the phone: typed into Rewrite, it is searched for straight away.
   calls.length = 0;
-  aiScript = [{ reply: 'Hi {{NAME}},\n\nWe’ve found a 2015 Subaru XV Hybrid that may be worth considering.', needs_human: [], facts_used: [], hold: false }];
+  aiScript = [{ reply: 'Hello {{NAME}},\n\nWe’ve found a 2015 Subaru XV Hybrid that may be worth considering.', needs_human: [], facts_used: [], hold: false }];
   const phoned = await drafter.draftFor(it, { save: false, now, instruction: '2015 or newer, under 130,000 km, budget 12k' });
   assert.match(JSON.parse(ai()[0].body).messages[1].content, /What they asked for: year 2015 or newer; under 130,000 km; a landed budget of about \$12,000\./);
   assert.ok(phoned.reply.includes('https://www.carbarn.com.au/live-auction/subaru/xv-hybrid/gpe/1992541'), phoned.reply.slice(0, 300));
@@ -334,7 +334,7 @@ test('a new import enquiry with only the form gets the standard asking reply, wo
 test('when the customer also wrote something, the AI answers it and still asks, with the closing lines added', async () => {
   const html = '<strong>Request Available Vehicles Lead</strong><br><br><strong>Vehicle Details:</strong><ul><li>Make: Subaru</li><li>Model: XV Hybrid</li><li>Model Code: GPE</li></ul><strong>Additional Notes:</strong><br>How long does it take to get one here?';
   lead(9003, null, 'Omar', { source: 'Import Request', inquiries: [{ id: 90030, type: 'Import Request', subject: 'Sourcing enquiry for Subaru XV Hybrid (GPE)', text: html, stockNo: 'subaru-xv-hybrid-gpe', at: now - HOUR, status: 'NEW', url: '', leadType: '', staffNotes: [] }] });
-  aiScript = [{ reply: 'Hi {{NAME}},\nThanks for your Subaru XV Hybrid enquiry. Sourcing, shipping and compliance take about 6 to 10 weeks.\nCould you let us know your preferred year range, maximum odometer, grade, landed budget and any colour preferences?', needs_human: [], facts_used: [], hold: false }];
+  aiScript = [{ reply: 'Hello {{NAME}},\nThanks for your Subaru XV Hybrid enquiry. Sourcing, shipping and compliance take about 6 to 10 weeks.\nCould you let us know your preferred year range, maximum odometer, grade, landed budget and any colour preferences?', needs_human: [], facts_used: [], hold: false }];
   const d = await drafter.draftFor(items.buildItem({ leadId: 9003 }), { save: false, now });
   assert.equal(ai().length, 1);
   const asked = JSON.parse(ai()[0].body).messages[1].content;
@@ -355,7 +355,7 @@ test('once the customer says what they want, the live auction is searched and th
   assert.equal(it.itemKey, 'c:904');
   assert.deepEqual(imports.wantedFrom(it).given, ['odometer', 'budget']);
 
-  const opening = 'Hi {{NAME}},\n\nWe’ve found a 2015 Subaru XV Hybrid that may be worth considering. It is newer than your last XV and it is a hybrid, as you asked.';
+  const opening = 'Hello {{NAME}},\n\nWe’ve found a 2015 Subaru XV Hybrid that may be worth considering. It is newer than your last XV and it is a hybrid, as you asked.';
   // However the AI breaks its lines, the opening is laid out as the team writes it: greeting, blank line, one paragraph.
   aiScript = [{ reply: opening.replace(',\n\n', ',\n').replace('considering. ', 'considering.\n'), needs_human: [], facts_used: [], hold: false }];
   const d = await drafter.draftFor(it, { save: false, now });
@@ -394,11 +394,11 @@ test('once the customer says what they want, the live auction is searched and th
 
 test('an opening that states a price is replaced by the standard one, and an offer is still written when no AI answers', async () => {
   const it = items.buildItem({ conversationId: 904 });
-  const priced = 'Hi {{NAME}},\n\nWe’ve found a 2015 Subaru XV Hybrid for about $11,019 landed.';
+  const priced = 'Hello {{NAME}},\n\nWe’ve found a 2015 Subaru XV Hybrid for about $11,019 landed.';
   aiScript = [priced, priced].map((reply) => ({ reply, needs_human: [], facts_used: [], hold: false }));
   const d = await drafter.draftFor(it, { save: false, now });
   assert.equal(ai().length, 2, 'asked once more, then the standard opening is used');
-  assert.ok(d.reply.startsWith('Hi Nina,\n\nWe’ve found a 2015 Subaru XV Hybrid that may be worth considering.\n\nVehicle details:'), d.reply.slice(0, 120));
+  assert.ok(d.reply.startsWith('Hello Nina,\n\nWe’ve found a 2015 Subaru XV Hybrid that may be worth considering.\n\nVehicle details:'), d.reply.slice(0, 120));
   assert.deepEqual(fails(d), []);
 
   calls.length = 0;
@@ -411,7 +411,7 @@ test('an opening that states a price is replaced by the standard one, and an off
 
 test('Rewrite can name the bid or the car, and a bid the customer names is called their own', async () => {
   const it = items.buildItem({ conversationId: 904 });
-  const opening = { reply: 'Hi {{NAME}},\n\nWe’ve found a 2015 Subaru XV Hybrid that may be worth considering.', needs_human: [], facts_used: [], hold: false };
+  const opening = { reply: 'Hello {{NAME}},\n\nWe’ve found a 2015 Subaru XV Hybrid that may be worth considering.', needs_human: [], facts_used: [], hold: false };
 
   aiScript = [opening];
   const bid = await drafter.draftFor(it, { save: false, now, instruction: 'bid 280000' });
@@ -451,7 +451,7 @@ test('when nothing suitable is in the coming auctions, the reply says so and nam
   lead(9005, 905, 'Pia', { inquiries: [{ id: 90050, type: 'Auction', subject: 'Auction alert for Toyota Century', text: FORM.replace('Subaru', 'Toyota').replace('XV Hybrid', 'Century'), stockNo: '', at: now - HOUR, status: 'NEW', url: '', leadType: '', staffNotes: [] }] });
   conv(905, 9005, 'Pia Test');
   msg(905, 'IN', 'My budget is about $40,000 landed, 2018 or newer.', 5 * MIN);
-  aiScript = [{ reply: 'Hi {{NAME}},\nThere is no suitable Toyota Century in the coming auctions at the moment. We are keeping the search going and will let you know when one comes up.', needs_human: [], facts_used: [], hold: false }];
+  aiScript = [{ reply: 'Hello {{NAME}},\nThere is no suitable Toyota Century in the coming auctions at the moment. We are keeping the search going and will let you know when one comes up.', needs_human: [], facts_used: [], hold: false }];
   const d = await drafter.draftFor(items.buildItem({ conversationId: 905 }), { save: false, now });
   const asked = JSON.parse(ai()[0].body).messages[1].content;
   assert.match(asked, /We searched the live auction: no Toyota Century is in the coming auctions right now/);
@@ -479,7 +479,7 @@ test('a request that is already under way, a compliance enquiry and an unreadabl
     lead(9008, 908, 'Sol');
     conv(908, 9008, 'Sol Test');
     msg(908, 'IN', 'Budget about 11k, under 120,000 km', 5 * MIN);
-    aiScript = [{ reply: 'Hi {{NAME}},\nWe are looking into this and will come back to you shortly.', needs_human: [], facts_used: [], hold: false }];
+    aiScript = [{ reply: 'Hello {{NAME}},\nWe are looking into this and will come back to you shortly.', needs_human: [], facts_used: [], hold: false }];
     const d = await drafter.draftFor(items.buildItem({ conversationId: 908 }), { save: false, now });
     assert.equal(d.status, 'ready');
     assert.match(JSON.parse(ai()[0].body).messages[1].content, /The live auction could not be read just now\. Do not name or describe any auction car/);

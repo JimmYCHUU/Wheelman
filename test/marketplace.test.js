@@ -193,7 +193,7 @@ test('the buyer\'s name and number never reach the AI service, and the reply is 
 
 test('an SMS suggestion still gets its greeting and sign-off', async () => {
   const { finishReply } = await import('../src/checks.js');
-  assert.equal(finishReply('Hi {{NAME}},\n\nYes it is.', { first_name: 'Priya' }), 'Hi Priya,\n\nYes it is.\n\nRegards,\nTeam Carbarn');
+  assert.equal(finishReply('Hi {{NAME}},\n\nYes it is.', { first_name: 'Priya' }), 'Hello Priya,\n\nYes it is.\n\nRegards,\nTeam Carbarn');
   assert.equal(finishReply('Hi {{NAME}},\n\nYes it is.', { first_name: 'Priya' }, { signOff: '', chat: true }), 'Yes it is.');
 });
 

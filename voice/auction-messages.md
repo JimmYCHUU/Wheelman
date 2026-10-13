@@ -7,7 +7,7 @@
 # How the parts are filled in:
 #   {word}        a fact Wheelman puts in from the order, the live auction or the stock list
 #   {if_word}     prints nothing; the paragraph it sits in is kept only when that is true
-#   {{NAME}}      the customer's first name ("Hi {{NAME}}," becomes "Hi," when there is none)
+#   {{NAME}}      the customer's first name ("Hello {{NAME}}," becomes "Hello," when there is none)
 #   [CAPITALS?]   a blank only you can fill in. The page highlights it. Type over it, or type
 #                 what you know into "Add what you know" (for example: we bid 1.2m, sold for 1.31m)
 #   A paragraph whose fact does not apply is left out. For example the deposit paragraph is left
@@ -46,7 +46,7 @@
 # their target bid. When there is no target bid on the order, or no car of that model is in the
 # coming auctions for the calculator to work on, the figures are left as blanks for you, and
 # the breakdown is left out.
-Hi {{NAME}},
+Hello {{NAME}},
 
 Thank you for your {car_wanted} enquiry.
 
@@ -103,7 +103,7 @@ Kind regards,
 
 ===== lots_coming =====
 # Several matching cars are in the coming auctions, and the customer can bid on the website.
-Hi {{NAME}},
+Hello {{NAME}},
 
 Thank you for your enquiry about the {car_wanted}.
 
@@ -122,7 +122,7 @@ Kind regards,
 ===== lot_offer =====
 # A matching car is in the coming auctions. These are only the opening lines: the car's details,
 # its link, the bid, the landed cost and the rest follow from the file auction-offer.md.
-Hi {{NAME}},
+Hello {{NAME}},
 
 We found this {lot_name} {auction_when}.
 
@@ -132,7 +132,7 @@ We found this {lot_name} {auction_when}.
 # know" to fill them in one go, for example:
 #   2021, 14,200 km, grade 4, tomorrow, bid 1.15m, landed 20400, https://photos.app.goo.gl/…
 #   {if_deposit}  keeps its paragraph only while the customer has not paid a deposit
-Hi {{NAME}},
+Hello {{NAME}},
 
 We found one {lot_name} {auction_when}.
 
@@ -156,7 +156,7 @@ Regards,
 
 ===== lot_short =====
 # The short way of offering a car. A car that is not on the website's list is left as blanks.
-Hi {{NAME}},
+Hello {{NAME}},
 
 There is one {auction_when}: {lot_title}
 {lot_km} driven
@@ -166,7 +166,7 @@ Would you like to bid on this car? Or we can keep checking other options{km_limi
 
 ===== search_update =====
 # FIRST DRAFT. A follow-up is due and nothing suitable has come up.
-Hi {{NAME}},
+Hello {{NAME}},
 
 Just an update on your {car_wanted}. We have been checking the Japan auctions and have not found a suitable one yet.
 
@@ -177,7 +177,7 @@ Regards,
 
 ===== deposit_reminder =====
 # FIRST DRAFT. A follow-up is due and no deposit has been paid.
-Hi {{NAME}},
+Hello {{NAME}},
 
 Just following up on your {car_wanted} enquiry.
 
@@ -191,7 +191,7 @@ Regards,
 
 ===== deposit_received =====
 # FIRST DRAFT. A deposit has appeared on the order.
-Hi {{NAME}},
+Hello {{NAME}},
 
 Thank you, we have received your deposit of {deposit_paid} AUD.
 
@@ -202,7 +202,7 @@ Regards,
 
 ===== bid_lost =====
 # The auction was held and we did not win. {outcome} is one of the three short pieces at the top.
-Hi {{NAME}},
+Hello {{NAME}},
 
 Just an update on the {lot_name}. We placed the bid at {our_bid}, but unfortunately {outcome}.
 
@@ -213,7 +213,7 @@ Regards,
 
 ===== bid_lost_stock =====
 # The same, when cars of that model are in our own stock in Japan or on the way.
-Hi {{NAME}},
+Hello {{NAME}},
 
 Unfortunately, we bid on the {lot_name} for {our_bid} and {outcome}.
 
@@ -231,7 +231,7 @@ Regards,
 ===== stock_priced =====
 # One car from our own stock, priced for an auction customer. Type the stock number and the two
 # prices into "Add what you know", for example: stock 1234, purchase 2.38m, landed 35900
-Hi {{NAME}},
+Hello {{NAME}},
 
 {stock_title}
 {stock_lines}
@@ -248,7 +248,7 @@ Regards,
 
 ===== secured =====
 # FIRST DRAFT. We won: the order has moved to "car secured".
-Hi {{NAME}},
+Hello {{NAME}},
 
 Good news: we won the auction and your {car} is secured.
 
@@ -271,7 +271,7 @@ Regards,
 
 ===== payment_due =====
 # FIRST DRAFT. A payment is outstanding and a follow-up is due.
-Hi {{NAME}},
+Hello {{NAME}},
 
 Just a reminder that a payment of {due} AUD is due on your {car}.
 
@@ -284,7 +284,7 @@ Regards,
 
 ===== shipping_booked =====
 # FIRST DRAFT. The order has moved to shipping and compliance.
-Hi {{NAME}},
+Hello {{NAME}},
 
 An update on your {car}: it is now being prepared for shipping to Australia.
 
@@ -303,7 +303,7 @@ Regards,
 
 ===== on_the_water =====
 # FIRST DRAFT. The stock record shows the car has left Japan.
-Hi {{NAME}},
+Hello {{NAME}},
 
 Your {car} has left Japan and is on its way to Australia.
 
@@ -316,7 +316,7 @@ Regards,
 
 ===== arrived =====
 # FIRST DRAFT. The stock record shows the car has arrived.
-Hi {{NAME}},
+Hello {{NAME}},
 
 Good news: your {car} has arrived in Australia.
 
@@ -331,7 +331,7 @@ Regards,
 
 ===== ready =====
 # FIRST DRAFT. The car is ready to hand over.
-Hi {{NAME}},
+Hello {{NAME}},
 
 Your {car} is ready.
 
@@ -348,7 +348,7 @@ Regards,
 
 ===== thanks =====
 # FIRST DRAFT. The order is completed.
-Hi {{NAME}},
+Hello {{NAME}},
 
 Thank you for importing your {car} with Carbarn. We hope you are enjoying it.
 
@@ -359,7 +359,7 @@ Regards,
 
 ===== refund =====
 # FIRST DRAFT. The order has been refunded.
-Hi {{NAME}},
+Hello {{NAME}},
 
 Your auction deposit of {deposit_paid} AUD has been refunded. It should reach your account by {refund_date}.
 
@@ -371,7 +371,7 @@ Regards,
 ===== progress_update =====
 # FIRST DRAFT. A follow-up is due on the dashboard and nothing is owing. {where} is one of the short
 # pieces at the top.
-Hi {{NAME}},
+Hello {{NAME}},
 
 A quick update on your {car_or_wanted}: {where}.
 

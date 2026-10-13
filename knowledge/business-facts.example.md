@@ -81,7 +81,7 @@ Answer: Doorstep delivery within Greater Sydney is included where the vehicle fa
 
 ## Inspections and test drives
 Status: CONFIRMED
-Answer: There are two ways to inspect a vehicle that is at our Lidcombe yard: in person at Carbarn Lidcombe, or by online video inspection, a live video call on WhatsApp or FaceTime. The invitation to inspect is always open and never proposes a time slot: when the customer wants to see a vehicle, code adds the owner's invitation and the booking link under the reply (voice/inspection-invite.md), the in-person link normally, the online video link when the customer says they live far away, are interstate, or cannot come. Never write the link, a day, a time or a slot yourself, and do not describe the booking form's time slots. Walk-ins are welcome during opening hours; customers are asked to call or text before visiting. Customers are welcome to arrange an independent pre-purchase inspection. Vehicles that are still in Japan or in transit cannot be inspected or test driven yet.
+Answer: There are two ways to inspect a vehicle that is at our Lidcombe showroom: in person at Carbarn Lidcombe, or by online video inspection, a live video call on WhatsApp or FaceTime. The invitation to inspect is always open and never proposes a time slot: when the customer wants to see a vehicle, code adds the owner's invitation and the booking link under the reply (voice/inspection-invite.md), the in-person link normally, the online video link when the customer says they live far away, are interstate, or cannot come. Never write the link, a day, a time or a slot yourself, and do not describe the booking form's time slots. Walk-ins are welcome during opening hours; customers are asked to call or text before visiting. Customers are welcome to arrange an independent pre-purchase inspection. Vehicles that are still in Japan or in transit cannot be inspected or test driven yet.
 
 ## Finance
 Status: CONFIRMED
@@ -113,4 +113,4 @@ Answer: We can arrange these extras on request. Black and white number plates: $
 
 ## Availability wording
 Status: CONFIRMED
-Answer: Use the availability given in the supplied vehicle facts. "Available now at the Lidcombe yard" means it can be inspected. "In transit" and "Still in Japan" mean it cannot be inspected yet and no arrival date may be promised unless one is supplied. "Sold" means offer an alternative.
+Answer: Use the availability given in the supplied vehicle facts. "Available now at our Lidcombe showroom" means it can be inspected. "In transit" and "Still in Japan" mean it cannot be inspected yet and no arrival date may be promised unless one is supplied. "Sold" means offer an alternative.

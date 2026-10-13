@@ -14,7 +14,7 @@ const now = Date.now();
 const MIN = 60e3, HOUR = 3600e3;
 const ADDON = `chrome-extension://${'a'.repeat(32)}`;
 let standins, app, base, config, db, items, worker, llm, parse;
-const ai = aiBehaviour({ behave: () => ({ reply: 'No worries.', needs_human: [], facts_used: [], hold: false }) });
+const ai = aiBehaviour({ behave: () => ({ reply: 'Certainly.', needs_human: [], facts_used: [], hold: false }) });
 
 before(async () => {
   standins = await startStandins({ ai });

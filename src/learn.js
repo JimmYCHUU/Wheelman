@@ -11,7 +11,7 @@
 // "sent" replaces "copied" for the same suggestion once it is seen.
 
 import { config } from './config.js';
-import { getDraft, upsertLearned, deleteLearned, deleteLearnedForAnchor, learnedTextExists, allLearned, recordCopied, recordCopiedTime, recordEdit, setDraftRating, getLearned, insertAdvice, allAdvice, setAdviceLessons } from './db.js';
+import { getMeta, setMeta, getDraft, upsertLearned, deleteLearned, deleteLearnedForAnchor, learnedTextExists, allLearned, recordCopied, recordCopiedTime, recordEdit, setDraftRating, getLearned, insertAdvice, allAdvice, setAdviceLessons } from './db.js';
 import { redact } from './redact.js';
 import { maskCustomerSignOff, maskGreetingNames, stripLocationBlock, loadExclusions } from './voice.js';
 import { stripModelSignOff, BLANK_PATTERN } from './checks.js';
@@ -20,6 +20,24 @@ import { complete } from './llm.js';
 import { SITUATIONS } from './situations.js';
 
 const BLANK = new RegExp(BLANK_PATTERN);
+
+/** When the voice changed (meta voice_cutover_at), or null. The app marks it once, at its first start after the change. */
+export function voiceCutover() { return getMeta('voice_cutover_at', null); }
+export function markVoiceCutover(at = Date.now()) {
+  if (!getMeta('voice_cutover_at', null)) setMeta('voice_cutover_at', at);
+  return getMeta('voice_cutover_at', null);
+}
+/**
+ * Lessons learned before the voice changed are in the old register. Those about price questions
+ * followed the old policy (invite first, no inclusions) and are dropped; the rest are kept and
+ * marked, so the request says to take what they say and not their wording.
+ */
+function sinceVoice(rows) {
+  const cut = voiceCutover();
+  if (!cut) return rows.map((r) => ({ ...r, beforeVoice: false }));
+  return rows.filter((r) => !((r.at || 0) < cut && (r.situations || []).includes('price_negotiation')))
+    .map((r) => ({ ...r, beforeVoice: (r.at || 0) < cut }));
+}
 
 /** Only dashboard conversations and leads, and import emails, teach Wheelman. */
 export const canLearnFrom = (itemKey) => /^(?:[cl]|em):\d+$/.test(String(itemKey || ''));
@@ -313,7 +331,7 @@ export async function distilPending(max = 2) {
  */
 export function ownerGuidance(q, now = Date.now()) {
   const mine = (r) => canLearnFrom(r.item_key) && r.item_key !== q.excludeItemKey && sameChannel(r, q);
-  const approved = allLearned().filter((r) => mine(r) && r.source === 'approved')
+  const approved = sinceVoice(allLearned().filter((r) => mine(r) && r.source === 'approved'))
     .map((r) => ({ r, s: score(r, q, now) })).filter((x) => x.s >= 3).sort((a, b) => b.s - a.s).slice(0, 2).map((x) => x.r);
 
   const notes = allAdvice().filter(mine); // newest first
@@ -355,20 +373,20 @@ function score(row, q, now) {
 /** Recent replies that were really used, as extra examples. Shaped like the base example bank. */
 export function learnedExamples(q, max = 2, now = Date.now()) {
   // Replies the owner approved are shown in their own section, with more weight than an example.
-  const rows = allLearned().filter((r) => canLearnFrom(r.item_key) && r.item_key !== q.excludeItemKey && r.source !== 'approved' && sameChannel(r, q));
+  const rows = sinceVoice(allLearned().filter((r) => canLearnFrom(r.item_key) && r.item_key !== q.excludeItemKey && r.source !== 'approved' && sameChannel(r, q)));
   return rows.map((r) => ({ r, s: score(r, q, now) }))
     .filter((x) => x.s >= 3)
     .sort((a, b) => b.s - a.s)
     .slice(0, max)
-    .map(({ r }) => ({ id: `learned-${r.draft_id}`, author: 'team', customer: r.customer_text, events: [], reply: r.final_text, replyWords: wordCount(r.final_text), learned: true }));
+    .map(({ r }) => ({ id: `learned-${r.draft_id}`, author: 'team', customer: r.customer_text, events: [], reply: r.final_text, replyWords: wordCount(r.final_text), learned: true, beforeVoice: r.beforeVoice }));
 }
 
 /** Cases where the person changed the suggestion before using it: the clearest lessons. */
 export function corrections(q, max = 2, now = Date.now()) {
-  const rows = allLearned().filter((r) => canLearnFrom(r.item_key) && r.changed && r.item_key !== q.excludeItemKey && r.draft_text && (r.similarity ?? 1) < 0.92 && (r.similarity ?? 0) > 0.15 && sameChannel(r, q));
+  const rows = sinceVoice(allLearned().filter((r) => canLearnFrom(r.item_key) && r.changed && r.item_key !== q.excludeItemKey && r.draft_text && (r.similarity ?? 1) < 0.92 && (r.similarity ?? 0) > 0.15 && sameChannel(r, q)));
   return rows.map((r) => ({ r, s: score(r, q, now) }))
     .filter((x) => x.s >= 2.5)
     .sort((a, b) => b.s - a.s)
     .slice(0, max)
-    .map(({ r }) => ({ customer: r.customer_text, drafted: r.draft_text, used: r.final_text }));
+    .map(({ r }) => ({ customer: r.customer_text, drafted: r.draft_text, used: r.final_text, beforeVoice: r.beforeVoice }));
 }
