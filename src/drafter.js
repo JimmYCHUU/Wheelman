@@ -11,7 +11,8 @@ import { planImport, auctionNote, bidBasisLine } from './imports.js';
 import { planOrderReply, restoreAmounts } from './ordermessages.js';
 import { insertDraft, latestDraft } from './db.js';
 import { sydneyHour } from './time.js';
-import { standardBlock, repeatsBlock, tidyOpening } from './firstreply.js';
+import { standardBlock, inviteBlock, repeatsBlock, tidyOpening } from './firstreply.js';
+import { priceBlock } from './pricereply.js';
 import { LEFTOVER_LABEL } from './practice.js';
 
 /**
@@ -83,21 +84,27 @@ function buyerCheck(item, body) {
   return { level: 'fail', code: 'buyer-ask', tokens: [m[0]], message: 'This customer has already bought, but the reply treats them as a new enquiry.' };
 }
 
-/** With the standard block below it, the AI's own lines must not give the address, hours, links or phone again. */
-function blockCheck(body, vehicleUrl, inspectionUrl = '', { askedWhere = false } = {}) {
+/**
+ * With a block under them, the AI's own lines must not say what the block says: the standard
+ * block's address, hours, links and phone (address), the price reply's sentences (price), or the
+ * invitation's (invite).
+ */
+function blockCheck(body, vehicleUrl, inspectionUrl = '', { askedWhere = false, address = true, price = false, invite = false } = {}) {
   // Pointing at the block ("our address is below") is not an answer. The sentence must stand on its own.
   const pointer = body.match(/\b(?:is|are|see|listed|shown|given|found|details?|address|hours|link)\s+(?:just\s+|right\s+)?below\b|\bbelow[.:]?\s*$/im);
   if (pointer) return { level: 'fail', code: 'block-pointer', tokens: [pointer[0]], message: `The reply points at the block ("${pointer[0].trim()}"). Say the answer in the sentence itself and leave out "below".` };
   // A customer who asked where we are, or when we are open, is answered in the AI's own sentence too.
-  let again = askedWhere ? '' : repeatsBlock(body);
+  let again = askedWhere || !address ? '' : repeatsBlock(body);
+  if (!again && (price || invite)) again = repeatsBlock(body, { address: false, price, inspection: price || invite });
   if (!again && inspectionUrl && body.includes(inspectionUrl)) again = inspectionUrl;
-  if (!again && vehicleUrl) {
+  if (!again && vehicleUrl && address) {
     // The inspection booking link starts with the vehicle's page link, so only the bare page link counts.
     const at = body.indexOf(vehicleUrl);
     if (at !== -1 && body[at + vehicleUrl.length] !== '#') again = vehicleUrl;
   }
   if (!again) return null;
-  return { level: 'fail', code: 'block-repeat', tokens: [again], message: `The reply repeats "${again}", which the standard block below it already gives. Leave the address, hours, links and phone number to the block.` };
+  const what = price ? 'the price reply under it' : invite ? 'the invitation under it' : 'the standard block below it';
+  return { level: 'fail', code: 'block-repeat', tokens: [again], message: `The reply repeats "${again}", which ${what} already gives. Leave that to the block and write only the answer.` };
 }
 
 /** The conversation in the plain form the promise, day and place checks read. */
@@ -129,11 +136,20 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   // reply (a complaint, say) does not.
   const { vehicleUrl, inspectionUrl } = prompt.standard;
   const offer = plan?.stage === 'offer';
-  // An import reply has its own lines underneath: the whole offer, or the short contact block.
-  const block = plan ? (json.hold ? '' : plan.tail || '') : prompt.standard.on && !json.hold ? standardBlock({ vehicleUrl, inspectionUrl }) : '';
+  const hold = !!json.hold;
   let text = String(json.reply || '').replace(/\\n/g, '\n');
+  // The owner's blocks under the AI's lines: the price reply when the price was asked about, else
+  // the invitation when the customer wants to see the car (not when the AI confirmed a time in
+  // words, and not on a first reply, where the standard block carries it).
+  const price = !plan && !hold && prompt.price?.on ? priceBlock({ vehicle: item.vehicles[0], inspectionUrl: prompt.price.inspectionUrl, online: prompt.price.online, chat, withStandard: prompt.standard.on }) : '';
+  const confirmedTime = /\bsee you\b|\bready for you\b|look forward to seeing you/i.test(text);
+  const invite = !price && !plan && !hold && prompt.inspection?.block && prompt.inspection.url && !prompt.standard.on && !confirmedTime
+    ? inviteBlock(prompt.inspection.url, { online: prompt.inspection.kind === 'online', chat, tail: true }) : '';
+  const extras = [price, invite].filter(Boolean).join('\n\n');
+  // An import reply has its own lines underneath: the whole offer, or the short contact block.
+  const block = plan ? (hold ? '' : plan.tail || '') : prompt.standard.on && !hold ? standardBlock({ vehicleUrl, inspectionUrl, online: !!prompt.standard.online }) : '';
   if (plan?.tokens) text = restoreAmounts(text, plan.tokens);
-  if (block) text = tidyOpening(text, vehicleUrl, inspectionUrl);
+  if (block || extras) text = tidyOpening(text, vehicleUrl, inspectionUrl, prompt.price?.inspectionUrl || '', invite ? prompt.inspection.url : '');
   // An offer opens the way the team writes it: the greeting, a blank line, then one short paragraph.
   if (offer) text = text.trim().replace(/^([^\n]{1,40},)\n+/, (m, hi) => `${hi}\n\n`).replace(/([^\n])\n(?!\n)/g, (m, c) => `${c} `);
   let body = fixGreeting(stripModelSignOff(text), sydneyHour(now));
@@ -142,10 +158,15 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   // Marketplace suggestions carry no sign-off: it is a chat, not a text message. An import
   // reply keeps its closing lines even when we have already written today.
   const signOff = chat ? '' : plan && block ? block : again ? '' : block || config.signOff;
-  const reply = finishReply(text, item.lead, { now, signOff, chat, greeting: offer || !again });
+  // The price reply or the invitation sits under the AI's lines, before the standard block or the sign-off.
+  const reply = finishReply(extras ? `${text.trim()}\n\n${extras}` : text, item.lead, { now, signOff, chat, greeting: offer || !again });
   let checks = checkDraft({
     channel: item.channel,
     reply, body,
+    // A figure below the advertised price is never ours to name.
+    advertisedPrice: item.deal ? 0 : Number(item.vehicles[0]?.price) || 0,
+    // The price reply or the invitation under the lines offers the next step itself.
+    blockNextStep: !!extras,
     needsHuman: json.needs_human,
     allowedText: allowed.trusted, policyText: allowed.policy, customerText: allowed.customer,
     instruction: staffSaid, situation: item.situation, hold: !!json.hold,
@@ -154,7 +175,7 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   });
   const repeat = offer
     ? (/[$¥]\s?\d|https?:\/\//.test(body) ? { level: 'fail', code: 'block-repeat', tokens: [], message: 'The opening states a figure or a link. The block below it gives the car, the bid, the costs and the link: write only the greeting and why the car may suit.' } : null)
-    : block ? blockCheck(body, vehicleUrl, inspectionUrl, { askedWhere: !plan && item.situation.all.includes('location_hours') }) : null;
+    : block || extras ? blockCheck(body, vehicleUrl, inspectionUrl || prompt.inspection?.url || prompt.price?.inspectionUrl || '', { askedWhere: !plan && item.situation.all.includes('location_hours'), address: !!block, price: !!price, invite: !!invite }) : null;
   if (offer) {
     checks = [...checks.filter((c) => c.level !== 'ok'),
       // Left out of the offer once a deposit is paid, so there is nothing to paste then.
@@ -178,7 +199,7 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   // An import email: the exact answer or a blank, never a holding line, and every model asked about answered.
   const mail = email ? emailChecks({ body, research, hold: !!json.hold }) : [];
   if (mail.length) checks = [...checks.filter((c) => c.level !== 'ok'), ...mail];
-  const visit = inspectionCheck(prompt.inspection, body, block);
+  const visit = inspectionCheck(prompt.inspection, body, [block, extras].filter(Boolean).join('\n'));
   if (visit) checks = [...checks.filter((c) => c.level !== 'ok'), visit];
   const buyer = buyerCheck(item, body);
   if (buyer) checks = [...checks.filter((c) => c.level !== 'ok'), buyer];

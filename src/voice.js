@@ -6,7 +6,7 @@ import path from 'node:path';
 import { config } from './config.js';
 import { squash, wordCount } from './text.js';
 import { loadPeople, namePattern } from './people.js';
-import { blockHeadings } from './firstreply.js';
+import { blockHeadings, inviteLines } from './firstreply.js';
 
 let exclusions = null;
 export function loadExclusions() {
@@ -88,10 +88,13 @@ export function stripLocationBlock(body) {
   // So do the block's own parts that come before the address: "Vehicle details:" and its link,
   // "Book your inspection:" and its link. A link under any other line is the sender's own.
   const headings = new Set([...blockHeadings(), 'check more details', 'vehicle details', 'book your inspection']);
+  // The invitation to inspect is the owner's wording, added by code: not the sender's own line either.
+  const invite = new Set(inviteLines());
   let end = lines.length;
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i].trim();
     if (line === '' || /^https?:\/\/\S+$/.test(line)) continue;
+    if (invite.has(line)) { end = i; continue; }
     if (headings.has(line.replace(/:\s*$/, '').toLowerCase()) && /:\s*$/.test(line)) { end = i; continue; }
     break;
   }

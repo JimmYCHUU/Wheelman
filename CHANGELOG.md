@@ -6,6 +6,19 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- **The price reply and the inspection invitation, in the owner's words, added by code.** When
+  a customer asks for the best price, a discount, or makes an offer, the standard price reply
+  from `voice/price-reply.md` goes under the AI's lines: what the price includes, built from
+  that car's own Included list; that government charges are extra; that we may offer a small
+  discount for a serious buyer; and the invitation with the booking link. Whenever a customer
+  wants to see a car, the invitation from `voice/inspection-invite.md` goes under the lines:
+  the booking link, "Or let us know your preferred date and time, and we'll arrange it for
+  you.", "Please call or text before visiting." It is always open: no time slot is ever
+  proposed. On a first reply it sits inside the standard block, which no longer says "Book
+  your inspection". The AI writes only the sentence around them; a line that repeats them is
+  sent back, and a figure below the advertised price fails a new `price-floor` check. The
+  business facts for price questions and inspections say the same. (The owner's words, 12 Oct
+  2026: his price template, and "open invitation plus the link".)
 - **Reviewing changes side by side.** `npm run review` writes the same real past conversations
   two ways, with two voice folders or two models, and the Review page at `/review` shows each
   pair as Left and Right, shuffled, with **Left is better**, **Right is better** and **Both

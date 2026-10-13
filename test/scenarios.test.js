@@ -41,6 +41,8 @@ before(async () => {
     // 1600: paid in full twenty days ago; the buyer texts from a number the sale does not have
     car(6, '1600', '2022 Toyota Corolla Touring', 'Corolla', { salesInfo: sale(9006, 'PAYMENT_COMPLETED', 25000, 25000, '0414 000 000', 'Email.Buyer@example.com', 20 * DAY) }),
     car(7, '1700', '2018 Toyota Alphard G', 'Alphard'),
+    // 1800: ordinary stock with an Included list, for the price reply
+    car(8, '1800', '2019 Toyota Vellfire Z', 'Vellfire', { outline: ['6 Months NSW Registration', 'CTP Insurance', 'Fresh Roadworthy Certificate', 'Doorstep Delivery (Greater Sydney)'] }),
   ]);
 });
 
@@ -238,12 +240,13 @@ test('a long conversation keeps its first message and what we already told the c
 // ---- the standard first reply --------------------------------------------------------------
 
 const NOAH = 'https://www.carbarn.com.au/vehicles/toyota/noah/abc10/1300';
+const INVITE = (booking) => `You can book an inspection here:\n${booking}\nOr let us know your preferred date and time, and we'll arrange it for you.`;
 const block = (url, booking = '') => [
   ...(url ? [`Vehicle details:\n${url}`] : []),
-  ...(booking ? [`Book your inspection:\n${booking}`] : []),
+  ...(booking ? [INVITE(booking)] : []),
   'Our location:\n📍 136 Frances Street, Lidcombe NSW 2141',
-  '🕛 Open 7 days, 8 AM–5 PM.',
-  'Feel free to visit us or call\n📞 0423 840 130\nTeam Carbarn',
+  '🕛 Open 7 days, 8 AM–5 PM.\nPlease call or text before visiting.',
+  '📞 0423 840 130\nTeam Carbarn',
 ].join('\n\n');
 const fails = (d) => d.checks.filter((c) => c.level === 'fail').map((c) => c.code);
 
@@ -257,7 +260,7 @@ test('a new enquiry asking where we are gets a short answer and then the exact s
   const answer = 'Hi {{NAME}},\nWe are at 136 Frances Street, Lidcombe, and we are open until 5 PM every day.';
   const { d, asked, attempts } = await draft(220, answer);
   assert.match(asked, /=== STANDARD FIRST REPLY ===\nThis is a brand-new enquiry\. Our standard block is added below your text automatically/);
-  assert.match(asked, /this vehicle's page link, the inspection booking link, our address, the opening hours and our phone number\./);
+  assert.match(asked, /this vehicle's page link, the inspection invitation and its booking link, our address, the opening hours and our phone number\./);
   assert.match(asked, /Never point at the block: no "below", "see below" or "details are below"/);
   assert.match(asked, /They asked where we are or when we are open, so answer that in your own sentence/);
   // Someone asking where we are is planning to visit, so the block carries the booking link as well.
@@ -358,7 +361,7 @@ test('a new enquiry asking to inspect gets the booking link inside the block, on
   // The AI types the link anyway. The line is dropped, with its lead-in, because the block gives it.
   const { d, asked } = await draft(221, `Hi {{NAME}},\nYou are welcome to inspect the Noah. Please choose a time here:\n${NOAH}#inspection=onsite`);
   assert.match(asked, /Our address and opening hours follow your text automatically/);
-  assert.match(asked, /this vehicle's page link, the inspection booking link, our address/);
+  assert.match(asked, /this vehicle's page link, the inspection invitation and its booking link, our address/);
   assert.ok(!/Google Maps/.test(asked), 'no map link is mentioned anywhere in the request');
   assert.equal(d.reply, `Hi Xavi,\nYou are welcome to inspect the Noah.\n\n${block(NOAH, `${NOAH}#inspection=onsite`)}`);
   assert.deepEqual(fails(d), [], JSON.stringify(d.checks));
@@ -375,14 +378,14 @@ test('the block leaves out the car and booking parts when there is nothing to po
   msg(222, 'IN', 'Is the Prius still available?', 5 * MIN);
   const sold = await draft(222, 'Hi {{NAME}},\nUnfortunately, that Prius has been sold.');
   assert.equal(sold.d.reply, `Hi Yara,\nUnfortunately, that Prius has been sold.\n\n${block('')}`);
-  assert.ok(!/Vehicle details|Book your inspection/.test(sold.d.reply));
+  assert.ok(!/Vehicle details|book an inspection/.test(sold.d.reply));
 
   lead(10, 223, 'Zane', '0421 000 004');
   conv(223, 10, 'Zane Test', '+61421000004');
   msg(223, 'IN', 'Do you have any vans?', 5 * MIN);
   const none = await draft(223, 'Hi {{NAME}},\nYes, we have several vans in stock. Which size are you after?');
   assert.ok(none.d.reply.endsWith(block('')));
-  assert.ok(!/Vehicle details|Book your inspection/.test(none.d.reply));
+  assert.ok(!/Vehicle details|book an inspection/.test(none.d.reply));
   assert.ok(!/this vehicle's page link/.test(none.asked));
 });
 
@@ -563,23 +566,24 @@ test('every way of asking to see a car counts, and a goodbye does not', async ()
     assert.equal(wants(t), false, t);
 });
 
-test('a customer who asks to inspect tomorrow gets the booking link, or the reply is sent back', async () => {
-  // Inside a conversation there is no block under the reply, so the AI's own lines must carry the link.
+test('a customer who asks to inspect tomorrow gets the invitation with the booking link under the reply, whatever the AI typed', async () => {
+  // Inside a conversation there is no standard block, so the invitation goes under the AI's lines on its own.
   lead(17, 230, 'Gus', '0421 000 011', { stocks: ['1300'] });
   conv(230, 17, 'Gus Test', '+61421000011');
   msg(230, 'IN', 'Is the Noah still available?', 3 * HOUR);
   msg(230, 'OUT', 'Yes, it is available.', 170 * MIN);
   msg(230, 'IN', 'Can I inspect it tomorrow?', 5 * MIN);
-  const without = 'Yes, you are welcome to come tomorrow.';
-  const bad = await draft(230, without, without);
-  assert.equal(bad.attempts, 2, 'a reply with no booking link is sent back once');
-  assert.ok(fails(bad.d).includes('inspection-link'), JSON.stringify(bad.d.checks));
-  assert.match(bad.asked, /If they named only a day, say that day is fine and still give the link/);
+  const plain = await draft(230, 'Yes, you are welcome to come tomorrow.');
+  assert.equal(plain.attempts, 1, 'nothing to send back: the invitation carries the link');
+  assert.match(plain.asked, /If they named only a day, say that day is fine/);
+  assert.equal(plain.d.reply, `Yes, you are welcome to come tomorrow.\n\n${INVITE(`${NOAH}#inspection=onsite`)}\nPlease call or text before visiting.`);
+  assert.deepEqual(fails(plain.d), [], JSON.stringify(plain.d.checks));
 
-  const good = await draft(230, without, `Yes, tomorrow is fine. Please choose a time here:\n${NOAH}#inspection=onsite`);
-  assert.equal(good.attempts, 2);
-  assert.deepEqual(fails(good.d), []);
-  assert.ok(good.d.reply.includes(`${NOAH}#inspection=onsite`));
+  // A link the AI types anyway is dropped with its lead-in: the invitation gives it once.
+  const typed = await draft(230, `Yes, tomorrow is fine. Please choose a time here:\n${NOAH}#inspection=onsite`);
+  assert.equal(typed.attempts, 1);
+  assert.deepEqual(fails(typed.d), [], JSON.stringify(typed.d.checks));
+  assert.equal((typed.d.reply.match(/#inspection=onsite/g) || []).length, 1, typed.d.reply);
 });
 
 test('the booking link follows a customer who asked to see the car earlier and has not been given it', async () => {
@@ -597,10 +601,11 @@ test('the booking link follows a customer who asked to see the car earlier and h
   const withLink = await draft(231, `No worries. You can choose a time for Saturday here:\n${NOAH}#inspection=onsite`);
   assert.match(withLink.asked, /=== INSPECTION ===\nEarlier in this conversation the customer asked to see this vehicle, and we have not sent them the booking link yet/);
   assert.deepEqual(fails(withLink.d), [], JSON.stringify(withLink.d.checks));
-  // Leaving it out here is pointed out, not rejected.
+  // Leaving it out makes no difference: the invitation with the link is added under the text.
   const withoutLink = await draft(231, 'No worries. Talk soon.');
   assert.equal(withoutLink.attempts, 1);
-  assert.ok(withoutLink.d.checks.some((c) => c.level === 'warn' && c.code === 'inspection-link'));
+  assert.ok(withoutLink.d.reply.includes(`${NOAH}#inspection=onsite`), withoutLink.d.reply);
+  assert.ok(!withoutLink.d.checks.some((c) => c.code === 'inspection-link'), JSON.stringify(withoutLink.d.checks));
 
   // Once the link has gone out, or a visit is confirmed, it is not pushed again.
   msg(231, 'OUT', `No worries. Choose a time here: ${NOAH}#inspection=onsite`, 4 * MIN);
@@ -616,14 +621,14 @@ test('asking for the inspection link in Rewrite supplies the real booking link',
   msg(232, 'IN', 'Ok. Does it come with a spare key?', 5 * MIN);
   assert.equal(promptModule.inspectionPlan(item(232)).kind, null, 'nothing about inspecting without the instruction');
 
-  const pageOnly = `We will check on the spare key [CHECK?]. You are welcome to book a time to see it here:\n${NOAH}`;
-  const booking = `We will check on the spare key [CHECK?]. You are welcome to book a time to see it here:\n${NOAH}#inspection=onsite`;
-  const { d, asked, attempts } = await draftAt(232, now, 'Suggest he books an inspection. Add the inspection link', pageOnly, booking);
+  const words = 'We will check on the spare key [CHECK?]. You are welcome to come and see it any day.';
+  const { d, asked, attempts } = await draftAt(232, now, 'Suggest he books an inspection. Add the inspection link', words);
   assert.match(asked, /Our staff asked, in their instruction for this draft, for the inspection booking link/);
-  assert.ok(asked.includes(`${NOAH}#inspection=onsite`));
-  assert.equal(attempts, 2, "the car's page link is not the booking link");
+  assert.match(asked, /The invitation and the booking link are added under your text automatically/);
+  assert.ok(!asked.includes('#inspection='), 'the link is never handed to the AI: code adds it');
+  assert.equal(attempts, 1);
   assert.deepEqual(fails(d), [], JSON.stringify(d.checks));
-  assert.ok(d.reply.includes(`${NOAH}#inspection=onsite`));
+  assert.ok(d.reply.includes(`${INVITE(`${NOAH}#inspection=onsite`)}`), d.reply);
 });
 
 // ---- learning what to say from what the team sends ---------------------------------------------
@@ -705,11 +710,13 @@ test('a customer who asked to inspect and then says he is far away gets the onli
   assert.equal(plan.kind, 'online');
   assert.equal(plan.must, true);
 
-  const without = 'We can arrange transport to Brisbane. Would you like an online video inspection?';
-  const bad = await draft(239, without, without);
-  assert.ok(fails(bad.d).includes('inspection-link'), JSON.stringify(bad.d.checks));
-  const good = await draft(239, `No worries. We can also do an online video inspection. You can choose a time here:\n${NOAH}#inspection=online`);
-  assert.deepEqual(fails(good.d), [], JSON.stringify(good.d.checks));
+  const plain = await draft(239, 'We can arrange transport to Brisbane, and we can do an online video inspection first.');
+  assert.deepEqual(fails(plain.d), [], JSON.stringify(plain.d.checks));
+  assert.ok(plain.d.reply.includes(`You can book an online video inspection (a live video call on WhatsApp or FaceTime) here:\n${NOAH}#inspection=online`), plain.d.reply);
+  assert.ok(!plain.d.reply.includes('#inspection=onsite'), 'not the in-person link');
+  const typed = await draft(239, `No worries. We can also do an online video inspection. You can choose a time here:\n${NOAH}#inspection=online`);
+  assert.deepEqual(fails(typed.d), [], JSON.stringify(typed.d.checks));
+  assert.equal((typed.d.reply.match(/#inspection=online/g) || []).length, 1, typed.d.reply);
 });
 
 // ---- what the owner says about a suggestion ----------------------------------------------------
@@ -885,4 +892,61 @@ test('a short reply that matches an earlier one is only noted, and a car trim na
 
   assert.equal(redact('Is the 2019 Nissan Serena Highway Star V still available?', {}), 'Is the 2019 Nissan Serena Highway Star V still available?');
   assert.equal(redact('I live at 12 Great Western Highway', {}), 'I live at [ADDRESS]');
+});
+
+// ---- the price reply and the invitation, in the owner's words --------------------------------------
+
+const VELL = 'https://www.carbarn.com.au/vehicles/toyota/vellfire/abc10/1800';
+const PRICE_LINES = 'The price includes 6 months NSW registration, CTP insurance, a fresh roadworthy certificate and Greater Sydney delivery. Government charges are extra.\n\n'
+  + 'We generally keep our prices competitive considering everything included, but we may offer a small discount for a serious buyer.';
+
+test("a best-price question mid-conversation gets the standard price reply under the AI's lines, with the car's own inclusions and the booking link", async () => {
+  lead(40, 260, 'Mira', '0421 000 040', { stocks: ['1800'] });
+  conv(260, 40, 'Mira Test', '+61421000040');
+  msg(260, 'IN', 'Is the Vellfire still available?', 3 * HOUR);
+  msg(260, 'OUT', 'Hi Mira, yes it is.', 170 * MIN);
+  msg(260, 'IN', "What's your best price on it?", 5 * MIN);
+  const { d, asked } = await draft(260, 'The Vellfire is available for inspection at our Lidcombe showroom, with 60,000 km on the export certificate.');
+  assert.match(asked, /=== PRICE REPLY ===/);
+  assert.match(asked, /Do not repeat the advertised price, do not name any figure/);
+  assert.equal(d.reply, 'The Vellfire is available for inspection at our Lidcombe showroom, with 60,000 km on the export certificate.\n\n'
+    + `${PRICE_LINES}\n\n`
+    + `${INVITE(`${VELL}#inspection=onsite`)}\nPlease call or text before visiting.`);
+  assert.deepEqual(fails(d), [], JSON.stringify(d.checks));
+
+  // An AI line that writes the block's own words is sent back; a figure below the price is refused.
+  const repeats = 'Yes, it is available. Government charges are extra, and we may offer a small discount.';
+  const second = await draft(260, repeats, repeats);
+  assert.ok(fails(second.d).includes('block-repeat'), JSON.stringify(second.d.checks));
+  const lower = 'We could do $19,500 for you.';
+  const third = await draft(260, lower, lower);
+  assert.ok(fails(third.d).includes('price-floor'), JSON.stringify(third.d.checks));
+});
+
+test("on a first reply the price reply sits between the AI's lines and the standard block, and says call or text once", async () => {
+  lead(41, 261, 'Omar', '0421 000 041', { stocks: ['1800'] });
+  conv(261, 41, 'Omar Test', '+61421000041');
+  msg(261, 'IN', 'Hi, what is your best price on the Vellfire?', 5 * MIN);
+  const { d } = await draft(261, 'Hi {{NAME}},\nThe Vellfire is available for inspection at our Lidcombe showroom.');
+  assert.equal(d.reply, 'Hi Omar,\nThe Vellfire is available for inspection at our Lidcombe showroom.\n\n'
+    + `${PRICE_LINES}\n\n`
+    + `${INVITE(`${VELL}#inspection=onsite`)}\n\n`
+    + `${block(VELL)}`);
+  assert.equal((d.reply.match(/call or text before visiting/g) || []).length, 1, 'once, in the block');
+  assert.deepEqual(fails(d), [], JSON.stringify(d.checks));
+});
+
+test("a later request to see the car gets the invitation under the AI's lines, in the owner's words; a time confirmed in words needs none", async () => {
+  lead(42, 262, 'Lena', '0421 000 042', { stocks: ['1300'] });
+  conv(262, 42, 'Lena Test', '+61421000042');
+  msg(262, 'IN', 'Is the Noah available?', 3 * HOUR);
+  msg(262, 'OUT', 'Hi Lena, yes it is.', 170 * MIN);
+  msg(262, 'IN', 'Can I come and see it on Saturday?', 5 * MIN);
+  const { d, asked } = await draft(262, `You are welcome to inspect the Noah at Lidcombe on Saturday. Book a time here:\n${NOAH}#inspection=onsite`);
+  assert.match(asked, /The invitation and the booking link are added under your text automatically/);
+  assert.equal(d.reply, `You are welcome to inspect the Noah at Lidcombe on Saturday.\n\n${INVITE(`${NOAH}#inspection=onsite`)}\nPlease call or text before visiting.`);
+  assert.deepEqual(fails(d), [], JSON.stringify(d.checks));
+  const confirmed = await draft(262, 'See you on Saturday. The Noah will be out the front for you.');
+  assert.ok(!confirmed.d.reply.includes('book an inspection'), confirmed.d.reply);
+  assert.deepEqual(fails(confirmed.d), [], JSON.stringify(confirmed.d.checks));
 });

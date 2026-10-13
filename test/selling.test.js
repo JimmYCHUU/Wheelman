@@ -50,7 +50,7 @@ test('where the customer is: interest, proof, fit, commit, buyer', () => {
 
   const price = stage({ situations: ['price_negotiation'], texts: [{ who: 'customer', text: 'Hi' }, { who: 'us', text: 'Hi, yes it is.' }, { who: 'customer', text: "What's your best price?" }] });
   assert.deepEqual([price.rung, price.move], ['fit', 'invite_before_price']);
-  assert.match(price.question, /cash/i);
+  assert.equal(price.question, '', 'the price reply is added by code: nothing to ask');
   assert.equal(stage({ situations: ['price_negotiation', 'finance'], texts: [{ who: 'customer', text: 'Best price on finance?' }] }).question, '', 'what they already said is not asked again');
 
   const history = stage({ situations: ['history_kms'], texts: [{ who: 'customer', text: 'How many kms and any accident history?' }] });

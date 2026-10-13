@@ -170,21 +170,73 @@ reserved, with no booking link.
 ### The standard first reply
 
 A brand-new enquiry in the Dashboard section gets the reply we always send: one or two lines
-that answer the question, then the standard block with the car's page, the booking link when
-the customer asked to see the car, the address (136 Frances Street, Lidcombe), the opening
-hours and the phone number. No map link is sent in any message. The AI writes only the opening lines. The block is added by code from
-`voice/first-reply.md`, so its wording and symbols are always exact, and it takes the place of
-the sign-off on that message. Edit that file to change the block.
+that answer the question, then the standard block with the car's page, the invitation to
+inspect with the booking link when the customer asked to see the car, the address (136 Frances
+Street, Lidcombe), the opening hours and the phone number. No map link is sent in any message.
+The AI writes only the opening lines. The block is added by code from `voice/first-reply.md`, so
+its wording and symbols are always exact, and it takes the place of the sign-off on that message.
+Edit that file to change the block.
 
 - No car matched, or the car is sold or reserved: the "Vehicle details" lines are left out.
-- The customer asks to see the car: the block carries the booking link under "Book your
-  inspection:". Otherwise those lines are left out.
+- The customer asks to see the car: the block carries the invitation (below). Otherwise those
+  lines are left out.
 - If the AI types the address, hours, phone number or one of those links itself, the line is
   dropped or the reply is sent back. The old address (Unit D3, 128-130 Frances Street) and a
   Google Maps link are refused outright: both live on in the team's past replies, which are
   shown to the AI with the address replaced by a label.
 - Buyers, later replies in a conversation, holding replies, Marketplace chats and anyone who
   writes to a staff member by name do not get it.
+
+### The inspection invitation
+
+Whenever a customer wants to see a car (they ask now, asked earlier and were not given the link,
+ask where we are, or our staff ask for it in a prompt), the invitation is added under the AI's
+lines by code, in the owner's words from `voice/inspection-invite.md`:
+
+```
+You can book an inspection here:
+<the car's booking link>
+Or let us know your preferred date and time, and we'll arrange it for you.
+Please call or text before visiting.
+```
+
+The invitation is always open: no time slot is ever proposed. On a first reply it sits inside
+the standard block, which already asks the customer to call or text first, so that last line is
+left out there. For a customer who says they are far away the first line offers the online video
+inspection instead. On Marketplace the last line reads "Please message or call before visiting."
+The AI writes the sentence that says the car is available to inspect, and nothing about days,
+times, slots or the link: a link line it types anyway is dropped, and a line that repeats the
+invitation's own words is sent back. When the AI confirms a time the customer named ("See you
+on Saturday"), no invitation is added. A car that cannot be inspected yet gets no invitation.
+
+### The price reply
+
+When a customer asks for the best price, a discount, or makes an offer, the owner's standard
+price reply is added under the AI's lines by code, from `voice/price-reply.md`:
+
+```
+The price includes 6 months NSW registration, a 5-year extended warranty, 1 year roadside
+assistance, CTP insurance, a fresh roadworthy certificate and Greater Sydney delivery.
+Government charges are extra.
+
+We generally keep our prices competitive considering everything included, but we may offer a
+small discount for a serious buyer.
+
+You can book an inspection here:
+<the car's booking link>
+Or let us know your preferred date and time, and we'll arrange it for you.
+Please call or text before visiting.
+```
+
+What the price includes is built from that car's own Included list on the dashboard, in the
+owner's words and order: an inclusion the car does not list is left out, and a car with none of
+them gets "The advertised price excludes government charges." The invitation is left out when the
+car cannot be inspected yet. The AI writes only the greeting when one is due and one or two
+sentences that answer anything else asked: never the advertised price again, never a figure, and
+never a yes or a no to an offer. A figure the customer named gets a `[PRICE?]` sentence for a
+person; a figure below the advertised price in the AI's own lines fails the `price-floor` check
+and the reply is written again. Marketplace chats get the same block. (The owner's words, 12 Oct
+2026.)
 
 ### Promises, days and places
 
@@ -664,9 +716,10 @@ every chat where the buyer wrote last. It works like the Dashboard section, with
 differences:
 
 - **Short replies.** One or two lines, no greeting line, no "Regards, Team Carbarn".
-- **Links in the reply.** The car's page link on a first reply, and the inspection booking
-  link when the buyer asks to see the car, each on its own line. (Marketplace has no standard
-  block, so the links go in the reply itself.)
+- **Links in the reply.** The car's page link on a first reply, and the invitation to inspect
+  with the booking link when the buyer asks to see the car, added under the lines by code as on
+  the dashboard. The price reply is added the same way. (Marketplace has no standard block, so
+  these go in the reply itself.)
 - **Send from here.** **Send reply** hands the text in the box to the content engine, which
   types it into the Marketplace chat from its phone. The reply shows in the conversation
   marked "Sending" until the engine reports it sent, and the chat leaves **Waiting** at once.
