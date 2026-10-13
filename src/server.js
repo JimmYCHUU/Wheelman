@@ -37,6 +37,7 @@ import { sendReply, fetchConversation, normalizeMpMessage } from './marketplace.
 import { storeMpConversation } from './sync.js';
 import { appendMpMessage, recordSentHere } from './db.js';
 import { blankMatcher } from '../web/lib/blank.js';
+import { share, viaTunnel, signedIn, checkPassword, signinToken, signinCookie, tooManyTries, noteWrong, clearWrong } from './share.js';
 
 const TYPES = { '.woff2': 'font/woff2', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(config.root, 'package.json'), 'utf8')).version || ''; } catch { return ''; } })();
@@ -72,9 +73,19 @@ const ADDON_ROUTES = [[/^\/api\/phone\//, 'x-wheelman-phone'], [/^\/api\/mail\//
  * (extension/), which reports from a browser add-on's own origin: it is let in on its two routes
  * only, each with its own header (an ordinary web page cannot add one without a preflight request,
  * which this server never answers), and only when PHONE_ADDON_ID, if set, names it.
+ *
+ * When the page is shared with the team (src/share.js), a request through the tunnel is let in
+ * as well, once gate() has seen the sign-in cookie: a GET as it is, and a POST only from the
+ * shared page itself (the browser names the page's own address as the origin) and only JSON.
  */
 function allowed(req, pathname = '') {
   const host = String(req.headers.host || '');
+  if (viaTunnel(req)) {
+    if (!config.share.on || !config.share.password) return false;
+    if (req.method === 'GET') return true;
+    const proto = /^https?$/.test(String(req.headers['x-forwarded-proto'] || '')) ? req.headers['x-forwarded-proto'] : 'https';
+    return String(req.headers.origin || '') === `${proto}://${host}` && /application\/json/i.test(String(req.headers['content-type'] || ''));
+  }
   if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host)) return false;
   if (req.method !== 'GET') {
     const origin = String(req.headers.origin || '');
@@ -449,7 +460,9 @@ async function api(req, res, url) {
     // the salespeople's genuine replies in the example bank.
     let practice = { dashboard: 0, days: PRACTICE_DAYS, email: 0, voice: 0 };
     try { practice = { dashboard: recentPractice().length, days: PRACTICE_DAYS, email: config.mail.switchedOn ? recentMailPractice().length : 0, voice: loadExamples().length }; } catch { /* the counts are a courtesy */ }
-    return send(res, 200, { ...worker.statusReport(), learned: learnedStats(), practice, facts: { ...facts.counts, unanswered: facts.unanswered, toConfirm: loadBusinessFacts().filter((t) => t.status === 'working').map((t) => t.title) } });
+    // Sharing with the team: the address colleagues open, once the tunnel has one.
+    const shared = { on: config.share.on && !!config.share.password, url: share.url || '', running: share.running, error: share.error };
+    return send(res, 200, { ...worker.statusReport(), learned: learnedStats(), practice, share: shared, facts: { ...facts.counts, unanswered: facts.unanswered, toConfirm: loadBusinessFacts().filter((t) => t.status === 'working').map((t) => t.title) } });
   }
 
   // Is Wheelman alive and able to read its database? For a watchdog, the demo check and a person.
@@ -758,10 +771,65 @@ function serveStatic(res, url) {
   send(res, 200, fs.readFileSync(file), TYPES[path.extname(file)] || 'application/octet-stream');
 }
 
+// The sign-in page the team sees at the shared address: the page file with the message filled in.
+function signinPage(message = '') {
+  const html = fs.readFileSync(path.join(config.webDir, 'signin.html'), 'utf8');
+  return html.replace('{{message}}', message.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])));
+}
+
+function readForm(req, limit = 4000) {
+  return new Promise((resolve, reject) => {
+    let size = 0; const parts = [];
+    req.on('data', (c) => { size += c.length; if (size > limit) { reject(new Error('too large')); req.destroy(); } else parts.push(c); });
+    req.on('end', () => resolve(new URLSearchParams(Buffer.concat(parts).toString('utf8'))));
+    req.on('error', reject);
+  });
+}
+
+// The team's sign-in at the shared address. The right password sets the cookie and goes to the
+// page; a wrong one says so and, after too many in a row from one address, that address waits.
+async function signin(req, res) {
+  const ip = String(req.headers['cf-connecting-ip'] || req.socket.remoteAddress || '');
+  const html = 'text/html; charset=utf-8';
+  if (req.method === 'GET') {
+    if (signedIn(req)) { res.writeHead(303, { location: '/', 'cache-control': 'no-store' }); return res.end(); }
+    return send(res, 200, signinPage(), html);
+  }
+  if (req.method !== 'POST') return send(res, 405, { error: 'Not allowed' });
+  if (tooManyTries(ip)) return send(res, 429, signinPage('Too many tries. Wait a quarter of an hour, then try again.'), html);
+  let form;
+  try { form = await readForm(req); } catch { return send(res, 400, signinPage('That could not be read. Try again.'), html); }
+  if (!checkPassword(form.get('password') || '')) {
+    noteWrong(ip);
+    logLine('share', `A wrong team password was typed at the shared address (from ${ip || 'an unknown address'})`);
+    return send(res, 403, signinPage('That is not the team password.'), html);
+  }
+  clearWrong(ip);
+  res.writeHead(303, { location: '/', 'set-cookie': signinCookie(signinToken()), 'cache-control': 'no-store' });
+  res.end();
+}
+
+/**
+ * A request through the tunnel: sharing must be on, with a team password; the sign-in page and
+ * the files it needs are open to all; everything else needs the cookie the sign-in sets. True
+ * when the request was answered here.
+ */
+async function gate(req, res, url) {
+  const p = url.pathname;
+  if (!config.share.on || !config.share.password) { send(res, 403, { error: 'Sharing is switched off on the computer that runs Wheelman.' }); return true; }
+  if (p === '/signin') { await signin(req, res); return true; }
+  if (/^\/(css|fonts|assets)\/|^\/(icon\.svg|favicon\.ico)$/.test(p)) return false;
+  if (signedIn(req)) return false;
+  if (req.method === 'GET' && !p.startsWith('/api/')) { res.writeHead(303, { location: '/signin', 'cache-control': 'no-store' }); res.end(); }
+  else send(res, 401, { error: 'Sign in first.' });
+  return true;
+}
+
 export function startServer() {
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://127.0.0.1');
+      if (viaTunnel(req) && await gate(req, res, url)) return;
       if (!allowed(req, url.pathname)) return send(res, 403, { error: 'This page can only be used from this computer.' });
       if (url.pathname.startsWith('/api/')) return await api(req, res, url);
       if (req.method !== 'GET') return send(res, 405, { error: 'Not allowed' });

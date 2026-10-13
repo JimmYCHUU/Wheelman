@@ -131,6 +131,19 @@ export const config = {
     keep: Math.max(1, num(env.BACKUP_KEEP, 20)),
   },
 
+  // Sharing with the team: the page reached from other computers through a Cloudflare tunnel
+  // (SHARE=1, or "Share Wheelman.cmd"), behind a password everyone on the team types once.
+  // Sharing stays off while the password is empty. A named tunnel's token and its address give a
+  // fixed address of your own; without them the address is a free one that changes each start.
+  share: {
+    on: /^(1|true|yes|on)$/i.test((env.SHARE ?? '0').trim()),
+    password: (env.TEAM_PASSWORD || '').trim(),
+    days: num(env.TEAM_SIGNIN_DAYS, 30),
+    tunnelToken: (env.CLOUDFLARE_TUNNEL_TOKEN || '').trim(),
+    url: (env.SHARE_URL || '').trim().replace(/\/+$/, ''),
+    cloudflaredPath: (env.CLOUDFLARED_PATH || '').trim(),
+  },
+
   // Senders that are never customers: a contact saved on the phone under a label, a finance company,
   // a courier, a code sender. A conversation under one of these names is kept but never listed.
   // Matched on the name without spaces or case, so "Credit One" and "creditone" are the same.

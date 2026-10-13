@@ -34,6 +34,7 @@ purpose.
 - [Install & run](#install--run)
 - [The daily workflow](#the-daily-workflow)
 - [Backups and another computer](#backups-and-another-computer)
+- [Sharing with the team](#sharing-with-the-team)
 - [The page](#the-page)
 - [The Marketplace section](#the-marketplace-section)
 - [The Auction section](#the-auction-section)
@@ -341,7 +342,9 @@ Enforced in code, not by convention.
 Double-click **Start Wheelman.cmd**. A black window opens and stays open, and the page opens
 in your browser at http://localhost:3210. Leave the window open while you work; the page
 refreshes by itself. Close the window to stop Wheelman: a backup is written as it closes. For a
-desktop shortcut, right-click the file, then **Send to > Desktop (create shortcut)**.
+desktop shortcut, right-click the file, then **Send to > Desktop (create shortcut)**. To let
+colleagues use the page from their own computers, double-click **Share Wheelman.cmd** instead:
+see [Sharing with the team](#sharing-with-the-team).
 
 No exe and no installer on purpose: Wheelman has no packages to install. Node.js is all it
 needs.
@@ -469,6 +472,50 @@ backup folder is fine to sync.
 | `BACKUPS` | `0` stops the backup on closing and the daily one. **Back up Wheelman.cmd** still works | `1` |
 | `BACKUP_DIR` | Where the backups go | `Documents\Wheelman backups` |
 | `BACKUP_KEEP` | How many to keep; the oldest are removed | `20` |
+
+## Sharing with the team
+
+Wheelman runs on one computer. To let colleagues use the same page from their own computers
+or phones, double-click **Share Wheelman.cmd** instead of Start Wheelman.cmd. It starts
+Wheelman as usual and opens a Cloudflare tunnel to the page. The black window prints the
+address to give them, and the welcome panel on the page shows it as a link:
+
+```
+==========================================================
+Shared with the team at:  https://some-words.trycloudflare.com
+==========================================================
+```
+
+Colleagues open that address in any browser and type the **team password** once; their browser
+remembers it for 30 days. Set the password in `.env` first:
+
+| Setting | What to put |
+|---|---|
+| `TEAM_PASSWORD` | The password the team types. Sharing stays off while it is empty |
+| `SHARE` | `1` to share every time Wheelman starts, even from **Start Wheelman.cmd**. `0` to share only from **Share Wheelman.cmd** |
+
+What to know:
+
+- **Everyone sees the same page.** The lists, what is read and what is dismissed are shared:
+  when one person opens a conversation, its blue number clears for everyone. The free AI
+  allowance is shared too.
+- **The address changes each time Wheelman starts.** A free trycloudflare.com address needs no
+  account; give colleagues the new one from the welcome panel. For a fixed address of your own,
+  make a named tunnel in the Cloudflare dashboard (Zero Trust > Networks > Tunnels, with its
+  public hostname pointed at `http://localhost:3210`), put its token in `CLOUDFLARE_TUNNEL_TOKEN`
+  and the address in `SHARE_URL`.
+- **Nothing is opened on this computer.** The tunnel is cloudflared, Cloudflare's own program,
+  which dials out from this computer; the page still listens on this computer only, and only
+  what comes through the tunnel with the team's sign-in reaches it. The first time, Wheelman
+  downloads cloudflared (about 55 MB) from Cloudflare's own releases into
+  `%LOCALAPPDATA%\Wheelman`.
+- **The rules do not change.** A Marketplace reply goes only when a person presses Send, from
+  this computer or a colleague's; everything else is still copy and paste.
+- **Ten wrong passwords in a row** from one address lock the sign-in there for a quarter of an
+  hour. Changing `TEAM_PASSWORD` signs everyone out at once.
+- **Close the black window to stop sharing.** The address stops working at once.
+- The phone add-on and the Gmail button talk to Wheelman on this computer only. They do not
+  work from a colleague's browser.
 
 ## The page
 
@@ -1079,6 +1126,10 @@ one-off US$10 credit purchase raises that to 1,000.
   the Gmail account. The customer's address is kept readable, as it is for an auction order,
   so the page can show and copy it; it is removed like any other before an AI sees the text.
 - `.env` holds the dashboard password and the AI keys. Git never sees it.
+- When the page is shared with the team, what colleagues see and type travels through
+  Cloudflare's tunnel, encrypted between their browser and Cloudflare and between Cloudflare
+  and this computer. Cloudflare carries it; nothing is stored there. The sign-in cookie holds no
+  password, only a signed date.
 - The folders that hold real customer details are listed under
   [Where your files live](#where-your-files-live). Git never sees those either.
 
@@ -1087,6 +1138,7 @@ one-off US$10 credit purchase raises that to 1,000.
 | Command | What it does |
 |---|---|
 | Double-click `Start Wheelman.cmd` | Runs Wheelman and opens the page |
+| Double-click `Share Wheelman.cmd` | The same, and shares the page with the team behind the team password. See [Sharing with the team](#sharing-with-the-team) |
 | `npm start` | The same, from a terminal |
 | Double-click `Back up Wheelman.cmd` | Writes a backup now, into the backup folder. Works while Wheelman is open |
 | Drop a backup onto `Restore Wheelman.cmd` | Puts that backup back; with nothing dropped on it, the newest one. Wheelman must be closed |
@@ -1122,6 +1174,8 @@ computer. Git never sees any of it.
 | `eval\out\` | Replay comparisons against real past replies |
 | `knowledge\website\` | Downloaded website pages. Rebuilt with `fetch-website -- --all` |
 | `.playwright-mcp\`, `.impeccable\review\` | Captures and screenshots from building the page |
+| `data\share-url.txt` | The address the page is shared at, while Wheelman runs shared |
+| `%LOCALAPPDATA%\Wheelman\cloudflared.exe` (outside this folder) | Cloudflare's tunnel program, downloaded the first time the page is shared |
 | `Documents\Wheelman backups` (outside this folder) | The backups: one dated zip file each, holding the database, `.env`, the staff names, the voice files and the private notes. See [Backups and another computer](#backups-and-another-computer) |
 
 ## Troubleshooting
@@ -1151,6 +1205,11 @@ computer. Git never sees any of it.
 | A thread's row says "Folded in Gmail" | Gmail had one or more messages folded when the button was pressed | In Gmail, press **Expand all**, then **Send to Wheelman** again |
 | The add-on's icon says "Wheelman is not running" | The black window is closed | Double-click **Start Wheelman.cmd** |
 | "Port 3210 is already in use" | Wheelman is already running in another window | Use that window, or close it |
+| "Sharing is on (SHARE=1) but TEAM_PASSWORD is empty" | No team password yet | Put one on the `TEAM_PASSWORD` line in `.env`, then start again |
+| "The team link could not be opened: cloudflared could not be downloaded" | No internet, or the download is blocked | Download it from the address in the message into `%LOCALAPPDATA%\Wheelman`, or set `CLOUDFLARED_PATH` in `.env` to where it is |
+| A colleague's link says the site cannot be reached | Wheelman was restarted (a free address changes each time), or the black window is closed | Give them the address on the welcome panel |
+| A colleague sees "Sharing is switched off on the computer that runs Wheelman" | Wheelman was started with **Start Wheelman.cmd** and `SHARE` is `0` | Double-click **Share Wheelman.cmd**, or set `SHARE=1` in `.env` |
+| "Too many tries" at the team sign-in | Ten wrong passwords in a row from that computer | Wait a quarter of an hour, then try again |
 | "running scripts is disabled on this system" | Windows PowerShell blocks `npm` | Use the double-click file, or type `npm.cmd` |
 | The page says Wheelman is not responding | The black window was closed | Double-click **Start Wheelman.cmd** again |
 | "The backup could not be written" in the black window or the log | The backup folder is on a drive that is not there, or cannot be written to | Plug the drive in, or set `BACKUP_DIR` in `.env` to a folder that is, then restart |
@@ -1244,6 +1303,7 @@ dismiss, seen and put back; and nothing from a thread reaching what Wheelman has
 ```
 wheelman/
 ├── Start Wheelman.cmd                 one click: start and open the page
+├── Share Wheelman.cmd                 the same, shared with the team through a Cloudflare tunnel
 ├── .env.example                       settings; copy to .env
 ├── PRODUCT.md · DESIGN.md             who the page is for, and how it looks
 ├── extension/                         the browser add-on for Chrome or Edge, loaded unpacked once:
@@ -1299,10 +1359,11 @@ wheelman/
 │   ├── checks.js · drafter.js         figures and links traced, blanks, greeting once a day
 │   ├── firstreply.js · promises.js    the standard first reply; promises, days and places
 │   ├── worker.js                      the loop: read, note what was sent, draft what is waiting
-│   ├── server.js                      the local page's data, on 127.0.0.1 only
+│   ├── server.js                      the local page's data, on 127.0.0.1 only; the team's sign-in
+│   ├── share.js                       sharing with the team: the Cloudflare tunnel, the sign-in cookie
 │   ├── db.js · time.js · config.js    SQLite, Sydney time, settings
 │   └── app.js                         start
-├── web/                               the page: index.html · app.js · fonts
+├── web/                               the page: index.html · app.js · fonts · signin.html (the team's sign-in)
 │   ├── css/                           tokens (every colour, size, space, corner, shadow, duration)
 │   │                                  · base · components · views · utilities, in layers
 │   ├── lib/                           blank.js: what a blank is, shared with the server's checks
@@ -1312,7 +1373,7 @@ wheelman/
 │                                      check-private
 └── test/                              core · pipeline · greeting · inspection · marketplace
                                        quality · scenarios · stock · models · imports · editor
-                                       orders · orders-upgrade · phone
+                                       orders · orders-upgrade · phone · share
     └── support/                       the invented world (fixtures), the stand-in services, the
                                        shared environment every test starts from
 ```

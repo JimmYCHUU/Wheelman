@@ -64,6 +64,8 @@ const inAuction = () => state.section === 'auction';
 async function api(path, post) {
   const res = await fetch(path, post ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(post.body || {}) } : undefined);
   const data = await res.json().catch(() => ({}));
+  // At the shared address, a sign-in that has run out: back to the sign-in page.
+  if (res.status === 401) location.assign('/signin');
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }
@@ -243,6 +245,11 @@ function renderWelcome() {
   // The last backup: when it was written and where, so a missing one is noticed before it matters.
   const backup = state.status?.backup || null;
   const backupLine = !backup ? '' : backup.last ? t('welcome.backup', { when: ago(backup.last.at), dir: backup.dir }) : backup.on ? t('welcome.backup.none') : t('welcome.backup.off');
+  // Shared with the team: the address colleagues open, as a link, so it can be copied from here.
+  const shared = state.status?.share || null;
+  const sharedLine = !shared?.on ? null
+    : shared.url ? h('p', { title: t('welcome.shared.title') }, t('welcome.shared'), ' ', h('a', { href: shared.url, target: '_blank', rel: 'noopener', text: shared.url }))
+      : h('p', { text: shared.error ? t('welcome.shared.down', { why: shared.error }) : t('welcome.shared.opening') });
   chat.replaceChildren(h('div', { class: 'welcome' },
     h('div', { class: 'welcome-mark' }, wheelMark()),
     h('h2', { text: inAuction()
@@ -256,7 +263,8 @@ function renderWelcome() {
     h('p', { text: inMarketplace() ? t('welcome.sendOnly') : t('welcome.copyOnly') }),
     reads ? h('p', { text: reads, title: readsTitle }) : null,
     bits.length ? h('p', { text: t('welcome.learned', { bits: listOf(bits) }), title: t('welcome.learned.title') }) : null,
-    backupLine ? h('p', { text: backupLine, title: t('welcome.backup.title') }) : null));
+    backupLine ? h('p', { text: backupLine, title: t('welcome.backup.title') }) : null,
+    sharedLine));
   state.threadSig = '';
   state.composerSig = '';
 }

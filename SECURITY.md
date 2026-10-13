@@ -25,6 +25,14 @@ please report it (see below).
   strict content security policy. The browser add-on may post to two routes only (the phone
   reader's reports, and an email thread from the Send to Wheelman button in Gmail), from an
   extension origin, each with its own header.
+- **Shared with the team only behind a password.** With `SHARE=1`, requests also arrive through
+  a Cloudflare tunnel that cloudflared dials out from this computer; nothing is opened on it.
+  Such a request (Cloudflare marks each one) is let in only when a team password is set and the
+  browser holds the cookie the sign-in sets: a signed expiry date (HMAC with a key derived from
+  the password; HttpOnly, Secure, SameSite=Lax), never the password itself. A POST through the
+  tunnel must come from the shared page's own origin and be JSON. Ten wrong passwords in a row
+  from one address lock the sign-in there for a quarter of an hour. Changing the password signs
+  everyone out.
 - **Nothing private in the repository.** `.env`, the session cookie, the database, the real
   business facts, the staff names and the evidence files are git-ignored. `npm run check-private`
   compares every file git would publish against the values in `.env`, the session, the staff

@@ -37,6 +37,10 @@ export const BASE_ENV = {
   PHONE_ADDON: '1',
   PHONE_ADDON_ID: '',
   PORT: '0',
+  // Sharing with the team is off, with no password, unless a test switches it on. No test ever
+  // starts a tunnel.
+  SHARE: '0',
+  TEAM_PASSWORD: '',
 };
 
 /** Sets the shared environment, then the given overrides, over whatever is already there. */
