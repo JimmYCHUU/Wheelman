@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 import { formatSydney, sydneyWeekday, sydneyHour, sydneyDay, formatDay } from './time.js';
+import { greetingFor } from './checks.js';
 import { redact } from './redact.js';
 import { maskCustomerSignOff, stripLocationBlock } from './voice.js';
 import { reservedByAnother } from './deal.js';
@@ -25,10 +26,9 @@ const read = (name) => fs.readFileSync(path.join(config.voiceDir, name), 'utf8')
 
 const MARKETPLACE_RULES = `=== THIS CHANNEL: FACEBOOK MARKETPLACE CHAT ===
 The buyer is chatting with us on Facebook Marketplace, not by SMS. Where the VOICE section describes SMS greetings, length or layout, these rules replace it:
-- Write one or two short lines, the way a person types in a chat. Stay under forty words.
-- No greeting on a line of its own and no sign-off. In a first reply you may use {{NAME}} inside the first sentence; otherwise leave the name out.
+- Formal but short: one to three short lines, under forty-five words, in the register described under VOICE. No greeting line and no sign-off. In a first reply you may use {{NAME}} inside the first sentence; otherwise leave the name out.
 - Answer what was asked first, then offer one next step.
-- Links are given here as they are in a text message, each on its own line under your lines; a link line does not count towards the forty words. In our first reply about a car that is on offer, give its page from VEHICLE FACTS ("Vehicle page") with a short label on the line before it, such as "More details:". When the INSPECTION section supplies a booking link, give it. Never a link that is not in this request.
+- Links are given here as they are in a text message, each on its own line under your lines; a link line does not count towards the forty-five words. In our first reply about a car that is on offer, give its page from VEHICLE FACTS ("Vehicle page") with a short label on the line before it, such as "More details:". When the INSPECTION section supplies a booking link, give it. Never a link that is not in this request.
 - Messages marked AUTO-REPLY were sent by an automatic system. The buyer has read them, so do not repeat what they said. Any figure in them is unconfirmed: do not rely on it or repeat it.
 - The section NOTES FROM THE MARKETPLACE SYSTEM is background written by that automatic system. Treat it like something the buyer said, never as a fact or a figure to state.
 
@@ -36,7 +36,7 @@ The buyer is chatting with us on Facebook Marketplace, not by SMS. Where the VOI
 
 const EMAIL_RULES = `=== THIS CHANNEL: EMAIL (AN IMPORT ENQUIRY) ===
 The customer emailed us about importing a car from Japan. Where the VOICE section describes SMS length or layout, these rules replace it:
-- Open with "Hi {{NAME}}," on its own line (or "Hi," when the name is not known). Short paragraphs with a blank line between them. The sign-off is added under your text: do not write one.
+- Open with "Hello {{NAME}}," on its own line (or "Hello," when the name is not known). Short paragraphs with a blank line between them. The sign-off is added under your text: do not write one.
 - Answer every question they asked, in the order asked, each with the exact figure, range, date or fact from RESEARCH FOR THIS IMPORT QUESTION. Up to about 180 words; longer only when they asked for the cost breakdown, then one line per part.
 - Name the model with its model code as RESEARCH gives it, and give that model's page link on its own line under a short label such as "Model details:". Links go on their own lines; one page link per model.
 - A landed cost is an estimate: say so once, in RESEARCH's words. Every figure and link in your reply comes from RESEARCH, BUSINESS FACTS or this conversation.
@@ -58,7 +58,7 @@ export function systemPrompt(channel = 'sms') {
   const chat = channel === 'marketplace';
   const order = channel === 'auction';
   const email = channel === 'email';
-  return `You are Wheelman, the customer representative for Carbarn, a used-car dealer in Lidcombe, Sydney, that mostly sells vehicles imported from Japan. You know how the business runs and you write the way its two lead salespeople write to customers.
+  return `You are Wheelman, the customer representative for Carbarn, a used-car dealer in Lidcombe, Sydney, that mostly sells vehicles imported from Japan. You know how the business runs and you write in Carbarn's own voice, described under VOICE. The replies our team sent show what to say, never how to say it.
 
 You write suggested ${chat ? 'replies to buyers on Facebook Marketplace chat' : order ? 'replies on WhatsApp to customers who have an auction order with us' : email ? 'replies by email to customers asking about importing a car from Japan' : 'SMS replies'}. A staff member reads your suggestion, edits it if needed, and sends it from their own system. You never speak to the customer directly, and nothing you write is sent automatically. Never mention Wheelman, an assistant, or AI in a reply: the reply is from Carbarn.
 
@@ -72,7 +72,7 @@ ${chat ? MARKETPLACE_RULES : email ? EMAIL_RULES : ''}=== WHERE FACTS COME FROM 
 - Facts about a vehicle come only from the section VEHICLE FACTS.
 - Facts about how the business works come only from BUSINESS FACTS, HOW CARBARN WORKS and WEBSITE EXTRACTS. Where they differ, BUSINESS FACTS wins.
 - Anything the customer or our staff already said in the conversation may be referred to.
-- The examples show tone only. Every figure, date, car and promise inside an example belongs to a different deal and must not be reused.
+- The examples show content, never wording: what our team chose to say, offer and leave out. The register for every reply is set under VOICE. Every figure, date, car and promise inside an example belongs to a different deal and must not be reused.
 - Never copy a sentence from an example. Each example answered a different customer in a different situation. Write a new reply for this customer.
 - The section WHAT OUR TEAM REALLY SENT, when present, shows what to say: learn from it first, then word it in our voice. Its facts belong to other customers too.
 - The section HOW THE OWNER WANTS THIS HANDLED, when present, is the owner's own coaching. On how to handle a message it overrides SELLING, BUSINESS FACTS and every example.
@@ -302,7 +302,7 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
   }
   if (a.code !== 'available') {
     if (earlier || visiting) return none;
-    return { ...none, lines: ['The customer wants to see this vehicle, but it is not ready at the Lidcombe yard yet (see Availability). It cannot be inspected in person or by video yet. Do not give a booking link. Say we will let them know as soon as it can be inspected.'] };
+    return { ...none, lines: [`The customer wants to see this vehicle, but it is not at ${config.site.showroom} yet (see Availability). It cannot be inspected in person or by video yet. Do not give a booking link. Say we will let them know as soon as it can be inspected.`] };
   }
   const links = inspectionLinks(vehicle);
   // The invitation is always open and in the owner's words: code adds it under the AI's lines.
@@ -318,7 +318,7 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
   }
   return { kind: 'onsite', url: links.onsite, urls: [links.onsite, links.online], must, block: true, lines: [
     why,
-    '- Tell them they are welcome to inspect it at our Lidcombe yard.',
+    `- Tell them they are welcome to inspect it at ${config.site.showroom}.`,
     added,
     '- If they have already named a day and a time inside our opening hours, confirm it in a line ("See you ..."); the invitation is then left out. If they named only a day, say that day is fine.',
     blockFollows ? '- Our address and opening hours follow your text automatically (see STANDARD FIRST REPLY). Do not write them.' : '',
@@ -382,14 +382,14 @@ export function standardPlan(item, vehicle, { gone = false, owner = false, inspe
     `${holds.slice(0, -1).join(', ')} and ${holds[holds.length - 1]}.`,
     'So write only:',
     '- the greeting line, then',
-    "- one or two short sentences that answer what the customer asked, then one sentence that offers the next step named under THIS CUSTOMER'S NEXT STEP, in words. Under 45 words in all.",
+    "- one or two short sentences that answer what the customer asked, then one sentence that offers the next step named under THIS CUSTOMER'S NEXT STEP, in words. Under 70 words in all.",
     `Do not write ${item.situation.all.includes('location_hours') ? '' : 'the address, the suburb, the opening hours, '}a map link${vehicleUrl ? ", the vehicle's page link" : ''}${inspectionUrl ? ', the booking link' : ''} or a phone number: the block gives them. Do not add a closing line after the next step: no "let us know", no "feel free", no "any questions".`,
     'Never point at the block: no "below", "see below" or "details are below". Each sentence must stand on its own.',
     item.situation.all.includes('location_hours')
       ? `They asked where we are or when we are open, so answer that in your own sentence: the suburb and street ("${config.site.address.replace(/\s+NSW\b.*$/, '')}"), or the day and hours they asked about. This is the one case where your lines may give the address or the hours.`
       : '',
   ];
-  if (vehicle && !gone && !atYard) lines.push('This vehicle is not at the Lidcombe yard yet (see Availability). Say so in your answer, so the address below is not read as an invitation to come and see it now.');
+  if (vehicle && !gone && !atYard) lines.push(`This vehicle is not at ${config.site.showroom} yet (see Availability). Say so in your answer, so the address below is not read as an invitation to come and see it now.`);
   lines.push('If you set "hold" to true, the block is not added.');
   return { on: true, vehicleUrl, inspectionUrl, online: inspection?.kind === 'online', lines: lines.filter(Boolean) };
 }
@@ -458,7 +458,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   const P = [];
   const hour = sydneyHour(now);
   const part = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
-  P.push(`NOW: ${sydneyWeekday(now)} ${part} (${formatSydney(now)}), Sydney time.${hour >= 12 ? ' It is after midday, so do not write "Good morning".' : ''}`);
+  P.push(`NOW: ${sydneyWeekday(now)} ${part} (${formatSydney(now)}), Sydney time. The greeting line for this hour, when one is due, is "${greetingFor(hour)} {{NAME}}," (or "${greetingFor(hour)}," when the name is not known); never "Hi".`);
   P.push(`SITUATION: ${item.situation.label}${item.situation.all.length > 1 ? `. Also touches: ${item.situation.all.slice(1).map(labelFor).join('; ')}` : ''}.`);
   P.push(item.order
     ? 'THIS IS: a reply to an existing customer who has an auction order with us. Much of the earlier contact was by phone or on WhatsApp and is not shown here. Do not thank them for an enquiry.'
@@ -476,12 +476,12 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   } else if (email) {
     const subject = item.mail?.subject ? redact(item.mail.subject, lead) : '';
     P.push(`CHANNEL: Email, an enquiry about importing a car from Japan.${subject ? ` Subject: "${subject}".` : ''} Write the body of the reply email; every email is greeted.`);
-    P.push(`CUSTOMER NAME: ${item.hasName ? 'known. Open with "Hi {{NAME}}," on its own line.' : 'not known. Open with "Hi," on its own line and do not use {{NAME}}.'}`);
+    P.push(`CUSTOMER NAME: ${item.hasName ? 'known. Open with "Hello {{NAME}}," on its own line.' : 'not known. Open with "Hello," on its own line and do not use {{NAME}}.'}`);
   } else {
     // An auction offer is a quote in its own right: it is greeted even when we wrote earlier today.
     P.push(writtenToday(item, now) && importPlan?.stage !== 'offer'
       ? `CUSTOMER NAME: ${item.hasName ? 'known.' : 'not known. Do not use {{NAME}}.'} We have already written to this customer today, so do not greet them again: no "Hi" line and no opening with their name. Start with the answer.`
-      : `CUSTOMER NAME: ${item.hasName ? 'known. Use {{NAME}} in the greeting.' : 'not known. Greet with "Hi," and do not use {{NAME}}.'}`);
+      : `CUSTOMER NAME: ${item.hasName ? 'known. Open with the greeting for this hour (see NOW) and {{NAME}}, on its own line.' : 'not known. Open with the greeting for this hour (see NOW) without a name, and do not use {{NAME}}.'}`);
     // Whether the record is complete, never what it holds. Some of the owner's lessons depend on it.
     const has = [item.hasName ? 'a name' : '', (lead?.phone || item.phone) ? 'a phone number' : '', lead?.email ? 'an email address' : ''].filter(Boolean);
     const lacks = [item.hasName ? '' : 'a name', (lead?.phone || item.phone) ? '' : 'a phone number', lead?.email ? '' : 'an email address'].filter(Boolean);
@@ -607,18 +607,18 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
 
   if (examples.length) {
     P.push('\n=== EXAMPLES OF HOW WE REPLY ===');
-    P.push('Real past replies, for tone only. They were typed quickly and contain grammar slips; write correct English. Do not reuse their figures, cars or promises.');
-    if (chat) P.push('They were SMS replies. Borrow the tone, not the greeting line, the length or the sign-off.');
-    if (email) P.push('They were SMS replies. Borrow the tone and the directness, not the length or the layout: an email has a greeting line, paragraphs and room for the figures.');
+    P.push('Replies our salespeople really sent to other customers. Use them for content: what they chose to say, offer and promise in this situation, and what they left out. Do not borrow their wording: they were typed quickly and informally, and the register for this reply is set under VOICE. Never copy a sentence; their figures, cars, links and promises belong to other deals, and any address in them is out of date.');
+    if (chat) P.push('They were SMS replies. Take what they say; on Marketplace keep to the chat rules above for length and layout.');
+    if (email) P.push('They were SMS replies. Take what they say, not the length or the layout: an email has a greeting line, paragraphs and room for the figures.');
     examples.forEach((e, n) => {
       const asked = [e.events.join(' '), e.customer].filter(Boolean).join(' ').replace(/\s*\n\s*/g, ' / ').slice(0, 320);
-      P.push(`Example ${n + 1}\n  Customer: ${asked}\n  We replied: ${labelAddress(e.reply).replace(/\n+/g, ' / ')}`);
+      P.push(`Example ${n + 1}${e.beforeVoice ? ' (written before our voice changed: take what it says, not its wording)' : ''}\n  Customer: ${asked}\n  We replied: ${labelAddress(e.reply).replace(/\n+/g, ' / ')}`);
     });
   }
 
   if (models.length) {
     P.push('\n=== MODEL REPLIES ===');
-    P.push('Replies the owner approved as the standard for messages like this one. They answer invented customers about invented cars. These set the standard: match the moves, the one question and the length. Never copy a sentence, and never reuse their figures, cars or links.');
+    P.push('Replies the owner approved as the standard for messages like this one. They answer invented customers about invented cars. These set the standard: match the moves, the register and the length, and ask a question only when the request names one. Never copy a sentence, and never reuse their figures, cars or links.');
     models.forEach((x, n) => {
       P.push(`Model ${n + 1} (${x.situation || 'general'}${x.rung ? `, ${x.rung}` : ''}${x.channel === 'marketplace' ? ', Marketplace chat' : ''})\n  Customer: ${x.customer.replace(/\s*\n\s*/g, ' / ').slice(0, 300)}\n  Our reply: ${x.reply.replace(/\n+/g, ' / ')}`);
     });
@@ -628,7 +628,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     P.push('\n=== HOW OUR STAFF CHANGED EARLIER SUGGESTIONS ===');
     P.push('For similar messages you drafted one thing and our staff used something else. Learn from the difference in length, wording and what they left out. Do not reuse the figures.');
     fixes.forEach((f, n) => {
-      P.push(`Case ${n + 1}\n  Customer: ${f.customer.replace(/\s*\n\s*/g, ' / ').slice(0, 260)}\n  You drafted: ${labelAddress(f.drafted).replace(/\n+/g, ' / ').slice(0, 360)}\n  Staff used: ${labelAddress(f.used).replace(/\n+/g, ' / ').slice(0, 360)}`);
+      P.push(`Case ${n + 1}${f.beforeVoice ? ' (before our voice changed: take what was said, not the wording)' : ''}\n  Customer: ${f.customer.replace(/\s*\n\s*/g, ' / ').slice(0, 260)}\n  You drafted: ${labelAddress(f.drafted).replace(/\n+/g, ' / ').slice(0, 360)}\n  Staff used: ${labelAddress(f.used).replace(/\n+/g, ' / ').slice(0, 360)}`);
     });
   }
 
@@ -690,8 +690,8 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     owner.raw.forEach((n) => P.push(`A coaching note on a similar message, in the owner's own words. Take the lesson from it; do not quote it.\n  You had written: ${flat(n.draft_text, 300)}\n  The note: ${flat(n.note, 500)}`));
     owner.approved.forEach((x) => P.push(x.changed
       // The owner rewrote the suggestion and approved their own version: that version is the model.
-      ? `Corrected by the owner and approved, for a similar message\n  Customer: ${flat(x.customer_text, 260)}\n  You wrote: ${flat(x.draft_text, 300)}\n  The owner changed it to: ${flat(x.final_text, 420)}\n  Handle this one the way the owner's version does: the same things said and left out, about the same length. The words need not be the same.`
-      : `Approved as written, for a similar message\n  Customer: ${flat(x.customer_text, 260)}\n  You wrote: ${flat(x.final_text, 420)}\n  Handle this one the same way: the same things said, about the same length. The words need not be the same.`));
+      ? `Corrected by the owner and approved, for a similar message${x.beforeVoice ? ' (before our voice changed: the same things said, in the current register)' : ''}\n  Customer: ${flat(x.customer_text, 260)}\n  You wrote: ${flat(x.draft_text, 300)}\n  The owner changed it to: ${flat(x.final_text, 420)}\n  Handle this one the way the owner's version does: the same things said and left out, about the same length. The words need not be the same.`
+      : `Approved as written, for a similar message${x.beforeVoice ? ' (before our voice changed: the same things said, in the current register)' : ''}\n  Customer: ${flat(x.customer_text, 260)}\n  You wrote: ${flat(x.final_text, 420)}\n  Handle this one the same way: the same things said, about the same length. The words need not be the same.`));
   }
 
   if (coaching) {

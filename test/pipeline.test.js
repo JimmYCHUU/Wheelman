@@ -19,7 +19,7 @@ before(async () => {
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
       seen.push({ auth: req.headers.authorization, body: JSON.parse(body) });
-      const next = script.shift() || { status: 200, reply: { reply: 'Hi {{NAME}},\nNo worries.', needs_human: [], facts_used: [], hold: false } };
+      const next = script.shift() || { status: 200, reply: { reply: 'Hello {{NAME}},\nCertainly.', needs_human: [], facts_used: [], hold: false } };
       if (next.status !== 200) { res.writeHead(next.status, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: { message: next.message || 'busy' } })); }
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(next.reply) }, finish_reason: 'stop' }] }));
@@ -121,7 +121,7 @@ test('customer details never reach the AI service, and cost figures are never se
   assert.equal(d.status, 'ready');
   // A brand-new enquiry: the team's standard block follows the answer. The car's page link the AI
   // typed is dropped, because the block gives it.
-  assert.equal(d.reply, 'Hi Priya,\nYes, the Noah is still available at $28,900. You are welcome to come and see it any day.\n\n'
+  assert.equal(d.reply, 'Hello Priya,\nYes, the Noah is still available at $28,900. You are welcome to come and see it any day.\n\n'
     + 'Vehicle details:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159\n\n'
     + 'Our location:\n📍 136 Frances Street, Lidcombe NSW 2141\n\n'
     + '🕛 Open 7 days, 8 AM–5 PM.\nPlease call or text before visiting.\n\n'

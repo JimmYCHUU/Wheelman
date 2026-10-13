@@ -287,3 +287,29 @@ test('a lead keeps its stages, and a conversation keeps the summary of a lead th
   assert.equal(it.lead.platform, 'IMPORTS');
   assert.equal(it.autoDraft, true);
 });
+
+test('lessons learned before the voice changed are read for content only: price lessons are dropped, the rest are marked', async () => {
+  const learn = await import('../src/learn.js');
+  lead(21, 121, 'Ida'); conv(121, 21, 'Ida Test');
+  const a = msg(121, 'IN', 'What is your best price on the Noah?', 40 * MIN);
+  const priced = db.insertDraft({ itemKey: 'c:121', anchorKey: `m:${a}`, situation: 'price_negotiation', reply: 'Hi Ida,\nThe price is as advertised.', status: 'ready', checks: [], context: { situations: ['price_negotiation'], firstReply: true } });
+  assert.equal(learn.onCopied(item(121), priced, 'Hi Ida,\nWe talk price once you have seen the car. Come in any day.').learned, true);
+  lead(22, 122, 'Jo'); conv(122, 22, 'Jo Test');
+  const b = msg(122, 'IN', 'Does the Noah have a tow bar?', 40 * MIN);
+  const plain = db.insertDraft({ itemKey: 'c:122', anchorKey: `m:${b}`, situation: 'vehicle_details', reply: 'Hi Jo,\nYes, it has a tow bar.', status: 'ready', checks: [], context: { situations: ['vehicle_details'], firstReply: true } });
+  assert.equal(learn.onCopied(item(122), plain, 'Hi Jo,\nYes, it has a tow bar fitted, and you are welcome to come and see it.').learned, true);
+  const want = (text, primary) => ({ text, primary, situations: [primary], rung: 'interest', channel: 'sms', firstReply: true });
+  assert.equal(learn.voiceCutover(), null, 'no cutover until the app marks one');
+  assert.ok(learn.learnedExamples(want('Best price on the Noah?', 'price_negotiation')).some((e) => /talk price/.test(e.reply)));
+  assert.ok(learn.learnedExamples(want('Does the Noah have a tow bar?', 'vehicle_details')).every((e) => e.beforeVoice === false));
+
+  db.setMeta('voice_cutover_at', Date.now() + 1);
+  try {
+    assert.ok(!learn.learnedExamples(want('Best price on the Noah?', 'price_negotiation')).some((e) => /talk price/.test(e.reply)), 'the old price policy is not shown');
+    const tow = learn.learnedExamples(want('Does the Noah have a tow bar?', 'vehicle_details')).find((e) => /tow bar/.test(e.reply));
+    assert.ok(tow && tow.beforeVoice === true, JSON.stringify(tow));
+  } finally { db.setMeta('voice_cutover_at', null); }
+  assert.equal(learn.markVoiceCutover(1000), 1000, 'marked once');
+  assert.equal(learn.markVoiceCutover(2000), 1000, 'and never moved');
+  db.setMeta('voice_cutover_at', null);
+});

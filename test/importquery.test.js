@@ -10,6 +10,8 @@ import { startStandins, aiBehaviour } from './support/standins.js';
 applyTestEnv({ MAIL_INTAKE: '1' });
 
 const DAY = 24 * 3600e3;
+// The fixture emails are dated from today, so the tests do not age out of the auto-draft window.
+const daysAgo = (n) => new Date(Date.now() - n * DAY).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Australia/Sydney' });
 const ADDON = `chrome-extension://${'a'.repeat(32)}`;
 const now = Date.now();
 let standins, app, base, config, db, items, mail, mailparse, worker, learn, voicebank;
@@ -68,9 +70,9 @@ const rawThread = () => ({
   subject: 'Importing a Toyota Hiace GDH206',
   containers: 3,
   messages: [
-    rawMessage(1, CUSTOMER, 'Mon, 5 Oct 2026, 10:31 am', 'Hi,\n\nCan you import a Toyota Hiace GDH206 for me? What would it cost landed?\n\nThanks,\nPriya'),
-    rawMessage(2, OURS, 'Mon, 5 Oct 2026, 2:05 pm', 'Hi Priya,\n\nYes, the GDH206 is on our eligible list.\n\nRegards,\nSam Lee\n\nOn Mon, 5 Oct 2026 at 10:31, Priya Raman\n<priya@example.com> wrote:\n> Hi,\n> Can you import a Toyota Hiace GDH206 for me?'),
-    rawMessage(3, CUSTOMER, 'Tue, 6 Oct 2026, 9:12 am', '', { collapsed: true }),
+    rawMessage(1, CUSTOMER, `${daysAgo(3)}, 10:31 am`, 'Hi,\n\nCan you import a Toyota Hiace GDH206 for me? What would it cost landed?\n\nThanks,\nPriya'),
+    rawMessage(2, OURS, `${daysAgo(3)}, 2:05 pm`, 'Hi Priya,\n\nYes, the GDH206 is on our eligible list.\n\nRegards,\nSam Lee\n\nOn Mon, 5 Oct 2026 at 10:31, Priya Raman\n<priya@example.com> wrote:\n> Hi,\n> Can you import a Toyota Hiace GDH206 for me?'),
+    rawMessage(3, CUSTOMER, `${daysAgo(2)}, 9:12 am`, '', { collapsed: true }),
   ],
 });
 const report = (raw = rawThread(), at = now) => mailparse.buildMailReport(raw, { now: at });
@@ -113,7 +115,7 @@ test('the Gmail parser: addresses in three forms, dates, bodies without the quot
 
   // The limits are applied before anything is sent: the newest 200 messages, 20,000 characters each.
   const big = rawThread();
-  big.messages = Array.from({ length: 201 }, (_, i) => rawMessage(100 + i, CUSTOMER, 'Mon, 5 Oct 2026, 10:31 am', `message ${i} ` + 'x'.repeat(25000)));
+  big.messages = Array.from({ length: 201 }, (_, i) => rawMessage(100 + i, CUSTOMER, `${daysAgo(3)}, 10:31 am`, `message ${i} ` + 'x'.repeat(25000)));
   const cut = report(big);
   assert.equal(cut.messages.length, 200);
   assert.equal(cut.messages[0].ref, 'msg-f:101');
@@ -182,8 +184,8 @@ test('a thread sent again adds only what is new; a folded message arriving in fu
 
   // We replied; the thread is sent again with the folded message now shown in full and our new reply.
   const r = rawThread();
-  r.messages[2] = rawMessage(3, CUSTOMER, 'Tue, 6 Oct 2026, 9:12 am', 'Great. What deposit do you need?');
-  r.messages.push(rawMessage(4, OURS, 'Tue, 6 Oct 2026, 11:40 am', 'Hi Priya,\n\nThe refundable auction deposit for that one is $4,545.\n\nRegards,\nSam Lee'));
+  r.messages[2] = rawMessage(3, CUSTOMER, `${daysAgo(2)}, 9:12 am`, 'Great. What deposit do you need?');
+  r.messages.push(rawMessage(4, OURS, `${daysAgo(2)}, 11:40 am`, 'Hi Priya,\n\nThe refundable auction deposit for that one is $4,545.\n\nRegards,\nSam Lee'));
   const more = mail.storeMailThread(mail.validateMailReport(report(r), { now }), { now });
   assert.deepEqual([more.added, more.updated, more.messages, more.collapsed], [1, 1, 4, 0]);
   const rows = db.getMailMessages(1);
@@ -201,7 +203,7 @@ test('a thread sent again adds only what is new; a folded message arriving in fu
   noIds.threadRef = '';
   noIds.subject = 'A Hiace with no ids';
   for (const m of noIds.messages) m.ref = '';
-  noIds.messages[2] = rawMessage(0, CUSTOMER, 'Tue, 6 Oct 2026, 9:12 am', 'Still keen.', { ref: '' });
+  noIds.messages[2] = rawMessage(0, CUSTOMER, `${daysAgo(2)}, 9:12 am`, 'Still keen.', { ref: '' });
   const first = mail.storeMailThread(mail.validateMailReport(report(noIds), { now }), { now });
   const second = mail.storeMailThread(mail.validateMailReport(report(noIds), { now }), { now });
   assert.deepEqual([first.isNew, first.added, second.isNew, second.added, second.messages], [true, 3, false, 0, 3]);
@@ -241,13 +243,13 @@ test('a thread is an item of its own kind: waiting when the customer wrote last,
   const footer = rawThread();
   footer.threadRef = 'thread-f:footer';
   footer.subject = 'Alphard question';
-  footer.messages = [rawMessage(50, CUSTOMER, 'Wed, 7 Oct 2026, 8:00 am', 'Hi, is the Alphard AGH30W eligible? ' + 'I would like to know the landed cost and the timeline. '.repeat(4) + '\n\nTo unsubscribe from these emails, click here.')];
+  footer.messages = [rawMessage(50, CUSTOMER, `${daysAgo(1)}, 8:00 am`, 'Hi, is the Alphard AGH30W eligible? ' + 'I would like to know the landed cost and the timeline. '.repeat(4) + '\n\nTo unsubscribe from these emails, click here.')];
   mail.storeMailThread(mail.validateMailReport(report(footer), { now }), { now });
   assert.equal(items.itemFromKey('em:3').state, 'awaiting');
   const stop = rawThread();
   stop.threadRef = 'thread-f:stop';
   stop.subject = 'Unsubscribe';
-  stop.messages = [rawMessage(60, CUSTOMER, 'Wed, 7 Oct 2026, 8:05 am', 'Please unsubscribe me.')];
+  stop.messages = [rawMessage(60, CUSTOMER, `${daysAgo(1)}, 8:05 am`, 'Please unsubscribe me.')];
   mail.storeMailThread(mail.validateMailReport(report(stop), { now }), { now });
   assert.equal(items.itemFromKey('em:4').state, 'optout');
 

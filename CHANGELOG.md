@@ -190,6 +190,22 @@ and versions follow `MAJOR.MINOR.PATCH`.
   the name the customer signed in a text (shown only; never given to the AI).
 
 ### Changed
+- **One voice, Carbarn's.** Every reply is written in the formal register the owner settled on
+  12 October 2026 ("formal and corporate"): the greeting follows Sydney time ("Good morning",
+  "Good afternoon", "Good evening", else "Hello"; a "Hi" the AI writes is changed by code), full
+  sentences, "we" never "I", hospitality phrasing in place of "No worries" and apologies, no
+  slang, no emoji, at most one exclamation mark, and a question only when the answer is needed
+  to proceed: the canned questions ("would a weekday after work or Saturday suit?", "cash or
+  finance?", "would you like the auction sheet?") are gone. `voice/house-voice.md` and
+  `voice/sales-playbook.md` are rewritten; the versions before the change are kept in
+  `voice/previous/` for a side-by-side review. The replies our salespeople really sent are read
+  for what they said, never for their wording. New in the message box: a register note on slang
+  or an apology, length notes at 70 words for a first reply, 50 inside a conversation and 45 on
+  Marketplace (which is now formal but short), and "plus on-roads" is refused. The thirty-seven
+  model replies are rewritten in the voice and every one is back under **Standards** to rate.
+  Lessons learned before the change are shown as content only, and those about price questions,
+  written under the old policy, are no longer shown. The premises are "our Lidcombe showroom" in
+  every reply, and the auction and import templates open with "Hello".
 - **Our address is 136 Frances Street, Lidcombe NSW 2141**, in the standard first-reply block,
   the import reply, the auction messages and the business facts, and the Google Maps line is
   gone from all of them. The old address lives on in the team's past replies, which the AI

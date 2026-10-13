@@ -46,7 +46,7 @@ const stage = (opts) => selling.saleStage(plain(opts), { now });
 test('where the customer is: interest, proof, fit, commit, buyer', () => {
   const first = stage({ situations: ['availability'], texts: [{ who: 'customer', text: 'Is the Noah still available?' }] });
   assert.deepEqual([first.rung, first.move, first.allowsUrgency], ['interest', 'invite_inspection', false]);
-  assert.match(first.question, /see it/);
+  assert.equal(first.question, '', 'no canned question: the invitation is the next step');
 
   const price = stage({ situations: ['price_negotiation'], texts: [{ who: 'customer', text: 'Hi' }, { who: 'us', text: 'Hi, yes it is.' }, { who: 'customer', text: "What's your best price?" }] });
   assert.deepEqual([price.rung, price.move], ['fit', 'invite_before_price']);
@@ -85,7 +85,7 @@ test('where the customer is: interest, proof, fit, commit, buyer', () => {
   assert.deepEqual([buyer.rung, buyer.move], ['buyer', 'after_sale_step']);
   assert.equal(stage({ situations: ['complaint'], texts: [{ who: 'customer', text: 'I want a refund, this is a scam.' }] }).move, 'hold');
   assert.equal(stage({ situations: ['availability'], vehicles: [{ id: 2, soldStatus: 'SOLD', stockIn: 'Sold' }], texts: [{ who: 'customer', text: 'Is the Hiace still available?' }] }).move, 'offer_alternative');
-  assert.equal(stage({ situations: ['availability'], channel: 'marketplace', texts: [{ who: 'customer', text: 'still available?' }] }).question, 'Would you like to come and see it?');
+  assert.equal(stage({ situations: ['availability'], channel: 'marketplace', texts: [{ who: 'customer', text: 'still available?' }] }).question, '', 'no canned question on Marketplace either');
   assert.equal(selling.saleStage({ order: { id: 1 }, situation: { all: ['general'] }, timeline: [] }), null, 'an auction order has its own plan');
   assert.equal(selling.saleStage({ imports: { kind: 'ask' }, situation: { all: ['import_sourcing'] }, timeline: [] }), null, 'so does an import enquiry');
 });
@@ -93,7 +93,9 @@ test('where the customer is: interest, proof, fit, commit, buyer', () => {
 test('the lines the AI is told', () => {
   const lines = selling.stageLines(stage({ situations: ['deposit_hold'], texts: [{ who: 'customer', text: 'Can you hold it?' }] })).join('\n');
   assert.match(lines, /Where they are: ready to commit/);
-  assert.match(lines, /ask only this one/);
+  assert.match(lines, /Ask no question: end on the next step/);
+  const asking = selling.stageLines(stage({ situations: ['delivery_interstate'], texts: [{ who: 'customer', text: 'Do you deliver to Brisbane?' }] })).join('\n');
+  assert.match(asking, /ask only this one, in your own words: "What is your postcode/);
   assert.match(lines, /takes the car off the market/);
   assert.match(lines, /Set "rung" in your answer to "commit"/);
   const quiet = selling.stageLines(stage({ situations: ['availability'], texts: [{ who: 'customer', text: 'Still available?' }] })).join('\n');
@@ -179,4 +181,24 @@ test('a reply that invents interest from other buyers is rejected and written ag
   const shown = (await (await fetch(`${base}/api/items/c:11`)).json()).item;
   assert.equal(shown.draft.rung, 'interest');
   assert.match(shown.draft.rungLabel, /interested/);
+});
+
+test('the register: slang and apologies are pointed out, "plus on-roads" is refused, and the length bands fit the voice', () => {
+  const facts = 'Vehicle: 2021 Toyota Noah X. Advertised price $28,900.';
+  const run = (body, extra = {}) => checks.checkDraft({ reply: body, body, allowedText: facts, ...extra });
+  const codes = (r) => r.map((c) => `${c.level}:${c.code}`);
+  assert.ok(codes(run('No worries, the Noah is available.')).includes('warn:register'));
+  assert.ok(codes(run('Sorry to bother you, is Saturday still fine?')).includes('warn:register'));
+  assert.ok(codes(run('Hope this helps.')).includes('warn:filler'));
+  assert.ok(!codes(run('Certainly. The Noah is available for inspection at our Lidcombe showroom.')).includes('warn:register'));
+  assert.ok(codes(run('The Noah is $28,900 plus on-roads.')).includes('fail:wording'));
+  assert.match(checks.retryNote(run('The Noah is $28,900 plus on-roads.')), /Never "plus on-roads"/);
+  assert.ok(selling.SLANG.test('Too easy, see you then') && selling.SERVILE.test('If that works for you'), 'the register words the review score uses');
+  const words = (n) => Array.from({ length: n }, () => 'alpha').join(' ');
+  assert.ok(!codes(run(words(74))).includes('warn:long'), 'a first reply has 70 words with a little slack');
+  assert.ok(codes(run(words(76))).includes('warn:long'));
+  assert.ok(!codes(run(words(54), { inConversation: true })).includes('warn:long'));
+  assert.ok(codes(run(words(56), { inConversation: true })).includes('warn:long'));
+  assert.ok(!codes(run(words(44), { channel: 'marketplace' })).includes('warn:long'));
+  assert.ok(codes(run(words(46), { channel: 'marketplace' })).includes('warn:long'));
 });

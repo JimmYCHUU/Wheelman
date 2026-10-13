@@ -6,7 +6,7 @@ import { restore, leftoverPlaceholders, NAME_TOKEN } from './redact.js';
 import { findUrls, hasEmoji, wordCount, stripEmoji, similarity } from './text.js';
 import { sydneyHour } from './time.js';
 import { promiseChecks } from './promises.js';
-import { FILLER, URGENCY, STAYS_FOR_SALE, CLAIM, NEXT_STEP_SIGNS } from './selling.js';
+import { FILLER, URGENCY, STAYS_FOR_SALE, CLAIM, NEXT_STEP_SIGNS, SLANG, SERVILE } from './selling.js';
 import { oldAddressIn, CURRENT_ADDRESS } from './address.js';
 
 export const MARKERS = ['[PRICE?]', '[TRADE-IN VALUE?]', '[DELIVERY COST?]', '[DATE?]', '[CHECK?]', '[DEPOSIT LINK?]', '[ELIGIBILITY?]', '[LANDED COST?]', '[DEPOSIT?]', '[TIMELINE?]'];
@@ -17,11 +17,13 @@ export { BLANK_PATTERN } from '../web/lib/blank.js';
 import { BLANK_PATTERN } from '../web/lib/blank.js';
 const MARKER_RE = new RegExp(BLANK_PATTERN, 'g');
 
-// Filler, pressure and unbacked claims have their own checks (filler, urgency, claim); these are the rest.
+// Filler, pressure, slang and unbacked claims have their own checks (filler, urgency, register, claim); these are the rest.
 const BANNED = [
-  [/\b(amazing|stunning|incredible|unbeatable|fantastic|awesome|perfect choice|great choice|excellent choice)\b/i, 'uses marketing wording'],
-  [/\b(as an ai|language model|i am an ai|i'?m an ai)\b/i, 'mentions being an AI'],
-  [/\b\d+(\.\d+)?\s?% ?(p\.?a\.?|per annum|interest|comparison)/i, 'quotes an interest rate'],
+  [/\b(amazing|stunning|incredible|unbeatable|fantastic|awesome|perfect choice|great choice|excellent choice)\b/i, 'uses marketing wording', 'warn'],
+  [/\b(as an ai|language model|i am an ai|i'?m an ai)\b/i, 'mentions being an AI', 'fail'],
+  [/\b\d+(\.\d+)?\s?% ?(p\.?a\.?|per annum|interest|comparison)/i, 'quotes an interest rate', 'fail'],
+  // The law wants one price with what it includes; "plus on-roads" is the wording it forbids.
+  [/\bplus on[- ]?road(s| costs?)?\b/i, 'says "plus on-roads": say what the price includes and that government charges are extra', 'fail'],
 ];
 
 const SIGN_OFF_LINES = [
@@ -42,13 +44,27 @@ export function stripModelSignOff(text) {
   return lines.join('\n').replace(/[\s,]*(kind |best )?regards,?\s*(the )?(team )?carbarn( team)?\.?\s*$/i, '').trim();
 }
 
-/** "Good morning" after midday (and the like) becomes a plain "Hi". */
+/** The greeting for a Sydney hour: "Good morning" from 4, "Good afternoon" from midday, "Good evening" from 5 pm; "Hello" in the small hours. */
+export function greetingFor(hour) {
+  if (hour >= 4 && hour < 12) return 'Good morning';
+  if (hour >= 12 && hour < 17) return 'Good afternoon';
+  if (hour >= 17 || hour < 2) return 'Good evening';
+  return 'Hello';
+}
+
+/**
+ * The greeting line in the brand register. "Good morning" after midday (and the like) becomes the
+ * greeting for the hour; "Hi", "Hey" and "G'day" become "Hello". A word that merely starts with
+ * "hi" (Hiace) is left alone.
+ */
 export function fixGreeting(text, hour) {
   const ok = { morning: hour >= 4 && hour < 12, afternoon: hour >= 12 && hour < 18, evening: hour >= 17 || hour < 2 };
-  return String(text || '').replace(/^(\s*)good (morning|afternoon|evening)\b[ \t]*,?[ \t]*(\{\{NAME\}\})?[ \t]*[,.!]?/i, (m, lead, part, name) => {
-    if (ok[part.toLowerCase()]) return m;
-    return `${lead}Hi${name ? ' ' + name : ''},`;
-  });
+  return String(text || '')
+    .replace(/^(\s*)good (morning|afternoon|evening)\b[ \t]*,?[ \t]*(\{\{NAME\}\})?[ \t]*[,.!]?/i, (m, lead, part, name) => {
+      if (ok[part.toLowerCase()]) return m;
+      return `${lead}${greetingFor(hour)}${name ? ' ' + name : ''},`;
+    })
+    .replace(/^(\s*)(hi there|hey there|hiya|hi|hey|g'?day)\b[ \t]*,?[ \t]*(\{\{NAME\}\})?[ \t]*[,.!]?(?=\s|$)/i, (m, lead, word, name) => `${lead}Hello${name ? ' ' + name : ''},`);
 }
 
 /**
@@ -249,14 +265,15 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   if (bangs > 1) add('warn', 'exclaim', `Contains ${bangs} exclamation marks.`);
 
   const words = wordCount(String(body).replace(/https?:\/\/\S+/g, ''));
-  if (channel === 'marketplace') { if (words > 40) add('warn', 'long', `Long for a Marketplace chat (${words} words). One or two short lines is usual.`); }
+  if (channel === 'marketplace') { if (words > 45) add('warn', 'long', `Long for a Marketplace chat (${words} words). One to three short lines, under 45 words.`); }
   else if (channel === 'email') {
     // An email has room, and a cost breakdown (one line per part) may run longer still.
     const breakdown = (String(body).match(/^.*\$\d[\d,]*/gm) || []).length >= 4;
     if (words > (breakdown ? 320 : 220)) add('warn', 'long', `Long for an email (${words} words). Up to about 180 is usual; a cost breakdown may run longer.`);
   }
   else if (words > 110) add('warn', 'long', `Long for a text message (${words} words).`);
-  else if (inConversation && words > 60) add('warn', 'long', `Longer than your team usually writes mid-conversation (${words} words).`);
+  else if (inConversation && words > 55) add('warn', 'long', `Long for a reply inside a conversation (${words} words). Up to 50 is the band.`);
+  else if (!inConversation && words > 75) add('warn', 'long', `Long for a first reply (${words} words). Up to 70 before the block is the band.`);
 
   // A reply lifted from an example answers somebody else's question. A short line ("Your
   // inspection is confirmed. See you on Saturday.") is bound to match one, so it is only noted;
@@ -275,6 +292,11 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   // Selling: no filler, no pressure, no claim the records cannot back, and a next step.
   const filler = String(body).match(FILLER);
   if (filler) add('warn', 'filler', `"${filler[0]}" reads as a reply for the sake of replying. Say the next step instead.`, [filler[0]]);
+  // The brand register: no slang, and no apologising for existing or asking permission to be useful.
+  const slang = String(body).match(SLANG);
+  if (slang) add('warn', 'register', `"${slang[0]}" is not in the brand register. Hospitality phrasing instead: Certainly, Of course, With pleasure, Thank you for your patience.`, [slang[0]]);
+  const servile = String(body).match(SERVILE);
+  if (servile) add('warn', 'register', `"${servile[0]}" reads as apologising or asking permission. State the fact or the next step instead.`, [servile[0]]);
   const claim = String(body).match(CLAIM);
   if (claim) add('fail', 'claim', `"${claim[0]}" is a claim the records cannot back. Say only what the vehicle facts and business facts state, in their words.`, [claim[0]]);
   const urgency = String(body).match(URGENCY);
@@ -286,7 +308,7 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
     add('warn', 'next-step', `No next step offered${String(nextStep || '').trim() ? ` (the model called its next step "${String(nextStep).trim().slice(0, 60)}")` : ''}. Aim for: ${stage.aim}.`);
   }
 
-  for (const [re, what] of BANNED) if (re.test(body)) add(/interest rate|AI/.test(what) ? 'fail' : 'warn', 'wording', `Off-voice or risky wording: ${what}.`);
+  for (const [re, what, level] of BANNED) if (re.test(body)) add(level, 'wording', `Off-voice or risky wording: ${what}.`);
 
   if (situation?.all?.includes('price_negotiation') && !markers.includes('[PRICE?]') && /(lowest|best price|we can do|discount|negotiab)/i.test(body)) {
     add('input', 'price', 'This talks about price. Confirm the figure before sending.');
@@ -314,6 +336,7 @@ export function retryNote(checks, { channel = 'sms' } = {}) {
     + (fails.some((c) => c.code === 'vague-answer' || c.code === 'model-unanswered') ? '\nNever write that we will check, look into, confirm, get back to them or update them later. Give the answer from RESEARCH FOR THIS IMPORT QUESTION. Where RESEARCH has no answer, write the sentence anyway with the matching blank ([ELIGIBILITY?], [LANDED COST?], [DEPOSIT?], [TIMELINE?] or [CHECK?]) and say what it stands for. Every model code the customer named must be answered: eligible or not, with its figure or its blank.' : '')
     + (fails.some((c) => c.code === 'urgency') ? '\nDo not say or imply that other people are interested, that the car is selling fast, or that the price will change. If the request allows urgency, the one true fact is that a $1,000 refundable holding deposit takes the car off the market; otherwise say nothing about urgency.' : '')
     + (fails.some((c) => c.code === 'price-floor') ? '\nNever name a figure below the advertised price. The standard price reply is added under your text; a counter-offer is [PRICE?] for a person.' : '')
+    + (fails.some((c) => c.code === 'wording' && /on-roads/.test(c.message)) ? '\nNever "plus on-roads": say what the price includes and that government charges are extra.' : '')
     + (fails.some((c) => c.code === 'old-address') ? `\nNever write our old address or a map link. Our address is ${CURRENT_ADDRESS}. The block gives it on a first reply; write it yourself only when the customer asked where we are.` : '')
     + (fails.some((c) => c.code === 'claim') ? '\nSay nothing about accidents, condition, approval, cooling-off or warranty beyond what VEHICLE FACTS and BUSINESS FACTS state, in their words.' : '');
 }

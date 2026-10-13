@@ -11,7 +11,7 @@ Wheelman leaves those to you.
 
 ---
 
-## Buying a car that is in our yard
+## Buying a car that is at our Lidcombe showroom
 
 1. Inspection. Customers can walk in any day during opening hours, or book a time with the in-person inspection link on the vehicle's page. Buyers who live far away or cannot visit can book an online video inspection, a live video call on WhatsApp or FaceTime, with the online inspection link. A walkaround video and extra photos are also available. Independent inspections are welcome at our yard; the customer arranges and pays for the inspector.
 2. Going ahead. The customer sends a photo of their driver licence and their email address, plus the delivery address if the car is being delivered. We email a tax invoice, usually the same day. We cannot issue an invoice without the licence and email.
@@ -37,7 +37,7 @@ Wheelman leaves those to you.
 - Odometer proof. The export certificate and auction sheet are the proof of kilometres. We can send photos of both.
 - Faults after purchase. Ask the customer to bring the vehicle in so our mechanic can check it. Anything about refunds, repair costs or how long a repair will take is for a person.
 
-## Cars that are not in the yard yet
+## Cars that are not at the showroom yet
 
 - A car shown as in transit or still in Japan cannot be inspected yet. Say we will let the customer know as soon as it arrives.
 - Do not give an arrival date unless one is supplied. After a vehicle arrives it still needs compliance work and registration on the government register before it can be handed over.

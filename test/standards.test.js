@@ -24,7 +24,7 @@ Name: Priya
 Customer:
 Hi, is the Noah still available?
 Reply:
-Hi {{NAME}},
+Hello {{NAME}},
 Yes, the 2021 Noah is here at Lidcombe. It has done 62,733 km, with the auction sheet to match.
 You are welcome to come and see it any day. Would a weekday after work or Saturday morning suit you?
 
@@ -39,7 +39,7 @@ US: Hi Tom, yes, the Noah is here at Lidcombe. You are welcome to come and see i
 Customer:
 Can you hold it for me until Saturday?
 Reply:
-Hi {{NAME}},
+Hello {{NAME}},
 We hold a car with a $1,000 refundable holding deposit, which takes it off the market for you. Until then it stays for sale.
 To send the invoice we need a photo of your driver licence and your email address. Would you like to secure it?
 
@@ -66,7 +66,7 @@ US: Hi Dana, of course. Here is the booking link: {onsite_link}
 Customer:
 Actually I'm in Melbourne so can't come up. Any other way to see it?
 Reply:
-Hi {{NAME}},
+Hello {{NAME}},
 No worries. Most of our interstate buyers do a live video inspection on WhatsApp or FaceTime, and then we send the car down by car carrier.
 Book a time here: {online_link}
 What is your postcode, so we can quote the delivery?
@@ -83,7 +83,7 @@ US: Hi Kofi, received, thank you.
 Customer:
 When will the car be ready to pick up?
 Reply:
-Hi {{NAME}},
+Hello {{NAME}},
 We are finishing the roadworthy, the service and the detail now, and the pickup day is confirmed with you as soon as the roadworthy is done.
 
 ## 6. Half written
@@ -133,7 +133,7 @@ test('the file: every scenario with its lines, earlier messages and a reply; a h
   assert.deepEqual([hold.title, hold.situation, hold.rung, hold.channel, hold.vehicle, hold.name, hold.state, hold.buyer], ['Hold it for me', 'deposit_hold', 'commit', 'sms', 'MR1', 'Tom', 'NSW', false]);
   assert.deepEqual(hold.earlier, [{ kind: 'customer', text: 'Is the Noah still available?' }, { kind: 'us', text: 'Hi Tom, yes, the Noah is here at Lidcombe. You are welcome to come and see it any day.' }]);
   assert.equal(hold.customer, 'Can you hold it for me until Saturday?');
-  assert.match(hold.reply, /^Hi \{\{NAME\}\},\nWe hold a car/);
+  assert.match(hold.reply, /^Hello \{\{NAME\}\},\nWe hold a car/);
   assert.equal(all[2].channel, 'marketplace');
   assert.deepEqual([all[4].buyer, all[3].state], [true, 'VIC']);
   assert.equal(mr.parseModelReplies(FILE.replace(/\n/g, '\r\n')).length, 5, 'Windows line endings are fine');
@@ -175,7 +175,7 @@ test('opening a scenario: the hand-written reply is finished and checked like a 
   assert.deepEqual(item.standard, { id: 1, title: 'Is it still available', status: 'PROPOSED', note: '', rung: 'interest', situation: 'availability' });
   assert.equal(seen.length, 0, 'no AI request');
   assert.deepEqual([item.draft.provider, item.draft.model, item.draft.status, item.draft.rung], ['none', 'the model reply as written', 'ready', 'interest']);
-  assert.match(item.draft.reply, /^Hi Priya,\nYes, the 2021 Noah/);
+  assert.match(item.draft.reply, /^Hello Priya,\nYes, the 2021 Noah/);
   assert.ok(item.draft.reply.includes('📍'), 'a first reply ends with the standard block');
   assert.ok(item.draft.checks.every((c) => c.level !== 'fail'), JSON.stringify(item.draft.checks));
   assert.deepEqual([item.name, item.firstName, item.phone, item.channel], ['Priya', 'Priya', '', 'sms']);
@@ -207,7 +207,7 @@ test('"Good reply" approves the text as it stands in the box as the standard; no
   assert.equal(seen.length, 0);
   const saved = state()['1'];
   assert.equal(saved.status, 'APPROVED');
-  assert.match(saved.reply, /^Hi \{\{NAME\}\},\nYes, the 2021 Noah/);
+  assert.match(saved.reply, /^Hello \{\{NAME\}\},\nYes, the 2021 Noah/);
   assert.ok(!/Priya|📍/.test(saved.reply), 'the name and the standard block are not part of the standard');
   assert.equal(db.getLearned(item.draft.id), null, 'never learned');
   assert.equal((await get('/api/status')).learned.approved, 0);
@@ -235,14 +235,14 @@ test('"Good reply" approves the text as it stands in the box as the standard; no
 test('"Could be better" keeps the note with the scenario and writes the reply again; no lesson is taken, nothing is learned', async () => {
   const { item } = await get('/api/items/tr:2');
   seen.length = 0;
-  ai.script = [{ reply: 'Hi {{NAME}},\nA $1,000 refundable holding deposit takes the Noah off the market for you until Saturday. Send a photo of your driver licence and your email address and the invoice follows by email.', needs_human: [], facts_used: [], hold: false, next_step: 'the deposit', rung: 'commit' }];
+  ai.script = [{ reply: 'Hello {{NAME}},\nA $1,000 refundable holding deposit takes the Noah off the market for you until Saturday. Send a photo of your driver licence and your email address and the invoice follows by email.', needs_human: [], facts_used: [], hold: false, next_step: 'the deposit', rung: 'commit' }];
   const out = await post(`/api/drafts/${item.draft.id}/advice`, { note: 'Say what the deposit does in the first line.' });
   assert.deepEqual([out.ok, out.learned, out.standard, out.lessons], [true, false, true, []]);
   assert.equal(seen.length, 1, 'one AI request: the rewrite, and no request for a lesson');
   const asked = seen[0].messages[1].content;
   assert.match(asked, /=== THE OWNER'S COACHING ON YOUR LAST DRAFT ===/);
   assert.ok(!/\bTom\b/.test(asked), "the invented customer's name is still not sent");
-  assert.match(out.item.draft.reply, /^Hi Tom,\nA \$1,000 refundable holding deposit/);
+  assert.match(out.item.draft.reply, /^Hello Tom,\nA \$1,000 refundable holding deposit/);
   assert.deepEqual([state()['2'].status, state()['2'].note], ['CHANGED', 'Say what the deposit does in the first line.']);
   assert.equal(db.getDraft(item.draft.id).rating, 'edit');
   assert.equal((await get('/api/status')).learned.notes || 0, 0);
@@ -252,7 +252,7 @@ test('"Could be better" keeps the note with the scenario and writes the reply ag
 
   // Rating the new version approves that text.
   await post(`/api/drafts/${out.item.draft.id}/rating`, { rating: 'good' });
-  assert.match(state()['2'].reply, /^Hi \{\{NAME\}\},\nA \$1,000 refundable holding deposit/);
+  assert.match(state()['2'].reply, /^Hello \{\{NAME\}\},\nA \$1,000 refundable holding deposit/);
   assert.equal((await post(`/api/drafts/${out.item.draft.id}/advice`, { note: '  ' })).ok, false, 'an empty note changes nothing');
   assert.equal(state()['2'].status, 'APPROVED');
 });
@@ -288,7 +288,7 @@ test('an approved model reply is shown to the AI as the standard for a message l
   const want = (text, primary, rung, channel = 'sms') => mr.modelReplies({ text, primary, situations: [primary], rung, channel }, 3);
   assert.deepEqual(want('Hi, is the Alphard still available?', 'availability', 'interest').map((p) => p.id), [1, 3], 'the SMS standard first for a text');
   assert.deepEqual(want('Is this still available?', 'availability', 'interest', 'marketplace').map((p) => p.id), [3, 1], 'the chat standard first for a chat');
-  assert.match(want('Is the Noah available?', 'availability', 'interest')[0].reply, /^Hi \{\{NAME\}\},\nYes, the 2021 Noah/);
+  assert.match(want('Is the Noah available?', 'availability', 'interest')[0].reply, /^Hello \{\{NAME\}\},\nYes, the 2021 Noah/);
   assert.deepEqual(want('Do you do finance?', 'finance', 'fit').map((p) => p.id), [], 'nothing close enough');
   assert.deepEqual(mr.modelReplies({ text: 'Is it available?', primary: 'availability', situations: ['availability'], rung: 'interest', channel: 'sms', excludeItemKey: 'tr:1' }).map((p) => p.id), [3], 'a scenario never sees its own text');
   assert.deepEqual(want('Can you hold it?', 'deposit_hold', 'commit').map((p) => p.id), [2]);
@@ -302,7 +302,7 @@ test('an approved model reply is shown to the AI as the standard for a message l
   assert.match(asked, /=== MODEL REPLIES ===/);
   const section = asked.split('=== MODEL REPLIES ===')[1].split('\n===')[0];
   assert.match(section, /Yes, the 2021 Noah is here at Lidcombe/);
-  assert.match(section, /match the moves, the one question and the length/i);
+  assert.match(section, /match the moves, the register and the length/i);
   assert.ok(!/Priya|Tom|Yuki|📍/.test(section), 'no invented name and no address block');
 
   db.upsertLead({ id: 2, conversationId: 12, firstName: 'Omar', lastName: 'Test', phone: '0491570132', email: '', source: 'carsales', status: 'NEW', platform: 'CARSALES', state: 'NSW', leadAt: now - HOUR, updatedAt: now - HOUR, stocks: [], inquiries: [], statusHistory: [] });
@@ -315,7 +315,7 @@ test('an approved model reply is shown to the AI as the standard for a message l
   assert.ok(lifted.checks.some((c) => c.code === 'copied' && c.level === 'fail'), JSON.stringify(lifted.checks));
 });
 
-test('the model replies shipped with Wheelman: complete, on invented cars, in the two voices, and clean on the checks', () => {
+test('the model replies shipped with Wheelman: complete, on invented cars, in the Carbarn voice, and clean on the checks', () => {
   const prev = [config.modelRepliesPath, config.modelRepliesStatePath];
   config.modelRepliesPath = fileURLToPath(new URL('../voice/model-replies.md', import.meta.url));
   config.modelRepliesStatePath = path.join(dir, 'shipped-state.json');
@@ -326,7 +326,7 @@ test('the model replies shipped with Wheelman: complete, on invented cars, in th
     assert.ok(all.some((s) => s.channel === 'marketplace') && all.some((s) => s.buyer) && all.some((s) => s.state !== 'NSW'));
     const RUNGS = ['interest', 'proof', 'fit', 'commit', 'buyer'];
     const known = new Set([...Object.keys(situations.SITUATIONS), 'general']);
-    const NEVER = ['urgency', 'next-step', 'filler', 'claim', 'questions', 'copied', 'marker', 'figures', 'links', 'promise'];
+    const NEVER = ['urgency', 'next-step', 'filler', 'claim', 'questions', 'copied', 'marker', 'figures', 'links', 'promise', 'register', 'wording', 'long', 'emoji', 'exclaim'];
     for (const s of all) {
       const at = `#${s.id} ${s.title}`;
       assert.ok(RUNGS.includes(s.rung), `${at}: rung`);
@@ -335,12 +335,14 @@ test('the model replies shipped with Wheelman: complete, on invented cars, in th
       assert.ok(s.name && s.customer && s.reply, `${at}: complete`);
       assert.ok((s.reply.match(/\?/g) || []).length <= 1, `${at}: one question at most`);
       const first = s.channel === 'sms' && !s.earlier.some((e) => e.kind === 'us');
-      if (s.channel === 'sms') assert.match(s.reply, /^Hi \{\{NAME\}\},\n/, `${at}: greets by name`);
-      else assert.doesNotMatch(s.reply, /^Hi\b|Regards/, `${at}: a chat reply has no greeting or sign-off`);
+      const words = s.reply.split(/\s+/).length;
+      if (s.channel === 'sms') assert.match(s.reply, /^Hello \{\{NAME\}\},\n/, `${at}: greets by name, in the register`);
+      else assert.doesNotMatch(s.reply, /^(Hi|Hello)\b|Regards/, `${at}: a chat reply has no greeting or sign-off`);
       if (first) {
-        assert.ok(s.reply.split(/\s+/).length <= 45, `${at}: a first reply stays under 45 words`);
+        assert.ok(words <= 70, `${at}: a first reply stays under 70 words (${words})`);
         assert.doesNotMatch(s.reply, /https?:|\{\w+_(url|link)\}|\b04\d{2}\b/, `${at}: a first reply leaves the links to the block`);
-      }
+      } else if (s.channel === 'sms') assert.ok(words <= 52, `${at}: a later reply stays under 50 words after the greeting (${words})`);
+      else assert.ok(words <= 45, `${at}: a Marketplace reply stays under 45 words (${words})`);
       const item = mr.scenarioItem(s.id, { now });
       assert.doesNotMatch(item.standard.proposed, /\{[a-z_]+\}/, `${at}: links filled`);
       const out = drafter.assessProposed(item, item.standard.proposed, { now });

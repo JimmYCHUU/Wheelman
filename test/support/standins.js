@@ -10,7 +10,7 @@ const json = (res, status, data, headers = {}) => { res.writeHead(status, { 'con
 const listen = (handler) => new Promise((resolve) => { const s = http.createServer(handler); s.listen(0, '127.0.0.1', () => resolve(s)); });
 const readBody = (req) => new Promise((resolve) => { let body = ''; req.on('data', (c) => { body += c; }); req.on('end', () => resolve(body)); });
 
-const DEFAULT_REPLY = { reply: 'Hi {{NAME}},\nNo worries.', needs_human: [], facts_used: [], hold: false };
+const DEFAULT_REPLY = { reply: 'Hello {{NAME}},\nCertainly.', needs_human: [], facts_used: [], hold: false };
 
 /**
  * The AI stand-in's behaviour:

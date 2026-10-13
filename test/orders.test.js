@@ -252,7 +252,7 @@ test('a bid that was lost: your figures fill the blanks, and without them the bl
   assert.ok(bare.checks.some((c) => c.level === 'warn' && /taken from the target bid on the order/.test(c.message)));
 
   const filled = await messages.draftOrderMessage(it, { type: 'bid_lost', facts: 'we bid 280000, sold for 331000', now });
-  assert.equal(filled.reply, 'Hi Omar,\n\n'
+  assert.equal(filled.reply, 'Hello Omar,\n\n'
     + 'Just an update on the 2015 Subaru XV Hybrid. We placed the bid at ¥280,000, but unfortunately we missed it by a small margin. The vehicle sold for ¥331,000.\n\n'
     + "We'll keep searching and send you the next good match as soon as we find one within your budget.\n\n"
     + 'Regards,\nTeam Carbarn');
@@ -278,7 +278,7 @@ test('what you type into "Add what you know" is read only where it is plainly sa
 
 test('the car is secured: the charges, what is paid and what is due come from the order', async () => {
   const d = await messages.draftOrderMessage(item(504), { type: 'secured', now });
-  assert.equal(d.reply, 'Hi Pia,\n\n'
+  assert.equal(d.reply, 'Hello Pia,\n\n'
     + 'Good news: we won the auction and your 2021 Toyota Hiace DX is secured.\n\n'
     + '60,000 km\nAuction Grade 4\nWhite\n\n'
     + 'Winning price: [WINNING PRICE?]\n\n'
@@ -303,7 +303,7 @@ test('a car found at auction: the bid comes from the three closest sold cars, an
   assert.equal(noDeposit.status, 'ready', noDeposit.error);
   // Sold: 401,000, 388,000 and 178,000 are the three closest. Their average is 322,333, rounded up to 350,000.
   assert.equal(feed().find((c) => c.method === 'POST').body, '{"bidYen":350000}');
-  assert.ok(noDeposit.reply.startsWith(`Hi Nina,\n\nWe found this 2015 Subaru XV Hybrid in tomorrow's auction.\n\nVehicle details:\n2015 Subaru XV Hybrid 2.0i EyeSight\n121,000 km\nAuction Grade 3.5\n2.0L Hybrid\n4WD\n5 seats\n\n`), noDeposit.reply.slice(0, 200));
+  assert.ok(noDeposit.reply.startsWith(`Hello Nina,\n\nWe found this 2015 Subaru XV Hybrid in tomorrow's auction.\n\nVehicle details:\n2015 Subaru XV Hybrid 2.0i EyeSight\n121,000 km\nAuction Grade 3.5\n2.0L Hybrid\n4WD\n5 seats\n\n`), noDeposit.reply.slice(0, 200));
   assert.ok(noDeposit.reply.includes('https://www.carbarn.com.au/live-auction/subaru/xv-hybrid/gpe/1992541'));
   assert.ok(noDeposit.reply.includes("The website's suggested bid is ¥253,590. We usually suggest around ¥350,000 to improve the chance of winning."));
   assert.ok(noDeposit.reply.includes('Based on a ¥350,000 bid, the current estimated landed and complied cost is approximately AUD $11,410, including:'));
@@ -438,7 +438,7 @@ test('a pasted customer message gets a reply that knows the order, and no name, 
   const it = out.item;
   assert.deepEqual([it.state, it.order.due, it.order.replying, it.unanswered], ['awaiting', 'Reply to their message', true, 1]);
   assert.equal(it.thread.at(-1).text, 'Hi, how much do I still owe? I paid $1,650 already. My number is 0491 570 504\nand when does it ship?', "WhatsApp's time and name are taken off");
-  assert.equal(it.draft.reply, 'Hi Pia,\nThe balance still to pay on your Hiace is $10,777 AUD, and your deposit of $1,650 has been received.\nWe will confirm the shipping date [DATE?].\n\nRegards,\nTeam Carbarn');
+  assert.equal(it.draft.reply, 'Hello Pia,\nThe balance still to pay on your Hiace is $10,777 AUD, and your deposit of $1,650 has been received.\nWe will confirm the shipping date [DATE?].\n\nRegards,\nTeam Carbarn');
   assert.deepEqual(it.draft.checks.filter((c) => c.level === 'fail'), []);
 
   const sent = ai()[0].body;
@@ -518,7 +518,7 @@ test('a message is always written: what cannot be looked up becomes a blank, nev
   // Order 502 wants a Honda N-Box. The stand-in auction has none, and neither has our stock.
   const offer = await messages.draftOrderMessage(item(502, { message: 'lot_offer' }), { type: 'lot_offer', now });
   assert.equal(offer.status, 'ready', offer.error);
-  assert.equal(offer.reply, 'Hi Remy,\n\n'
+  assert.equal(offer.reply, 'Hello Remy,\n\n'
     + 'We found one Honda N-Box in [WHICH AUCTION?].\n\n'
     + 'Year: [YEAR?]\nOdometer: [KM?]\nAuction Grade: [GRADE?]\n\n'
     + 'You can see the photos here:\n[PHOTO LINK?]\n\n'

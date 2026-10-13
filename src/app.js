@@ -7,6 +7,7 @@ import { logLine, logFile } from './log.js';
 import { openDb, closeDb, countRows } from './db.js';
 import { startServer } from './server.js';
 import * as worker from './worker.js';
+import { markVoiceCutover } from './learn.js';
 import { providers } from './llm.js';
 import { businessFactsForPrompt } from './knowledge.js';
 import { backupNow, lastBackup } from './backup.js';
@@ -14,6 +15,8 @@ import { formatSydney } from './time.js';
 import { startTunnel, stopTunnel } from './share.js';
 
 openDb();
+// The voice changed on 12 October 2026. Lessons learned before this first start are read for what they say, not how.
+markVoiceCutover();
 
 console.log('\nWheelman, the Carbarn reply assistant');
 console.log('------------------------------------');

@@ -60,6 +60,8 @@ export const config = {
     apiUrl: (env.SITE_API_URL || '').trim().replace(/\/+$/, '') || 'https://www.carbarn.com.au',
     // The address of the yard, as written in every message. No map link is sent anywhere.
     address: '136 Frances Street, Lidcombe NSW 2141',
+    // What a reply calls the premises. The team says "the yard"; the brand says showroom.
+    showroom: 'our Lidcombe showroom',
     phone: '0423 840 130',
     // Other numbers of ours that may appear in a text (a staff mobile, say). They are not customer
     // details and are left as they are when a text goes to the AI. Set in .env; never in the code.

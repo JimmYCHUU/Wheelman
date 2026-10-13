@@ -65,35 +65,54 @@ booking link, and then write it the way the dealership writes. Thirty to fifty m
 need that, on the dashboard and on Marketplace.
 
 Wheelman does the looking-up and the first draft. The facts come only from our own records,
-and the tone comes from a couple of hundred replies our two lead salespeople typed themselves,
-with templates and AI-polished messages removed. What it cannot know, such as a discount, a
+what to say from a couple of hundred replies our salespeople typed themselves (templates and
+AI-polished messages removed), and how to say it from Carbarn's own voice guide. What it cannot know, such as a discount, a
 trade-in value or a delivery quote, it hands to the person as a highlighted blank instead of
 guessing. It keeps learning from the replies that were really used and from the edits made to
 its suggestions.
 
 ## The voice
 
-Wheelman does not have a personality of its own. It writes as a blend of the two people who
-set the tone of the business, studied from their real messages.
+Wheelman writes in one voice: Carbarn's. Formal, courteous and exact, the way a good dealership
+writes when it is shortened to fit a phone screen. The owner settled the register on 12 October
+2026: "formal and corporate", a brand rather than a copy of any one person.
 
-**The first is brisk and factual.** He answers exactly what was asked in one or two short
-sentences, then stops. Politely formal, says "we", no emojis, almost no exclamation marks,
-no slang. Bad news starts with "Unfortunately," followed by the fact and where to look next.
-A price is stated flatly, with no justification. He does not chase; urgency is only ever a
-fact, such as a deposit already taken on the car.
+**The shape.** The greeting follows Sydney time ("Good morning", "Good afternoon", "Good
+evening", else "Hello"), once a day; "Hi" is never used, and one the AI writes is changed by code.
+The first sentence answers what was asked, with facts as figures ("48,000 km verified on the
+export certificate"). One idea per sentence, a link on its own line, and the reply ends on the next
+step. Code adds the sign-off "Regards, Team Carbarn" and the standard blocks; the AI never types
+them.
 
-**The second is courteous and a little warmer.** He uses the customer's first name, says
-"No worries", and adds a short well-wish. He asks plainly for the holding deposit when the
-customer is serious. He reduces risk instead of persuading: he shares the export certificate
-and the auction sheet, invites the customer's own mechanic, and mentions the refundable
-deposit early. He accepts a "no" at once and offers at most one alternative.
+**The register.** Full sentences, Australian English, "we" never "I", no slang, no emoji, at most
+one exclamation mark, no marketing words, and no apologising for the business. Hospitality phrasing
+in place of casual phrasing:
 
-**What the blend sounds like.** A busy, experienced dealer texting a customer: plain, polite,
-straight to the answer, one next step, never pushy. Grammar is tidied; the tone is not.
+| Instead of | Wheelman writes |
+|---|---|
+| No worries / No problem | Certainly. / Of course. / With pleasure. |
+| Sorry for the delay | Thank you for your patience. |
+| Just checking in / Sorry to bother you | (nothing: it says what the message is for) |
+| Feel free to / Don't hesitate to | You are welcome to |
+| Let us know if you have any questions | (nothing: it ends on the next step) |
+| Our yard | Our Lidcombe showroom |
 
-The names of the two people, and of other staff, are not in this repository. They live in
-`voice/people.json` on the computer that runs Wheelman. `voice/people.example.json` shows the
-shape with invented names. The tone guide is `voice/house-voice.md`.
+**Questions.** Only when the answer is needed to proceed: which car they mean, a postcode for a
+delivery quote, the details of a trade-in. There is no canned question; the invitation to inspect
+is the next step.
+
+**Length.** Up to 70 words on a first reply (before the standard block), up to 50 inside a
+conversation, under 45 on Marketplace, about 180 in an import email. A customer who writes one
+line gets two or three sentences. A reply over the band, or one with slang or an apology in it,
+is pointed out in the message box; it is never refused for that alone.
+
+**What the team's replies teach.** The replies our salespeople really sent are still read for
+every suggestion, for their content: what they chose to say, offer and leave out. Their wording
+is not borrowed; the register is this voice. Lessons learned before the voice changed are read the
+same way, and those about price questions, written under the old policy, are no longer shown. The
+names of the salespeople are not in this repository (`voice/people.json`, local only). The voice is
+`voice/house-voice.md`; the version before 12 October 2026 is kept in `voice/previous/` so the two
+can be compared on the Review page.
 
 ## How a suggestion is written
 
@@ -715,7 +734,8 @@ Wheelman reads the Facebook Marketplace chats from the content engine and sugges
 every chat where the buyer wrote last. It works like the Dashboard section, with these
 differences:
 
-- **Short replies.** One or two lines, no greeting line, no "Regards, Team Carbarn".
+- **Formal but short.** One to three lines, under 45 words, in the same register as a text, with
+  no greeting line and no "Regards, Team Carbarn".
 - **Links in the reply.** The car's page link on a first reply, and the invitation to inspect
   with the booking link when the buyer asks to see the car, added under the lines by code as on
   the dashboard. The price reply is added the same way. (Marketplace has no standard block, so
@@ -1117,15 +1137,16 @@ what the team really sends. **How to say it** comes from the two voices.
   selling advice. A rewrite that repeats seven of your words in a row is sent back. If no
   AI model is free, the note is kept and its lesson is worked out later.
 - **The model replies.** `voice/model-replies.md` holds thirty-seven invented scenarios, each
-  with a reply written to the selling playbook in the house voice: a first text about
+  with a reply written to the selling playbook in the Carbarn voice (rewritten in the formal
+  register on 12 October 2026, so every one is back under **Standards** to rate): a first text about
   availability, a price asked before a visit, a customer who turns out to be interstate, a
   booked inspection, a buyer after the deposit, a no, Marketplace chats. While any of them is
   waiting for a rating, a **Standards** tab is on the page, where they come up one by one in
   the normal message box. One counts only once you have marked it **Good reply**, as written
   or after your changes. **Could be better** keeps your note with it and writes it again for
   you to rate; **Set this one aside** drops it, and it can be put back. An approved one is
-  shown to the AI as the standard for messages like it: the moves, the one question and the
-  length, never the sentences, which are refused as copied. Nothing from a scenario is
+  shown to the AI as the standard for messages like it: the moves, the register and the
+  length, with a question only when one was needed, never the sentences, which are refused as copied. Nothing from a scenario is
   learned, and showing one costs no AI request. Once every one is approved or set aside, the
   tab leaves the page and the page goes back to the Dashboard; the approved ones keep setting
   the standard. Edit the file freely: a scenario added to it brings the tab back, and the
@@ -1149,9 +1170,10 @@ often you asked for a rewrite. Counts only; no customer text.
 
 | Topic | Rule |
 |---|---|
-| Voice | One blended voice of the two lead salespeople, grammar tidied. See [The voice](#the-voice) |
+| Voice | One voice, Carbarn's: formal and corporate, courteous, exact. The team's replies teach content, not tone (12 Oct 2026). See [The voice](#the-voice) |
 | Sign-off | "Regards, Team Carbarn" |
-| Greeting and sign-off | Once a day per customer. Later replies that day start with the answer |
+| Greeting and sign-off | "Good morning / afternoon / evening" by Sydney time, else "Hello"; never "Hi". Once a day per customer: later replies that day start with the answer |
+| Questions | Only when the answer is needed to proceed: which car, a postcode for a delivery quote, trade-in details. No canned question (12 Oct 2026) |
 | First reply to a new enquiry | One or two lines that answer the question, then the standard block: the car's page, the booking link if they asked to see it, address, hours, phone |
 | Address | 136 Frances Street, Lidcombe NSW 2141, in every message. No map link (12 Oct 2026) |
 | Buyers | Answered about their own car. No "which car?", no booking link, no other cars, no amounts |
@@ -1173,7 +1195,7 @@ often you asked for a rewrite. Counts only; no customer text.
 | "Below" | A reply never points at the address block. It answers in the sentence itself |
 | The message box | An editor: change the text or clear it, and it is saved as you type. A changed reply teaches Wheelman when it is copied or approved |
 | AI models | The better models are kept for dashboard customers. Marketplace chats use the small one |
-| Marketplace | A suggestion for every chat where the buyer wrote last; short chat style, with the car's page link and the booking link when asked |
+| Marketplace | A suggestion for every chat where the buyer wrote last; formal but short (one to three lines, under 45 words), with the car's page link and the booking link when asked |
 | Sending | Marketplace only, by the **Send reply** button. Dashboard and auction replies are copied and pasted |
 | Learning | Dashboard only |
 
@@ -1289,6 +1311,7 @@ conversations, blind. In a terminal:
 ```bat
 npm.cmd run review -- --b-voice voice-next --n 30 --confirm
 npm.cmd run review -- --a-model openai/gpt-5.6 --b-model gemini/gemini-3.8-flash --n 40 --confirm
+npm.cmd run review -- --a-voice voice\previous --b-voice voice --n 40 --confirm
 ```
 
 Side A is the current voice on the dashboard's model unless `--a-voice` or `--a-model` says
@@ -1299,7 +1322,8 @@ script takes the last past exchanges that one of our people answered (`--n`, 20 
 one both ways as if the real answer had not been sent, and saves the run under `data\review\`.
 When a paid model is in the run it prints the requests it will make and the estimated cost from
 `data\ai-prices.json`, caps the run at 40 cases, refuses a run that would pass the month's budget,
-and needs `--confirm`.
+and needs `--confirm`. The third command compares the voice before 12 October 2026, kept in
+`voice\previous`, with the current one.
 
 Then open http://localhost:3210/review. Each case shows what the customer wrote, the team's real
 reply folded away, and the two suggestions as Left and Right, shuffled on every case so the rating
@@ -1532,8 +1556,9 @@ wheelman/
 ├── docs/
 │   └── selling-by-text.md             what the replies are taught about selling, and the evidence behind it
 ├── voice/
-│   ├── house-voice.md                 the tone, from our salespeople's real replies
-│   ├── sales-playbook.md              how it sells: the ladder, the ten rules, the moves, the one question
+│   ├── house-voice.md                 the Carbarn voice: the register every reply is written in
+│   ├── sales-playbook.md              how it sells: the ladder, the moves, the price reply, a question only when needed
+│   ├── previous/                      the voice and the playbook before 12 Oct 2026, for a side-by-side review
 │   ├── model-replies.md               the model replies, rated under Standards on the page; edit freely
 │   ├── model-replies.json             where each model reply stands: to rate, approved, set aside
 │   ├── first-reply.md                 the standard block under a first reply; edit freely

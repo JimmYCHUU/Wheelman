@@ -345,7 +345,7 @@ export async function planImport(item, { instruction = '', now = Date.now() } = 
   return {
     stage: 'offer', w, lot, estimate, bidYen, bidBy, pick, readAt: now,
     tail: offerBlock(lot, estimate, bidBy, { websiteBidYen: lot.benchmarkYen, depositPaid: !!ctx.order && ctx.order.depositState !== 'NONE' }),
-    opening: `Hi {{NAME}},\n\nWe’ve found a ${name} that may be worth considering.`,
+    opening: `Hello {{NAME}},\n\nWe’ve found a ${name} that may be worth considering.`,
     lines: [
       `This customer asked us to find a ${w.car} from the Japan auctions. What they asked for: ${wantedLine(w)}.`,
       `${lotId ? 'The auction car in question is' : `We searched the live auction (${searched} ${w.car} in the coming auctions) and chose`} this one: ${lot.title}, ${lot.km.toLocaleString('en-AU')} km, auction grade ${lot.grade || 'not given'}${lot.auctionDate ? `, at auction on ${formatDay(lot.auctionDate)}` : ''}.`,
