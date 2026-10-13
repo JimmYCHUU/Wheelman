@@ -140,7 +140,7 @@ const lead = (id, conv, first, extra = {}) => db.upsertLead({ id, conversationId
 const conv = (id, leadId, name) => db.upsertConversation({ id, phone: `+61491570${leadId}`, channel: 'SMS', status: 'OPEN', leadId, customerName: name, latestDirection: 'IN', latestAt: now - MIN, latestBody: 'x', leadPlatform: 'IMPORTS', leadStatus: 'NEW', leadEmail: '' });
 const msg = (conversationId, direction, body, agoMs) => db.upsertMessage({ id: mid++, conversationId, direction, body, sentBy: direction === 'OUT' ? 'Dana' : null, status: 'SENT', mediaType: null, at: now - agoMs, importedAt: now - agoMs });
 
-const CLOSING = '📍 Unit D3, 128-130 Frances Street, Lidcombe NSW 2141\n📞 0423 840 130\n🕛 Open 7 days, 8 AM–5 PM\n\nRegards,\nTeam Carbarn';
+const CLOSING = '📍 136 Frances Street, Lidcombe NSW 2141\n📞 0423 840 130\n🕛 Open 7 days, 8 AM–5 PM\n\nRegards,\nTeam Carbarn';
 const OFFER = (bidSentence, bid, total, lines) => [
   'Vehicle details:\n2015 Subaru XV Hybrid 2.0i EyeSight\n121,000 km\nAuction Grade 3.5\n2.0L Hybrid\n4WD\n5 seats',
   'You can view the vehicle and photos here:\nhttps://www.carbarn.com.au/live-auction/subaru/xv-hybrid/gpe/1992541',

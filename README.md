@@ -170,16 +170,18 @@ reserved, with no booking link.
 
 A brand-new enquiry in the Dashboard section gets the reply we always send: one or two lines
 that answer the question, then the standard block with the car's page, the booking link when
-the customer asked to see the car, the address, the map link, the opening hours and the phone
-number. The AI writes only the opening lines. The block is added by code from
+the customer asked to see the car, the address (136 Frances Street, Lidcombe), the opening
+hours and the phone number. No map link is sent in any message. The AI writes only the opening lines. The block is added by code from
 `voice/first-reply.md`, so its wording and symbols are always exact, and it takes the place of
 the sign-off on that message. Edit that file to change the block.
 
 - No car matched, or the car is sold or reserved: the "Vehicle details" lines are left out.
 - The customer asks to see the car: the block carries the booking link under "Book your
   inspection:". Otherwise those lines are left out.
-- If the AI types the address, hours, map link, phone number or one of those links itself,
-  the line is dropped or the reply is sent back.
+- If the AI types the address, hours, phone number or one of those links itself, the line is
+  dropped or the reply is sent back. The old address (Unit D3, 128-130 Frances Street) and a
+  Google Maps link are refused outright: both live on in the team's past replies, which are
+  shown to the AI with the address replaced by a label.
 - Buyers, later replies in a conversation, holding replies, Marketplace chats and anyone who
   writes to a staff member by name do not get it.
 
@@ -1096,7 +1098,8 @@ often you asked for a rewrite. Counts only; no customer text.
 | Voice | One blended voice of the two lead salespeople, grammar tidied. See [The voice](#the-voice) |
 | Sign-off | "Regards, Team Carbarn" |
 | Greeting and sign-off | Once a day per customer. Later replies that day start with the answer |
-| First reply to a new enquiry | One or two lines that answer the question, then the standard block: the car's page, the booking link if they asked to see it, address, map link, hours, phone |
+| First reply to a new enquiry | One or two lines that answer the question, then the standard block: the car's page, the booking link if they asked to see it, address, hours, phone |
+| Address | 136 Frances Street, Lidcombe NSW 2141, in every message. No map link (12 Oct 2026) |
 | Buyers | Answered about their own car. No "which car?", no booking link, no other cars, no amounts |
 | Promises and times | Only what our staff said. Otherwise "We will check and come back to you shortly", or a blank |
 | Price | Any discount, best price or offer is decided by a person: `[PRICE?]` |

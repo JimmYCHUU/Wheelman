@@ -155,6 +155,13 @@ and versions follow `MAJOR.MINOR.PATCH`.
   the name the customer signed in a text (shown only; never given to the AI).
 
 ### Changed
+- **Our address is 136 Frances Street, Lidcombe NSW 2141**, in the standard first-reply block,
+  the import reply, the auction messages and the business facts, and the Google Maps line is
+  gone from all of them. The old address lives on in the team's past replies, which the AI
+  reads as examples: every such reply is shown with our address replaced by `[our address]`,
+  and a suggestion that gives the old address or a map link is sent back and written again.
+  (The owner's words: "136 Frances street instead of Unit D3 128-130 Frances street. no need to
+  mention shifting, and skip map link for now".)
 - One suggestion is written at a time for one customer message. **Write it now** pressed while
   one is being written in the background joins it instead of asking the AI again, and the other
   way round; a reply written from a prompt or an instruction is never overwritten by a plain one

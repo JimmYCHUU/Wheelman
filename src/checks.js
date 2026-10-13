@@ -7,6 +7,7 @@ import { findUrls, hasEmoji, wordCount, stripEmoji, similarity } from './text.js
 import { sydneyHour } from './time.js';
 import { promiseChecks } from './promises.js';
 import { FILLER, URGENCY, STAYS_FOR_SALE, CLAIM, NEXT_STEP_SIGNS } from './selling.js';
+import { oldAddressIn, CURRENT_ADDRESS } from './address.js';
 
 export const MARKERS = ['[PRICE?]', '[TRADE-IN VALUE?]', '[DELIVERY COST?]', '[DATE?]', '[CHECK?]', '[DEPOSIT LINK?]', '[ELIGIBILITY?]', '[LANDED COST?]', '[DEPOSIT?]', '[TIMELINE?]'];
 // A blank is any short label in capitals with a question mark, in square brackets: [PRICE?], [SOLD PRICE?].
@@ -223,6 +224,9 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   const allowedUrls = new Set(findUrls(`${allowed}\n${policyText}\n${customerText}`).map((u) => u.toLowerCase().replace(/\/$/, '')));
   const badUrls = findUrls(body).filter((u) => !allowedUrls.has(u.toLowerCase().replace(/\/$/, '')));
   if (badUrls.length) add('fail', 'link', `This link is not in your records: ${badUrls.join(', ')}`, badUrls);
+  // The yard moved. The old address lives on in the team's past replies, which the AI reads.
+  const stale = oldAddressIn(body);
+  if (stale) add('fail', 'old-address', `"${stale}" is our old address or the old map link. Our address is ${CURRENT_ADDRESS}: the standard block gives it on a first reply, and your own sentence gives it only when the customer asks where we are.`, [stale]);
 
   const markers = [...new Set(String(body).match(MARKER_RE) || [])];
   if (markers.length) add('input', 'marker', markers.length === 1 ? 'Fill in the blank before sending.' : 'Fill in the blanks before sending.', markers);
@@ -302,6 +306,7 @@ export function retryNote(checks, { channel = 'sms' } = {}) {
       : '\nDo not swap one day or time for another. Where the day or time of something we will do is not given by our staff, write "shortly" or use [DATE?]. Where nobody on our side agreed to do something, say we will check and come back to them.') : '')
     + (fails.some((c) => c.code === 'vague-answer' || c.code === 'model-unanswered') ? '\nNever write that we will check, look into, confirm, get back to them or update them later. Give the answer from RESEARCH FOR THIS IMPORT QUESTION. Where RESEARCH has no answer, write the sentence anyway with the matching blank ([ELIGIBILITY?], [LANDED COST?], [DEPOSIT?], [TIMELINE?] or [CHECK?]) and say what it stands for. Every model code the customer named must be answered: eligible or not, with its figure or its blank.' : '')
     + (fails.some((c) => c.code === 'urgency') ? '\nDo not say or imply that other people are interested, that the car is selling fast, or that the price will change. If the request allows urgency, the one true fact is that a $1,000 refundable holding deposit takes the car off the market; otherwise say nothing about urgency.' : '')
+    + (fails.some((c) => c.code === 'old-address') ? `\nNever write our old address or a map link. Our address is ${CURRENT_ADDRESS}. The block gives it on a first reply; write it yourself only when the customer asked where we are.` : '')
     + (fails.some((c) => c.code === 'claim') ? '\nSay nothing about accidents, condition, approval, cooling-off or warranty beyond what VEHICLE FACTS and BUSINESS FACTS state, in their words.' : '');
 }
 

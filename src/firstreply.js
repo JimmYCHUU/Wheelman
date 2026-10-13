@@ -1,5 +1,5 @@
 // The standard block we send on a first reply: the car's page, the booking link when the customer
-// asked to see the car, the address, map link, hours and phone number. The wording lives in
+// asked to see the car, the address, hours and phone number. The wording lives in
 // voice/first-reply.md so it can be edited without touching code. The AI never writes this block:
 // code adds it, so every symbol and word is exact.
 
@@ -48,7 +48,7 @@ export function blockHeadings() {
 
 /** True when the AI's own lines repeat what the block already says. */
 export function repeatsBlock(opening) {
-  const m = String(opening || '').match(/(frances\s+st(reet)?|maps\.app\.goo\.gl\S*|\b8\s?(:00)?\s?am\b.{0,14}\b5\s?(:00)?\s?pm\b|open (7|seven) days|0423\s?840\s?130)/i);
+  const m = String(opening || '').match(/(frances\s+st(reet)?|\b8\s?(:00)?\s?am\b.{0,14}\b5\s?(:00)?\s?pm\b|open (7|seven) days|0423\s?840\s?130)/i);
   return m ? m[0] : '';
 }
 

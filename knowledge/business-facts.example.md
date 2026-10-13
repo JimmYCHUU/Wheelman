@@ -29,7 +29,7 @@ Answer: Phone 0423 840 130. Email info@carbarn.com.au. Website https://www.carba
 
 ## Address
 Status: CONFIRMED
-Answer: Unit D3, 128–130 Frances Street, Lidcombe NSW 2141. Google Maps: https://maps.app.goo.gl/EQfdkTE7FYDF4DTT8
+Answer: 136 Frances Street, Lidcombe NSW 2141.
 
 ## Opening hours
 Status: CONFIRMED

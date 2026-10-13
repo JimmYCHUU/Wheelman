@@ -19,10 +19,7 @@ Book your inspection:
 {inspection_url}
 
 Our location:
-📍 Unit D3, 128-130 Frances Street, Lidcombe NSW 2141
-
-Google Maps:
-https://maps.app.goo.gl/EQfdkTE7FYDF4DTT8
+📍 136 Frances Street, Lidcombe NSW 2141
 
 🕛 Open 7 days, 8 AM–5 PM.
 

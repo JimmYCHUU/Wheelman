@@ -22,7 +22,7 @@ Once we have those details, we can keep the search focused and let you know when
 
 ---
 
-📍 Unit D3, 128-130 Frances Street, Lidcombe NSW 2141
+📍 136 Frances Street, Lidcombe NSW 2141
 📞 0423 840 130
 🕛 Open 7 days, 8 AM–5 PM
 
