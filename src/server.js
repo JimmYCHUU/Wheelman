@@ -137,6 +137,8 @@ function draftOf(item) {
     practiceUsed: draft.context?.practice || 0,
     // The AI thought an ordinary enquiry might be an import one: the page offers to treat it so.
     aiImport: !!draft.context?.aiImport,
+    // Which of our records' notes on the customer shaped the reply (labels only); never said to them.
+    insiderUsed: Array.isArray(draft.context?.insider) ? draft.context.insider : [],
     needsHuman: (draft.needsHuman || []).filter((n) => n && n.marker && n.reason).map((n) => ({ marker: String(n.marker), reason: String(n.reason) })),
     // What the reply is for: the one next step it offers, and where the customer is on the way to a sale.
     nextStep: draft.next_step || '', rung: draft.rung || '', rungLabel: RUNG_LABELS[draft.rung] || '',

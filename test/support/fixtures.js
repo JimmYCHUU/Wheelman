@@ -90,12 +90,15 @@ export function vehicles(now = Date.now()) {
 
 // ---- leads and text conversations, as the dashboard sends them ----------------------------------
 
-const rawLead = (id, conversationId, who, now, { platform = 'CARSALES', source = 'Carsales', stocks = [], inquiries = [], status = 'NEW', agoMs = 2 * HOUR } = {}) => ({
+const rawLead = (id, conversationId, who, now, { platform = 'CARSALES', source = 'Carsales', stocks = [], inquiries = [], status = 'NEW', agoMs = 2 * HOUR, leadScore = null, utmSource = '', utmMedium = '', utmCampaign = '', others = {} } = {}) => ({
   id, conversationId, customerFirstName: who[0], customerLastName: who[1], customerPhone: who[2], customerEmail: email(who[0]),
   leadSourceDto: { leadSource: source }, leadStatus: status, platform,
   leadDate: sydneyNaive(now - agoMs), updatedAt: sydneyNaive(now - agoMs + 5 * MIN),
-  stocks, statusHistory: [], others: JSON.stringify({ stateShortName: 'NSW' }),
-  inquiries: inquiries.map((q, i) => ({ id: id * 10 + i, inquiryType: q.type || source, customerQuerySubject: q.subject || 'Vehicle enquiry', customerQuery: q.text, stockNo: q.stockNo || '', platform, leadDate: sydneyNaive(now - (q.agoMs ?? agoMs)), status, comments: [], canonicalUrl: q.url || '' })),
+  // The dashboard's own reading of the lead (shape only reaches the AI; see src/insider.js).
+  leadScore, utmSource, utmMedium, utmCampaign,
+  stocks, statusHistory: [], others: JSON.stringify({ stateShortName: 'NSW', ...others }),
+  inquiries: inquiries.map((q, i) => ({ id: id * 10 + i, inquiryType: q.type || source, customerQuerySubject: q.subject || 'Vehicle enquiry', customerQuery: q.text, stockNo: q.stockNo || '', platform, leadDate: sydneyNaive(now - (q.agoMs ?? agoMs)), status, comments: [], canonicalUrl: q.url || '',
+    financeStatus: q.financeStatus ?? null, weeklyRepaymentAtTime: q.weeklyRepayment ?? null, stockStatus: q.stockStatus ?? null, actionType: q.actionType ?? null, sourceBlock: q.sourceBlock ?? null, videoViewed: q.videoViewed ?? null })),
 });
 const rawConversation = (id, lead, who, { direction, at, body }, { phone = who?.[2] } = {}) => ({
   id, phoneNumber: intl(phone), channel: 'SMS', status: 'OPEN',
@@ -129,7 +132,9 @@ export function dashboard(now = Date.now()) {
   };
 
   // Waiting for a reply, each in a different situation.
-  thread(201, 101, P.priya, [['IN', 'Hi, is the Noah still available?', 20 * MIN]], { stocks: ['1159'], inquiries: [{ text: 'Hi, is the Noah still available?', stockNo: '1159', agoMs: 20 * MIN }] });
+  // Priya's lead carries what the dashboard knows about her: the shape reaches the AI, the values never do.
+  thread(201, 101, P.priya, [['IN', 'Hi, is the Noah still available?', 20 * MIN]], { stocks: ['1159'], inquiries: [{ text: 'Hi, is the Noah still available?', stockNo: '1159', agoMs: 20 * MIN }],
+    leadScore: 6, utmSource: 'carsales.com.au', others: { leadCount: 3, postcode: '2560', otherLeads: [{ dealerName: 'Other Dealer Pty Ltd', lead: 'their notes about her' }] } });
   thread(202, 102, P.tom, [['OUT', 'Hello Tom, yes it is available. Would you like to come and see it?', 90 * MIN, STAFF.alex], ['IN', 'What is your best price?', 15 * MIN]], { stocks: ['1159'], agoMs: 3 * HOUR });
   thread(203, 103, P.isla, [['IN', 'Hi, I am interested in the 2020 Hiace. I have a 2015 Camry to trade in, what would you give me for it?', 35 * MIN]], { stocks: ['1201'], source: 'Autotrader', platform: 'AUTOTRADER' });
   thread(204, 104, P.kofi, [['IN', 'Can I come and see the Alphard on Saturday morning?', 50 * MIN]], { stocks: ['1400'] });

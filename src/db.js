@@ -298,6 +298,7 @@ export function openDb(file = config.dbPath) {
   ensureColumn(db, 'advice', 'channel', "TEXT NOT NULL DEFAULT 'sms'");
   ensureColumn(db, 'advice', 'lessons_json', 'TEXT');
   ensureColumn(db, 'leads', 'status_history_json', 'TEXT');
+  ensureColumn(db, 'leads', 'signals_json', 'TEXT');
   ensureColumn(db, 'conversations', 'lead_platform', 'TEXT');
   ensureColumn(db, 'conversations', 'lead_status', 'TEXT');
   ensureColumn(db, 'conversations', 'lead_email', 'TEXT');
@@ -396,16 +397,16 @@ export function transaction(fn) {
 
 export function upsertLead(l) {
   stmt(`
-    INSERT INTO leads(id, conversation_id, first_name, last_name, phone, email, source, status, platform, state, lead_at, updated_at, stocks_json, inquiries_json, status_history_json)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO leads(id, conversation_id, first_name, last_name, phone, email, source, status, platform, state, lead_at, updated_at, stocks_json, inquiries_json, status_history_json, signals_json)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       conversation_id = excluded.conversation_id, first_name = excluded.first_name, last_name = excluded.last_name,
       phone = excluded.phone, email = excluded.email, source = excluded.source, status = excluded.status,
       platform = excluded.platform, state = excluded.state, lead_at = excluded.lead_at, updated_at = excluded.updated_at,
       stocks_json = excluded.stocks_json, inquiries_json = excluded.inquiries_json,
-      status_history_json = excluded.status_history_json
+      status_history_json = excluded.status_history_json, signals_json = excluded.signals_json
   `).run(l.id, l.conversationId, l.firstName, l.lastName, l.phone, l.email, l.source, l.status, l.platform, l.state,
-    l.leadAt, l.updatedAt, JSON.stringify(l.stocks), JSON.stringify(l.inquiries), JSON.stringify(l.statusHistory || []));
+    l.leadAt, l.updatedAt, JSON.stringify(l.stocks), JSON.stringify(l.inquiries), JSON.stringify(l.statusHistory || []), JSON.stringify(l.signals || {}));
 }
 
 export function upsertConversation(c) {
@@ -725,7 +726,7 @@ export function mpDraftsLastDay(now = Date.now()) {
 
 // ---- reads ---------------------------------------------------------------
 
-const parseLead = (r) => r && ({ ...r, stocks: JSON.parse(r.stocks_json || '[]'), inquiries: JSON.parse(r.inquiries_json || '[]'), statusHistory: JSON.parse(r.status_history_json || '[]') });
+const parseLead = (r) => r && ({ ...r, stocks: JSON.parse(r.stocks_json || '[]'), inquiries: JSON.parse(r.inquiries_json || '[]'), statusHistory: JSON.parse(r.status_history_json || '[]'), signals: JSON.parse(r.signals_json || '{}') });
 
 export function getLead(id) {
   return parseLead(stmt('SELECT * FROM leads WHERE id = ?').get(id));

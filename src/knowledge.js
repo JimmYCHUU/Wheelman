@@ -4,6 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 import { availability } from './normalize.js';
+import { stripEmoji } from './text.js';
+import { redact } from './redact.js';
+import { CLAIM, URGENCY } from './selling.js';
 
 // ---- business facts ------------------------------------------------------
 
@@ -252,6 +255,26 @@ export function websiteStats() {
 const money = (n) => (n === null || n === undefined || n === '' ? '' : '$' + Number(n).toLocaleString('en-AU'));
 const kms = (n) => (n === null || n === undefined || n === '' ? '' : Number(n).toLocaleString('en-AU') + ' km');
 const has = (v) => v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && !v.length);
+// The dashboard answers its yes/no questions as words ("no"), sometimes as booleans.
+const no = (v) => v === false || /^(no|false|0|n)$/i.test(String(v ?? '').trim());
+const yes = (v) => v === true || /^(yes|true|1|y)$/i.test(String(v ?? '').trim());
+
+/**
+ * The listing description, trimmed for the AI: emoji and markup out, customer details out, any
+ * sentence with a marketing claim, urgency or a removed detail out, and cut at a sentence end.
+ */
+export function descriptionFor(v, max = 600) {
+  let t = stripEmoji(String(v?.description || '')).replace(/<[^>]+>/g, ' ').replace(/&nbsp;|&amp;/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return '';
+  t = redact(t, null);
+  const keep = t.split(/(?<=[.!?])\s+/).filter((s) => s.trim() && !CLAIM.test(s) && !URGENCY.test(s) && !/\[[A-Z][A-Z ]+\]/.test(s) && !/\b(call|text|message|ring|phone) (us|now|today|me)\b/i.test(s));
+  let out = '';
+  for (const s of keep) {
+    if (`${out} ${s}`.trim().length > max) break;
+    out = `${out} ${s}`.trim();
+  }
+  return out;
+}
 
 /**
  * @param owner     the customer is buying, or has bought, this vehicle: it is theirs, not stock on offer
@@ -278,7 +301,7 @@ export function vehicleFacts(v, { owner = false, reserved = false } = {}) {
   add('Seats', v.seats);
   add('Doors', v.doors);
   add('Fuel', v.fuel);
-  add('Engine', [v.engine?.engineSizeL || (v.engineCc ? `${v.engineCc} cc` : ''), v.engineCode, v.engine?.induction].filter(Boolean).join(', '));
+  add('Engine', [v.engine?.engineSizeL || (v.engineCc ? `${v.engineCc} cc` : ''), has(v.cylinders) ? `${v.cylinders} cylinders` : '', v.engineCode, v.engine?.induction].filter(Boolean).join(', '));
   add('Transmission', [v.transmission, v.spec?.gearType].filter(Boolean).join(', '));
   add('Drive', v.driveTrain);
   add('Colour', [v.color, v.interiorColour ? `interior ${v.interiorColour}` : ''].filter(Boolean).join(', '));
@@ -289,13 +312,23 @@ export function vehicleFacts(v, { owner = false, reserved = false } = {}) {
   add('Fuel use', v.spec?.fuelConsumptionCombined || v.fuelConsumption);
   add('Hybrid battery health', has(v.batterySOH) ? `${v.batterySOH}` : '');
   if (has(v.odometerHistory1)) add('Odometer history', [`${kms(v.odometerHistory1)} on ${v.odometerHistory1Date || 'date not recorded'}`, has(v.odometerHistory2) ? `${kms(v.odometerHistory2)} on ${v.odometerHistory2Date || 'date not recorded'}` : ''].filter(Boolean).join('; '));
-  if (v.ppsrClear === true) add('PPSR', 'clear');
-  if (v.writtenOff === true) add('Written off', 'yes');
-  if (v.writtenOff === false) add('Written off', 'no');
+  if (yes(v.ppsrClear)) add('PPSR', 'clear');
+  // The Australian register's answer, as the dashboard records it. "Not recorded as written off" is
+  // never "accident-free": the system prompt says so.
+  if (no(v.writtenOff)) add('Written-off register', 'not recorded as written off');
+  else if (yes(v.writtenOff)) add('Written-off register', 'recorded as written off. Name this before they ask.');
+  if (no(v.waterDamage)) add('Water damage', 'none recorded');
+  else if (yes(v.waterDamage)) add('Water damage', 'recorded. Name this before they ask.');
+  if (no(v.majorRepairs)) add('Major repairs', 'none recorded');
+  else if (yes(v.majorRepairs)) add('Major repairs', 'recorded. Name this before they ask.');
+  add('Previous owners', v.numberOfPreviousOwner);
+  add('First registered (Japan)', v.firstRegistrationDate);
   add('Registration expiry', v.registrationExpiryDate);
   add('Included', (v.outline || []).join('; '));
   add('Service record', (v.serviceRecord || []).join('; '));
   add('Features', (v.features || []).join(', '));
+  // Our own words on the website, for facts only: the voice says what a reply sounds like.
+  if (onOffer) add('From the listing (our own words on the website: use it for facts, never for its tone or its claims)', descriptionFor(v));
   add('Location', /lidcombe/i.test(v.inventoryAddress || '') && a.code === 'available' ? v.inventoryAddress : '');
   if (v.url && onOffer) {
     // The inspection booking links are deliberately not listed here. They are supplied only when

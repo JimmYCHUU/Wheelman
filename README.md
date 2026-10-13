@@ -139,6 +139,7 @@ can be compared on the Review page.
         │                     our salespeople's real replies   │
         │                     what the team sent lately        │
         │                     what you changed last time       │
+        │                     what our records say, unstated   │
         │                     your prompt, when you gave one   │
         └──────────────────────────┬──────────────────────────┘
         ┌──────────────────────────▼──────────────────────────┐
@@ -714,8 +715,9 @@ The suggestion waits in the message box, marked **not sent**. The box is an edit
 
 ### The details panel
 
-The customer, the car with everything included with it, and the facts the suggestion relied
-on. For an import or auction enquiry it shows what the customer asked us to find instead of
+The customer, the car with everything included with it, the facts the suggestion relied on,
+and which of our records' notes on the customer shaped it (a finance decision, how they found us,
+how widely they are enquiring): those are never said to the customer. For an import or auction enquiry it shows what the customer asked us to find instead of
 a car from our stock: the model, the years, the kilometre limit, the budget, and what we
 still do not know. **Dismiss** is at the bottom of this panel, away from Copy and Rewrite. It takes a
 conversation out of Waiting, for example when you have already phoned the customer. Nothing is
@@ -1061,7 +1063,8 @@ Wheelman only states facts it has been given.
 
 | Source | File or place | How it stays current |
 |---|---|---|
-| Stock: price, kilometres, availability, inclusions | The dashboard | Read every few minutes |
+| Stock: price, kilometres, availability, inclusions, the written-off, water-damage and major-repairs record, the listing description | The dashboard | Read every few minutes |
+| What the dashboard knows about a customer: engagement score, a finance decision, how they found us, how many other cars they asked about on Carsales | The dashboard, with the lead | Read with the lead. Shapes the reply; never stated in it |
 | Business facts: deposit, warranty, delivery, payment | `knowledge/business-facts.md` (private; `business-facts.example.md` is what is published) | You edit it |
 | How Carbarn works: the steps of a sale, common questions | `knowledge/how-carbarn-works.md` (private; an example file is published) | You edit it |
 | The website: policy pages, guides, blog, import pages | `knowledge/website/` | `npm run fetch-website -- --all` |
@@ -1177,6 +1180,7 @@ often you asked for a rewrite. Counts only; no customer text.
 | First reply to a new enquiry | One or two lines that answer the question, then the standard block: the car's page, the booking link if they asked to see it, address, hours, phone |
 | Address | 136 Frances Street, Lidcombe NSW 2141, in every message. No map link (12 Oct 2026) |
 | Buyers | Answered about their own car. No "which car?", no booking link, no other cars, no amounts |
+| What our records say about a customer | Shapes the reply and is never stated: no score, status, source, other dealers or finance decision. "Not recorded as written off" is the register's answer, never "accident-free" (12 Oct 2026) |
 | Promises and times | Only what our staff said. Otherwise "We will check and come back to you shortly", or a blank |
 | Price | Any discount, best price or offer is decided by a person: `[PRICE?]` |
 | Holding deposit | $1,000, refundable while inspecting or arranging finance |
@@ -1343,6 +1347,11 @@ claim outside what the records allow; and the block or the proof that was due.
 
 - Customer details are removed before any text goes to an AI service (RULE-2). Free AI
   services may use what they receive to improve their products, which is why.
+- What the dashboard knows about a customer beyond what they wrote (their engagement score, a
+  finance decision, how they found us, how many other cars they asked about on Carsales) is kept
+  by shape only: the data other dealers hold about them is dropped at intake and never stored,
+  and the AI is told the shape ("their engagement is high"), never a number, a name or a
+  postcode. None of it is ever said to the customer: a suggestion that mentions it is sent back.
 - From Marketplace, Wheelman stores the buyer's name, the messages and the listing. It does
   not store Facebook thread or participant identifiers, photo addresses, or any phone number
   or email the engine captured.

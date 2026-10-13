@@ -26,6 +26,9 @@ const BANNED = [
   [/\bplus on[- ]?road(s| costs?)?\b/i, 'says "plus on-roads": say what the price includes and that government charges are extra', 'fail'],
 ];
 
+// What our records say about a customer, said to them. Shape the reply by it; never state it.
+const INSIDER_LEAK = /\b(lead score|your (engagement )?score|scored (as|at)|(hot|warm|cold) lead|our (dashboard|system|records?) (shows?|says?|notes?|records?|tells? us)|came to us (from|via|through)|found us (on|through|via)|(enquir|inquir|look|shopp)\w* (at|with|about|around) other (dealers?|cars|vehicles)|other dealers?|your (finance )?application (was|has been|got|is) (declined|rejected|knocked back|approved|unsuccessful)|finance (was|has been|is|got) (declined|rejected|knocked back|approved)|you (have |'ve )?(watched|viewed|seen) (the|our) (video|walkaround))\b/i;
+
 const SIGN_OFF_LINES = [
   /^(kind |warm |best |many )?regards,?\.?$/i,
   /^(thanks|thank you|cheers),?$/i,
@@ -299,6 +302,13 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   if (servile) add('warn', 'register', `"${servile[0]}" reads as apologising or asking permission. State the fact or the next step instead.`, [servile[0]]);
   const claim = String(body).match(CLAIM);
   if (claim) add('fail', 'claim', `"${claim[0]}" is a claim the records cannot back. Say only what the vehicle facts and business facts state, in their words.`, [claim[0]]);
+  // What our records show about a customer is never said to them, unless they said it first.
+  const leak = String(body).match(INSIDER_LEAK);
+  if (leak) {
+    const word = (leak[0].match(/approved|declined|rejected|knocked back|unsuccessful|video|walkaround/i) || [''])[0];
+    const theirs = !!word && new RegExp(word.replace(/\s+/g, '\\s+'), 'i').test(String(customerText || ''));
+    if (!theirs) add('fail', 'insider-leak', `"${leak[0]}": what our records show about a customer is never said to them. Shape the reply by it, and mention no score, status, source, other dealers or finance decision.`, [leak[0]]);
+  }
   const urgency = String(body).match(URGENCY);
   if (urgency) add('fail', 'urgency', `"${urgency[0]}": never say that other people are interested, that the car is selling fast or that the price will change.`, [urgency[0]]);
   const stays = String(body).match(STAYS_FOR_SALE);
@@ -337,6 +347,7 @@ export function retryNote(checks, { channel = 'sms' } = {}) {
     + (fails.some((c) => c.code === 'urgency') ? '\nDo not say or imply that other people are interested, that the car is selling fast, or that the price will change. If the request allows urgency, the one true fact is that a $1,000 refundable holding deposit takes the car off the market; otherwise say nothing about urgency.' : '')
     + (fails.some((c) => c.code === 'price-floor') ? '\nNever name a figure below the advertised price. The standard price reply is added under your text; a counter-offer is [PRICE?] for a person.' : '')
     + (fails.some((c) => c.code === 'wording' && /on-roads/.test(c.message)) ? '\nNever "plus on-roads": say what the price includes and that government charges are extra.' : '')
+    + (fails.some((c) => c.code === 'insider-leak') ? '\nNever tell the customer what our records show about them: no score, no status, no source, no other dealers, no finance decision. Use it only to choose what to say.' : '')
     + (fails.some((c) => c.code === 'old-address') ? `\nNever write our old address or a map link. Our address is ${CURRENT_ADDRESS}. The block gives it on a first reply; write it yourself only when the customer asked where we are.` : '')
     + (fails.some((c) => c.code === 'claim') ? '\nSay nothing about accidents, condition, approval, cooling-off or warranty beyond what VEHICLE FACTS and BUSINESS FACTS state, in their words.' : '');
 }

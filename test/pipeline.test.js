@@ -43,7 +43,7 @@ before(async () => {
   const msg = (conversationId, direction, body, minsAgo, sentBy = null) => upsertMessage({ id: mid++, conversationId, direction, body, sentBy, status: 'SENT', mediaType: null, at: now - minsAgo * 60e3, importedAt: now - minsAgo * 60e3 });
 
   // 1: availability question about stock 1159
-  lead(101, 201, 'Priya', 'Raman', ['20211159']);
+  lead(101, 201, 'Priya', 'Raman', ['20211159'], { signals: { leadScore: 6, utmSource: 'carsales.com.au', utmMedium: '', utmCampaign: '', customerType: 'Individual', otherLeadCount: 3, postcode: '2560' } });
   conv(201, 101, 'Priya Raman', 'IN', 'x');
   msg(201, 'IN', 'Hi, is the Noah still available? My number is 0400 111 222. Regards Priya', 20);
 
@@ -112,8 +112,10 @@ test('customer details never reach the AI service, and cost figures are never se
   const d = await drafter.draftFor(items.buildItem({ conversationId: 201 }));
 
   const sent = JSON.stringify(seen[0].body);
-  for (const secret of ['Priya', 'Raman', '0400 111 222', '0400111222', '61400111222', 'someone@example.com', '21000', '1500000', 'grossCost', 'fob'])
+  for (const secret of ['Priya', 'Raman', '0400 111 222', '0400111222', '61400111222', 'someone@example.com', '21000', '1500000', 'grossCost', 'fob', 'Other Dealer', 'their notes', 'leadCount', 'otherLeads', '2560'])
     assert.ok(!sent.includes(secret), `leaked: ${secret}`);
+  // What the dashboard knows about her reaches the AI by shape only, to act on and never to state.
+  assert.ok(sent.includes('Shape the reply by these, never state them: Our dashboard scores their engagement as high. They came to us from Carsales. They have enquired about other cars on Carsales too: they are comparing.'), sent.slice(sent.indexOf("THIS CUSTOMER'S NEXT STEP ==="), sent.indexOf("THIS CUSTOMER'S NEXT STEP ===") + 1200));
   assert.ok(sent.includes('{{NAME}}'));
   assert.ok(sent.includes('$28,900'));
   assert.equal(seen[0].auth, 'Bearer test-key');
