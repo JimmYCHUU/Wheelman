@@ -7,7 +7,7 @@
 import { SITUATIONS, farAway } from './situations.js';
 import { availability } from './normalize.js';
 import { reservedByAnother } from './deal.js';
-import { findUrls } from './text.js';
+import { findUrls, hasEmoji } from './text.js';
 
 const DAY = 24 * 3600 * 1000;
 
@@ -137,7 +137,7 @@ export const STAYS_FOR_SALE = /\b((stays|remains|is still|will stay|will remain)
 export const CLAIM = /\b(no accidents?|accident[- ]free|never (been )?in an accident|perfect condition|immaculate condition|(is|looks|in) like[- ]new|nothing wrong with it|no (issues|problems) (at all|whatsoever)|guaranteed? (approval|finance)|you will be approved|approval is (certain|guaranteed)|no cooling[- ]off|sold as[\s-]is|no warranty|without warranty)\b/i;
 
 /** Words that show a reply ends on something concrete. */
-export const NEXT_STEP_SIGNS = /\b(welcome to|come (in|and|by|down|over|past|through|see)|pop (in|by)|drop (in|by)|book|see you|video (call|walkaround|inspection)|walkaround|send (you|through|over|it|them)|we can (send|hold|arrange|deliver|do|organi[sz]e|quote)|deposit|apply|application|have a look|which day|what day|suit|happy to|let us know which)\b/i;
+export const NEXT_STEP_SIGNS = /\b(welcome to|come (in|and|by|down|over|past|through|see)|pop (in|by)|drop (in|by)|book|see you|video (call|walkaround|inspection)|walkaround|send (you|through|over|it|them)|we can (send|hold|arrange|deliver|do|organi[sz]e|quote)|deposit|apply|application|have a look|which day|what day|suit|happy to|let us know which|inspect(ion)?|preferred (date|day|time)|look forward to seeing you|arrange it for you)\b/i;
 
 // ---- the rung and the move ---------------------------------------------------------------------
 
@@ -246,28 +246,41 @@ export function stageLines(stage) {
   return L;
 }
 
-// ---- the replay score ---------------------------------------------------------------------------
+// ---- the register, and the sales score ---------------------------------------------------------
+
+/** Slang and chat shorthand: not in the brand register. */
+export const SLANG = /\b(no worries|no problem|no probs|cheers|mate|heaps|arvo|yep|yeah|nope|nah|hope (it|this|that) helps|awesome|cool|guys|gonna|wanna|kinda|sorta|okay|ok|lol|btw|asap)\b/i;
+/** Apologising for existing, or asking permission to be useful: servile, not courteous. */
+export const SERVILE = /\b(sorry to (bother|trouble|disturb)|if that('s| is) (okay|ok|alright|fine) with you|if that works for you|apologies for|so sorry|i apologi[sz]e|just (checking|wondering|following)|hope you don'?t mind|whenever you get a chance|no rush|no pressure)\b/i;
 
 const words = (s) => String(s || '').replace(/https?:\/\/\S+/g, ' ').split(/\s+/).filter(Boolean).length;
 
 /**
- * A rule-based score out of six for one reply: does it do what a selling reply does. Used by the
- * replay script and the report so a change to the playbook can be judged before it is merged.
+ * A rule-based score out of six for one reply: does it do what a selling reply does in the brand
+ * register. Used by the review, the replay and the report, so a change to the playbook or the
+ * voice can be judged before it is merged.
+ * question: the one question the request allowed ('' for none); null when it is not known.
+ * due: { price, priceGiven, invite, inviteGiven }: whether the price reply or the invitation was
+ *      due under the text, and whether it is there.
  */
-export function salesScore({ body = '', nextStep = '', rung = '', situations = [], channel = 'sms', farAway: far = false, firstReply = false } = {}) {
+export function salesScore({ body = '', nextStep = '', rung = '', situations = [], channel = 'sms', farAway: far = false, firstReply = false, question = null, due = null } = {}) {
   const b = String(body || '');
   const n = words(b);
   const questions = (b.match(/\?/g) || []).length - (b.match(/\[[A-Z][A-Z0-9 &'/-]{1,30}\?\]/g) || []).length;
+  const needed = question === null || question === undefined ? null : !!String(question).trim();
+  const proofDue = situations.includes('history_kms') || situations.includes('photos_video') || far;
   const parts = {
-    nextStep: /\?/.test(b) || findUrls(b).length > 0 || NEXT_STEP_SIGNS.test(b) || !!String(nextStep || '').trim(),
-    oneQuestion: questions <= 1,
-    length: channel === 'marketplace' ? n > 0 && n <= 40 : firstReply ? n >= 12 && n <= 45 : n >= 4 && n <= 40,
-    proof: !(situations.includes('history_kms') || situations.includes('photos_video') || far) || /auction sheet|export certificate|walkaround|video|photos?|odometer history|ppsr/i.test(b),
-    noFiller: !FILLER.test(b),
-    noUrgency: !URGENCY.test(b) && (!STAYS_FOR_SALE.test(b) || rung === 'commit'),
+    nextStep: /\?/.test(b) || findUrls(b).length > 0 || NEXT_STEP_SIGNS.test(b) || !!String(nextStep || '').trim() || !!(due && (due.priceGiven || due.inviteGiven)),
+    // No question is right unless one was needed; one question is right unless none was.
+    questionOnlyWhenNeeded: questions === 0 ? needed !== true : questions === 1 && needed !== false,
+    length: channel === 'marketplace' ? n > 0 && n <= 45 : channel === 'email' ? n > 0 && n <= 180 : firstReply ? n >= 12 && n <= 70 : n >= 4 && n <= 50,
+    register: !SLANG.test(b) && !SERVILE.test(b) && !hasEmoji(b) && (b.match(/!/g) || []).length <= 1,
+    noUrgency: !URGENCY.test(b) && !CLAIM.test(b) && (!STAYS_FOR_SALE.test(b) || rung === 'commit'),
+    dueBlocks: (!due?.price || !!due.priceGiven) && (!due?.invite || !!due.inviteGiven) && (!proofDue || /auction sheet|export certificate|walkaround|video|photos?|odometer history|ppsr/i.test(b)),
   };
   const notes = Object.entries(parts).filter(([, ok]) => !ok).map(([k]) => ({
-    nextStep: 'no next step', oneQuestion: 'more than one question', length: 'outside the length band', proof: 'proof not offered', noFiller: 'filler', noUrgency: 'urgency',
+    nextStep: 'no next step', questionOnlyWhenNeeded: 'a question that was not needed, or a needed one missing', length: 'outside the length band',
+    register: 'informal or apologetic wording', noUrgency: 'urgency or a claim', dueBlocks: 'a due block or proof missing',
   }[k]));
   return { score: Object.values(parts).filter(Boolean).length, parts, notes };
 }

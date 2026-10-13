@@ -7,17 +7,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 
-let cache = { mtime: 0, parts: [] };
+let cache = { file: '', mtime: 0, parts: [] };
 
 /** The parts of the block, from the file. Read again whenever the file changes. */
 function parts() {
   const file = path.join(config.voiceDir, 'first-reply.md');
   let stat;
   try { stat = fs.statSync(file); } catch { return []; }
-  if (stat.mtimeMs !== cache.mtime) {
+  if (file !== cache.file || stat.mtimeMs !== cache.mtime) {
     const text = fs.readFileSync(file, 'utf8').replace(/^﻿/, '').replace(/\r/g, '');
     const body = text.split('\n').filter((line) => !line.startsWith('#')).join('\n');
-    cache = { mtime: stat.mtimeMs, parts: body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean) };
+    cache = { file, mtime: stat.mtimeMs, parts: body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean) };
   }
   return cache.parts;
 }

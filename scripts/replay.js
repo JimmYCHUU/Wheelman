@@ -13,11 +13,11 @@ import { displayOfVoice } from '../src/people.js';
 import path from 'node:path';
 import { config } from '../src/config.js';
 import { openDb, closeDb } from '../src/db.js';
-import { buildItem, finishItem } from '../src/items.js';
-import { attribute, cleanForExample, buildFrequencyIndex, stripSignature, stripLocationBlock } from '../src/voice.js';
+import { buildItem } from '../src/items.js';
+import { collectCases, spread, itemAt } from '../src/replaycases.js';
 import { draftFor } from '../src/drafter.js';
 import { comparable } from '../src/learn.js';
-import { isAcknowledgement, similarity, wordCount } from '../src/text.js';
+import { similarity, wordCount } from '../src/text.js';
 import { providers } from '../src/llm.js';
 import { worst } from '../src/checks.js';
 import { formatSydney } from '../src/time.js';
@@ -33,57 +33,9 @@ if (!providers().length) {
 }
 
 const db = openDb();
-const isFrequentTemplate = buildFrequencyIndex(db.prepare("SELECT conversation_id, body FROM messages WHERE direction = 'OUT'").all());
-
-/**
- * The conversation as it stood just before our reply at position `cut`, judged as it would have
- * been at that moment: who was waiting, whether they were already a buyer, which car.
- */
-const itemAt = (full, cut, at) => finishItem({
-  itemKey: full.itemKey, channel: 'sms', lead: full.lead, hasLeadRecord: full.hasLeadRecord,
-  conversation: full.conversation, conversationId: full.conversationId, phone: full.phone,
-}, full.timeline.slice(0, cut), { now: at });
-
-// 1. Collect candidate cases: a customer message followed by a genuine reply from one of the voices.
-const cases = [];
-for (const conv of db.prepare('SELECT id FROM conversations ORDER BY latest_at DESC').all()) {
-  const full = buildItem({ conversationId: conv.id });
-  if (!full) continue;
-  const t = full.timeline;
-  for (let i = 1; i < t.length; i++) {
-    const e = t[i];
-    if (e.who !== 'us' || e.internal) continue;
-    if (t[i - 1].who !== 'customer') continue;
-    const author = attribute(e.by, e.text);
-    // The standard first reply is often nothing but "Hello," and the block, so for --first the
-    // reply does not have to be a clean example of someone's own writing.
-    if (only !== 'first') {
-      if (!author) continue;
-      if (!cleanForExample({ body: e.text, conversation_id: conv.id }, isFrequentTemplate).body) continue;
-    }
-    const pending = [];
-    for (let k = i - 1; k >= 0 && t[k].who === 'customer'; k--) pending.unshift(t[k]);
-    const text = pending.map((p) => p.text).filter(Boolean).join('\n');
-    if (!text || pending.every((p) => !p.text || isAcknowledgement(p.text))) continue;
-    const item = itemAt(full, i, e.at);
-    if (item.state !== 'awaiting') continue;
-    if (only === 'buyers' && !item.deal) continue;
-    if (only === 'first' && !item.isNewEnquiry) break; // only the very first reply can qualify
-    // Their whole answer may span two or three texts sent within minutes.
-    const actual = [];
-    for (let k = i; k < t.length && t[k].who === 'us' && !t[k].internal && t[k].at - e.at < 15 * 60 * 1000; k++) actual.push(only === 'first' ? stripSignature(t[k].text) : stripSignature(stripLocationBlock(t[k].text)));
-    cases.push({ conversationId: conv.id, cut: i, author, actual: actual.filter(Boolean).join('\n'), situation: item.situation.primary, at: e.at });
-    break; // one case per conversation keeps the sample varied
-  }
-}
-
-// 2. Spread the sample across situations.
-const bySituation = new Map();
-for (const c of cases) { if (!bySituation.has(c.situation)) bySituation.set(c.situation, []); bySituation.get(c.situation).push(c); }
-const sample = [];
-while (sample.length < wanted && [...bySituation.values()].some((a) => a.length)) {
-  for (const arr of bySituation.values()) { if (arr.length && sample.length < wanted) sample.push(arr.shift()); }
-}
+// 1. The candidate cases, spread across situations so the sample is varied.
+const cases = collectCases(db, { only });
+const sample = spread(cases, wanted);
 console.log(`Found ${cases.length} usable past exchanges. Testing ${sample.length}.\n`);
 
 // 3. Draft each one as if the real answer had not been written yet.
@@ -95,7 +47,7 @@ for (const [n, c] of sample.entries()) {
   // Draft as if it were the moment they replied, so the time of day matches.
   const d = await draftFor(item, { save: false, holdOutConversation: true, now: c.at });
   const level = d.status === 'ready' ? worst(d.checks) : 'error';
-  // Does the suggestion do what a selling reply does: a next step, one question at most, the right length, proof where it matters, no filler, no urgency.
+  // Does the suggestion do what a selling reply does: a next step, a question only when needed, the right length, the brand register, no urgency, the block or proof that was due.
   const score = d.reply ? salesScore({ body: comparable(d.reply), nextStep: d.nextStep, rung: d.rung, situations: item.situation.all, channel: 'sms', farAway: farAway(item.pendingText, item.lead?.state).far, firstReply: item.isNewEnquiry }) : { score: 0, parts: {}, notes: ['no reply'] };
   const theirs = salesScore({ body: comparable(c.actual), rung: d.rung, situations: item.situation.all, channel: 'sms', farAway: farAway(item.pendingText, item.lead?.state).far, firstReply: item.isNewEnquiry });
   console.log(`${level}  sells ${score.score}/6${score.notes.length ? ` (${score.notes.join(', ')})` : ''}`);
@@ -117,8 +69,8 @@ const summary = {
   salesScoreOurs: done.length ? Math.round((done.reduce((s, r) => s + r.score.score, 0) / done.length) * 10) / 10 : 0,
   salesScoreTheirs: done.length ? Math.round((done.reduce((s, r) => s + r.theirs.score, 0) / done.length) * 10) / 10 : 0,
   withNextStep: done.filter((r) => r.score.parts.nextStep).length,
-  oneQuestionOrFewer: done.filter((r) => r.score.parts.oneQuestion).length,
-  noFiller: done.filter((r) => r.score.parts.noFiller).length,
+  questionOnlyWhenNeeded: done.filter((r) => r.score.parts.questionOnlyWhenNeeded).length,
+  brandRegister: done.filter((r) => r.score.parts.register).length,
   urgencyOutsideCommit: done.filter((r) => !r.score.parts.noUrgency).length,
 };
 

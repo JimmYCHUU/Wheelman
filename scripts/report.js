@@ -103,15 +103,16 @@ console.log(`  Suggestions ending with the standard address block: ${block} of $
 const learned = db.prepare('SELECT COUNT(*) AS n FROM learned WHERE at >= ?').get(since).n;
 console.log(`  Replies you changed that Wheelman learned from: ${learned}.\n`);
 
-// Does each suggestion do what a selling reply does: a next step, one question at most, the right
-// length, proof where it matters, no filler, no urgency outside the commit rung. Out of six.
+// Does each suggestion do what a selling reply does: a next step, a question only when needed, the
+// right length, the brand register, no urgency outside the commit rung, the block or proof that
+// was due. Out of six.
 console.log('SELLING (dashboard)');
 const scored = ready.map((d) => ({ d, s: salesScore({ body: comparable(d.reply), nextStep: d.next_step, rung: d.rung, situations: d.context?.situations || [], channel: 'sms', firstReply: !!d.context?.newEnquiry }) }));
 if (!scored.length) console.log('  No suggestions yet.');
 else {
   const mean = scored.reduce((t, x) => t + x.s.score, 0) / scored.length;
   console.log(`  Sales score: ${Math.round(mean * 10) / 10} out of 6 on average over ${count(scored.length, 'suggestion')}.`);
-  const PARTS = { nextStep: 'offer a next step', oneQuestion: 'ask one question at most', length: 'are the right length', proof: 'offer proof where it matters', noFiller: 'have no filler', noUrgency: 'have no urgency where it should not be' };
+  const PARTS = { nextStep: 'offer a next step', questionOnlyWhenNeeded: 'ask a question only when one is needed', length: 'are the right length', register: 'keep the brand register', noUrgency: 'have no urgency where it should not be', dueBlocks: 'carry the block or the proof that was due' };
   for (const [k, label] of Object.entries(PARTS)) { const n = scored.filter((x) => x.s.parts[k]).length; line('  ', pad(label, 42), num(`${n} of ${scored.length}`, 12), num(pct(n, scored.length), 6)); }
   const rungs = new Map();
   for (const { d } of scored) { const r = d.rung || '(not recorded)'; rungs.set(r, (rungs.get(r) || 0) + 1); }
