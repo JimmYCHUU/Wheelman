@@ -128,10 +128,25 @@ const FAR_AWAY = new RegExp([
  * source 'record': only their lead record says another state. That is a hint for which link to
  * offer; a reply must never say or imply where the customer lives on that basis.
  */
-export function farAway(customerText, leadState = '') {
+/**
+ * A postcode outside Greater Sydney (Sydney and its suburbs, the Macarthur region, Penrith and the
+ * Blue Mountains). A box number (1000 to 1999) says nothing about where someone lives.
+ */
+export function farPostcode(postcode) {
+  const n = Number(String(postcode || '').trim());
+  if (!Number.isFinite(n) || n < 200 || (n >= 1000 && n <= 1999)) return false;
+  return !((n >= 2000 && n <= 2249) || (n >= 2555 && n <= 2574) || (n >= 2740 && n <= 2786));
+}
+
+/**
+ * Whether the customer is far from Sydney: 'said' when they wrote it themselves, 'record' when only
+ * their lead record (the state, or the postcode) suggests it. A record is a hint, never a statement.
+ */
+export function farAway(customerText, leadState = '', postcode = '') {
   if (FAR_AWAY.test(String(customerText || ''))) return { far: true, source: 'said' };
   const state = String(leadState || '').trim();
   if (state && !/^(nsw|new south wales)$/i.test(state)) return { far: true, source: 'record' };
+  if (farPostcode(postcode)) return { far: true, source: 'record' };
   return { far: false, source: null };
 }
 

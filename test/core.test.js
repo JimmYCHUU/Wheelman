@@ -8,7 +8,8 @@ applyTestEnv(); // invented names and keys, the same on every computer
 const { parseDashboardTime, formatSydney } = await import('../src/time.js');
 const { redact, restore, firstNameOf, leftoverPlaceholders } = await import('../src/redact.js');
 const { isAcknowledgement, isOptOut, isReaction, menuReply, readInquiry, resolveStock, stockFromUrl, unwrapRelay, similarity } = await import('../src/text.js');
-const { classify } = await import('../src/situations.js');
+const { classify, farAway, farPostcode } = await import('../src/situations.js');
+const { vehicleFacts, descriptionFor } = await import('../src/knowledge.js');
 const checksModule = await import('../src/checks.js');
 const { checkDraft, finishReply, stripModelSignOff, numbersIn, worst } = checksModule;
 const { attribute, stripSignature, stripLocationBlock, looksMachineWritten, maskGreetingNames } = await import('../src/voice.js');
@@ -459,4 +460,38 @@ test('placeholder names from portals are recognised', async () => {
 test('short sign-offs about timing need no reply', () => {
   for (const s of ['Ok great. See u this morning.', 'See you this arvo', 'Thanks, talk later', 'Ok see you at 10'])
     assert.equal(isAcknowledgement(s), true, s);
+});
+
+test('vehicle facts: the register answers as the dashboard records them, the cylinders, and the listing trimmed to its facts', () => {
+  const raw = { id: 1, stockNo: '1159', title: '2021 Toyota Noah X', year: '2021', make: 'TOYOTA', model: 'Noah', modelCode: 'ZRR80G', auPublishPrice: 28900, odometer: 62733, cylinders: 4, engineCc: 2000, status: 'PUBLISHED', soldStatus: 'UnSold', stockIn: 'Online',
+    writtenOff: 'no', waterDamage: 'no', majorRepairs: 'yes', ppsrClear: 'yes', numberOfPreviousOwner: 1, firstRegistrationDate: '2021-03',
+    description: 'Immaculate condition 🚗 and accident free! Hurry, selling fast. Eight seats with dual sliding doors. Serviced on arrival. Ring Dave on 0412 345 678 today. ' + 'A long sentence about the trim and the wheels follows here to fill out the space. '.repeat(12) };
+  const v = normalizeVehicle(raw);
+  const facts = vehicleFacts(v);
+  assert.match(facts, /\nPPSR: clear\n/);
+  assert.match(facts, /\nWritten-off register: not recorded as written off\n/);
+  assert.match(facts, /\nWater damage: none recorded\n/);
+  assert.match(facts, /\nMajor repairs: recorded\. Name this before they ask\.\n/);
+  assert.match(facts, /\nEngine: 2000 cc, 4 cylinders\n/);
+  assert.match(facts, /\nPrevious owners: 1\n/);
+  assert.match(facts, /\nFirst registered \(Japan\): 2021-03\n/);
+  const listing = facts.split('\n').find((l) => l.startsWith('From the listing'));
+  assert.ok(listing, facts);
+  assert.match(listing, /Eight seats with dual sliding doors\. Serviced on arrival\./);
+  assert.ok(!/Immaculate|accident free|selling fast|🚗|0412|Dave|\[PHONE\]/.test(listing), listing);
+  assert.ok(descriptionFor(v).length <= 600 && /\.$/.test(descriptionFor(v)), 'cut at a sentence end');
+  assert.ok(!vehicleFacts(normalizeVehicle({ ...raw, soldStatus: 'Sold', stockIn: 'Sold' })).includes('From the listing'), 'a sold car gets no description');
+  const bad = vehicleFacts(normalizeVehicle({ ...raw, writtenOff: true, waterDamage: 'Yes', majorRepairs: false }));
+  assert.match(bad, /Written-off register: recorded as written off\. Name this before they ask\./);
+  assert.match(bad, /Water damage: recorded\. Name this before they ask\./);
+  assert.match(bad, /Major repairs: none recorded/);
+  assert.ok(!/Written-off register|Water damage|Major repairs/.test(vehicleFacts(normalizeVehicle({ ...raw, writtenOff: null, waterDamage: undefined, majorRepairs: '' }))), 'nothing recorded, nothing said');
+});
+
+test('a postcode outside Greater Sydney is a far-away hint from the record; a box number or a Sydney postcode is not', () => {
+  assert.deepEqual([farPostcode('2650'), farPostcode('4350'), farPostcode('0870'), farPostcode('2600')], [true, true, true, true]);
+  assert.deepEqual([farPostcode('2141'), farPostcode('2560'), farPostcode('2750'), farPostcode('2780'), farPostcode('1235'), farPostcode(''), farPostcode('abcd')], [false, false, false, false, false, false, false]);
+  assert.deepEqual(farAway('', 'NSW', '2650'), { far: true, source: 'record' });
+  assert.deepEqual(farAway('', 'NSW', '2141'), { far: false, source: null });
+  assert.deepEqual(farAway('I am in Brisbane', 'NSW', '2141'), { far: true, source: 'said' });
 });

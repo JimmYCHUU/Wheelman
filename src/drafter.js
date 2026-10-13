@@ -326,6 +326,7 @@ async function writeDraft(item, { instruction = '', coaching = null, save = true
     const prompt = buildPrompt(item, { instruction, coaching, importPlan: plan, research, holdOutConversation, now });
     // Where the customer was on the way to a sale, and the move asked for, so the report can read it later.
     context.rung = prompt.stage?.rung || null;
+    context.insider = prompt.insider || [];
     context.move = prompt.stage?.move || null;
     // How many of the team's own replies (texts, or past emails) the request showed, so the page can say.
     context.practice = (prompt.practiceIds || []).length;

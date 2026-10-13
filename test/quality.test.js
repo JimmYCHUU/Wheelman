@@ -313,3 +313,52 @@ test('lessons learned before the voice changed are read for content only: price 
   assert.equal(learn.markVoiceCutover(2000), 1000, 'and never moved');
   db.setMeta('voice_cutover_at', null);
 });
+
+test('what the dashboard knows about a customer is kept by shape, shapes the request, and is never said to them', async () => {
+  const { insiderFacts, sourceLine } = await import('../src/insider.js');
+  const checks = await import('../src/checks.js');
+  const prompt = await import('../src/prompt.js');
+  const raw = { id: 31, conversationId: 131, customerFirstName: 'Kim', customerLastName: 'Test', customerPhone: '0491 570 131', customerEmail: '', leadSourceDto: { leadSource: 'Carsales' }, leadStatus: 'NEW', platform: 'CARSALES', stocks: ['1159'], statusHistory: [],
+    leadScore: 6, utmSource: 'carsales.com.au', utmMedium: 'referral', utmCampaign: 'spring',
+    others: JSON.stringify({ stateShortName: 'NSW', postcode: '2650', customerType: 'Individual', leadCount: 3, otherLeads: [{ dealerName: 'Other Dealer Pty Ltd', lead: 'their notes' }], mobilePhone: '0491 570 131' }),
+    inquiries: [{ id: 311, inquiryType: 'Carsales', customerQuerySubject: 'Vehicle enquiry', customerQuery: 'Is the Noah available?', stockNo: '1159', status: 'NEW', comments: [], canonicalUrl: '', financeStatus: 'REJECTED', weeklyRepaymentAtTime: 189.5, stockStatus: 'reserved', videoViewed: true }] };
+  const lead = normalize.normalizeLead(raw);
+  assert.deepEqual(lead.signals, { leadScore: 6, utmSource: 'carsales.com.au', utmMedium: 'referral', utmCampaign: 'spring', customerType: 'Individual', otherLeadCount: 3, postcode: '2650' });
+  assert.ok(!JSON.stringify(lead).includes('Other Dealer') && !JSON.stringify(lead).includes('their notes'), "other dealers' data is dropped at intake");
+  assert.deepEqual([lead.inquiries[0].financeStatus, lead.inquiries[0].weeklyRepayment, lead.inquiries[0].stockStatus, lead.inquiries[0].videoViewed], ['REJECTED', 189.5, 'reserved', true]);
+  assert.deepEqual(normalize.normalizeLead({ id: 32, others: '', inquiries: [] }).signals, { leadScore: null, utmSource: '', utmMedium: '', utmCampaign: '', customerType: '', otherLeadCount: null, postcode: '' });
+  db.upsertLead({ ...lead, leadAt: now - HOUR, updatedAt: now - HOUR });
+  assert.deepEqual(db.getLead(31).signals, lead.signals, 'kept with the lead');
+  db.upsertVehicle(normalize.normalizeVehicle({ id: 1, stockNo: '1159', year: '2021', title: '2021 Toyota Noah X (8 Seater)', make: 'TOYOTA', model: 'Noah', modelCode: 'ZRR80G', auPublishPrice: 28900, odometer: 62733, status: 'PUBLISHED', soldStatus: 'UnSold', stockIn: 'Online' }));
+  conv(131, 31, 'Kim Test');
+  msg(131, 'IN', 'Is the Noah available?', 10 * MIN);
+  const it = item(131);
+  const read = insiderFacts(it);
+  assert.deepEqual(read.labels, ['engagement score', 'finance status', 'repayment viewed', 'stock status at enquiry', 'video viewed', 'source', 'comparing on Carsales']);
+  assert.equal(read.video, true);
+  assert.ok(read.lines.every((l) => !/\d/.test(l) && !/Kim|Other Dealer/.test(l)), read.lines.join(' | '));
+  assert.deepEqual([sourceLine('fb marketplace'), sourceLine('meta ads'), sourceLine('googleads'), sourceLine('www.google.com'), sourceLine('www.carbarn.com.au'), sourceLine('d')],
+    ['They came to us from our Facebook Marketplace listing.', 'They came to us from a Facebook or Instagram advertisement.', 'They came to us from an online advertisement.', 'They came to us from a web search.', 'They came to our website directly.', '']);
+  const built = prompt.buildPrompt(it, { now });
+  assert.match(built.user, /Shape the reply by these, never state them: Our dashboard scores their engagement as high\. A finance application was declined\./);
+  assert.match(built.user, /Never mention a score, a status, where they came from, other dealers, or a finance decision\./);
+  assert.match(built.user, /We have already offered a video: do not offer it again/);
+  assert.ok(!/2650|Other Dealer|leadCount|spring|189/.test(built.user), 'no value, name or postcode reaches the AI');
+  assert.deepEqual(built.insider, read.labels);
+  // The postcode is far from Sydney: when they ask to see the car, the online link is offered as an option.
+  msg(131, 'IN', 'Can I come and see it?', 5 * MIN);
+  const plan = prompt.inspectionPlan(item(131));
+  assert.ok(plan.lines.some((l) => /They may not be near Sydney/.test(l)), JSON.stringify(plan.lines));
+  assert.ok(!JSON.stringify(plan.lines).includes('2650'));
+  // A reply that says what the records show is sent back, unless the customer said it first.
+  const codes = (body, customerText = '') => checks.checkDraft({ reply: body, body, allowedText: 'Vehicle: 2021 Toyota Noah X.', customerText }).map((c) => `${c.level}:${c.code}`);
+  assert.ok(codes('Your finance application was declined, so a cash purchase would suit.').includes('fail:insider-leak'));
+  assert.ok(codes('We can see you came to us from Carsales and have been looking at other dealers.').includes('fail:insider-leak'));
+  assert.ok(codes('We noticed you have watched the video.').includes('fail:insider-leak'));
+  assert.ok(!codes('Finance was approved, so the next step is the inspection.', 'My finance got approved yesterday').includes('fail:insider-leak'), 'what the customer said themselves may be repeated');
+  assert.ok(!codes('The Noah is available for inspection at our Lidcombe showroom.').includes('fail:insider-leak'));
+  assert.match(checks.retryNote(checks.checkDraft({ reply: 'Your finance application was declined.', body: 'Your finance application was declined.', allowedText: '' })), /Never tell the customer what our records show/);
+  // A buyer, an order and an email get no insider lines: their replies have their own plans.
+  assert.deepEqual(insiderFacts({ ...it, deal: { source: 'lead_status' } }).lines, []);
+  assert.deepEqual(insiderFacts({ ...it, channel: 'email' }).lines, []);
+});

@@ -1149,6 +1149,8 @@ function renderInfo() {
         d.factsUsed.length ? h('ul', { class: 'facts' }, d.factsUsed.map((f) => h('li', { text: f }))) : h('p', { class: 'fine', text: 'No particular facts were listed.' }),
         // The team's own replies the request showed: the suggestion was written with them in view.
         d.practiceUsed ? h('p', { class: 'fine', text: item.channel === 'email' ? `Written with ${plural(d.practiceUsed, 'past import email')} the team answered in view.` : `Written with ${plural(d.practiceUsed, 'reply', 'replies')} the team sent to customers who asked something similar in view, whoever sent them.` }) : null,
+        // What our own records say about the customer that shaped the reply and is never said to them.
+        d.insiderUsed?.length ? h('p', { class: 'fine', text: `Shaped by what our records show, never stated: ${d.insiderUsed.join(', ')}.` }) : null,
         h('p', { class: 'fine', text: d.provider === 'none' ? `Written from ${d.model || 'your wording'} at ${clock(d.createdAt)}, with no AI.${d.instruction ? ` What you added: “${d.instruction}”.` : ''}` : `Written by ${d.model || 'the AI model'} at ${clock(d.createdAt)}.${d.instruction ? ` Your instruction: “${d.instruction}”.` : ''}` })) : null,
       item.standard ? h('section', {},
         h('h4', { text: 'Model reply' }),

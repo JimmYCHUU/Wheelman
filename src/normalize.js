@@ -36,10 +36,33 @@ export function phoneKeys(...values) {
   return [...out];
 }
 
-export function normalizeLead(raw) {
-  let state = '';
-  try { state = raw.others ? JSON.parse(raw.others).stateShortName || '' : ''; } catch { /* not JSON */ }
+/**
+ * The dashboard's own reading of a lead: how engaged, where they came from, how many other cars
+ * they enquired about on Carsales, their postcode. Shape only: the "otherLeads" array (other
+ * dealers' data about the customer) and everything else in "others" is dropped here and never
+ * stored. What the AI is told from these is in insider.js; none of it is ever stated to the customer.
+ */
+export function leadSignals(raw, others = {}) {
+  const score = Number(raw.leadScore);
+  const count = Number(others.leadCount);
+  const postcode = clean(others.postcode);
   return {
+    leadScore: raw.leadScore !== null && raw.leadScore !== undefined && raw.leadScore !== '' && Number.isFinite(score) ? score : null,
+    utmSource: clean(raw.utmSource).toLowerCase(),
+    utmMedium: clean(raw.utmMedium).toLowerCase(),
+    utmCampaign: clean(raw.utmCampaign),
+    customerType: clean(others.customerType),
+    otherLeadCount: others.leadCount !== null && others.leadCount !== undefined && others.leadCount !== '' && Number.isFinite(count) ? count : null,
+    postcode: /^\d{4}$/.test(postcode) ? postcode : '',
+  };
+}
+
+export function normalizeLead(raw) {
+  let others = {};
+  try { others = (raw.others ? JSON.parse(raw.others) : null) || {}; } catch { /* not JSON */ }
+  const state = clean(others.stateShortName);
+  return {
+    signals: leadSignals(raw, others),
     // Every stage this lead has been through, oldest first. Who changed it is not kept.
     statusHistory: (Array.isArray(raw.statusHistory) ? raw.statusHistory : [])
       .map((h) => ({ status: clean(h?.status), at: parseDashboardTime(h?.time) }))
@@ -72,6 +95,14 @@ export function normalizeLead(raw) {
       depositAmount: i.dipositAmount ?? null,
       years: i.durationInYears ?? null,
       staffNotes: (i.comments || []).map((c) => ({ by: clean(c.commentedBy), text: clean(c.content), at: parseDashboardTime(c.createdAt) })),
+      // The dashboard's notes on this enquiry: the finance decision, whether a repayment figure was
+      // shown, whether the car was reserved at the time, whether the video was watched (insider.js).
+      financeStatus: clean(i.financeStatus).toUpperCase() || null,
+      weeklyRepayment: i.weeklyRepaymentAtTime ?? null,
+      stockStatus: clean(i.stockStatus).toLowerCase() || null,
+      actionType: clean(i.actionType) || null,
+      sourceBlock: clean(i.sourceBlock) || null,
+      videoViewed: i.videoViewed === true || i.videoViewed === 1 || /^(true|1|yes)$/i.test(String(i.videoViewed ?? '')),
     })),
   };
 }

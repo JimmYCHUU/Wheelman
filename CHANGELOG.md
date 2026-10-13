@@ -6,6 +6,20 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- **The whole vehicle record, and what the dashboard knows about the customer.** The vehicle
+  facts the AI reads now carry the written-off register answer (the dashboard's "no" was being
+  dropped), water damage and major repairs, the cylinders, previous owners, the first registration
+  and the listing description trimmed to its facts (emoji, claims, urgency and contact lines out).
+  "Not recorded as written off" is the register's answer and is never written as "accident-free".
+  The lead's own signals come through intake by shape: the engagement score, a finance decision,
+  how they found us, whether the video was watched, whether the car was reserved when they asked,
+  how many other cars they asked about on Carsales, and the postcode. Other dealers' data about
+  the customer is dropped at intake and never stored. The request tells the AI what these mean
+  ("a finance application was declined: do not raise finance") and never a number, a name or a
+  postcode; a reply that mentions a score, a status, a source, other dealers or a finance decision
+  fails the new `insider-leak` check and is written again. The details panel lists which of these
+  shaped a suggestion. A postcode outside Greater Sydney makes the online video inspection link an
+  option, as a record in another state already did.
 - **The price reply and the inspection invitation, in the owner's words, added by code.** When
   a customer asks for the best price, a discount, or makes an offer, the standard price reply
   from `voice/price-reply.md` goes under the AI's lines: what the price includes, built from

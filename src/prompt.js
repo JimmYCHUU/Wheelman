@@ -18,6 +18,7 @@ import { blockCarries } from './firstreply.js';
 import { labelAddress } from './address.js';
 import { allVehicles } from './db.js';
 import { saleStage, stageLines } from './selling.js';
+import { insiderFacts } from './insider.js';
 import { modelReplies } from './modelreplies.js';
 import { renderResearch } from './importquery.js';
 import { mailPracticeFor } from './mailpractice.js';
@@ -70,6 +71,7 @@ ${read('sales-playbook.md')}
 
 ${chat ? MARKETPLACE_RULES : email ? EMAIL_RULES : ''}=== WHERE FACTS COME FROM ===
 - Facts about a vehicle come only from the section VEHICLE FACTS.
+- "Not recorded as written off" means the Australian written-off vehicle register has no entry for it. Say "not written off" or "not on the written-off register", never "accident-free", "no accidents" or "never been in an accident", about any vehicle. The listing description is ours: take facts from it, never its tone or its claims.
 - Facts about how the business works come only from BUSINESS FACTS, HOW CARBARN WORKS and WEBSITE EXTRACTS. Where they differ, BUSINESS FACTS wins.
 - Anything the customer or our staff already said in the conversation may be referred to.
 - The examples show content, never wording: what our team chose to say, offer and leave out. The register for every reply is set under VOICE. Every figure, date, car and promise inside an example belongs to a different deal and must not be reused.
@@ -269,7 +271,7 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
   if (item.deal) return none; // a buyer is not asking to inspect a car on offer
   const said = item.timeline.filter((e) => e.who === 'customer').slice(-8).map((e) => `${e.text || ''} ${e.event || ''}`).join('\n');
   // 'said': the customer wrote that they are far away. 'record': only their lead record says so.
-  const where = farAway(said, item.lead?.state);
+  const where = farAway(said, item.lead?.state, item.lead?.signals?.postcode);
   const saidFar = where.far && where.source === 'said';
 
   const asksNow = item.situation.all.includes('inspection_booking');
@@ -342,7 +344,7 @@ export function pricePlan(item, vehicle = item.vehicles[0], { gone = false, owne
   if (a.code === 'sold') return off;
   const canInspect = a.code === 'available' && !reservedByAnother(vehicle);
   const said = item.timeline.filter((e) => e.who === 'customer').slice(-8).map((e) => `${e.text || ''} ${e.event || ''}`).join('\n');
-  const where = farAway(said, item.lead?.state);
+  const where = farAway(said, item.lead?.state, item.lead?.signals?.postcode);
   const online = where.far && where.source === 'said';
   const links = inspectionLinks(vehicle);
   return {
@@ -425,7 +427,9 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   const primaryGone = primary && !primaryOpts.owner && (availability(primary).code === 'sold' || primaryOpts.reserved);
   const alts = primaryGone && !deal ? alternatives(primary, allVehicles()) : [];
   // Where this customer is on the way to a sale, and the one move the reply should make.
-  const stage = importPlan || item.order || email ? null : saleStage(item, { now });
+  // What our records say about this customer shapes the move and is never stated (insider.js).
+  const insider = importPlan || item.order || email ? { lines: [], labels: [], video: false } : insiderFacts(item);
+  const stage = importPlan || item.order || email ? null : saleStage(item, { now, videoViewed: insider.video });
 
   // An auction order's amounts never go to the AI: wherever one appears it is replaced by its marker.
   const mask = importPlan?.mask || ((t) => t);
@@ -535,6 +539,10 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   if (stage) {
     P.push("\n=== THIS CUSTOMER'S NEXT STEP ===");
     P.push(stageLines(stage).join('\n'));
+    if (insider.lines.length) {
+      P.push(`Shape the reply by these, never state them: ${insider.lines.join(' ')}`);
+      P.push('These are from our own records, not from the customer. Never mention a score, a status, where they came from, other dealers, or a finance decision.');
+    }
   }
 
   // An import enquiry has its own closing lines, added by the drafter, in place of the standard block.
@@ -712,6 +720,8 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   P.push(`\nWrite the reply now as the JSON object described.${owner.lessons.length ? ' Before you answer, check it against each of the owner\'s lessons above.' : ''}`);
   return {
     system: systemPrompt(item.channel),
+    // Which of our records' notes on the customer shaped the request: labels only, for the details panel.
+    insider: insider.labels,
     unconfirmedText,
     inspection,
     standard,

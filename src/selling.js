@@ -148,7 +148,7 @@ export const NEXT_STEP_SIGNS = /\b(welcome to|come (in|and|by|down|over|past|thr
  * @returns {null|{ rung, label, aim, move, moveText, question, signals, told, allowsUrgency, far, channel }}
  *   null for an auction order or an import enquiry: those replies have their own plan.
  */
-export function saleStage(item, { now = Date.now() } = {}) {
+export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) {
   // An import email has its own plan (the research), not the sales ladder.
   if (!item || item.order || item.imports || item.channel === 'email') return null;
   const sit = item.situation?.all || [];
@@ -159,12 +159,13 @@ export function saleStage(item, { now = Date.now() } = {}) {
   const ours = (e) => e.who === 'us' && !e.internal && !e.auto && e.text;
   const customer = t.filter((e) => e.who === 'customer' && e.text);
   const said = customer.slice(-8).map((e) => `${e.text} ${e.event || ''}`).join('\n');
-  const far = farAway(said, item.lead?.state);
+  const far = farAway(said, item.lead?.state, item.lead?.signals?.postcode);
 
   const told = {
     deposit: t.some((e) => ours(e) && /\bdeposit\b/i.test(e.text)),
     links: t.some((e) => ours(e) && /#inspection=/.test(e.text)),
-    video: t.some((e) => ours(e) && /\b(video|walkaround)\b/i.test(e.text)),
+    // Offered by us earlier, or watched on the website (the dashboard records that; insider.js).
+    video: t.some((e) => ours(e) && /\b(video|walkaround)\b/i.test(e.text)) || !!videoViewed,
     invited: t.some((e) => ours(e) && /welcome to (come|visit|inspect)|come (in|and see|down|by)/i.test(e.text)),
   };
 
