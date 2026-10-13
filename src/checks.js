@@ -8,7 +8,7 @@ import { sydneyHour } from './time.js';
 import { promiseChecks } from './promises.js';
 import { FILLER, URGENCY, STAYS_FOR_SALE, CLAIM, NEXT_STEP_SIGNS } from './selling.js';
 
-export const MARKERS = ['[PRICE?]', '[TRADE-IN VALUE?]', '[DELIVERY COST?]', '[DATE?]', '[CHECK?]', '[DEPOSIT LINK?]'];
+export const MARKERS = ['[PRICE?]', '[TRADE-IN VALUE?]', '[DELIVERY COST?]', '[DATE?]', '[CHECK?]', '[DEPOSIT LINK?]', '[ELIGIBILITY?]', '[LANDED COST?]', '[DEPOSIT?]', '[TIMELINE?]'];
 // A blank is any short label in capitals with a question mark, in square brackets: [PRICE?], [SOLD PRICE?].
 // The page (web/app.js) uses the same pattern to highlight them.
 // One definition of a blank, shared with the page's editor.
@@ -240,6 +240,11 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
 
   const words = wordCount(String(body).replace(/https?:\/\/\S+/g, ''));
   if (channel === 'marketplace') { if (words > 40) add('warn', 'long', `Long for a Marketplace chat (${words} words). One or two short lines is usual.`); }
+  else if (channel === 'email') {
+    // An email has room, and a cost breakdown (one line per part) may run longer still.
+    const breakdown = (String(body).match(/^.*\$\d[\d,]*/gm) || []).length >= 4;
+    if (words > (breakdown ? 320 : 220)) add('warn', 'long', `Long for an email (${words} words). Up to about 180 is usual; a cost breakdown may run longer.`);
+  }
   else if (words > 110) add('warn', 'long', `Long for a text message (${words} words).`);
   else if (inConversation && words > 60) add('warn', 'long', `Longer than your team usually writes mid-conversation (${words} words).`);
 
@@ -285,17 +290,64 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
 export const worst = (checks) => (checks.some((c) => c.level === 'fail') ? 'fail' : checks.some((c) => c.level === 'input') ? 'input' : checks.some((c) => c.level === 'warn') ? 'warn' : 'ok');
 
 /** Feedback handed back to the model for one retry. */
-export function retryNote(checks) {
+export function retryNote(checks, { channel = 'sms' } = {}) {
   const fails = checks.filter((c) => c.level === 'fail');
   if (!fails.length) return '';
+  const email = channel === 'email';
   return 'Your previous draft was rejected for these reasons:\n'
     + fails.map((c) => `- ${c.message}`).join('\n')
     + '\nWrite it again, in your own words for this customer. Use only figures and links that appear in the supplied material. A dollar amount that only the customer mentioned is their figure, not ours: do not state or accept it. Where a figure is not supplied, use the matching marker such as [PRICE?], [DELIVERY COST?], [DATE?] or [CHECK?].'
-    + (fails.some((c) => TIME_CODES.has(c.code)) ? '\nDo not swap one day or time for another. Where the day or time of something we will do is not given by our staff, write "shortly" or use [DATE?]. Where nobody on our side agreed to do something, say we will check and come back to them.' : '')
+    + (fails.some((c) => TIME_CODES.has(c.code)) ? (email
+      ? '\nDo not swap one day or time for another. Where the day or time of something we will do is not given by our staff, write the sentence with [DATE?] or [TIMELINE?]. Never say we will check and come back.'
+      : '\nDo not swap one day or time for another. Where the day or time of something we will do is not given by our staff, write "shortly" or use [DATE?]. Where nobody on our side agreed to do something, say we will check and come back to them.') : '')
+    + (fails.some((c) => c.code === 'vague-answer' || c.code === 'model-unanswered') ? '\nNever write that we will check, look into, confirm, get back to them or update them later. Give the answer from RESEARCH FOR THIS IMPORT QUESTION. Where RESEARCH has no answer, write the sentence anyway with the matching blank ([ELIGIBILITY?], [LANDED COST?], [DEPOSIT?], [TIMELINE?] or [CHECK?]) and say what it stands for. Every model code the customer named must be answered: eligible or not, with its figure or its blank.' : '')
     + (fails.some((c) => c.code === 'urgency') ? '\nDo not say or imply that other people are interested, that the car is selling fast, or that the price will change. If the request allows urgency, the one true fact is that a $1,000 refundable holding deposit takes the car off the market; otherwise say nothing about urgency.' : '')
     + (fails.some((c) => c.code === 'claim') ? '\nSay nothing about accidents, condition, approval, cooling-off or warranty beyond what VEHICLE FACTS and BUSINESS FACTS state, in their words.' : '');
 }
 
 const TIME_CODES = new Set(['time-passed', 'day-mismatch', 'promise']);
+
+// ---- an import email: the exact answer, never a holding line ----------------------------------
+
+// "We will check and get back to you", in its many forms.
+const HOLDING_LINE = /\b(?:(?:we|i)(?:'ll| will| shall|'d| would| am going to| are going to| can)\s+(?:(?:have|take) a (?:closer )?look|look (?:into|up|at)|check(?:ing)?(?: on| into| with| this| that| it| the)?|find out|confirm(?: this| that| it| the details?| the exact| with)?|verify|chase(?: this| that| it)?(?: up)?|get back to you|come back to you|revert|update you|let you know|be in touch|keep you (?:posted|updated|informed)|advise(?: you)?)|(?:updat|lett)ing you know shortly|get back to you (?:shortly|soon|asap)|once (?:we|i) (?:have )?(?:checked|confirmed|looked|verified|heard)|after (?:we|i) (?:check|confirm|look)|in due course|as soon as (?:we|i) (?:know|hear|can confirm))\b/i;
+// What our website itself promises about the process: these are ours to say.
+const PROCESS_LINE = /\b(?:before (?:any|a|the|we|placing)\b[^.]{0,40}\bbid|after your approval|inspect\w*|photos?|auction sheet|inspector|once (?:the|your) deposit|after (?:the|your) deposit|progress updates?|\bVIA\b|complian\w*|shipping|lodge|customs|biosecurity|deliver\w*|arriv\w*|vessel|\bport\b)\b/i;
+const ELIGIBILITY_WORDS = /eligib|approved|can be imported|import(?:ed)? (?:to|into) australia|sevs|not eligible|cannot be imported|25.year|build (?:range|date)/i;
+const BLANK_IN = new RegExp(BLANK_PATTERN);
+const sentencesOf = (t) => String(t || '').split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+
+/**
+ * The checks only an import email gets. research: the record from importquery.js (or null).
+ * vague-answer: a sentence that puts the answer off, with no blank in it. A fail.
+ * model-unanswered: a model code the customer named with no eligibility statement, figure, blank or page link near it. A fail.
+ * research-link: a costed model given with no link to its page. A warn.
+ * research-stale: the figures came from a saved page, or the website could not be read. A warn.
+ */
+export function emailChecks({ body, research = null, hold = false }) {
+  const out = [];
+  const text = String(body || '');
+  const sentences = sentencesOf(text);
+  const holding = sentences.find((s) => HOLDING_LINE.test(s) && !BLANK_IN.test(s) && !PROCESS_LINE.test(s));
+  if (holding) {
+    const m = holding.match(HOLDING_LINE);
+    out.push({ level: hold ? 'input' : 'fail', code: 'vague-answer', tokens: [m[0]], message: `"${m[0]}" puts the answer off. An import email carries the exact answer from the research, or the sentence with its blank.` });
+  }
+  const asked = research ? [...(research.asked?.codes?.known || []), ...(research.asked?.codes?.unknown || [])] : [];
+  for (const code of asked) {
+    const re = new RegExp(`\\b${code}\\b`, 'i');
+    const lines = text.split('\n');
+    const answered = sentences.some((s) => re.test(s) && !HOLDING_LINE.test(s) && (ELIGIBILITY_WORDS.test(s) || /\$\s?\d/.test(s) || BLANK_IN.test(s)))
+      || lines.some((l, i) => re.test(l) && /\/importing\//.test(`${l}\n${lines[i + 1] || ''}`));
+    if (!answered) out.push({ level: 'fail', code: 'model-unanswered', tokens: [], message: `The customer asked about ${code} and the reply does not say whether it can be imported. Say so from the research, with its figure or its page link, or write the sentence with [ELIGIBILITY?].` });
+  }
+  for (const m of research?.models || []) {
+    if (m.costing && !text.includes(m.url)) out.push({ level: 'warn', code: 'research-link', tokens: [], message: `The ${m.title} is answered without its page link (${m.url}). Give it on its own line so the customer can read the details.` });
+  }
+  if (research && (research.stale || research.notes?.length)) {
+    out.push({ level: 'warn', code: 'research-stale', tokens: [], message: research.fetchedAt ? `The website's eligible-models list could not be read today; the figures come from the list read earlier${research.notes?.length ? ` (${research.notes[0]})` : ''}. Open the page link before sending.` : `The website's eligible-models list could not be read; the figures come from the pages saved on this computer. Open the page link before sending.` });
+  }
+  return out;
+}
 
 export { NAME_TOKEN };

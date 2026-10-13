@@ -101,16 +101,23 @@ test('the Marketplace inbox is only ever read: GET, on the allowed addresses', a
   }
 });
 
-test('anything other than the three read addresses is refused before a request is made', async () => {
+test('reading is three GET addresses; the one write is the reply address, and only sendReply can use it', async () => {
   const { mp } = await load();
   engineSeen.length = 0;
   for (const path of ['/conversations/501/reply', '/conversations/501/send', '/send', '/conversations/abc', '/conversations/501/../../admin', '/agent/toggle', '']) {
     await assert.rejects(() => mp.get(path), /Blocked/);
   }
-  assert.equal(engineSeen.length, 0, 'no request may leave for a blocked address');
-  // The module offers no way to send, post or change anything.
-  assert.ok(!Object.keys(mp).some((name) => /post|send|reply|write|update|delete|toggle|archive/i.test(name)), Object.keys(mp).join(', '));
-  assert.ok(!/method:\s*['"](POST|PUT|PATCH|DELETE)/i.test(fs.readFileSync(new URL('../src/marketplace.js', import.meta.url), 'utf8')));
+  // sendReply refuses before any request leaves: no chat, nothing to say, or too much.
+  await assert.rejects(() => mp.sendReply('abc', 'Hello'), /Not a Marketplace chat/);
+  await assert.rejects(() => mp.sendReply(0, 'Hello'), /Not a Marketplace chat/);
+  await assert.rejects(() => mp.sendReply(501, '   '), /nothing to send/);
+  await assert.rejects(() => mp.sendReply(501, 'x'.repeat(2001)), /too long/);
+  assert.equal(engineSeen.length, 0, 'no request may leave for a blocked address or an unusable reply');
+  // The module can read, and send one reply. It cannot mark read, archive, retry, or touch the auto-reply.
+  assert.deepEqual(Object.keys(mp).filter((name) => /post|send|reply|write|update|delete|toggle|archive|read|retry|agent|lock|fetch\b/i.test(name)), ['sendReply']);
+  const source = fs.readFileSync(new URL('../src/marketplace.js', import.meta.url), 'utf8');
+  assert.equal((source.match(/method:\s*['"](POST|PUT|PATCH|DELETE)['"]/gi) || []).length, 1, 'one write request in the whole module');
+  assert.equal((source.match(/method:\s*['"]POST['"]/g) || []).length, 1);
 });
 
 test('a redirect from the engine is refused, not followed', async () => {
@@ -223,6 +230,43 @@ test('a long Marketplace reply is flagged, and a price difference with the Faceb
   assert.ok(note, JSON.stringify(d.checks));
   assert.match(note.message, /\$27,900.*\$28,900/);
   assert.ok(db.countRows('mp_messages') > 0);
+});
+
+test('on Marketplace the booking link and the car\'s page link go in the reply itself, and pass the checks', async () => {
+  const { items, drafter } = await load();
+  // 503: "Can I come and see it on Saturday?" No standard block follows a Marketplace reply, so
+  // the AI is asked to write the booking link itself, and a reply that carries it passes.
+  const item = items.itemFromKey('mp:503');
+  const url = item.vehicles[0].url;
+  assert.ok(url, 'the listing is matched to a car with a page');
+  aiSeen.length = 0;
+  ai.script = [{ reply: `You are welcome to come and see it on Saturday. Book a time that suits you here:\n${url}#inspection=onsite`, needs_human: [], facts_used: [], hold: false }];
+  const d = await drafter.draftFor(item, { save: false });
+  assert.equal(aiSeen.length, 1, 'accepted first time');
+  const asked = aiSeen[0].messages[1].content;
+  assert.match(asked, /=== INSPECTION ===/);
+  assert.match(asked, /give this in-person booking link/);
+  assert.ok(!/added under your text automatically/.test(asked), 'the AI writes the link itself');
+  assert.ok(!/=== STANDARD FIRST REPLY ===/.test(asked));
+  assert.match(aiSeen[0].messages[0].content, /Links are given here as they are in a text message/);
+  assert.equal(d.status, 'ready');
+  assert.ok(d.reply.includes(`${url}#inspection=onsite`), d.reply);
+  assert.ok(!d.checks.some((c) => c.level === 'fail'), JSON.stringify(d.checks));
+  assert.ok(!d.checks.some((c) => c.code === 'inspection-link'), JSON.stringify(d.checks));
+
+  // A first reply that gives the car's page link: the page is in our records, so it passes too,
+  // and the link line does not count towards the length.
+  ai.script = [{ reply: `Yes, it is still available.\nMore details:\n${url}\nWould you like to come and see it?`, needs_human: [], facts_used: [], hold: false }];
+  const first = await drafter.draftFor(items.itemFromKey('mp:501'), { save: false });
+  assert.ok(first.reply.includes(url), first.reply);
+  assert.ok(!first.checks.some((c) => c.level === 'fail'), JSON.stringify(first.checks));
+  assert.ok(!first.checks.some((c) => c.code === 'long'), JSON.stringify(first.checks));
+
+  // A link that is not in our records is still refused.
+  const stray = { reply: 'Book here:\nhttps://example.com/book/123', needs_human: [], facts_used: [], hold: false };
+  ai.script = [stray, stray];
+  const bad = await drafter.draftFor(items.itemFromKey('mp:501'), { save: false });
+  assert.ok(bad.checks.some((c) => c.level === 'fail' && c.code === 'link'), JSON.stringify(bad.checks));
 });
 
 // ---- never learned from --------------------------------------------------------------
@@ -451,4 +495,140 @@ test('when the small model has used up its day, only Marketplace waits: dashboar
     assert.equal(await worker.draftWaiting(), 1);
     assert.ok(aiSeen.every((b) => b.model === 'gemini-3.8-flash'));
   } finally { globalThis.setTimeout = real; usedUpModels.clear(); llm.resetModelState(); worker.state.mpHoldUntil = 0; }
+});
+
+// ---- sending ---------------------------------------------------------------------------
+
+const post = (base, path, body = {}) => fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+test('Send: the reply goes to the engine\'s reply address, shows in the chat on its way, and the chat leaves Waiting', async () => {
+  const { items, db, sync } = await load();
+  config.marketplace.url = `${standins.engineBase}/inbox`;
+  const base = `http://127.0.0.1:${appServer.address().port}`;
+  const get = async (path) => (await fetch(base + path)).json();
+
+  // 506: Zoe Hart, "Is the Noah still for sale?", waiting.
+  await sync.syncMarketplace();
+  const item = items.itemFromKey('mp:506');
+  assert.equal(item.state, 'awaiting');
+  const draft = db.latestDraft(item.itemKey, item.anchorKey);
+  assert.ok(draft, 'the suggestion from the earlier test');
+
+  // A blank is never sent, and neither is nothing.
+  engineSeen.length = 0;
+  let res = await post(base, '/api/items/mp:506/send', { text: 'The best we can do is [PRICE?]. Delivery is [DELIVERY COST?].', draftId: draft.id });
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /^Fill in the blanks before sending: \[PRICE\?\], \[DELIVERY COST\?\]\.$/);
+  res = await post(base, '/api/items/mp:506/send', { text: '   ' });
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /nothing to send/);
+  assert.equal(engineSeen.length, 0, 'nothing reached the engine');
+
+  // Only a Marketplace chat has a send. A dashboard conversation, a lead, an order, a phone thread,
+  // a model reply, a message key or an unknown chat does not.
+  for (const key of ['c:901', 'l:801', 'ao:1', 'ph:1', 'tr:1', 'fm:1', 'm:1', 'mp:99999']) {
+    assert.equal((await post(base, `/api/items/${key}/send`, { text: 'Hello' })).status, 404, key);
+  }
+  assert.equal(engineSeen.length, 0);
+
+  // The real thing: exactly the text in the box, to the one address, as JSON.
+  const text = 'Yes, it is still here. Would you like to come and see it?';
+  res = await post(base, '/api/items/mp:506/send', { text, draftId: draft.id });
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  const out = await res.json();
+  assert.equal(out.ok, true);
+  assert.equal(out.queued, false);
+  const writes = engineSeen.filter((r) => r.method !== 'GET');
+  assert.deepEqual(writes.map((r) => `${r.method} ${r.path}`), ['POST /inbox/conversations/506/reply']);
+  assert.deepEqual(JSON.parse(writes[0].body), { text, urls: [] });
+  assert.ok(engineSeen.some((r) => r.method === 'GET' && r.path === '/inbox/conversations/506'), 'the chat was read back after sending');
+
+  // On the page: the reply is in the thread, marked as on its way, and the chat is no longer waiting.
+  assert.equal(out.item.state, 'answered');
+  assert.equal(out.item.marketplace.sending, true);
+  const last = out.item.thread[out.item.thread.length - 1];
+  assert.equal(last.who, 'us');
+  assert.equal(last.text, text);
+  assert.equal(last.sending, true);
+  assert.equal(last.by, 'Typed by a person');
+  assert.equal(last.auto, false);
+  // Answered, so no suggestion is shown with it any more: the chat is not waiting on one.
+  assert.equal(out.item.draft, null);
+  const waiting = await get('/api/items?section=marketplace&tab=waiting');
+  assert.ok(!waiting.items.some((i) => i.key === 'mp:506'), 'no longer waiting');
+  const all = await get('/api/items?section=marketplace&tab=all');
+  const row = all.items.find((i) => i.key === 'mp:506');
+  assert.equal(row.state, 'answered');
+  assert.equal(row.preview.who, 'us');
+  assert.equal(row.preview.text, text);
+
+  // Nothing is learned, and no text is kept beyond the engine's own record of the message.
+  assert.equal(db.allLearned().length, 0);
+  const kept = db.getDraft(draft.id);
+  assert.equal(kept.copied_text, null);
+  assert.equal(kept.sent_text, null);
+  assert.ok(kept.sent_here_at > 0, 'Send is noted on the suggestion');
+  assert.equal(kept.edited_text, text, 'what was in the box is kept with the suggestion, as any edit is');
+  assert.equal(db.draftsAwaitingOutcome().some((d) => d.id === draft.id), false);
+
+  // Once the engine's phone has typed it, the next read shows it as sent.
+  const c = chats.get(506);
+  const m = c.messages[c.messages.length - 1];
+  assert.equal(m.status, 'queued');
+  assert.equal(m.source, 'dashboard');
+  Object.assign(m, { status: 'sent', sent_at: new Date().toISOString() });
+  Object.assign(c.row, { pending_outbound: 0, last_message_at: new Date().toISOString() });
+  const read = await sync.syncMarketplace();
+  assert.equal(read.chatsUpdated, 1);
+  const after = items.itemFromKey('mp:506');
+  assert.equal(after.state, 'answered');
+  assert.equal(after.marketplace.sending, false);
+  assert.equal(after.timeline.at(-1).sending, false);
+  assert.equal(after.timeline.at(-1).by, 'Typed by a person');
+});
+
+test('Send: a refused or unreachable engine changes nothing; an offline phone means queued; a queued auto-reply still keeps the buyer waiting', async () => {
+  const { items, sync } = await load();
+  const base = `http://127.0.0.1:${appServer.address().port}`;
+  chats.set(507, { row: row(507, 'Ivy Lane', 2), messages: [message(70, 'in', 'phone', 'Does it have 8 seats?', 2)] });
+  await sync.syncMarketplace();
+  assert.equal(items.itemFromKey('mp:507').state, 'awaiting');
+
+  // The engine says no.
+  standins.world.engineRefusesSend = true;
+  let res = await post(base, '/api/items/mp:507/send', { text: 'Yes, it has 8 seats.' });
+  assert.equal(res.status, 502);
+  assert.match((await res.json()).error, /did not accept the reply: the phone is offline/);
+  standins.world.engineRefusesSend = false;
+  assert.equal(items.itemFromKey('mp:507').state, 'awaiting', 'still waiting');
+  assert.equal(chats.get(507).messages.length, 1, 'nothing was added to the chat');
+
+  // The engine cannot be reached at all.
+  const closed = await listen(() => {});
+  const port = closed.address().port;
+  await new Promise((r) => closed.close(r));
+  config.marketplace.url = `http://127.0.0.1:${port}/inbox`;
+  res = await post(base, '/api/items/mp:507/send', { text: 'Yes, it has 8 seats.' });
+  assert.equal(res.status, 502);
+  assert.match((await res.json()).error, /could not be reached .*so the reply was not sent/);
+  config.marketplace.url = `${standins.engineBase}/inbox`;
+  assert.equal(items.itemFromKey('mp:507').state, 'awaiting');
+
+  // The engine takes it but its phone is offline: the reply is queued, and the page is told so.
+  standins.world.workerOnline = false;
+  res = await post(base, '/api/items/mp:507/send', { text: 'Yes, it has 8 seats.' });
+  assert.equal(res.status, 200);
+  const out = await res.json();
+  assert.equal(out.queued, true);
+  assert.equal(out.item.state, 'answered');
+  assert.equal(out.item.marketplace.sending, true);
+  standins.world.workerOnline = true;
+
+  // A queued reply from the engine's own auto-reply is not the same thing: the buyer still waits on it.
+  chats.set(508, { row: row(508, 'Theo Park', 3, { last_direction: 'out', pending_outbound: 1, last_outbound_at: iso(1), last_message_at: iso(1) }), messages: [message(80, 'in', 'phone', 'Is it automatic?', 3), message(81, 'out', 'agent', 'Yes, it is automatic.', 1, 'queued')] });
+  await sync.syncMarketplace();
+  const held = items.itemFromKey('mp:508');
+  assert.equal(held.state, 'awaiting', 'a queued auto-reply has not reached the buyer');
+  assert.equal(held.marketplace.replyComing, true);
+  assert.ok(!held.timeline.some((e) => e.who === 'us'));
 });

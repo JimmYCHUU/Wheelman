@@ -282,7 +282,31 @@ export function phoneReport(now = Date.now()) {
   };
 }
 
+// ---- the website's import-eligible models, as its list sends them --------------------------------
+
+/** One model in the raw shape of the website's eligible-models list. Figures invented. */
+export const eligibleRow = ({ id, make, model, modelCode, slug, yearRange, summary, engine = '', seats = 0, bodyType = '', fuelType = '', total = 0, deposit = 0, depositJpy = 0, avgJpy = 0, avgAud = 0, compliance = 1980, shipping = 0, gst = 0, nichibo = 0, priceOnRequest = false, sevs = [] }) => ({
+  id, make, model, modelCode, title: `${make} ${model} ${modelCode}`, slug, yearRange, bodyType, fuelType, engineSize: '', status: 'In Force', publishStatus: 'PUBLISHED',
+  compliancePrice: `$${compliance.toLocaleString('en-AU')}`, seats, image: 'https://img.example/secret-catalog.png', catalogImage: 'https://img.example/secret-catalog.png',
+  engine, transmission: 'Automatic', drivetrain: '2WD', power: '', torque: '', displacement: '',
+  complianceSummary: summary, weight: '', dimensions: '',
+  costing: priceOnRequest ? { validCosting: false } : { validCosting: true, jpyToAudRate: 0.009085, avgPriceJpy: avgJpy, avgPriceAud: avgAud, internationalFreightAud: 5200, customsElectronicEntryFeeAud: 220, deliveryAud: 250, bmsbHeatTreatmentFeeAud: 250, shippingChargeAud: shipping, gstAud: gst, customGstAud: 0, importDutyAud: null, lctAud: null, compliancePackagePrice: compliance, complianceCriterion: 'sevs environmental criterion', complianceBandLabel: 'Passenger', carbarnAgentFeeAud: 1500, nichiboAgentFeeJpy: 0, nichiboAgentFeeAud: nichibo, nichiboAgentBandLabel: '', auctionDepositAmount: depositJpy, auctionDepositAmountAud: deposit, profitRate: null, profitAud: null, totalLandedPriceAud: total },
+  yearPrices: [], soldData: null, priceOnRequest, externalAveragePrice: null,
+  mres: [{ id: id * 10, mreNumber: `MRE-${String(id).padStart(6, '0')}`, roverApprovalId: 'secret-approval-id', holderName: 'SYDNEY AVV PTY LTD', modificationCategory: 'NA', mreBuildStart: '2004-01-01', mreBuildEnd: '2024-10-31', nswBodyCode: 'Van', mreNotes: summary.join(' '), specialNotes: '' }],
+  sevs: sevs.map((n, i) => ({ id: i + 1, sevNumber: n, roverApprovalId: 'secret-approval-id', criterion: 'Environmental Criterion', sevBuildStart: '2004-01-01', sevBuildEnd: null })),
+  estimatedPrice: `$${total.toLocaleString('en-AU')}`, vehiclePrice: `$${avgAud.toLocaleString('en-AU')}`, auctionPriceAud: avgAud, auctionPriceJpy: avgJpy, japanAgentFee: nichibo, shippingCost: shipping, customsCost: gst, agentFee: 1500, lctAud: 0, importDutyAud: 0, auctionDepositAmountAud: deposit, images: [],
+});
+
+/** Five invented models: a costed van, a kei car, a people mover, a sports car with an odometer limit, and one with no costing. */
+export const ELIGIBLE = [
+  eligibleRow({ id: 116, make: 'Toyota', model: 'Hiace', modelCode: 'GDH206', slug: 'toyota-hiace-gdh206', yearRange: '1/2004 to 10/2026', summary: ['Eligible as a 4WD campervan with 2, 3, 5 or 6 seats', 'Engines 1TR, 2TR, 1KD, 2KD and 1GD eligible', 'Vehicle must be fitted with an internal campervan fit out'], engine: '1GD', seats: 6, bodyType: 'Motorhome, Van', fuelType: 'Diesel', total: 57781, deposit: 4545, depositJpy: 500000, avgJpy: 4100000, avgAud: 37249, shipping: 9200, gst: 5252, nichibo: 2230, sevs: ['SEV-000933'] }),
+  eligibleRow({ id: 23, make: 'Honda', model: 'N-Box', modelCode: 'JF3', slug: 'honda-n-box-jf3', yearRange: '1/2017 to 12/2023', summary: ['Eligible under the SEVS Environmental Criterion'], engine: 'S07B', seats: 4, bodyType: 'Kei', fuelType: 'Petrol', total: 21600, deposit: 1500, depositJpy: 150000, avgJpy: 1200000, avgAud: 10902, shipping: 6100, gst: 1964, nichibo: 1363, compliance: 1540, sevs: ['SEV-000441'] }),
+  eligibleRow({ id: 61, make: 'Toyota', model: 'Alphard Welcab', modelCode: 'AGH30W', slug: 'toyota-alphard-welcab-agh30w', yearRange: '1/2015 to 5/2023', summary: ['Eligible under the SEVS Mobility Criterion with a welfare lift or ramp fitted'], engine: '2AR-FE', seats: 7, bodyType: 'People mover', fuelType: 'Petrol', total: 48900, deposit: 3000, depositJpy: 300000, avgJpy: 3200000, avgAud: 29072, shipping: 8900, gst: 4445, nichibo: 1900, sevs: ['SEV-000512'] }),
+  eligibleRow({ id: 88, make: 'Daihatsu', model: 'Copen', modelCode: 'LA400', slug: 'daihatsu-copen-la400', yearRange: '6/2014 to 12/2026', summary: ['Odometer must be under 80,000 km', 'Eligible with the KF turbo engine'], engine: 'KF', seats: 2, bodyType: 'Convertible', fuelType: 'Petrol', total: 24100, deposit: 1500, depositJpy: 150000, avgJpy: 1400000, avgAud: 12719, shipping: 6100, gst: 2191, nichibo: 1363, compliance: 1540, sevs: ['SEV-000380'] }),
+  eligibleRow({ id: 140, make: 'Audi', model: 'Q7', modelCode: '4MC', slug: 'audi-q7-4mc', yearRange: '1/2016 to 12/2026', summary: ['Eligible under the SEVS Performance Criterion'], engine: 'CRTC', seats: 7, bodyType: 'SUV', fuelType: 'Diesel', compliance: 2480, priceOnRequest: true, sevs: ['SEV-000777'] }),
+];
+
 /** Everything the stand-ins serve, built once for a given `now`. */
 export function world(now = Date.now()) {
-  return { now, vehicles: vehicles(now), ...dashboard(now), orders: orders(now), lots: LOTS, sold: SOLD, chats: marketplace(now), phoneReport: phoneReport(now) };
+  return { now, vehicles: vehicles(now), ...dashboard(now), orders: orders(now), lots: LOTS, sold: SOLD, chats: marketplace(now), phoneReport: phoneReport(now), eligible: ELIGIBLE };
 }

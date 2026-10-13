@@ -480,7 +480,7 @@ The name of the product, at the top of the list column.
 ### Buttons
 Rounded, low, quiet until needed. One filled button per view.
 - **Shape:** pill (2.25rem tall, 1.125rem radius), label at 0.875rem / 650, optional 1rem icon before the label with a 0.4375rem gap.
-- **Primary:** solid Action Blue with Ink on Blue, 1.125rem side padding. This is "Copy reply", and also "Write it now" and "Try again" when there is no draft yet.
+- **Primary:** solid Action Blue with Ink on Blue, 1.125rem side padding. This is "Copy reply", and also "Write it now" and "Try again" when there is no draft yet. In a Marketplace chat the primary is "Send reply", with a paper-plane icon, and "Copy reply" drops to the plain button beside it.
 - **Primary, blanks remaining:** while the draft still contains a blank, the same button drops to the sheet colour with Navy Ink text and a Strong Line outline and reads "Copy with blanks". It still works; it stops inviting.
 - **Quiet:** transparent, Muted text, no outline (Rewrite, Dismiss). Toggled on, it takes Blue Tint with Blue Text.
 - **Outline:** transparent with a Strong Line outline and Navy Ink text ("Write it again", "Write a reply anyway"). The three rating buttons shown after copying are the same shape at 1.875rem tall.
@@ -489,17 +489,20 @@ Rounded, low, quiet until needed. One filled button per view.
 - **Hover / Focus:** hover, on fine pointers only, washes the button with 5 to 8% of the text colour and turns the label to Navy Ink; the primary goes to Action Blue Pressed. Pressing scales to 0.97 (0.94 for icon buttons) over 160ms. Keyboard focus is a 2px Action Blue outline, 2px out. Disabled is 55% opacity (50% for icon buttons).
 
 ### Dismiss placement
-Dismiss is not in the message box. It lives in the last section of the details panel, as an outline button under a one-line explanation. The message box footer holds Rewrite, the two teaching buttons (Good reply, Could be better), the word count, Clear and Copy. Clear only empties the box; it does not dismiss the conversation.
+Dismiss is not in the message box. It lives in the last section of the details panel, as an outline button under a one-line explanation. The message box footer holds Rewrite, the two teaching buttons (Good reply, Could be better), the word count, Clear, Copy and, in a Marketplace chat, Send. Clear only empties the box; it does not dismiss the conversation.
 
 ### Row tag
 A small label in front of a row's preview text, used for "Dismissed" under No reply needed.
 - **Style:** Panel Mist ground, Muted text at 0.75rem / 650, 0.25rem corners, 0.375rem side padding. It sits inline with the preview and never changes the row's height. A dismissed row shows no number badge and is not bold.
 
 ### Section switch
-Up to three segments under the brand block: Dashboard, Marketplace and Auction. It chooses which list is shown; they are never mixed. A section that is switched off has no segment, and the others share the width.
+Up to five segments under the brand block: Dashboard, Marketplace, Auction, Import Query and, while a model reply waits for a rating, Standards. It chooses which list is shown; they are never mixed. A section that is switched off has no segment, and the others share the width: three in one row, four two by two, and five with Standards (always the last) on a full-width third row.
 - **Style:** a Panel Mist track with 0.75rem corners and 0.1875rem padding, holding equal segments 2.125rem tall with 0.5625rem corners. Labels are Muted at 0.875rem / 500. A badge after each label counts who is waiting there, and is hidden at zero.
 - **State:** the selected segment takes the list ground (white in light, the open-row colour in dark), Ink text at 650 and the hairline shadow in light. Exactly one is selected. Hover on the other segment darkens its label. Press scales to 0.97.
 - **Behaviour:** switching resets the filter to the first chip, clears the search and closes the open chat. In Marketplace the "Not customers" chip is hidden. In Auction the three chips read To do, In progress and Finished. Every conversation and every order is listed, newest first; there is no time window.
+
+### Import Query
+An email thread uses the same three columns as a conversation. The row carries the subject on the car line, the address stands in for a missing name, and a "Folded in Gmail" tag in amber marks a thread with a message Gmail had folded. The header reads "Email · subject". Customer bubbles say "via Email"; ours carry the sender's name from Gmail, or "Sent from Gmail". The details panel adds an Import Query block (subject, address with copy, message count, first and latest) and a Research notes heading for what the website said about the model asked about.
 
 ### Auction orders
 An order uses the same three columns as a conversation, with these differences.
@@ -553,7 +556,7 @@ A quiet strip under the rows, below a 1px line, in Faint at 0.8125rem.
 - A photo or attachment is an italic "Photo" or "Attachment" with the image icon. Links keep the bubble's text colour and are underlined.
 
 ### Thread pills
-In Marketplace, two more pills can close the thread: the event pill when the auto-reply has handed the chat to a person, had a reply fail, or left an answer unsent for more than 15 minutes; the quiet note pill when an auto-reply is queued and may answer first. Outgoing bubbles there are labelled "Auto-reply" or "Typed by a person". Marketplace rows carry a third line, the car, in Muted at 0.8125rem.
+In Marketplace, two more pills can close the thread: the event pill when the auto-reply has handed the chat to a person, had a reply fail, or left an answer unsent for more than 15 minutes; the quiet note pill when an auto-reply is queued and may answer first. Outgoing bubbles there are labelled "Auto-reply" or "Typed by a person"; a person's reply that the engine's phone has yet to type into the chat shows "Sending" in place of its time. Marketplace rows carry a third line, the car, in Muted at 0.8125rem.
 Centred, 0.5rem corners, 0.78125rem text, padding 0.3125rem by 0.75rem.
 - **Date:** Pill ground, Muted text, resting lift ("Today", "Yesterday", or the full date).
 - **Event:** Event Cream with Event Text, for things the system did.
@@ -611,7 +614,7 @@ When no conversation is open: centred on Panel Mist, the brand mark at 4.5rem, t
 - **Do** keep solid blue for the primary button, the unanswered badge, the wordmark and mark, the "checked" dot and the focus ring, and use Blue Tint with Blue Text for anything that is switched on.
 - **Do** show the name as it is built: the white steering wheel on a Carbarn Blue disc, WHEELMAN in Montserrat 800 capitals, and "by Carbarn" under it.
 - **Do** put a plain sentence in every red, amber or navy block, and use the strong value as text on its own soft ground.
-- **Do** keep the suggested reply in the message box under the label "Suggested reply · not sent", with a copy action as the one filled button.
+- **Do** keep the suggested reply in the message box under the label "Suggested reply · not sent", with one filled button: Copy, or Send in a Marketplace chat.
 - **Do** mark blanks in amber and failed figures in red inside the draft text itself, and name each blank on a button that selects it.
 - **Do** use the two shadows as they are used now: resting lift for bubbles, pills and the message box; floating for the jump button, the toast and the details drawer.
 - **Do** give pressable controls the 160ms press scale (0.94 to 0.97) and keep hover styles inside the fine-pointer media query.
@@ -620,7 +623,7 @@ When no conversation is open: centred on Panel Mist, the brand mark at 4.5rem, t
 
 ### Don't:
 - **Don't** show the suggestion as a bubble in the thread. The thread is only what was really said.
-- **Don't** add anything that looks like sending: no send icon and no "Send" label. The button at the bottom right of the message box always says what it does, which is copy.
+- **Don't** add anything that looks like sending where nothing is sent. Outside a Marketplace chat there is no send icon and no "Send" label; the button at the bottom right of the message box says what it does, which is copy. In a Marketplace chat the one Send button reads "Send reply", sends exactly the text in the box, waits while a blank is still to be filled, and reads "Sending" until the engine answers.
 - **Don't** add a second accent colour, and don't use solid red, amber or navy as a fill larger than a status dot.
 - **Don't** signal status with colour alone or with a code. Write the sentence.
 - **Don't** add uppercase or letter-spaced labels. The wordmark is the only capitals, and Montserrat and weight 800 belong to it alone.

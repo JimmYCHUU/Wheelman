@@ -1,7 +1,9 @@
 // Learning from replies that were really used.
 //
-// Sources, by the owner's instruction: the dashboard's leads and conversations only.
-// Marketplace conversations are never learned from.
+// Sources, by the owner's instruction: the dashboard's leads and conversations, and the import
+// emails of the Import Query section, each kept to its own kind: what an email taught is used only
+// for emails, what a text taught only for texts and Marketplace chats. Marketplace chats, texts
+// seen only on the phone and auction orders are never learned from.
 //
 // Two signals:
 //   copied — the text in the message box when Copy was pressed (what the person chose to send)
@@ -19,8 +21,11 @@ import { SITUATIONS } from './situations.js';
 
 const BLANK = new RegExp(BLANK_PATTERN);
 
-/** Only dashboard conversations and leads teach Wheelman. */
-export const canLearnFrom = (itemKey) => /^[cl]:\d+$/.test(String(itemKey || ''));
+/** Only dashboard conversations and leads, and import emails, teach Wheelman. */
+export const canLearnFrom = (itemKey) => /^(?:[cl]|em):\d+$/.test(String(itemKey || ''));
+/** Which kind of reply a request wants lessons for: emails learn from emails, everything else from texts. */
+const wantChannel = (q) => (q?.channel === 'email' ? 'email' : 'sms');
+const sameChannel = (row, q) => (row.channel || 'sms') === wantChannel(q);
 
 export function withoutSignOff(text) {
   let t = String(text || '').replace(/\r/g, '').trim();
@@ -73,8 +78,8 @@ function aboutOf(item, draft, upto) {
  * @param source    'copied' | 'sent'
  */
 export function learnFrom(item, draft, finalText, source, { at = Date.now() } = {}) {
-  if (!item || !draft || !canLearnFrom(item.itemKey)) return { learned: false, why: 'not a dashboard conversation' };
-  if (draft.item_key !== undefined && !canLearnFrom(draft.item_key)) return { learned: false, why: 'not a dashboard conversation' };
+  if (!item || !draft || !canLearnFrom(item.itemKey)) return { learned: false, why: 'not a dashboard conversation or an import email' };
+  if (draft.item_key !== undefined && !canLearnFrom(draft.item_key)) return { learned: false, why: 'not a dashboard conversation or an import email' };
   if (draft.rating === 'bad' && source === 'copied') return { learned: false, why: 'rated not usable' };
 
   const lead = item.lead;
@@ -130,8 +135,9 @@ export function onCopied(item, draftId, text) {
   // A message for an auction order: the text is kept, because Wheelman cannot see WhatsApp and
   // this is its only record of what was said to the customer. Nothing is learned from it.
   if (/^ao:\d+$/.test(String(draft.item_key || ''))) { recordCopied(draftId, String(text || '').slice(0, 4000)); return { learned: false, why: 'an auction order' }; }
-  // A Marketplace suggestion: note that Copy was pressed, keep none of the text, learn nothing.
-  if (!canLearnFrom(draft.item_key) || !canLearnFrom(item?.itemKey)) { recordCopiedTime(draftId); return { learned: false, why: 'not a dashboard conversation' }; }
+  // A Marketplace suggestion, or one for a text seen only on the phone: note that Copy was
+  // pressed, keep none of the text, learn nothing.
+  if (!canLearnFrom(draft.item_key) || !canLearnFrom(item?.itemKey)) { recordCopiedTime(draftId); return { learned: false, why: 'not a dashboard conversation or an import email' }; }
   recordCopied(draftId, String(text || '').slice(0, 4000));
   return learnFrom(item, draft, text, 'copied');
 }
@@ -204,7 +210,7 @@ export function onApproved(item, draftId, approved = true) {
 }
 
 const LESSON_SYSTEM = [
-  'You help train a reply assistant for Carbarn, a used-car dealer in Sydney. The assistant drafts SMS replies to customers.',
+  'You help train a reply assistant for Carbarn, a used-car dealer in Sydney. The assistant drafts SMS replies to customers, and email replies to customers asking about importing a car from Japan.',
   'The owner read one of its drafts and wrote a coaching note. The note is written to the assistant. It teaches how to handle this kind of message. It is not text for a customer.',
   'Turn the note into one to three general lessons the assistant can apply to future messages of the same kind.',
   '',
@@ -306,7 +312,7 @@ export async function distilPending(max = 2) {
  * raw: notes on similar messages with no lesson (not worked out yet, or none could be taken).
  */
 export function ownerGuidance(q, now = Date.now()) {
-  const mine = (r) => canLearnFrom(r.item_key) && r.item_key !== q.excludeItemKey;
+  const mine = (r) => canLearnFrom(r.item_key) && r.item_key !== q.excludeItemKey && sameChannel(r, q);
   const approved = allLearned().filter((r) => mine(r) && r.source === 'approved')
     .map((r) => ({ r, s: score(r, q, now) })).filter((x) => x.s >= 3).sort((a, b) => b.s - a.s).slice(0, 2).map((x) => x.r);
 
@@ -349,7 +355,7 @@ function score(row, q, now) {
 /** Recent replies that were really used, as extra examples. Shaped like the base example bank. */
 export function learnedExamples(q, max = 2, now = Date.now()) {
   // Replies the owner approved are shown in their own section, with more weight than an example.
-  const rows = allLearned().filter((r) => canLearnFrom(r.item_key) && r.item_key !== q.excludeItemKey && r.source !== 'approved');
+  const rows = allLearned().filter((r) => canLearnFrom(r.item_key) && r.item_key !== q.excludeItemKey && r.source !== 'approved' && sameChannel(r, q));
   return rows.map((r) => ({ r, s: score(r, q, now) }))
     .filter((x) => x.s >= 3)
     .sort((a, b) => b.s - a.s)
@@ -359,7 +365,7 @@ export function learnedExamples(q, max = 2, now = Date.now()) {
 
 /** Cases where the person changed the suggestion before using it: the clearest lessons. */
 export function corrections(q, max = 2, now = Date.now()) {
-  const rows = allLearned().filter((r) => canLearnFrom(r.item_key) && r.changed && r.item_key !== q.excludeItemKey && r.draft_text && (r.similarity ?? 1) < 0.92 && (r.similarity ?? 0) > 0.15);
+  const rows = allLearned().filter((r) => canLearnFrom(r.item_key) && r.changed && r.item_key !== q.excludeItemKey && r.draft_text && (r.similarity ?? 1) < 0.92 && (r.similarity ?? 0) > 0.15 && sameChannel(r, q));
   return rows.map((r) => ({ r, s: score(r, q, now) }))
     .filter((x) => x.s >= 2.5)
     .sort((a, b) => b.s - a.s)

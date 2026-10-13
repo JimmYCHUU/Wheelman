@@ -6,6 +6,51 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- Wheelman says what it reads of the team's own replies. The welcome panel's line "Reads N
+  replies the team sent in the last year, whoever sent them and from wherever, and N of our
+  salespeople's own replies" (or, under Import Query, "Reads N past import emails the team
+  answered"), and under a suggestion "Written with N replies the team sent to customers who asked
+  something similar in view". The team's replies are now read from the last year rather than the
+  last 45 days, and a reply the team sends from the phone to a dashboard customer teaches like one
+  sent from the dashboard once the add-on has seen all of it (one the Messages list cut short does
+  not). The dashboard's replies teach the dashboard; the email threads teach Import Query; never
+  the other way round. Nothing has to go through Wheelman for any of it.
+- Import Query learns from the past. The email threads sent from Gmail, including the old ones,
+  show the AI how the team really answered similar import enquiries ("How we answered similar
+  import emails" in the request), with the other customer's name, address, staff name, figures
+  and links taken out. Good reply, Could be better and a reply changed before copying teach for
+  emails as they do for the dashboard, and a reply later sent from Gmail is compared with the
+  suggestion. Every lesson carries its kind: an email's lessons serve emails only, a text's serve
+  texts and Marketplace chats only. Marketplace and auction orders still teach nothing.
+- Import Query replies are researched on the website before they are written. The model codes
+  and names in an email are matched against carbarn.com.au's list of import-eligible models,
+  read once a day into `data\eligible-models.json`; the reply carries the model's eligibility
+  and build years, the estimated landed and complied cost with its parts, the refundable
+  deposit, the model's page link, and the process facts from the guide pages, each figure
+  checked against that research like any other. A sentence that puts the answer off ("we will
+  check and get back to you") is refused and the reply written again; a model code the customer
+  named must be answered. What the website does not have becomes a blank (`[ELIGIBILITY?]`,
+  `[LANDED COST?]`, `[DEPOSIT?]`, `[TIMELINE?]`) in a full sentence, with research notes in the
+  details panel saying what was looked up and where. If the website cannot be read, the list
+  on this computer and the saved pages stand in, with a warning. Settings: `SITE_API_URL`,
+  `IMPORT_RESEARCH_DAILY`, `IMPORT_AUCTION_SNAPSHOT`.
+- The Import Query section: import enquiries that arrive by email. The browser add-on gains a
+  **Send to Wheelman** button in Gmail; pressed on an open email, it hands the whole thread
+  (subject, each message's sender, time and text, with the quoted history removed) to Wheelman,
+  which lists it under the new section and shows it in the usual thread, the customer on the
+  left and the team's replies on the right. Sent again after a reply, only what is new is added,
+  and a message Gmail had folded is filled in. Our side is any sender at `@carbarn.com.au`
+  (`MAIL_OUR_DOMAINS`); `MAIL_INTAKE=0` switches the intake off. Nothing is learned from a thread
+  and no reply is written for one yet: that comes with the research step. The add-on is now
+  "Wheelman reader", with a second route and header for Gmail; four section tabs sit two by two,
+  and five (with Standards) put Standards on a full third row.
+- Marketplace replies are sent from the page. **Send reply** in a Marketplace chat hands the
+  text in the box to the content engine's own reply address, the one its inbox page uses, and
+  the engine's phone types it into the chat. The reply shows in the conversation marked
+  "Sending" until the engine reports it sent, the chat leaves Waiting at once, a blank such as
+  `[PRICE?]` is never sent, a second press while the first is under way is refused, and a
+  refused or unreachable engine changes nothing. Copy and paste still works there. Dashboard
+  and auction replies are unchanged: copy and paste only. Nothing is learned from a sent reply.
 - Backups: one dated zip file of everything that lives only on this computer (the database, the
   `.env` settings, the staff names, the voice files, the private business facts and notes),
   written when the black window closes, once a day while Wheelman is open, and by hand with
@@ -47,6 +92,12 @@ and versions follow `MAJOR.MINOR.PATCH`.
   the name the customer signed in a text (shown only; never given to the AI).
 
 ### Changed
+- RULE-0 "never sends" is now "sends nothing by itself": the one send is the Marketplace Send
+  button. The Marketplace client keeps its three read addresses and gains the one reply address.
+- Marketplace suggestions carry links: the car's page on a first reply, and the inspection
+  booking link whenever the buyer asks to see the car, each on its own line. Until now a
+  Marketplace chat got neither, because both lived in the standard block that only dashboard
+  replies carry, and a buyer who asked to see a car got a red flag instead of a link.
 - The list is "All": every conversation ever stored, newest message first whoever wrote it, with
   "Waiting" as the filter for the ones that need a reply. No time window, no "No reply needed",
   no "Not customers". Only a text from the last fortnight counts as new for the blue numbers.

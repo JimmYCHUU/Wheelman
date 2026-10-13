@@ -1,9 +1,11 @@
 // The add-on's background: every 30 seconds it asks the reader in the Messages tab for the list and
 // hands the result to Wheelman on this computer. It keeps the Messages tab open, and wakes it when
-// the browser has put it to sleep. It sends nothing anywhere else.
+// the browser has put it to sleep. When the Send to Wheelman button is pressed in Gmail, it hands
+// that one email thread over the same way. It sends nothing anywhere else.
 
 const SERVER = 'http://127.0.0.1:3210'; // must match PORT in Wheelman's .env file
 const MESSAGES = 'https://messages.google.com/web/*';
+const MAIL = 'https://mail.google.com/*';
 const OPEN_AT = 'https://messages.google.com/web/conversations';
 const EVERY_MINUTES = 0.5;
 const RELOAD_GAP = 2 * 60 * 1000;
@@ -75,10 +77,50 @@ async function finish(last) {
   return last;
 }
 
+/** One email thread, read by the Gmail button, handed to Wheelman. What happened is kept for the popup. */
+async function postMail(report) {
+  const lastMail = { at: Date.now(), subject: report.subject || '', messages: (report.messages || []).length, collapsed: (report.found && report.found.collapsed) || 0 };
+  let res;
+  try {
+    res = await fetch(`${SERVER}/api/mail/threads`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-wheelman-mail': '1' },
+      body: JSON.stringify(report),
+    });
+  } catch {
+    return finishMail({ ...lastMail, ok: false, problem: 'no-wheelman' });
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) return finishMail({ ...lastMail, ok: false, problem: 'refused', error: body.error || `HTTP ${res.status}` });
+  return finishMail({ ...lastMail, ok: true, added: body.added || 0, updated: body.updated || 0, key: body.key || '' });
+}
+
+async function finishMail(lastMail) {
+  await chrome.storage.local.set({ lastMail });
+  return lastMail;
+}
+
+const fromGmail = (sender) => !!(sender && sender.tab && /^https:\/\/mail\.google\.com\//.test(sender.tab.url || ''));
+
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (!msg) return false;
   if (msg.type === 'readNow') { tick('button').then(reply); return true; }
   if (msg.type === 'openTab') { ensureTab().then(() => reply({ ok: true }), () => reply({ ok: false })); return true; }
+  // The Gmail button. Only the reader in a Gmail tab may ask for a thread to be sent.
+  if (msg.type === 'sendMail') {
+    if (!fromGmail(sender) || !msg.report) { reply({ ok: false, problem: 'error', error: 'Not from the Gmail page.' }); return false; }
+    postMail(msg.report).then(reply, (e) => reply({ ok: false, problem: 'error', error: String((e && e.message) || e) }));
+    return true;
+  }
+  if (msg.type === 'mailShape') {
+    (async () => {
+      const tabs = await chrome.tabs.query({ url: MAIL });
+      const tab = tabs.find((t) => t.active) || tabs[0];
+      if (!tab) return reply({ error: 'No Gmail tab is open.' });
+      try { reply(await chrome.tabs.sendMessage(tab.id, { type: 'mailShape' })); } catch { reply({ error: 'The reader is not running in the Gmail tab. Reload the tab and try again.' }); }
+    })();
+    return true;
+  }
   if (msg.type === 'shape') {
     (async () => {
       const tab = await findTab();

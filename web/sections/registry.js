@@ -56,7 +56,7 @@ export const SECTIONS = {
       other: ['Nothing here', ''],
       search: ['Nothing matches', 'Try a name, a car or a word from the message.'],
     },
-    welcome: { pick: 'Pick a buyer', check: 'Check the reply', paste: 'and paste it into the Marketplace chat.' },
+    welcome: { pick: 'Pick a buyer', check: 'Check the reply', paste: 'and it goes to the Marketplace chat. Or copy it and paste it there yourself.' },
     more: 'Load older conversations',
     backTo: 'Waiting',
     dismiss: 'Dismiss this conversation',
@@ -89,6 +89,37 @@ export const SECTIONS = {
     backTo: 'To do',
     dismiss: 'Dismiss this message',
     copyTarget: 'WhatsApp',
+  },
+  // Import enquiries that came by email, each thread sent from Gmail with the add-on's Send to
+  // Wheelman button. Replies are copied and pasted into Gmail.
+  importquery: {
+    id: 'importquery',
+    label: 'Import Query',
+    prefixes: ['em:'],
+    noun: ['enquiry', 'enquiries'],
+    person: 'Customer',
+    unknown: 'Email enquiry',
+    tabs: [
+      { id: 'all', label: 'All' },
+      { id: 'waiting', label: 'Waiting', counted: true },
+      null,
+    ],
+    search: { placeholder: 'Search name, email, subject or message', phone: false },
+    place: 'the dashboard',
+    placeShort: 'Dashboard',
+    phone: false,
+    empty: {
+      all: ['No email enquiries yet', 'Open an import enquiry in Gmail and press Send to Wheelman. The whole thread appears here.'],
+      waiting: ['Nobody is waiting', 'Email enquiries where the customer wrote last appear here.'],
+      quiet: ['Nothing here', 'Enquiries you dismissed, and customers who only said thanks.'],
+      other: ['Nothing here', ''],
+      search: ['Nothing matches', 'Try a name, an email address, a word from the subject or from the message.'],
+    },
+    welcome: { pick: 'Pick an enquiry', check: 'Check the reply', paste: 'and paste it into your reply in Gmail.' },
+    more: 'Load older enquiries',
+    backTo: 'Waiting',
+    dismiss: 'Dismiss this enquiry',
+    copyTarget: 'Gmail',
   },
 };
 
@@ -124,7 +155,7 @@ SECTIONS.standards = {
 
 export const SECTION_IDS = Object.keys(SECTIONS);
 
-/** Which section a conversation key belongs to: c:, l: and ph: are the dashboard; mp: Marketplace; ao: Auction. */
+/** Which section a conversation key belongs to: c:, l: and ph: are the dashboard; mp: Marketplace; ao: Auction; em: Import Query; tr: Standards. */
 export const sectionOf = (key) => SECTION_IDS.find((id) => SECTIONS[id].prefixes.some((p) => String(key || '').startsWith(p))) || 'dashboard';
 
 /** The list a conversation state sits on, and the name of that list for an order found by a search on another list. */

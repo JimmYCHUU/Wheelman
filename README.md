@@ -4,7 +4,7 @@
 ![Node.js 22.13 or newer](https://img.shields.io/badge/node-%E2%89%A522.13-339933)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-lightgrey)
 ![Free AI models](https://img.shields.io/badge/AI-free%20models%20only-blue)
-![Never sends](https://img.shields.io/badge/sending-never%2C%20copy%20only-orange)
+![Sends only on Send](https://img.shields.io/badge/sending-Marketplace%20Send%20button%20only-orange)
 
 Carbarn's reply assistant. Wheelman reads new enquiries from the Carbarn dashboard and new
 chats from Facebook Marketplace, works out who is waiting for an answer, and writes a suggested
@@ -37,7 +37,8 @@ purpose.
 - [The page](#the-page)
 - [The Marketplace section](#the-marketplace-section)
 - [The Auction section](#the-auction-section)
-- [The phone add-on](#the-phone-add-on)
+- [The Import Query section](#the-import-query-section)
+- [The browser add-on](#the-browser-add-on)
 - [What Wheelman knows](#what-wheelman-knows)
 - [How Wheelman learns](#how-wheelman-learns)
 - [Rules as Carbarn confirmed them](#rules-as-carbarn-confirmed-them)
@@ -96,7 +97,7 @@ shape with invented names. The tone guide is `voice/house-voice.md`.
 
 ```
  Carbarn dashboard ──► leads · SMS conversations · stock      (read-only, four addresses)
- Content engine    ──► Facebook Marketplace chats             (read-only, three addresses)
+ Content engine    ──► Facebook Marketplace chats             (three read addresses, one send address)
                                    │
         ┌──────────────────────────▼──────────────────────────┐
         │ 1. WHO IS WAITING   did the customer write last?     │──► NO REPLY NEEDED (thanks, STOP)
@@ -283,15 +284,21 @@ has moved past its first stage, Wheelman stops offering cars and answers as usua
 
 Enforced in code, not by convention.
 
-- **RULE-0 Never sends.** There is no code path that sends a message. The only way a reply
-  leaves is a person's copy and paste.
+- **RULE-0 Sends nothing by itself.** One code path sends a message: a Marketplace reply, to
+  the content engine's own reply address, when a person presses **Send reply** on the page. It
+  sends exactly the text in the box, refuses while a blank is still to be filled, and never
+  runs on its own. Dashboard and auction replies leave only by a person's copy and paste.
 - **RULE-1 Read-only.** The dashboard client can sign in and GET six addresses: the leads, the
   conversations, their messages, the cars, the auction orders, and the notification feed, which
-  is only ever read and never marked as read. The content engine client can GET three. The live auction client uses no login: it can GET three
+  is only ever read and never marked as read. The content engine client can GET three and
+  POST a reply to one; it cannot mark a chat read, archive it, retry a message or touch the
+  engine's auto-reply. The live auction client uses no login: it can GET three
   addresses (the cars coming up, one car, what similar cars sold for) and ask the website's
   cost calculator for one figure. That one request is a
   POST, because that is how the website's own page asks. It carries the bid amount and
-  nothing else, places no bid and stores nothing. Any other address or method is refused
+  nothing else, places no bid and stores nothing. The eligible-models client, also with no
+  login, can GET two addresses: the website's list of import-eligible models, and one model's
+  figures. Any other address or method is refused
   before a request is made. Reading does not mark anything as read, and never triggers the
   dashboard's own drafts or the engine's auto-reply. The phone add-on reads the list in the
   Messages tab of your own browser: it opens nothing, clicks nothing and marks nothing read,
@@ -303,11 +310,17 @@ Enforced in code, not by convention.
   check. A price that only the customer mentioned is theirs, not ours. What a person must
   decide becomes a blank: `[PRICE?]`, `[TRADE-IN VALUE?]`, `[DELIVERY COST?]`, `[DATE?]`,
   `[CHECK?]`. The same goes for a time that has passed, a day nobody mentioned, a dated
-  promise nobody on our side made, and a place the customer never said.
-- **RULE-4 Marketplace and the phone never teach.** Learning accepts dashboard conversations
-  only. It is refused in three places: the learning code, the copy route and the database
-  helper. A reply typed on the phone counts as the reply but teaches nothing, and the example
-  bank never sees it.
+  promise nobody on our side made, and a place the customer never said. An email about
+  importing never says we will check and come back: the sentence carries the exact figure
+  from the website, or its blank.
+- **RULE-4 Marketplace never teaches.** Learning accepts dashboard conversations and import
+  emails, each kept to its own kind: what an email taught is used only for emails, and what a
+  text taught only for texts and Marketplace chats. Marketplace chats, numbers seen only on the
+  phone with no dashboard record, and auction orders are refused in three places: the learning
+  code, the copy route and the database helper. A reply the team sends from the phone to a
+  dashboard customer teaches like one sent from the dashboard once the add-on has seen all of
+  it; one the Messages list cut short does not. The example bank, which sets the voice, takes
+  only replies whose author it knows: never a text typed on the phone, never an email.
 - **RULE-5 No costs, no sale amounts.** Purchase cost, shipping cost and margin are never
   stored and never sent anywhere. From a sale record Wheelman keeps the stage and the date,
   and whether a deposit or the full amount is recorded. It keeps no amount and no buyer name,
@@ -374,7 +387,7 @@ blocked by a Windows security setting and shows "running scripts is disabled on 
 In Command Prompt, plain `npm` works.
 
 To catch texts that reach the business phone but not the dashboard, load the browser add-on
-once: see [The phone add-on](#the-phone-add-on).
+once: see [The browser add-on](#the-browser-add-on).
 
 ### Check it worked
 
@@ -392,7 +405,8 @@ npm.cmd test                :: the automated checks, no internet needed
 2. The browser tab shows a number when a customer has sent something new: `(2) Wheelman`.
 3. Pick a customer from the list. Their number clears once you have opened the conversation.
 4. Read the suggestion in the message box. Fill in anything highlighted.
-5. Press **Copy reply**, paste it into the dashboard or the Marketplace chat, and send it.
+5. Press **Copy reply**, paste it into the dashboard, and send it. In a Marketplace chat, press
+   **Send reply** instead and it goes to the buyer from here (Copy still works there too).
 6. The customer leaves **Waiting** by themselves once the reply appears in the conversation.
    Wheelman then compares what was sent with what it suggested, and learns from it.
 
@@ -553,7 +567,16 @@ every chat where the buyer wrote last. It works like the Dashboard section, with
 differences:
 
 - **Short replies.** One or two lines, no greeting line, no "Regards, Team Carbarn".
-- **Copy and paste.** Paste the suggestion into the Marketplace chat yourself.
+- **Links in the reply.** The car's page link on a first reply, and the inspection booking
+  link when the buyer asks to see the car, each on its own line. (Marketplace has no standard
+  block, so the links go in the reply itself.)
+- **Send from here.** **Send reply** hands the text in the box to the content engine, which
+  types it into the Marketplace chat from its phone. The reply shows in the conversation
+  marked "Sending" until the engine reports it sent, and the chat leaves **Waiting** at once.
+  A blank such as `[PRICE?]` is never sent: fill it in first. If the engine's phone is offline
+  the reply is queued and goes when it is back; if the engine refuses, nothing changes and the
+  reason is shown. **Copy reply** is still there for pasting it yourself. This is the only
+  section that sends.
 - **Auto-reply.** Messages the engine sent by itself are labelled **Auto-reply**. Messages a
   person sent are labelled **Typed by a person**.
 - **Needs a person.** When the engine has handed a chat to a person, or one of its replies
@@ -691,7 +714,86 @@ that knows their order. This is the one place the section asks an AI, on the bet
 - The live auction is looked at for each order that is still searching, at most once an hour.
 - Nothing is learned from this section. The wording is corrected in its file.
 
-## The phone add-on
+## The Import Query section
+
+Customers also ask about importing by email to the business mailbox: whether a model can be
+imported, what it would land for, how the process works. The mailbox holds much else besides, so
+Wheelman does not read it. Instead you hand each import enquiry over yourself: open the email in
+Gmail, press **Send to Wheelman**, and the whole thread appears in the Import Query section in
+the usual conversation, the customer on the left and the team's replies on the right. Nothing in
+Gmail changes.
+
+- **One press per thread.** The button reads the subject and every message that is open on the
+  page: who sent it, when, and its text, with the quoted history under a reply left out. A
+  message Gmail has folded cannot be read: the row says **Folded in Gmail**, the thread shows
+  where it sits, and pressing **Expand all** in Gmail and then the button again fills it in.
+- **Send it again after you reply.** The same press after replying in Gmail adds the reply to
+  the thread; nothing already there is added twice.
+- **Our side** is any message from an address at `carbarn.com.au` (`MAIL_OUR_DOMAINS`). Everything
+  else is the customer, named from the first such message.
+- **Copy and paste.** A reply is copied from the message box and pasted into your reply in
+  Gmail. Nothing is sent from here.
+- **It learns from the past.** Send the old import threads from Gmail too, one press each. What
+  the team wrote back in them becomes "how we answered similar import emails" in the request
+  for a new one: the moves, what was included, the order, the length, with the other
+  customer's name, address, figures and links taken out. Good reply, Could be better, and a
+  reply you change before copying teach the same way, as email lessons that never reach a text
+  message; and a reply you later send from Gmail and send to Wheelman again is compared with
+  the suggestion like a dashboard reply is. The SMS example bank never sees an email.
+
+### The exact answer, researched
+
+An import email is answered from the website, not from memory. Before a reply is written,
+Wheelman looks the question up:
+
+- **The model.** Model codes in the email (GDH206, AGH30W, JF3) and make and model names
+  ("Alphard Welcab", "N-Box") are matched against the website's list of import-eligible
+  models, which Wheelman reads from carbarn.com.au once a day and keeps in
+  `data\eligible-models.json`. For each model found: whether it can be imported and for which
+  build years, the engines and odometer limits, the SEVS approval, the estimated landed and
+  complied cost with its parts, the refundable auction deposit, and the model's page on the
+  website. What the customer said (a year, a budget, kilometres) is set against those facts.
+- **The process.** The deposit bands, the timeline, the payment stages, VIA approval,
+  compliance and the warranty come from the saved guide pages (how importing works, how
+  compliance works, the live auction) and from the business facts.
+- **What is coming up.** The live auction is looked at for the model: how many are coming up,
+  the cheapest estimated landed cost, and the next auction date.
+
+All of it goes to the AI as the research for that email, every figure with the page it came
+from, and the reply must carry the figures and the model's page link. Two rules are enforced
+by the checks, not by hoping:
+
+- **Never "we will check and get back to you".** A sentence that puts the answer off is
+  refused and the reply is written again. The one exception is what the website itself
+  promises about the process, such as inspecting before any bid.
+- **Every model asked about is answered.** A model code the customer named must be answered:
+  eligible or not, with its figure or its page link, or with a blank.
+
+When the answer is not on the website, the reply gets a blank inside a full sentence, and the
+details panel's **Research notes** say what was looked up, where, and what was not found:
+
+| Blank | When |
+|---|---|
+| `[ELIGIBILITY?]` | A model, code or year the eligible-models list does not have |
+| `[LANDED COST?]` | A model the website shows as price on request |
+| `[DEPOSIT?]` | A deposit amount neither the model nor the deposit table gives |
+| `[TIMELINE?]` | A timeframe that is not on our pages |
+
+If the website cannot be read, the list already on this computer is used, then the saved
+importing pages (with the day they were saved); the reply is still written, marked so you
+open the page link before sending. Email replies are written by the better AI models, not
+the small one Marketplace uses.
+
+| Setting in `.env` | What it does | Default |
+|---|---|---|
+| `MAIL_INTAKE` | Set to `0` to switch the section and the intake off | `1` |
+| `MAIL_OUR_DOMAINS` | The domains whose senders are our side of a thread, comma-separated | `carbarn.com.au` |
+| `MAIL_AUTO_DRAFT_MAX_AGE_DAYS` | An email older than this is listed but not written for unasked | `7` |
+| `SITE_API_URL` | Where the eligible-models list is read from | The website |
+| `IMPORT_RESEARCH_DAILY` | Most emails researched with live website requests in a day; beyond it the list on this computer is used | `60` |
+| `IMPORT_AUCTION_SNAPSHOT` | Set to `0` to leave the live auction out of the research | `1` |
+
+## The browser add-on
 
 The dashboard gets its texts through a Pushbullet link to the business phone, and now and then
 one does not arrive. The phone is also paired to Google Messages for web, which shows them all.
@@ -708,9 +810,11 @@ What it does, and does not do:
 - It talks to Wheelman only, at `127.0.0.1:3210`, and to nothing else. Wheelman takes its
   reports on one route, from a browser add-on only, with the add-on's own header, so no web
   page can post anything there. `PHONE_ADDON_ID` in `.env` can pin it to one add-on.
-- The texts stay on this computer, in their own tables, apart from the dashboard's. They are
-  never learned from and never used for the example bank. A text that gets a suggestion goes
-  through the same removal of names and numbers as any other before an AI sees it.
+- The texts stay on this computer, in their own tables, apart from the dashboard's. A reply the
+  team sent from the phone to a dashboard customer teaches what to say, like one sent from the
+  dashboard, once the add-on has seen all of it; none of them is ever used for the example bank,
+  which sets the voice and takes only replies whose author it knows. A text that gets a
+  suggestion goes through the same removal of names and numbers as any other before an AI sees it.
 
 What you see:
 
@@ -725,7 +829,8 @@ What you see:
 - Login codes, couriers and short codes land under **Not customers**, as now.
 - A reply someone typed on the phone itself shows as ours, labelled **Sent from the phone,
   not on the dashboard**. After a quarter of an hour with no dashboard copy it counts as the
-  reply, but it teaches nothing.
+  reply and teaches like one sent from the dashboard, unless the Messages list cut it short
+  (shown with "…"): half a reply is not what was said, so that one teaches nothing.
 - A line at the foot of the list says when the add-on last reported and how many
   conversations are on the phone. If the browser or the tab is closed, a notice says the
   add-on has not reported since when, and Wheelman keeps working from the dashboard. When the
@@ -742,7 +847,7 @@ Installing it, once:
 1. In Chrome, open `chrome://extensions` (in Edge, `edge://extensions`), switch on
    **Developer mode** at the top right, press **Load unpacked** and choose the `extension`
    folder inside the Wheelman folder.
-2. Click the puzzle-piece icon in the toolbar and pin **Wheelman phone reader**.
+2. Click the puzzle-piece icon in the toolbar and pin **Wheelman reader**.
 3. Open https://messages.google.com/web in that browser and sign in if it asks. Leave the tab
    open: the add-on pins it, and opens it again at the next start.
 4. In Chrome's settings, under Performance, add `messages.google.com` to **Always keep these
@@ -757,10 +862,25 @@ longer be read, the icon says so, and **Copy page details** copies the shape of 
 element names, no words) to fix the reader with. The names it looks for are in one table at
 the top of `extension/reader.js`.
 
+### Send to Wheelman in Gmail
+
+The same add-on puts a **Send to Wheelman** button at the bottom right of Gmail while an email
+is open. Pressing it reads that conversation and hands it to Wheelman for the Import Query
+section; see [The Import Query section](#the-import-query-section) for what happens then. It
+reads only when pressed, and it never clicks, marks read, types or sends anything in Gmail.
+
+After updating Wheelman, open `chrome://extensions`, press the add-on's reload arrow, and accept
+the new permission for mail.google.com when Chrome asks. The button says in plain words what
+happened: "Sent to Wheelman · 3 messages", "Wheelman is not running on this computer", or why
+Wheelman refused the thread. If Gmail's page has changed and the email cannot be read, the
+button offers **Copy page details** (the add-on's icon has the same under "Copy Gmail page
+details"), which copies the shape of the page, element names only, to fix the table at the top
+of `extension/mail.js` with.
+
 | Setting in `.env` | What it does | Default |
 |---|---|---|
-| `PHONE_ADDON` | Set to `0` to stop taking the add-on's reports | `1` |
-| `PHONE_ADDON_ID` | The add-on's id as `chrome://extensions` shows it, so no other add-on is listened to | Empty: any add-on on this computer |
+| `PHONE_ADDON` | Set to `0` to stop taking the phone reader's reports | `1` |
+| `PHONE_ADDON_ID` | The add-on's id as `chrome://extensions` shows it, so no other add-on is listened to, on either of its routes | Empty: any add-on on this computer |
 | `PHONE_STALE_MINUTES` | After this long without a report, the page says the add-on has gone quiet | `10` |
 | `IGNORED_SENDERS` | Senders that are never customers and are never listed: a contact saved on the phone under a label, a finance company, a courier. Comma-separated; spaces and case are ignored | `Not customer, OTP, Delivery Service, Autotrader, CreditOne` |
 
@@ -778,6 +898,8 @@ Wheelman only states facts it has been given.
 | Auction orders: the stage, what was asked for, the car, what is charged and paid | The dashboard | Read every few minutes |
 | The wording of messages to auction customers | `voice/auction-messages.md`, `voice/auction-offer.md` | You edit them |
 | Texts that reached the business phone but not the dashboard | The phone add-on, reading Google Messages for web in your browser | Every 30 seconds while the browser is open |
+| Import enquiries that came by email | The Send to Wheelman button in Gmail, pressed by you on an open email | When you press it |
+| Which models can be imported, and what they land for | The website's own list of import-eligible models, kept in `data\eligible-models.json` | Once a day, and when an email is researched |
 
 In `knowledge/business-facts.md` each topic is marked `CONFIRMED` (stated freely), `WORKING`
 (in use, please check) or `NEEDS ANSWER` (Wheelman says nothing and leaves a blank). Write the
@@ -795,16 +917,21 @@ automated checks).
 
 ## How Wheelman learns
 
-Only from dashboard leads and conversations, the website and the dashboard's records. Never
-from Marketplace, and not from the Auction section: its messages come from a wording file,
-and what a customer wrote on WhatsApp is pasted in, not read from the dashboard.
+From dashboard leads and conversations, the website and the dashboard's records, and from the
+import email threads sent from Gmail, each kind kept to itself (see the Import Query section).
+Never from Marketplace, never from the phone, and not from the Auction section: its messages
+come from a wording file, and what a customer wrote on WhatsApp is pasted in, not read from
+the dashboard.
 
 Wheelman learns two different things from two different places. **What to say** comes from
 what the team really sends. **How to say it** comes from the two voices.
 
 - **What the team sends.** For each waiting message, Wheelman looks up the replies the team
-  sent in the last 45 days to customers who wrote something similar, whoever sent them, and
-  shows itself the closest three. From those it takes what to include and leave out (the
+  sent in the last year to customers who wrote something similar, whoever sent them and from
+  wherever (the dashboard, the phone relayed to the dashboard, or the phone alone once the
+  add-on has seen all of a text), and shows itself the closest three, the most recent weeks
+  counting for more. Nothing has to go through Wheelman for this: a reply one of the
+  salespeople sends from their own phone teaches the same way. From those it takes what to include and leave out (the
   car's link, a booking link, the address, a question back), the order and the length, then
   writes the reply in the house voice. Before they are used, the customer's details and the
   sender's name are removed, and every link and dollar amount is replaced by a label such as
@@ -894,8 +1021,8 @@ often you asked for a rewrite. Counts only; no customer text.
 | "Below" | A reply never points at the address block. It answers in the sentence itself |
 | The message box | An editor: change the text or clear it, and it is saved as you type. A changed reply teaches Wheelman when it is copied or approved |
 | AI models | The better models are kept for dashboard customers. Marketplace chats use the small one |
-| Marketplace | A suggestion for every chat where the buyer wrote last; short chat style |
-| Sending | Never. Copy and paste, in both sections |
+| Marketplace | A suggestion for every chat where the buyer wrote last; short chat style, with the car's page link and the booking link when asked |
+| Sending | Marketplace only, by the **Send reply** button. Dashboard and auction replies are copied and pasted |
 | Learning | Dashboard only |
 
 The business facts themselves are in `knowledge/business-facts.md`.
@@ -946,6 +1073,11 @@ one-off US$10 credit purchase raises that to 1,000.
   latest text of each conversation and its time. Nothing more: no photos, no other contact
   details. The texts are never learned from, and go through the same removal of details as
   any other before an AI sees one.
+- From an email thread you send from Gmail, Wheelman stores the subject, and for each message
+  the sender's name and address, the time, the text with the quoted history removed, and how
+  many attachments it had. Never the HTML, the attachments, the recipients or anything about
+  the Gmail account. The customer's address is kept readable, as it is for an auction order,
+  so the page can show and copy it; it is removed like any other before an AI sees the text.
 - `.env` holds the dashboard password and the AI keys. Git never sees it.
 - The folders that hold real customer details are listed under
   [Where your files live](#where-your-files-live). Git never sees those either.
@@ -1014,6 +1146,9 @@ computer. Git never sees any of it.
 | "The phone add-on has not reported since …" | Chrome is closed, the Messages tab is closed, or the browser put it to sleep | Open Chrome with the Messages tab in it. The add-on's icon gives the reason |
 | "Messages for web is signed out" | Google signs a computer out after weeks without use | Open the Messages tab and sign in again (whoever has the phone taps the matching emoji) |
 | "The phone add-on could not read the Messages list" | Google changed its page | Click the add-on's icon, press **Copy page details**, and keep what it copied for fixing the table at the top of `extension/reader.js` |
+| The Gmail button says "Could not read this email" | Google changed its page, or nothing is open | Open the email, then press the button again. If it still fails, press **Copy page details** under the button and keep what it copied for fixing the table at the top of `extension/mail.js` |
+| The Gmail button says "Wheelman refused it" | The thread could not be checked (nothing readable in it, or the intake is off) | The reason follows the words. A thread with every message folded: press **Expand all** in Gmail first |
+| A thread's row says "Folded in Gmail" | Gmail had one or more messages folded when the button was pressed | In Gmail, press **Expand all**, then **Send to Wheelman** again |
 | The add-on's icon says "Wheelman is not running" | The black window is closed | Double-click **Start Wheelman.cmd** |
 | "Port 3210 is already in use" | Wheelman is already running in another window | Use that window, or close it |
 | "running scripts is disabled on this system" | Windows PowerShell blocks `npm` | Use the double-click file, or type `npm.cmd` |
@@ -1030,7 +1165,7 @@ computer. Git never sees any of it.
 npm.cmd test
 ```
 
-214 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
+291 tests, all on invented data, against a stand-in AI service, a stand-in content engine and
 a stand-in auction feed on this computer: who counts as waiting and who does not, stock numbers matched to the right
 car however a portal writes them (a year in front, a portal code, upper or lower case), that
 no customer detail and no cost figure reaches the AI request, an invented price
@@ -1039,11 +1174,15 @@ rewrite accepted, nothing drafted for an opt-out, a sold car bringing a similar 
 request, a message that tries to give orders passed as data, busy models and the daily cap,
 learning from copied and sent replies with details removed, that blanks and bank details are
 never learned, the greeting and sign-off once a day, the in-person and online inspection links
-and how "far away" is recognised, and the Marketplace section: only GET requests on three
-addresses, redirects refused, identifiers and contact details not stored, a failed reply not
-counting as a reply, the auto-reply's price not trusted, nothing learned from a copied
-Marketplace suggestion, its own allowance, the engine being down, dismiss with undo, and the
-unread counts. Whole-conversation scenarios cover the rest: a buyer recognised by phone, by
+and how "far away" is recognised, and the Marketplace section: three GET addresses and the one
+send address, which only the Send button reaches, redirects refused, identifiers and contact
+details not stored, a failed reply not counting as a reply, the auto-reply's price not
+trusted, the booking link and the car's page link in the reply itself, nothing learned from a
+copied or sent Marketplace suggestion, its own allowance, the engine being down, dismiss with
+undo, the unread counts, and Send: the text in the box to the engine's reply address and
+nothing else, shown on its way and the chat out of Waiting, a blank refused, a refused or
+unreachable engine changing nothing, an offline phone meaning queued, and a queued auto-reply
+still counting as waiting. Whole-conversation scenarios cover the rest: a buyer recognised by phone, by
 email, by lead status and from our own texts; no amount, buyer name or readable contact
 stored or sent; a reply that asks a buyer "which car?" rejected; a reserved car; the standard
 first reply exact to the character and never learned; "this afternoon" at 8:44 pm, "tomorrow"
@@ -1092,7 +1231,13 @@ unknown numbers with nothing written unasked, codes and sender ids set aside, a 
 matched by its name; a Phone only conversation moving under the dashboard's key with its
 suggestion and marks; and a reply
 typed on the phone counting as sent after a grace period, teaching nothing and kept out of the
-example bank.
+example bank. The Import Query section: the Gmail button's parser reading addresses in three
+forms, dates, and bodies with the quoted history cut; a thread taken only from the add-on, on
+its own route, with its own header; limits, time clamps and which side a sender is on; a thread
+sent again adding only what is new, a folded message filled in, and threads without Gmail's ids
+still told apart; a thread as an item (waiting, answered, an "unsubscribe" footer not an
+opt-out); the section's lists, counts and search, and the section off with the intake;
+dismiss, seen and put back; and nothing from a thread reaching what Wheelman has learned.
 
 ## Project layout
 
@@ -1101,8 +1246,9 @@ wheelman/
 ├── Start Wheelman.cmd                 one click: start and open the page
 ├── .env.example                       settings; copy to .env
 ├── PRODUCT.md · DESIGN.md             who the page is for, and how it looks
-├── extension/                         the phone add-on for Chrome or Edge, loaded unpacked once:
-│                                      manifest · background · reader · parse · popup
+├── extension/                         the browser add-on for Chrome or Edge, loaded unpacked once:
+│                                      manifest · background · reader · parse · popup (the phone)
+│                                      · mail · mailparse · shape (the Send to Wheelman button in Gmail)
 ├── knowledge/
 │   ├── business-facts.md              what Wheelman may state, topic by topic
 │   ├── how-carbarn-works.md           the steps of a sale and the usual answers
@@ -1130,6 +1276,9 @@ wheelman/
 │   ├── ordermessages.js               the messages for an order, from the wording file; replies to pasted messages
 │   ├── templates.js                   reads the wording files and fills them in
 │   ├── phone.js                       the phone add-on's reports: checked, kept, matched by number
+│   ├── mail.js                        email threads from the Gmail button: checked, kept, merged
+│   ├── eligible.js                    the website's eligible-models list: read daily, kept, matched
+│   ├── importquery.js                 the research behind an import email: model, cost, deposit, blanks
 │   ├── sync.js · normalize.js         what is read, and what is kept of it
 │   ├── items.js                       who is waiting: one shape for a lead and a Marketplace chat
 │   ├── situations.js · text.js        what a message is about, by keyword rules

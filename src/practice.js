@@ -1,8 +1,10 @@
-// What the team really sent, lately, to customers who wrote something like the message that is
-// waiting. This is where Wheelman learns WHAT to say: what our people include, leave out and how
-// long they write. HOW it is said still comes from the house voice.
+// What the team really sent, in the last year, to customers who wrote something like the message
+// that is waiting. This is where Wheelman learns WHAT to say: what our people include, leave out
+// and how long they write. HOW it is said still comes from the house voice.
 //
-// Every reply sent from the dashboard counts, whoever sent it. Marketplace chats never do.
+// Every reply in a dashboard conversation counts, whoever sent it and from wherever: the dashboard,
+// the phone relayed to the dashboard, or the phone alone (when the add-on saw all of it).
+// Marketplace chats never do, and the Import Query section has its own (mailpractice.js).
 // Customer details are removed, staff names are removed, and links and amounts are replaced by
 // labels, so nothing from another customer's deal can be carried into a new reply.
 
@@ -16,6 +18,8 @@ import { comparable } from './learn.js';
 
 const DAY = 24 * 3600 * 1000;
 const BURST_MS = 15 * 60 * 1000;
+/** How far back the team's replies are read: the last year. The most recent weeks still count for more. */
+export const PRACTICE_DAYS = 365;
 export const BLOCK_LABEL = '[then our standard address block]';
 export const OFFER_LABEL = '[then the auction car: its details, link, bid and cost breakdown]';
 
@@ -24,13 +28,15 @@ const LINK_LABELS = [
   [/https?:\/\/\S*carbarn\.com\.au\/vehicles\/\S+#inspection\S*/gi, '[inspection booking link]'],
   [/https?:\/\/\S*carbarn\.com\.au\/vehicles\/\S+/gi, '[vehicle page link]'],
   [/https?:\/\/\S*carbarn\.com\.au\/live-auction\/\S+/gi, '[live auction link]'],
+  [/https?:\/\/\S*carbarn\.com\.au\/importing\/\S+/gi, '[model page link]'],
+  [/https?:\/\/\S*carbarn\.com\.au\/(?:how-importing-works|how-compliance-works|live-auction)\S*/gi, '[guide page link]'],
   [/https?:\/\/\S*carbarn\.com\.au\/customer-links\/\S+/gi, '[link]'],
   [/https?:\/\/(?:photos\.app\.goo\.gl|photos\.google\.com)\S*/gi, '[photo album link]'],
   [/https?:\/\/(?:maps\.app\.goo\.gl|(?:www\.)?google\.[a-z.]+\/maps)\S*/gi, '[Google Maps link]'],
   [/https?:\/\/\S+/gi, '[link]'],
 ];
 /** A label left in a finished reply means the AI copied an example instead of using the real thing. */
-export const LEFTOVER_LABEL = /\[(?:online video inspection link|inspection booking link|vehicle page link|photo album link|Google Maps link|live auction link|link|amount|then our standard address block|then the auction car: its details, link, bid and cost breakdown)\]/i;
+export const LEFTOVER_LABEL = /\[(?:online video inspection link|inspection booking link|vehicle page link|model page link|guide page link|photo album link|Google Maps link|live auction link|link|amount|then our standard address block|then the auction car: its details, link, bid and cost breakdown)\]/i;
 
 /** Links and dollar amounts belong to the other customer's deal: only what kind of thing it was is kept. */
 export function labelled(text) {
@@ -45,17 +51,33 @@ const SIGN_LINE = [
   /^\p{Lu}[\p{L}'’-]+(\s+\p{Lu}[\p{L}'’-]+)?\s+(from|at|@)\s+carbarn\.?$/iu,
   /^(the\s+)?(team\s+)?carbarn(\s+team)?\.?$/i,
   /^(📞\s*)?(\+?61|0)[\d\s-]{8,12}$/,
+  // The lines an email signature carries under the name: the company, the address, a phone, an
+  // address or website, a title.
+  /^carbarn( pty ltd| australia)?\.?$/i,
+  /^(unit\s+\w+,?\s*)?\d{1,4}([-–]\d{1,4})?\s+frances\s+st(reet)?\b.*$/i,
+  /^lidcombe\b.*$/i,
+  /^(?:m|t|p|ph|phone|mobile|tel|e|email|w|web)\b\s*[:.]\s*\S.*$/i,
+  /^\S+@\S+\.\S+$/,
+  /^(https?:\/\/)?(www\.)?carbarn\.com\.au\/?$/i,
+  /^(sales|sales team|import team|customer service|director|dealer principal|sales (manager|consultant))$/i,
 ];
+// One to three capitalised words on a line of their own: a name, when it follows a regards line.
+const NAME_LINE = /^\p{Lu}[\p{L}'’.-]+(\s+\p{Lu}[\p{L}'’.-]+){0,2}$/u;
+const REGARDS = /^(kind |warm |best |many )?(regards|thanks|thank you|cheers),?\.?$/i;
 
 /**
  * Removes whoever signed the text, whether or not they are in the people file: "Regards, Kim",
- * "Kim from Carbarn", and "Kim from Carbarn here." at the start.
+ * "Kim from Carbarn", "Kim from Carbarn here." at the start, and an email signature's lines.
  */
 function withoutAnySignature(text) {
   const lines = stripSignature(text).split('\n');
   while (lines.length) {
     const last = lines[lines.length - 1].trim();
-    if (last === '' || SIGN_LINE.some((re) => re.test(last))) lines.pop(); else break;
+    const before = lines.length > 1 ? lines[lines.length - 2].trim() : '';
+    if (last === '' || SIGN_LINE.some((re) => re.test(last))) { lines.pop(); continue; }
+    // "Regards,\nSam Lee": the name line goes with the regards line above it.
+    if (NAME_LINE.test(last) && REGARDS.test(before)) { lines.pop(); lines.pop(); continue; }
+    break;
   }
   return lines.join('\n')
     .replace(/[\s,]*(kind |warm |best )?regards,?\s*\p{Lu}[\p{L}'’-]+(\s+(from|at)\s+carbarn)?\.?\s*$/u, '')
@@ -106,24 +128,28 @@ function maskTrailingNames(text) {
   }).join('\n');
 }
 
+/** The same cleaning, for the email threads the Import Query section learns from (mailpractice.js). */
+export { cleanReply as cleanOurText };
+
 /** How many words a reply has once the greeting and the name are set aside. */
 const substance = (text) => wordCount(String(text || '').replace(/\{\{NAME\}\}/g, ' ').replace(/\b(hi|hello|hey|dear|good (morning|afternoon|evening)|morning)\b/gi, ' ').replace(/[,.!]/g, ' '));
 
 let cache = { key: '', rows: [] };
 
-/** Rebuilt only when a message has arrived or a lead has changed. */
+/** Rebuilt only when a message has arrived (on the dashboard or the phone), a text seen on the phone has grown, or a lead has changed. */
 function stamp(days) {
   const d = openDb();
   const m = d.prepare('SELECT COUNT(*) AS n, MAX(id) AS top FROM messages').get();
+  const p = d.prepare('SELECT COUNT(*) AS n, MAX(id) AS top, COALESCE(SUM(LENGTH(text)), 0) AS len FROM phone_messages').get();
   const l = d.prepare('SELECT COUNT(*) AS n, MAX(updated_at) AS top FROM leads').get();
-  return `${days}|${m.n}|${m.top}|${l.n}|${l.top}`;
+  return `${days}|${m.n}|${m.top}|${p.n}|${p.top}|${p.len}|${l.n}|${l.top}`;
 }
 
 /**
  * Every exchange of the last `days` days: what a customer wrote and what we sent straight back.
  * @returns [{ id, itemKey, at, situations, primary, firstReply, buyer, customer, reply, words, hadBlock }]
  */
-export function recentPractice({ days = 45, now = Date.now() } = {}) {
+export function recentPractice({ days = PRACTICE_DAYS, now = Date.now() } = {}) {
   const key = stamp(days);
   if (cache.key === key) return cache.rows;
   const since = now - days * DAY;
@@ -145,6 +171,8 @@ export function recentPractice({ days = 45, now = Date.now() } = {}) {
       for (let k = i - 1; k >= 0 && t[k].who === 'customer'; k--) before.unshift(t[k]);
       const burst = [];
       for (let k = i; k < t.length && t[k].who === 'us' && t[k].at - t[i].at < BURST_MS; k++) burst.push(t[k]);
+      // A text the phone's Messages list cut short teaches nothing: half a reply is not what was said.
+      if (burst.some((e) => e.truncated)) continue;
 
       const customerText = before.map((e) => e.text).filter(Boolean).join('\n').trim();
       const events = before.map((e) => e.event).filter(Boolean);

@@ -204,6 +204,38 @@ CREATE TABLE IF NOT EXISTS phone_messages (
   seen_at INTEGER NOT NULL, source TEXT NOT NULL -- when the add-on first saw it; 'list'
 );
 CREATE INDEX IF NOT EXISTS phone_messages_thread ON phone_messages(thread_id, at);
+
+-- Email threads the owner hands in from Gmail with the add-on's "Send to Wheelman" button (the
+-- Import Query section). Kept apart from the dashboard tables. Text only: no HTML, no attachments,
+-- no recipients. Learned from for Import Query replies only (mailpractice.js); never used for the
+-- example bank.
+CREATE TABLE IF NOT EXISTS mail_threads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  key TEXT NOT NULL UNIQUE,            -- 'ref:<Gmail's own thread id>' or 'subj:<subject>|<customer email>'
+  ref TEXT, subject TEXT NOT NULL DEFAULT '',
+  customer_name TEXT NOT NULL DEFAULT '', customer_email TEXT NOT NULL DEFAULT '', email_key TEXT NOT NULL DEFAULT '',
+  lead_id INTEGER, conversation_id INTEGER,  -- the dashboard's records for the same person, once matched
+  last_direction TEXT, last_at INTEGER, first_at INTEGER,
+  message_count INTEGER NOT NULL DEFAULT 0, collapsed_count INTEGER NOT NULL DEFAULT 0,
+  first_seen_at INTEGER, last_seen_at INTEGER, changed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS mail_threads_last ON mail_threads(last_at);
+CREATE INDEX IF NOT EXISTS mail_threads_email ON mail_threads(email_key);
+
+CREATE TABLE IF NOT EXISTS mail_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  thread_id INTEGER NOT NULL,
+  ref TEXT,                            -- Gmail's own message id, when the page gave one
+  direction TEXT NOT NULL,             -- 'IN' from the customer, 'OUT' from one of our addresses
+  from_name TEXT NOT NULL DEFAULT '', from_email TEXT NOT NULL DEFAULT '',
+  text TEXT NOT NULL DEFAULT '',       -- plain text, with the quoted history under it removed
+  collapsed INTEGER NOT NULL DEFAULT 0, -- Gmail had it folded, so its text could not be read
+  attachments INTEGER NOT NULL DEFAULT 0,
+  at INTEGER NOT NULL, at_text TEXT, approx INTEGER NOT NULL DEFAULT 0,  -- approx: no time of its own could be read
+  seen_at INTEGER NOT NULL, updated_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS mail_messages_thread ON mail_messages(thread_id, at);
+CREATE UNIQUE INDEX IF NOT EXISTS mail_messages_ref ON mail_messages(thread_id, ref) WHERE ref IS NOT NULL AND ref != '';
 CREATE INDEX IF NOT EXISTS sales_phone ON sales(phone_hash);
 CREATE INDEX IF NOT EXISTS sales_email ON sales(email_hash);
 `;
@@ -242,6 +274,14 @@ export function openDb(file = config.dbPath) {
   ensureColumn(db, 'drafts', 'edited_at', 'INTEGER');
   ensureColumn(db, 'drafts', 'next_step', 'TEXT');
   ensureColumn(db, 'drafts', 'rung', 'TEXT');
+  // When a Marketplace reply was sent from the page. The text itself is the engine's record.
+  ensureColumn(db, 'drafts', 'sent_here_at', 'INTEGER');
+  // What was looked up on the website for an import email: the page's research notes.
+  ensureColumn(db, 'drafts', 'research_json', 'TEXT');
+  // Which kind of reply a lesson came from: 'sms' (the dashboard) or 'email' (Import Query). What an
+  // email taught is used only for emails, and what a text taught only for texts and chats.
+  ensureColumn(db, 'learned', 'channel', "TEXT NOT NULL DEFAULT 'sms'");
+  ensureColumn(db, 'advice', 'channel', "TEXT NOT NULL DEFAULT 'sms'");
   ensureColumn(db, 'advice', 'lessons_json', 'TEXT');
   ensureColumn(db, 'leads', 'status_history_json', 'TEXT');
   ensureColumn(db, 'conversations', 'lead_platform', 'TEXT');
@@ -309,7 +349,9 @@ export function oldRowsStamp() {
       (SELECT COUNT(*) || ':' || IFNULL(MAX(at), 0) FROM seen) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(changed_at), 0) || ':' || IFNULL(SUM(conversation_id), 0) FROM phone_threads) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(last_message_at), 0) FROM mp_conversations) || '/' ||
-      (SELECT COUNT(*) FROM mp_messages) AS stamp`).get().stamp;
+      (SELECT COUNT(*) FROM mp_messages) || '/' ||
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(changed_at), 0) FROM mail_threads) || '/' ||
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(updated_at), 0) FROM mail_messages) AS stamp`).get().stamp;
 }
 
 export function getMeta(key, fallback = null) {
@@ -639,6 +681,19 @@ export function replaceMpMessages(conversationId, messages, sig) {
   d.prepare('UPDATE mp_conversations SET sig = ?, messages_synced_at = ? WHERE id = ?').run(sig, Date.now(), conversationId);
 }
 
+/**
+ * Adds the engine's record of a reply just sent from the page to the stored chat, so the thread
+ * shows it before the next read. The change fingerprint is left alone: the next read sees the
+ * engine's summary has moved on and fetches the whole chat again.
+ */
+export function appendMpMessage(conversationId, m) {
+  const d = openDb();
+  const seq = (d.prepare('SELECT IFNULL(MAX(seq), -1) + 1 AS n FROM mp_messages WHERE conversation_id = ?').get(conversationId)).n;
+  d.prepare('INSERT OR REPLACE INTO mp_messages(id, conversation_id, seq, direction, source, text, status, has_media, at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(m.id, conversationId, seq, m.direction, m.source, m.text, m.status, m.hasMedia ? 1 : 0, m.at);
+  if (m.direction === 'out') d.prepare('UPDATE mp_conversations SET last_direction = ?, last_message_at = MAX(IFNULL(last_message_at, 0), ?) WHERE id = ?').run('out', m.at || Date.now(), conversationId);
+}
+
 export function getMpConversation(id) {
   const r = stmt('SELECT * FROM mp_conversations WHERE id = ?').get(id);
   return r ? { ...r, data: JSON.parse(r.data_json || '{}') } : null;
@@ -708,12 +763,12 @@ export function countRows(table) {
 
 export function insertDraft(d) {
   const info = stmt(`
-    INSERT INTO drafts(item_key, anchor_key, situation, reply, needs_human_json, facts_used_json, checks_json, provider, model, status, instruction, error, created_at, context_json, next_step, rung)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO drafts(item_key, anchor_key, situation, reply, needs_human_json, facts_used_json, checks_json, provider, model, status, instruction, error, created_at, context_json, next_step, rung, research_json)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(d.itemKey, d.anchorKey, d.situation || null, d.reply || null, JSON.stringify(d.needsHuman || []),
     JSON.stringify(d.factsUsed || []), JSON.stringify(d.checks || []), d.provider || null, d.model || null,
     d.status, d.instruction || null, d.error || null, Date.now(), d.context ? JSON.stringify(d.context) : null,
-    d.nextStep || null, d.rung || null);
+    d.nextStep || null, d.rung || null, d.research ? JSON.stringify(d.research) : null);
   return Number(info.lastInsertRowid);
 }
 
@@ -724,6 +779,8 @@ const parseDraft = (r) => r && ({
   checks: JSON.parse(r.checks_json || '[]'),
   // What the message was about when the suggestion was written (it reads as "general" once answered).
   context: r.context_json ? JSON.parse(r.context_json) : null,
+  // For an import email: what was looked up on the website, for the page's research notes.
+  research: r.research_json ? JSON.parse(r.research_json) : null,
 });
 
 export function latestDraft(itemKey, anchorKey) {
@@ -735,7 +792,7 @@ export function getDraft(id) {
 }
 
 export function draftsAwaitingOutcome() {
-  return stmt("SELECT * FROM drafts WHERE status = 'ready' AND sent_text IS NULL AND (item_key LIKE 'c:%' OR item_key LIKE 'l:%') ORDER BY id DESC LIMIT 500").all().map(parseDraft);
+  return stmt("SELECT * FROM drafts WHERE status = 'ready' AND sent_text IS NULL AND (item_key LIKE 'c:%' OR item_key LIKE 'l:%' OR item_key LIKE 'em:%') ORDER BY id DESC LIMIT 500").all().map(parseDraft);
 }
 
 export function recordOutcome(id, { sentText, sentBy, sentAt, similarity }) {
@@ -796,20 +853,31 @@ export function recordCopiedTime(id) {
   stmt('UPDATE drafts SET copied_at = ? WHERE id = ?').run(Date.now(), id);
 }
 
+/** Notes that Send was pressed on a Marketplace suggestion. Marketplace only; no text is kept here. */
+export function recordSentHere(id, now = Date.now()) {
+  stmt("UPDATE drafts SET sent_here_at = ? WHERE id = ? AND item_key LIKE 'mp:%'").run(now, id);
+}
+
 // ---- learning ------------------------------------------------------------
 
+// Only dashboard conversations (c:), leads (l:) and import emails (em:) may teach Wheelman.
+// Marketplace chats, texts seen only on the phone and auction orders never do.
+const TEACHES = /^(?:[cl]|em):\d+$/;
+/** Which kind of reply a lesson is for: an email's lessons serve emails, a text's serve texts and chats. */
+export const channelOfKey = (itemKey) => (/^em:/.test(String(itemKey || '')) ? 'email' : 'sms');
+
 export function upsertLearned(l) {
-  // Last line of defence: only dashboard conversations (c:) and leads (l:) may teach Wheelman.
-  if (!/^[cl]:\d+$/.test(String(l.itemKey || ''))) throw new Error('Refused: only dashboard conversations can be learned from.');
+  // Last line of defence.
+  if (!TEACHES.test(String(l.itemKey || ''))) throw new Error('Refused: only dashboard conversations and import emails can be learned from.');
   stmt(`
-    INSERT INTO learned(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, final_text, source, changed, similarity, at)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO learned(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, final_text, source, changed, similarity, at, channel)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(draft_id) DO UPDATE SET
       situations_json = excluded.situations_json, first_reply = excluded.first_reply, customer_text = excluded.customer_text,
       draft_text = excluded.draft_text, final_text = excluded.final_text, source = excluded.source,
-      changed = excluded.changed, similarity = excluded.similarity, at = excluded.at
+      changed = excluded.changed, similarity = excluded.similarity, at = excluded.at, channel = excluded.channel
   `).run(l.draftId, l.itemKey, JSON.stringify(l.situations || []), l.firstReply ? 1 : 0, l.customerText || '', l.draftText || '',
-    l.finalText, l.source, l.changed ? 1 : 0, l.similarity ?? null, l.at || Date.now());
+    l.finalText, l.source, l.changed ? 1 : 0, l.similarity ?? null, l.at || Date.now(), channelOfKey(l.itemKey));
 }
 
 export function deleteLearned(draftId) {
@@ -844,11 +912,11 @@ export function getLearned(draftId) {
 
 /** A note from the owner on what a suggestion should have done differently. Dashboard conversations only. */
 export function insertAdvice(a) {
-  if (!/^[cl]:\d+$/.test(String(a.itemKey || ''))) throw new Error('Refused: only dashboard conversations can be learned from.');
+  if (!TEACHES.test(String(a.itemKey || ''))) throw new Error('Refused: only dashboard conversations and import emails can be learned from.');
   // One note per suggestion: saying it again replaces what was said before.
   if (a.draftId !== null && a.draftId !== undefined) stmt('DELETE FROM advice WHERE draft_id = ?').run(a.draftId);
-  return Number(stmt('INSERT INTO advice(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, note, lessons_json, at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(a.draftId ?? null, a.itemKey, JSON.stringify(a.situations || []), a.firstReply ? 1 : 0, a.customerText || '', a.draftText || '', a.note, a.lessons ? JSON.stringify(a.lessons) : null, a.at || Date.now()).lastInsertRowid);
+  return Number(stmt('INSERT INTO advice(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, note, lessons_json, at, channel) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(a.draftId ?? null, a.itemKey, JSON.stringify(a.situations || []), a.firstReply ? 1 : 0, a.customerText || '', a.draftText || '', a.note, a.lessons ? JSON.stringify(a.lessons) : null, a.at || Date.now(), channelOfKey(a.itemKey)).lastInsertRowid);
 }
 
 /** The lessons taken from a note: what Wheelman actually keeps of it. */
@@ -882,6 +950,96 @@ export function addUsage(day, provider) {
 }
 
 // ---- the phone (the browser add-on) -------------------------------------------
+
+// ---- email threads from Gmail (the Import Query section) --------------------------
+
+/** The thread row for a key, made if it is new. The subject follows the latest report; Gmail's id is kept once known. */
+export function upsertMailThread(t, now = Date.now()) {
+  const d = openDb();
+  const row = d.prepare('SELECT id FROM mail_threads WHERE key = ?').get(t.key);
+  if (row) {
+    d.prepare("UPDATE mail_threads SET ref = COALESCE(NULLIF(?, ''), ref), subject = CASE WHEN ? != '' THEN ? ELSE subject END, last_seen_at = ? WHERE id = ?")
+      .run(t.ref || '', t.subject || '', t.subject || '', now, row.id);
+    return { id: row.id, isNew: false };
+  }
+  const r = d.prepare('INSERT INTO mail_threads(key, ref, subject, first_seen_at, last_seen_at, changed_at) VALUES(?, ?, ?, ?, ?, ?)')
+    .run(t.key, t.ref || null, t.subject || '', now, now, now);
+  return { id: Number(r.lastInsertRowid), isNew: true };
+}
+
+export function getMailThread(id) {
+  return stmt('SELECT * FROM mail_threads WHERE id = ?').get(id) || null;
+}
+
+/** The email threads with their messages, oldest message first, for learning what the team wrote back. */
+export function mailExchanges({ since = 0 } = {}) {
+  const d = openDb();
+  const threads = d.prepare('SELECT id, subject, customer_name, customer_email FROM mail_threads WHERE last_at >= ? ORDER BY last_at DESC').all(since);
+  const messages = d.prepare('SELECT id, direction, from_name, at, text FROM mail_messages WHERE thread_id = ? ORDER BY at ASC, id ASC');
+  return threads.map((t) => ({ id: t.id, subject: t.subject, customerName: t.customer_name, customerEmail: t.customer_email, messages: messages.all(t.id) }));
+}
+
+/** Moves when an email message is added or filled in, so what was learned from the threads is rebuilt. */
+export function mailPracticeStamp() {
+  const r = stmt('SELECT COUNT(*) AS n, IFNULL(MAX(id), 0) AS top, IFNULL(MAX(updated_at), 0) AS upd FROM mail_messages').get();
+  return `${r.n}|${r.top}|${r.upd}`;
+}
+
+export function getMailThreadByKey(key) {
+  return stmt('SELECT * FROM mail_threads WHERE key = ?').get(key) || null;
+}
+
+/** Threads with a message in the window, newest first. */
+export function listMailThreads({ cutoff = 0, before = Number.MAX_SAFE_INTEGER } = {}) {
+  return stmt('SELECT * FROM mail_threads WHERE last_at >= ? AND last_at < ? ORDER BY last_at DESC').all(cutoff, before);
+}
+
+export function getMailMessages(threadId) {
+  return stmt('SELECT * FROM mail_messages WHERE thread_id = ? ORDER BY at ASC, id ASC').all(threadId);
+}
+
+/** The stored message a reported one is: by Gmail's id, or else the same sender and direction within a minute. */
+export function findMailMessage(threadId, m) {
+  if (m.ref) {
+    const byRef = stmt('SELECT * FROM mail_messages WHERE thread_id = ? AND ref = ?').get(threadId, m.ref);
+    if (byRef) return byRef;
+  }
+  if (!m.fromEmail) return null;
+  return stmt('SELECT * FROM mail_messages WHERE thread_id = ? AND direction = ? AND from_email = ? AND ABS(at - ?) <= 60000 ORDER BY ABS(at - ?) ASC, id ASC LIMIT 1')
+    .get(threadId, m.direction, m.fromEmail, m.at, m.at) || null;
+}
+
+export function addMailMessage(threadId, m, now = Date.now()) {
+  const r = stmt('INSERT INTO mail_messages(thread_id, ref, direction, from_name, from_email, text, collapsed, attachments, at, at_text, approx, seen_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(threadId, m.ref || null, m.direction, m.fromName || '', m.fromEmail || '', m.text || '', m.collapsed ? 1 : 0, m.attachments || 0, m.at, m.atText || null, m.approx ? 1 : 0, m.seenAt || now, now);
+  return Number(r.lastInsertRowid);
+}
+
+export function updateMailMessage(id, { text, collapsed, attachments }, now = Date.now()) {
+  stmt('UPDATE mail_messages SET text = ?, collapsed = ?, attachments = ?, updated_at = ? WHERE id = ?').run(text, collapsed ? 1 : 0, attachments || 0, now, id);
+}
+
+/**
+ * Works the thread's summary out again from its messages: who the customer is (the earliest
+ * sender who is not us), when it started and last moved, who wrote last, and the counts.
+ * changed_at moves only when something was added or updated, so the page's older rows stay put.
+ */
+export function refreshMailThreadSummary(threadId, now = Date.now(), { changed = false } = {}) {
+  const d = openDb();
+  const agg = d.prepare('SELECT COUNT(*) AS n, IFNULL(SUM(collapsed), 0) AS folded, MIN(at) AS first_at, MAX(at) AS last_at FROM mail_messages WHERE thread_id = ?').get(threadId);
+  const last = d.prepare('SELECT direction FROM mail_messages WHERE thread_id = ? ORDER BY at DESC, id DESC LIMIT 1').get(threadId);
+  const customer = d.prepare("SELECT from_email FROM mail_messages WHERE thread_id = ? AND direction = 'IN' AND from_email != '' ORDER BY at ASC, id ASC LIMIT 1").get(threadId);
+  const named = customer ? d.prepare("SELECT from_name FROM mail_messages WHERE thread_id = ? AND from_email = ? AND from_name != '' ORDER BY at ASC, id ASC LIMIT 1").get(threadId, customer.from_email) : null;
+  d.prepare(`UPDATE mail_threads
+      SET customer_name = ?, customer_email = ?, email_key = ?, last_direction = ?, last_at = ?, first_at = ?,
+          message_count = ?, collapsed_count = ?, last_seen_at = ?, changed_at = CASE WHEN ? THEN ? ELSE changed_at END
+    WHERE id = ?`)
+    .run(named ? named.from_name : '', customer ? customer.from_email : '', customer ? customer.from_email : '', last ? last.direction : null,
+      agg.last_at ?? null, agg.first_at ?? null, agg.n || 0, agg.folded || 0, now, changed ? 1 : 0, now, threadId);
+  return d.prepare('SELECT * FROM mail_threads WHERE id = ?').get(threadId);
+}
+
+// ---- texts seen on the phone -------------------------------------------------------
 
 /**
  * Saves one conversation as the Messages list shows it. Returns whether its latest message is new

@@ -147,7 +147,8 @@ export const NEXT_STEP_SIGNS = /\b(welcome to|come (in|and|by|down|over|past|thr
  *   null for an auction order or an import enquiry: those replies have their own plan.
  */
 export function saleStage(item, { now = Date.now() } = {}) {
-  if (!item || item.order || item.imports) return null;
+  // An import email has its own plan (the research), not the sales ladder.
+  if (!item || item.order || item.imports || item.channel === 'email') return null;
   const sit = item.situation?.all || [];
   const primary = item.situation?.primary || 'general';
   const channel = item.channel || 'sms';

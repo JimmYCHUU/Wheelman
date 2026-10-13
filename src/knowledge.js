@@ -207,6 +207,41 @@ export function importPagesFor(text, max = 2) {
   return scored.sort((a, b) => b.score - a.score || a.p.url.localeCompare(b.p.url)).slice(0, max).map(({ p }) => ({ url: p.url, title: p.title }));
 }
 
+const cap = (w) => (w ? w[0].toUpperCase() + w.slice(1) : '');
+
+/**
+ * What a saved importing page says about one model, for when the website's list cannot be read:
+ * the code, the approved years, the eligibility sentence, the SEVS numbers, the landed total, the
+ * deposit and the compliance package, with the day the page was saved. Found by model code, or
+ * else the best page for a text. Null when there is no such page.
+ */
+export function importPageDetails({ modelCode = '', text = '' } = {}) {
+  const pages = loadImportPages();
+  let p = modelCode ? pages.find((x) => x.code === String(modelCode).toLowerCase()) : null;
+  if (!p && text) { const best = importPagesFor(text, 1)[0]; p = best ? pages.find((x) => x.url === best.url) : null; }
+  if (!p) return null;
+  let raw = '';
+  try { raw = fs.readFileSync(path.join(config.importPagesDir, `${p.url.split('/').pop()}.md`), 'utf8').replace(/\r/g, ''); } catch { return null; }
+  const code = p.code.toUpperCase();
+  const years = raw.match(new RegExp(`^${code}\\s+(\\d{4})\\s*[-–]\\s*(\\d{4})\\s*$`, 'mi')) || [];
+  const criterion = (raw.match(/approved for import to Australia under the ([^.\n]+?)\s*\./i) || [])[1];
+  const money = (re) => { const m = raw.match(re); return m ? Number(m[1].replace(/,/g, '')) : 0; };
+  const odo = raw.match(/odometer must be (?:less than|under|below)\s*([\d,]+)\s*(?:km|kilomet)/i);
+  return {
+    modelCode: code, make: p.make.map(cap).join(' '), model: p.model.map(cap).join(' '),
+    title: (raw.match(/^# (.+?) Import to Australia\s*$/m) || [])[1] || p.title, url: p.url,
+    yearRange: years[1] ? `${years[1]} to ${years[2]}` : '', fromYear: Number(years[1]) || 0, toYear: Number(years[2]) || 0,
+    eligibility: criterion ? [`Approved for import to Australia under the ${criterion.trim()}.`] : [],
+    sevs: [...new Set(raw.match(/SEV-\d{6}/g) || [])],
+    totalAud: money(/Estimated Landed Total[^$]{0,80}\$([\d,]+)/i),
+    depositAud: money(/Refundable Auction Deposit[^$]{0,80}\$([\d,]+)/i),
+    complianceAud: money(/Compliance Package[^$]{0,80}\$([\d,]+)/i),
+    odometerLimitKm: odo ? Number(odo[1].replace(/,/g, '')) : 0,
+    priceOnRequest: /price on request/i.test(raw),
+    savedAt: (raw.match(/saved:\s*(\d{4}-\d\d-\d\d)/) || [])[1] || '',
+  };
+}
+
 export function websiteStats() {
   const all = loadWebsiteChunks();
   return { passages: all.length, pages: new Set(all.map((c) => c.source)).size };
