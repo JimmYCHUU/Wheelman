@@ -6,6 +6,15 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- **Marketplace links say they came from Facebook.** Every link to the Carbarn website in a
+  Marketplace suggestion, and in any text sent with **Send reply** (typed or pasted links
+  included), carries `utm_source=facebook`, placed before a booking link's `#inspection=…` so the
+  booking form still opens (checked on the live site, in person and video call). A link already
+  tagged for somewhere else is re-tagged; links to other sites and dashboard replies are
+  untouched. The link check compares links without the tag. A lead whose source is plain
+  `facebook` now reads "They came to us from Facebook" rather than as an advertisement. (The
+  owner's words, 15 Oct 2026: "for facebook marketplace all the links given to customer should
+  have ?utm_source=facebook".)
 - **The whole vehicle record, and what the dashboard knows about the customer.** The vehicle
   facts the AI reads now carry the written-off register answer (the dashboard's "no" was being
   dropped), water damage and major repairs, the cylinders, previous owners, the first registration

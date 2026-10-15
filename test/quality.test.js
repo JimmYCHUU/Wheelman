@@ -339,6 +339,9 @@ test('what the dashboard knows about a customer is kept by shape, shapes the req
   assert.ok(read.lines.every((l) => !/\d/.test(l) && !/Kim|Other Dealer/.test(l)), read.lines.join(' | '));
   assert.deepEqual([sourceLine('fb marketplace'), sourceLine('meta ads'), sourceLine('googleads'), sourceLine('www.google.com'), sourceLine('www.carbarn.com.au'), sourceLine('d')],
     ['They came to us from our Facebook Marketplace listing.', 'They came to us from a Facebook or Instagram advertisement.', 'They came to us from an online advertisement.', 'They came to us from a web search.', 'They came to our website directly.', '']);
+  // Plain "facebook" is the tag on the links in our Marketplace replies, so it is not an advertisement.
+  assert.deepEqual([sourceLine('facebook'), sourceLine(' Facebook '), sourceLine('fb'), sourceLine('instagram'), sourceLine('facebook ads')],
+    ['They came to us from Facebook.', 'They came to us from Facebook.', 'They came to us from a Facebook or Instagram advertisement.', 'They came to us from a Facebook or Instagram advertisement.', 'They came to us from a Facebook or Instagram advertisement.']);
   const built = prompt.buildPrompt(it, { now });
   assert.match(built.user, /Shape the reply by these, never state them: Our dashboard scores their engagement as high\. A finance application was declined\./);
   assert.match(built.user, /Never mention a score, a status, where they came from, other dealers, or a finance decision\./);

@@ -14,6 +14,7 @@ import { sydneyHour } from './time.js';
 import { standardBlock, inviteBlock, repeatsBlock, tidyOpening } from './firstreply.js';
 import { priceBlock } from './pricereply.js';
 import { LEFTOVER_LABEL } from './practice.js';
+import { tagMarketplaceLinks } from './marketplace.js';
 
 /**
  * What a reply may legitimately quote, split by how far it can be trusted.
@@ -371,7 +372,9 @@ async function writeDraft(item, { instruction = '', coaching = null, save = true
     const draft = {
       ...base,
       status: 'ready',
-      reply: best.reply,
+      // On Marketplace, links to our website say they came from Facebook. Added after the checks,
+      // which compare links without the tag.
+      reply: chat ? tagMarketplaceLinks(best.reply) : best.reply,
       needsHuman: Array.isArray(result.json.needs_human) ? result.json.needs_human : [],
       // What was looked up for an import email, for the page's research notes.
       research: rendered ? rendered.panel : null,

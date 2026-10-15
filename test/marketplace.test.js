@@ -250,7 +250,9 @@ test('on Marketplace the booking link and the car\'s page link go in the reply i
   assert.ok(!/=== STANDARD FIRST REPLY ===/.test(asked));
   assert.match(aiSeen[0].messages[0].content, /Links are given here as they are in a text message/);
   assert.equal(d.status, 'ready');
-  assert.ok(d.reply.includes(`${url}#inspection=onsite`), d.reply);
+  // Every link to our website is tagged as coming from Facebook, the tag before the #part.
+  assert.ok(d.reply.includes(`${url}?utm_source=facebook#inspection=onsite`), d.reply);
+  assert.ok(!d.reply.includes(`${url}#`), d.reply);
   assert.ok(!d.checks.some((c) => c.level === 'fail'), JSON.stringify(d.checks));
   assert.ok(!d.checks.some((c) => c.code === 'inspection-link'), JSON.stringify(d.checks));
 
@@ -258,9 +260,15 @@ test('on Marketplace the booking link and the car\'s page link go in the reply i
   // and the link line does not count towards the length.
   ai.script = [{ reply: `Yes, it is still available.\nMore details:\n${url}\nWould you like to come and see it?`, needs_human: [], facts_used: [], hold: false }];
   const first = await drafter.draftFor(items.itemFromKey('mp:501'), { save: false });
-  assert.ok(first.reply.includes(url), first.reply);
+  assert.ok(first.reply.includes(`More details:\n${url}?utm_source=facebook\n`), first.reply);
   assert.ok(!first.checks.some((c) => c.level === 'fail'), JSON.stringify(first.checks));
   assert.ok(!first.checks.some((c) => c.code === 'long'), JSON.stringify(first.checks));
+
+  // A link the AI copied already tagged, from a reply earlier in the chat, is ours too.
+  ai.script = [{ reply: `Yes, it is still available.\nMore details:\n${url}?utm_source=facebook`, needs_human: [], facts_used: [], hold: false }];
+  const copied = await drafter.draftFor(items.itemFromKey('mp:501'), { save: false });
+  assert.ok(copied.reply.endsWith(`More details:\n${url}?utm_source=facebook`), copied.reply);
+  assert.ok(!copied.checks.some((c) => c.code === 'link'), JSON.stringify(copied.checks));
 
   // A link that is not in our records is still refused.
   const stray = { reply: 'Book here:\nhttps://example.com/book/123', needs_human: [], facts_used: [], hold: false };
@@ -631,4 +639,24 @@ test('Send: a refused or unreachable engine changes nothing; an offline phone me
   assert.equal(held.state, 'awaiting', 'a queued auto-reply has not reached the buyer');
   assert.equal(held.marketplace.replyComing, true);
   assert.ok(!held.timeline.some((e) => e.who === 'us'));
+});
+
+test('Send: a link to our website typed or pasted into the box goes to the buyer tagged as coming from Facebook', async () => {
+  const { items, sync } = await load();
+  const base = `http://127.0.0.1:${appServer.address().port}`;
+  chats.set(509, { row: row(509, 'Ruby Shaw', 2), messages: [message(90, 'in', 'phone', 'Where can I see more photos?', 2)] });
+  await sync.syncMarketplace();
+  const url = items.itemFromKey('mp:509').vehicles[0].url;
+  assert.ok(url);
+
+  engineSeen.length = 0;
+  const typed = `More photos here:\n${url}\nBook a time:\n${url}#inspection=onsite\nOur yard: https://maps.app.goo.gl/AbCdEf`;
+  const res = await post(base, '/api/items/mp:509/send', { text: typed });
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  const out = await res.json();
+  const tagged = `More photos here:\n${url}?utm_source=facebook\nBook a time:\n${url}?utm_source=facebook#inspection=onsite\nOur yard: https://maps.app.goo.gl/AbCdEf`;
+  const writes = engineSeen.filter((r) => r.method !== 'GET');
+  assert.deepEqual(writes.map((r) => `${r.method} ${r.path}`), ['POST /inbox/conversations/509/reply']);
+  assert.deepEqual(JSON.parse(writes[0].body), { text: tagged, urls: [] });
+  assert.equal(out.item.thread.at(-1).text, tagged, 'the chat shows what the buyer gets');
 });

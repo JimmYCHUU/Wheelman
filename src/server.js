@@ -33,7 +33,7 @@ import { reservedByAnother } from './deal.js';
 import { wantedFrom } from './imports.js';
 import { learnedStats } from './db.js';
 import { validateReport, storePhoneReport } from './phone.js';
-import { sendReply, fetchConversation, normalizeMpMessage } from './marketplace.js';
+import { sendReply, fetchConversation, normalizeMpMessage, tagMarketplaceLinks } from './marketplace.js';
 import { storeMpConversation } from './sync.js';
 import { appendMpMessage, recordSentHere } from './db.js';
 import { blankMatcher } from '../web/lib/blank.js';
@@ -682,7 +682,8 @@ async function api(req, res, url) {
     const item = itemFromKey(m[1]);
     if (!item || item.channel !== 'marketplace') return send(res, 404, { error: 'That Marketplace chat was not found.' });
     const body = await readBody(req);
-    const text = String(body.text ?? '').replace(/\r/g, '').trim();
+    // A link to our website typed or pasted into the box is tagged as coming from Facebook too.
+    const text = tagMarketplaceLinks(String(body.text ?? '').replace(/\r/g, '').trim());
     if (!text) return send(res, 400, { error: 'There is nothing to send.' });
     // A blank is for the person to fill in. It is never sent to a buyer as it stands.
     const blanks = [...new Set([...text.matchAll(blankMatcher())].map((x) => x[0]))];

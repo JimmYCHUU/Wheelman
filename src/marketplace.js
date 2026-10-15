@@ -7,6 +7,10 @@
 // on or off. No cookies are sent and redirects are refused.
 
 import { config } from './config.js';
+import { tagLinks } from './text.js';
+
+/** A Marketplace reply with every link to our website tagged as coming from Facebook. */
+export const tagMarketplaceLinks = (text) => tagLinks(text, config.marketplace.linkSource, new URL(config.site.baseUrl).hostname.replace(/^www\./, ''));
 
 const READ_ALLOWLIST = [
   /^\/conversations$/,

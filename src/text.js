@@ -321,6 +321,47 @@ export function findUrls(text) {
   return (String(text || '').match(/https?:\/\/[^\s<>()"']+/gi) || []).map((u) => u.replace(/[.,;:!?]+$/, ''));
 }
 
+// A link in three parts: before the query, the query's parameters, and the #part.
+function linkParts(link) {
+  const hashAt = link.indexOf('#');
+  const front = hashAt === -1 ? link : link.slice(0, hashAt);
+  const q = front.indexOf('?');
+  return {
+    path: q === -1 ? front : front.slice(0, q),
+    params: q === -1 ? [] : front.slice(q + 1).split('&').filter(Boolean),
+    hash: hashAt === -1 ? '' : link.slice(hashAt),
+  };
+}
+const joinLink = ({ path, params, hash }) => `${path}${params.length ? `?${params.join('&')}` : ''}${hash}`;
+const isUtmSource = (p) => /^utm_source(=|$)/i.test(p);
+
+/**
+ * Every link to the site (site: its domain, with or without www.) in a text, with
+ * utm_source=<source> added, so the website can tell where a visit came from. The tag goes before
+ * any #part, so a booking link's #inspection=onsite still opens the form; a utm_source already
+ * there is replaced. Links to other sites are left alone. Tagging twice changes nothing.
+ */
+export function tagLinks(text, source, site) {
+  const ours = new RegExp(`^(www\\.)?${site.replace(/\./g, '\\.')}$`, 'i');
+  return String(text || '').replace(/https?:\/\/[^\s<>()"']+/gi, (whole) => {
+    const link = whole.replace(/[.,;:!?]+$/, '');
+    let host;
+    try { host = new URL(link).hostname; } catch { return whole; }
+    if (!ours.test(host)) return whole;
+    const parts = linkParts(link);
+    const tag = `utm_source=${encodeURIComponent(source)}`;
+    const at = parts.params.findIndex(isUtmSource);
+    if (at === -1) parts.params.push(tag); else parts.params[at] = tag;
+    return joinLink(parts) + whole.slice(link.length);
+  });
+}
+
+/** The link as it was before tagLinks: without its utm_source. */
+export const untagged = (link) => {
+  const parts = linkParts(String(link || ''));
+  return joinLink({ ...parts, params: parts.params.filter((p) => !isUtmSource(p)) });
+};
+
 // ---- similarity (for comparing a suggestion with what was actually sent) ----
 
 export function similarity(a, b) {
