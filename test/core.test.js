@@ -7,7 +7,7 @@ applyTestEnv(); // invented names and keys, the same on every computer
 
 const { parseDashboardTime, formatSydney } = await import('../src/time.js');
 const { redact, restore, firstNameOf, leftoverPlaceholders } = await import('../src/redact.js');
-const { isAcknowledgement, isOptOut, isReaction, menuReply, readInquiry, resolveStock, stockFromUrl, unwrapRelay, similarity } = await import('../src/text.js');
+const { isAcknowledgement, isOptOut, isReaction, menuReply, readInquiry, resolveStock, stockFromUrl, unwrapRelay, similarity, tagLinks } = await import('../src/text.js');
 const { classify, farAway, farPostcode } = await import('../src/situations.js');
 const { vehicleFacts, descriptionFor } = await import('../src/knowledge.js');
 const checksModule = await import('../src/checks.js');
@@ -197,6 +197,31 @@ test('stock numbers rewritten by the portals are resolved', () => {
   assert.equal(resolveStock('20051149', find), null); // year does not match
   assert.equal(resolveStock('99999', find), null);
   assert.equal(stockFromUrl('https://www.carbarn.com.au/vehicles/toyota/rav4/zca25/1149#inspection=onsite'), '1149');
+  assert.equal(stockFromUrl('https://www.carbarn.com.au/vehicles/toyota/rav4/zca25/1149?utm_source=facebook#inspection=onsite'), '1149');
+});
+
+test('links to our website are tagged with where they were given, and nothing else changes', () => {
+  const car = 'https://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159';
+  const tag = (t) => tagLinks(t, 'facebook', 'carbarn.com.au');
+  assert.equal(tag(car), `${car}?utm_source=facebook`);
+  // The booking link: the tag goes before the #part, so the booking form still opens.
+  assert.equal(tag(`${car}#inspection=onsite`), `${car}?utm_source=facebook#inspection=onsite`);
+  assert.equal(tag(`${car}#inspection=online`), `${car}?utm_source=facebook#inspection=online`);
+  // A link with a query of its own keeps it; one tagged for somewhere else is tagged for here.
+  assert.equal(tag('https://www.carbarn.com.au/finance?term=60'), 'https://www.carbarn.com.au/finance?term=60&utm_source=facebook');
+  assert.equal(tag('https://www.carbarn.com.au/warranty?utm_source=carsales&utm_medium=referral'), 'https://www.carbarn.com.au/warranty?utm_source=facebook&utm_medium=referral');
+  assert.equal(tag('https://carbarn.com.au'), 'https://carbarn.com.au?utm_source=facebook');
+  // A full stop or comma after a link stays outside it.
+  assert.equal(tag(`More details: ${car}. Or call us.`), `More details: ${car}?utm_source=facebook. Or call us.`);
+  assert.equal(tag(`(${car})`), `(${car}?utm_source=facebook)`);
+  // Every link in the text, each once: tagging twice changes nothing.
+  const two = `More details:\n${car}\nBook a time:\n${car}#inspection=onsite`;
+  assert.equal(tag(two), `More details:\n${car}?utm_source=facebook\nBook a time:\n${car}?utm_source=facebook#inspection=onsite`);
+  assert.equal(tag(tag(two)), tag(two));
+  // Links to other sites, and look-alikes of ours, are left alone. So is text with no link.
+  for (const other of ['https://maps.app.goo.gl/AbCdEf', 'https://photos.app.goo.gl/XyZ', 'https://www.facebook.com/marketplace/item/246813', 'https://carbarn.com.au.example.com/x', 'https://notcarbarn.com.au/x', 'Visit carbarn.com.au today.'])
+    assert.equal(tag(other), other);
+  assert.equal(tag(''), '');
 });
 
 test('similarity is high for near-identical text and low for unrelated text', () => {
@@ -241,6 +266,20 @@ test('a draft using only supplied figures passes', () => {
   const body = 'Hi {{NAME}},\nYes, the Noah is available at $28,900 with 62,733 km.\nIt has 8 seats and comes with 6 months NSW registration.\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159';
   const checks = checkDraft({ reply: finishReply(body, lead), body, allowedText: facts });
   assert.equal(worst(checks), 'ok', JSON.stringify(checks));
+});
+
+test('a link of ours tagged for Facebook is still one of ours; a stranger\'s link is not', () => {
+  const car = 'https://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159';
+  for (const link of [`${car}?utm_source=facebook`, `${car}?utm_source=facebook#inspection=onsite`]) {
+    const body = `Book a time here:\n${link}`;
+    const checks = checkDraft({ reply: body, body, allowedText: `${facts}\nBooking link: ${car}#inspection=onsite` });
+    assert.ok(!checks.some((c) => c.code === 'link'), `${link}: ${JSON.stringify(checks)}`);
+  }
+  // Already tagged in the conversation, and given again without the tag.
+  const plain = `More details:\n${car}`;
+  assert.ok(!checkDraft({ reply: plain, body: plain, allowedText: '', customerText: `We sent: ${car}?utm_source=facebook` }).some((c) => c.code === 'link'));
+  const stray = 'Book here:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/9999?utm_source=facebook';
+  assert.ok(checkDraft({ reply: stray, body: stray, allowedText: facts }).some((c) => c.code === 'link' && c.level === 'fail'));
 });
 
 test('an invented price is caught', () => {

@@ -742,6 +742,11 @@ differences:
   with the booking link when the buyer asks to see the car, added under the lines by code as on
   the dashboard. The price reply is added the same way. (Marketplace has no standard block, so
   these go in the reply itself.)
+- **Links say they came from Facebook.** Every link to the Carbarn website in a Marketplace reply
+  carries `utm_source=facebook`, so the website, and the lead it records, shows where the visit
+  came from. The tag goes before a booking link's `#inspection=…` part, so the booking form still
+  opens. Links you type or paste into the box are tagged on **Send reply** too. Links to other
+  sites, and dashboard replies, are left as they are.
 - **Send from here.** **Send reply** hands the text in the box to the content engine, which
   types it into the Marketplace chat from its phone. The reply shows in the conversation
   marked "Sending" until the engine reports it sent, and the chat leaves **Waiting** at once.

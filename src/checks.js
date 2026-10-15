@@ -3,7 +3,7 @@
 
 import { config } from './config.js';
 import { restore, leftoverPlaceholders, NAME_TOKEN } from './redact.js';
-import { findUrls, hasEmoji, wordCount, stripEmoji, similarity } from './text.js';
+import { findUrls, untagged, hasEmoji, wordCount, stripEmoji, similarity } from './text.js';
 import { sydneyHour } from './time.js';
 import { promiseChecks } from './promises.js';
 import { FILLER, URGENCY, STAYS_FOR_SALE, CLAIM, NEXT_STEP_SIGNS, SLANG, SERVILE } from './selling.js';
@@ -246,8 +246,10 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
     if (low.length) add('fail', 'price-floor', `${low.join(', ')} is below the advertised price. Never name a lower figure: the standard price reply is added under your text, and a counter-offer is [PRICE?] for a person.`, low);
   }
 
-  const allowedUrls = new Set(findUrls(`${allowed}\n${policyText}\n${customerText}`).map((u) => u.toLowerCase().replace(/\/$/, '')));
-  const badUrls = findUrls(body).filter((u) => !allowedUrls.has(u.toLowerCase().replace(/\/$/, '')));
+  // A link tagged for Facebook (a Marketplace reply) is still the same link.
+  const urlKey = (u) => untagged(u).toLowerCase().replace(/\/$/, '');
+  const allowedUrls = new Set(findUrls(`${allowed}\n${policyText}\n${customerText}`).map(urlKey));
+  const badUrls = findUrls(body).filter((u) => !allowedUrls.has(urlKey(u)));
   if (badUrls.length) add('fail', 'link', `This link is not in your records: ${badUrls.join(', ')}`, badUrls);
   // The yard moved. The old address lives on in the team's past replies, which the AI reads.
   const stale = oldAddressIn(body);

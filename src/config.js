@@ -119,6 +119,9 @@ export const config = {
     get enabled() { return this.switchedOn && !!this.url; },
     dailyDrafts: num(env.MARKETPLACE_DAILY_DRAFTS, 60),
     windowDays: 14,
+    // Every link to the website in a Marketplace reply carries utm_source=<this>, so a visit (and
+    // the lead it becomes) shows it came from Facebook.
+    linkSource: 'facebook',
   },
 
   // Texts seen on the business phone, reported by the browser add-on (extension/) that reads
