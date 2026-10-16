@@ -159,7 +159,7 @@ export function vehicleUrl(v) {
 }
 
 const SAFE_FIELDS = [
-  'id', 'stockNo', 'dsVehicleId', 'year', 'builtMonthYear', 'firstRegistrationDate', 'title', 'noOfKeys',
+  'id', 'stockNo', 'chassisNo', 'dsVehicleId', 'year', 'builtMonthYear', 'firstRegistrationDate', 'title', 'noOfKeys',
   'registrationExpiryDate', 'make', 'model', 'modelCode', 'variant', 'engineCc', 'fuel', 'transmission',
   'engineCode', 'driveTrain', 'cylinders', 'doors', 'seats', 'height', 'width', 'length', 'color',
   'interiorColour', 'bodyType', 'batterySOH', 'batteryRange', 'odometer', 'odometerHistory1',

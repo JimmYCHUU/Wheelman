@@ -10,6 +10,9 @@ const json = (res, status, data, headers = {}) => { res.writeHead(status, { 'con
 const listen = (handler) => new Promise((resolve) => { const s = http.createServer(handler); s.listen(0, '127.0.0.1', () => resolve(s)); });
 const readBody = (req) => new Promise((resolve) => { let body = ''; req.on('data', (c) => { body += c; }); req.on('end', () => resolve(body)); });
 
+// A one-pixel PNG: every picture the stand-in dashboard serves.
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+
 const DEFAULT_REPLY = { reply: 'Hello {{NAME}},\nCertainly.', needs_human: [], facts_used: [], hold: false };
 
 /**
@@ -50,6 +53,8 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
   const engineSeen = [];
   const row = () => lotRow(world.now);
   const detail = () => lotDetail(world.now);
+  // This stand-in's own address, once it is listening.
+  const base = () => `http://127.0.0.1:${main.address().port}`;
 
   const main = await listen(async (req, res) => {
     const body = await readBody(req);
@@ -88,6 +93,25 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
     if (p === '/carbarnau/api/v1/vehicles') {
       const page = Number(q.page) || 0;
       return json(res, 200, { content: page === 0 ? world.vehicles || [] : [], page: { totalPages: 1 } });
+    }
+    // One car's media list and its full record, by chassis number. Picture addresses in the world
+    // say {base}, which becomes this stand-in, where /pic/ serves them.
+    m = p.match(/^\/carbarnau\/api\/v2\/vehicles\/media\/([A-Za-z0-9-]+)$/);
+    if (m) {
+      if (world?.mediaDown) return json(res, 503, { error: 'Service Unavailable' });
+      return json(res, 200, JSON.parse(JSON.stringify((world.vehicleMedia || {})[m[1]] || []).replaceAll('{base}', base())));
+    }
+    m = p.match(/^\/carbarnau\/api\/v1\/vehicles\/chassis\/([A-Za-z0-9-]+)$/);
+    if (m) {
+      if (world?.mediaDown) return json(res, 503, { error: 'Service Unavailable' });
+      const rec = (world.vehicleRecords || {})[m[1]];
+      return rec ? json(res, 200, JSON.parse(JSON.stringify(rec).replaceAll('{base}', base()))) : json(res, 404, { error: 'Not Found' });
+    }
+    m = p.match(/^\/pic\/([\w.-]+)$/);
+    if (m) {
+      if (m[1].endsWith('.html')) { res.writeHead(200, { 'content-type': 'text/html' }); return res.end('<p>not a picture</p>'); }
+      res.writeHead(200, { 'content-type': 'image/png' });
+      return res.end(PNG);
     }
     if (p === '/carbarnau/api/v1/sales/auction') {
       const rows = world.orders || [];

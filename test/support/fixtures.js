@@ -74,7 +74,7 @@ export const hiaceT88 = (stockIn) => ({
 
 export function vehicles(now = Date.now()) {
   return [
-    car(1, '1159', '2021 Toyota Noah X (8 Seater)', 'Noah', 'ZRR80G', 28900, 62733, { seats: 8, color: 'Pearl white', outline: ['6 Months NSW Registration', '5-Year Extended Warranty'] }),
+    car(1, '1159', '2021 Toyota Noah X (8 Seater)', 'Noah', 'ZRR80G', 28900, 62733, { chassisNo: 'ZRR80-0101010', seats: 8, color: 'Pearl white', outline: ['6 Months NSW Registration', '5-Year Extended Warranty'] }),
     car(2, '1200', '2019 Toyota Hiace DX', 'Hiace', 'GDH206V', 32900, 123000, { status: 'UNPUBLISHED', soldStatus: 'Sold', stockIn: 'Sold', fuel: 'Diesel', seats: 3 }),
     car(3, '1201', '2020 Toyota Hiace DX', 'Hiace', 'GDH206V', 33900, 98000, { fuel: 'Diesel', seats: 3 }),
     // Deposit paid ten days ago by the buyer on Brad's number; registered, no blue slip date on file.
@@ -311,7 +311,50 @@ export const ELIGIBLE = [
   eligibleRow({ id: 140, make: 'Audi', model: 'Q7', modelCode: '4MC', slug: 'audi-q7-4mc', yearRange: '1/2016 to 12/2026', summary: ['Eligible under the SEVS Performance Criterion'], engine: 'CRTC', seats: 7, bodyType: 'SUV', fuelType: 'Diesel', compliance: 2480, priceOnRequest: true, sevs: ['SEV-000777'] }),
 ];
 
+// ---- one car's photos, videos and documents, by chassis number ---------------------------------
+// {base} is the stand-in dashboard, which serves a one-pixel picture under /pic/.
+
+/** The Noah's website media: photos out of order (the walk round the car puts them right) and two videos. */
+export const VEHICLE_MEDIA = {
+  'ZRR80-0101010': [
+    { id: 1, chassisNo: 'ZRR80-0101010', mediaType: 'IMAGE', imageRole: 'odometer', displayOrder: 9, url: '{base}/pic/odo.png', altText: 'odometer' },
+    { id: 2, chassisNo: 'ZRR80-0101010', mediaType: 'IMAGE', imageRole: 'front_exterior', displayOrder: 1, url: '{base}/pic/front-1.png' },
+    { id: 3, chassisNo: 'ZRR80-0101010', mediaType: 'IMAGE', imageRole: 'front_exterior', displayOrder: 2, url: '{base}/pic/front-2.png' },
+    { id: 4, chassisNo: 'ZRR80-0101010', mediaType: 'IMAGE', imageRole: 'boot_space', displayOrder: 20, url: '{base}/pic/boot.png' },
+    { id: 5, chassisNo: 'ZRR80-0101010', mediaType: 'VIDEO', label: 'Inside Front', url: 'https://fastlycb.s3.ap-southeast-2.amazonaws.com/inventory/media-v2/ZRR80-0101010/videos/inside-front.mp4', voiceOverVideoUrl: 'https://fastlycb.s3.ap-southeast-2.amazonaws.com/inventory/media-v2/ZRR80-0101010/videos/1159_inside-front-voiceover.mp4', thumbnailUrl: '{base}/pic/poster-2.png' },
+    { id: 6, chassisNo: 'ZRR80-0101010', mediaType: 'VIDEO', label: 'Walkaround 360', url: 'https://fastlycb.s3.ap-southeast-2.amazonaws.com/inventory/media-v2/ZRR80-0101010/videos/walk.mp4', voiceOverVideoUrl: 'https://fastlycb.s3.ap-southeast-2.amazonaws.com/inventory/media-v2/ZRR80-0101010/videos/1159_walkaround-360-voiceover.mp4', thumbnailUrl: '{base}/pic/poster-1.png' },
+  ],
+};
+
+/**
+ * The Noah's full record, as the dashboard sends it: the auction photos and documents Wheelman
+ * keeps, and beside them everything it must never keep (costs, the supplier, the VIN, the buyer,
+ * the inspection sheet with the supplier's key, the pro-forma invoice, a signed Form 5).
+ */
+export const VEHICLE_RECORDS = {
+  'ZRR80-0101010': {
+    id: 1, chassisNo: 'ZRR80-0101010', stockNo: '1159', vin: 'SECRETVIN00000001', engineNo: 'SECRET-ENGINE-9',
+    fob: 777111, shippingPrice: 333444, grossCost: 888222, supplierId: 'SUPPLIER-9',
+    paymentSummary: { totalPaidAud: 666777 }, salesInfo: { customerName: 'Somebody Private', customerMobile: '0491 570 199', customerEmail: 'private@example.com' },
+    auctionPhotos: ['{base}/pic/auction-1.png', '{base}/pic/auction-2.png', '{base}/pic/auction-1.png'],
+    exteriorPhoto: ['{base}/pic/old-outside.png'], interiorPhoto: ['{base}/pic/old-inside.png'],
+    operation: {
+      id: 1, vehicleId: 1, shippingStatus: 'ARRIVED', viaStatus: 'APPROVED',
+      documents: [
+        { id: 11, documentType: 'INSPECTION_SHEET', url: 'https://supplier.example/?user=AU&key=secret-supplier-key&stock_no=1', active: true },
+        { id: 12, documentType: 'AUCTION_SHEET', url: '{base}/pic/sheet.png', active: true, updatedAt: '2026-06-01T10:00:00' },
+        { id: 13, documentType: 'EXPORT_CERTIFICATE', url: 'https://fastlycb.s3.ap-southeast-2.amazonaws.com/docs/export-old.pdf', active: true, updatedAt: '2026-06-01T10:00:00' },
+        { id: 14, documentType: 'EXPORT_CERTIFICATE', url: 'https://fastlycb.s3.ap-southeast-2.amazonaws.com/docs/export.pdf', active: true, updatedAt: '2026-06-05T10:00:00' },
+        { id: 15, documentType: 'PROFORMA_INVOICE', url: 'https://fastlycb.s3.ap-southeast-2.amazonaws.com/docs/proforma-secret.pdf', active: true },
+        { id: 16, documentType: 'SIGNED_FORM_5', url: 'https://fastlycb.s3.ap-southeast-2.amazonaws.com/docs/form5-secret.pdf', active: true },
+        { id: 17, documentType: 'RAW_FOOTAGE_LINK', url: 'https://photos.app.goo.gl/invented-footage', active: true },
+        { id: 18, documentType: 'VIA_APPROVAL', url: 'https://fastlycb.s3.ap-southeast-2.amazonaws.com/docs/via.pdf', active: false },
+      ],
+    },
+  },
+};
+
 /** Everything the stand-ins serve, built once for a given `now`. */
 export function world(now = Date.now()) {
-  return { now, vehicles: vehicles(now), ...dashboard(now), orders: orders(now), lots: LOTS, sold: SOLD, chats: marketplace(now), phoneReport: phoneReport(now), eligible: ELIGIBLE };
+  return { now, vehicles: vehicles(now), ...dashboard(now), orders: orders(now), lots: LOTS, sold: SOLD, chats: marketplace(now), phoneReport: phoneReport(now), eligible: ELIGIBLE, vehicleMedia: VEHICLE_MEDIA, vehicleRecords: VEHICLE_RECORDS };
 }

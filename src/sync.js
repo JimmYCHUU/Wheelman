@@ -41,12 +41,18 @@ export function storeConversation(rawConv, rawMessages) {
   return c;
 }
 
+// Raised whenever normalizeVehicle keeps a field it did not keep before, so the stored stock list is
+// read again once instead of waiting half an hour. 2: the chassis number, for the car's photos.
+const VEHICLE_FIELDS = 2;
+
 export async function syncVehicles({ force = false } = {}) {
   const last = getMeta('vehicles_synced_at', 0);
-  if (!force && Date.now() - last < VEHICLE_REFRESH_MS) return { skipped: true };
+  const fields = Number(getMeta('vehicles_fields', 1));
+  if (!force && fields === VEHICLE_FIELDS && Date.now() - last < VEHICLE_REFRESH_MS) return { skipped: true };
   const raw = await dash.fetchAllVehicles();
   storeVehicles(raw);
   setMeta('vehicles_synced_at', Date.now());
+  setMeta('vehicles_fields', VEHICLE_FIELDS);
   return { vehicles: raw.length };
 }
 

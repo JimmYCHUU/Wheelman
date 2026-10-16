@@ -39,6 +39,19 @@ and versions follow `MAJOR.MINOR.PATCH`.
   the dashboard.")
 
 ### Added
+- **A car's photos, videos and documents, on the server.** Two read-only dashboard addresses,
+  by the car's chassis number (now kept with each car in the stock list, never shown to the AI):
+  the website's photos and videos, and the car's record, which is read only for its auction
+  photos, its older photo lists and its documents (auction sheet, export certificate, import
+  approval, the Google Photos albums). Everything else in that record (costs, the supplier, the
+  VIN, the buyer, the inspection sheet with the supplier's key, the pro-forma invoice, a signed
+  Form 5) is dropped the moment it is read. Each car's answer is kept for half an hour; pictures
+  are fetched once and served from Wheelman's own copy; videos play from Carbarn's own storage,
+  the one address the page's policy now allows for them. New read-only routes:
+  `/api/vehicles?q=` (Find a car), `/api/vehicles/:stock`, `/api/vehicles/:stock/media` and
+  `/api/vehicles/:stock/picture/:n`. The stock list is read again once after this update so every
+  car gets its chassis number. (The owner's request, 15 Oct 2026: "I should be able to access
+  the vehicle photos and videos … export certificate and auction report".)
 - **Marketplace links say they came from Facebook.** Every link to the Carbarn website in a
   Marketplace suggestion, and in any text sent with **Send reply** (typed or pasted links
   included), carries `utm_source=facebook`, placed before a booking link's `#inspection=…` so the
