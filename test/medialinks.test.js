@@ -88,6 +88,21 @@ test('the links answer only what was asked: the walkaround for a video, the insi
   assert.deepEqual(ask('more photos', { pageInBlock: true }), [], 'the page link is in the standard block already');
   assert.deepEqual(vm.replyLinks(media, { ...car, stockIn: 'Transit', status: 'UNPUBLISHED' }, vm.askedFor('photos')), [], 'a car not yet listed has no photos line');
   assert.ok(!ask('send me the footage album and the VIA').some((l) => /album|via/.test(l)), 'albums and the import approval are never added by code');
+  // An auction sheet at the supplier's own address is never put in a reply.
+  const supplier = { ...media, documents: [{ type: 'AUCTION_SHEET', link: 'http://www.nichibojapan.com/sheet.jpg', shareable: false }] };
+  assert.deepEqual(vm.replyLinks(supplier, car, vm.askedFor('Can you send the auction sheet?')), []);
+});
+
+test('an auction sheet kept at the supplier\'s address is left out of the reply, with the usual rule for the AI', async () => {
+  vm.forgetMedia();
+  const kept = world.vehicleRecords['ZRR80-0101010'];
+  world.vehicleRecords['ZRR80-0101010'] = { ...kept, operation: { ...kept.operation, documents: [{ id: 1, documentType: 'AUCTION_SHEET', url: 'http://www.nichibojapan.com/AuctionPictures/stock/9S.jpg', active: true }] } };
+  try {
+    const { d, asked } = await draft(101, 'Hi {{NAME}},\nOf course. The Noah is ready to inspect at our Lidcombe showroom.');
+    assert.ok(d.reply.includes(`Walkaround 360 video: ${WALK}`), 'the video still comes');
+    assert.doesNotMatch(d.reply, /nichibojapan|Auction sheet:/);
+    assert.doesNotMatch(asked, /auction sheet\. /, 'the AI is not told an auction sheet link is added');
+  } finally { world.vehicleRecords['ZRR80-0101010'] = kept; vm.forgetMedia(); }
 });
 
 test('a customer who asks for the walkaround video and the auction sheet gets both links, labelled, under the reply', async () => {

@@ -278,9 +278,10 @@ export function replyLinks(media, vehicle, asked, { pageInBlock = false } = {}) 
     const chosen = [video(/walk/i) || videos[0]];
     if (asked.inside) chosen.push(video(/inside\s*front/i), video(/inside\s*rear/i), video(/inside|interior/i));
     if (asked.engine) chosen.push(video(/engine/i));
-    for (const v of [...new Set(chosen.filter(Boolean))]) out.push({ label: /video/i.test(v.label) ? v.label : `${v.label} video`, url: v.link });
+    for (const v of [...new Set(chosen.filter((x) => x && x.shareable !== false))]) out.push({ label: /video/i.test(v.label) ? v.label : `${v.label} video`, url: v.link });
   }
-  const doc = (type) => (media.documents || []).find((d) => d.type === type);
+  // A document kept at the supplier's own address is never put in a reply (the owner's choice).
+  const doc = (type) => (media.documents || []).find((d) => d.type === type && d.shareable !== false);
   if (asked.auctionSheet && doc('AUCTION_SHEET')) out.push({ label: 'Auction sheet', url: doc('AUCTION_SHEET').link });
   if (asked.exportCertificate && doc('EXPORT_CERTIFICATE')) out.push({ label: 'Export certificate', url: doc('EXPORT_CERTIFICATE').link });
   const listed = vehicle?.url && availability(vehicle).code === 'available';

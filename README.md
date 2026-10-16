@@ -288,7 +288,9 @@ Photos: <the car's page on the website>
 Only what was asked for: the walkaround for any video, the inside or engine videos too when those
 are asked for, the photos as the car's page (and not at all on a first reply, whose standard block
 already carries that page, or for a car not yet listed). The albums and the import approval are
-never added by code; Add to reply on the page puts them in by hand. The AI is told the links are
+never added by code; Add to reply on the page puts them in by hand. An auction sheet kept at the
+supplier's own address is never added at all, so the supplier's address never reaches a customer;
+one on Carbarn's own storage is. The AI is told the links are
 added and writes the answer around them in its own words; a link it types anyway is given once,
 and a reply that points at the links with "below" is written again. If the dashboard does not
 answer within five seconds, nothing is added and the usual rule stands: say we will check and send
