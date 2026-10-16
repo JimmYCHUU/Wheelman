@@ -278,8 +278,8 @@ test('the register: slang and apologies are pointed out, "plus on-roads" is refu
   assert.ok(codes(run(words(76))).includes('warn:long'));
   assert.ok(!codes(run(words(54), { inConversation: true })).includes('warn:long'));
   assert.ok(codes(run(words(56), { inConversation: true })).includes('warn:long'));
-  assert.ok(!codes(run(words(59), { channel: 'marketplace' })).includes('warn:long'), 'a Marketplace reply has room for its thank-you: up to 60 words');
-  assert.ok(codes(run(words(61), { channel: 'marketplace' })).includes('warn:long'));
+  assert.ok(!codes(run(words(89), { channel: 'marketplace' })).includes('warn:long'), 'a Marketplace reply has room to sell: up to 90 words');
+  assert.ok(codes(run(words(91), { channel: 'marketplace' })).includes('warn:long'));
   assert.ok(!codes(run('Thank you for your offer.', { stage: { rung: 'fit', move: 'part_well', allowsUrgency: false, aim: 'x' } })).includes('warn:next-step'), 'a polite close gets no next step');
 });
 
@@ -298,8 +298,8 @@ test('a reply that refuses or runs down an offer is sent back: the figure is a p
 
 test('the Marketplace length band in the replay score matches the check', () => {
   const words = (n) => Array.from({ length: n }, () => 'alpha').join(' ');
-  assert.equal(selling.salesScore({ body: words(58), channel: 'marketplace' }).parts.length, true);
-  assert.equal(selling.salesScore({ body: words(62), channel: 'marketplace' }).parts.length, false);
+  assert.equal(selling.salesScore({ body: words(88), channel: 'marketplace' }).parts.length, true);
+  assert.equal(selling.salesScore({ body: words(92), channel: 'marketplace' }).parts.length, false);
 });
 
 test('a buyer leaving over the price gets no price reply and no invitation; a second offer gets no second price reply', () => {

@@ -369,7 +369,7 @@ export function salesScore({ body = '', nextStep = '', rung = '', situations = [
     nextStep: /\?/.test(b) || findUrls(b).length > 0 || NEXT_STEP_SIGNS.test(b) || !!String(nextStep || '').trim() || !!(due && (due.priceGiven || due.inviteGiven)),
     // No question is right unless one was needed; one question is right unless none was.
     questionOnlyWhenNeeded: questions === 0 ? needed !== true : questions === 1 && needed !== false,
-    length: channel === 'marketplace' ? n > 0 && n <= 60 : channel === 'email' ? n > 0 && n <= 180 : firstReply ? n >= 12 && n <= 70 : n >= 4 && n <= 50,
+    length: channel === 'marketplace' ? n > 0 && n <= 90 : channel === 'email' ? n > 0 && n <= 180 : firstReply ? n >= 12 && n <= 70 : n >= 4 && n <= 50,
     register: !SLANG.test(b) && !SERVILE.test(b) && !hasEmoji(b) && (b.match(/!/g) || []).length <= 1,
     noUrgency: !URGENCY.test(b) && !CLAIM.test(b) && (!STAYS_FOR_SALE.test(b) || rung === 'commit'),
     dueBlocks: (!due?.price || !!due.priceGiven) && (!due?.invite || !!due.inviteGiven) && (!proofDue || /auction sheet|export certificate|walkaround|video|photos?|odometer history|ppsr/i.test(b)),
