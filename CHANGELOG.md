@@ -21,6 +21,12 @@ and versions follow `MAJOR.MINOR.PATCH`.
   with the panel on the right and took the panel's layout; the panel is now styled by its own id.
 
 ### Changed
+- **The page is four rounded tiles.** The top bar, the conversation list, the conversation and the
+  car panel are tiles with rounded corners on a slightly darker ground, with a small gap between
+  them in place of the straight dividing lines. Inside each tile nothing changes. In a smaller
+  window the car panel floats in as a rounded tile of its own; on a phone the gaps and corners are
+  smaller. (The owner, 16 Oct 2026: "How would the Ui look in bento box styled rounded corners
+  type. As of now it is straign lines", then, on the preview, "It looks good actually".)
 - **Marketplace replies are courteous, and nobody is asked for a deposit while the price is
   open.** The owner found the Marketplace replies "a bit rude, extra brief and very much pushy",
   asking for a deposit when the customer was not matching our price (16 Oct 2026). The cause: a

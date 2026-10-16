@@ -41,3 +41,14 @@ test('the top bar is one bar with the sections in its middle, and the panel\'s s
   const bare = views.split('\n').filter((l) => /(^|[\s,{(])\.info(?=[\s{:,.])/.test(l.replace(/\/\*.*?\*\//g, '')));
   assert.deepEqual(bare, [], 'no style is written for the bare .info class');
 });
+
+test('the page is rounded tiles on a tray, with gaps in place of dividing lines', () => {
+  const views = fs.readFileSync(path.join(root, 'web', 'css', 'views.css'), 'utf8').replace(/\s+/g, ' ');
+  const tokens = fs.readFileSync(path.join(root, 'web', 'css', 'tokens.css'), 'utf8');
+  // The owner's choice, 16 Oct 2026: "bento box styled rounded corners".
+  assert.equal((tokens.match(/--tray:/g) || []).length, 2, 'the tray has a light and a dark value');
+  assert.ok(views.includes('.shell { background: var(--tray); padding: var(--sp-2); gap: var(--sp-2); }'));
+  assert.ok(views.includes('.shell > .topbar { border-bottom: 0; border-radius: var(--r-lg); }'));
+  assert.ok(views.includes('.side, .chat, #info { border-radius: var(--r-lg); overflow: hidden; }'));
+  assert.ok(views.includes('.side { border-right: 0; }') && views.includes('#info { border-left: 0; }'), 'no line between the tiles');
+});

@@ -494,7 +494,8 @@
     /* The list a little narrower, so the conversation keeps its room. */
     .app, .app.has-info { grid-template-columns: minmax(var(--col-list-min), var(--col-list-narrow)) minmax(0, 1fr); }
     #info {
-      position: fixed; inset: 0 0 0 auto; z-index: var(--z-drawer); width: min(var(--col-panel), 100vw);
+      position: fixed; inset: var(--sp-2) var(--sp-2) var(--sp-2) auto; z-index: var(--z-drawer); width: min(var(--col-panel), calc(100vw - 2 * var(--sp-2)));
+      border-radius: var(--r-lg);
       box-shadow: var(--shadow-2);
       transition: translate var(--dur-drawer) var(--ease-drawer), opacity var(--dur-base) var(--ease-out);
     }
@@ -562,6 +563,22 @@
   .signin-note { color: var(--red); font-weight: var(--fw-semibold); }
   .signin-note:empty { display: none; }
   .signin .btn { margin-top: var(--sp-2); }
+}
+
+/* Bento: the top bar, the list, the conversation and the panel as rounded tiles on a tray, with
+   gaps between them in place of dividing lines. Inside a tile nothing is boxed again. */
+@layer views {
+  .shell { background: var(--tray); padding: var(--sp-2); gap: var(--sp-2); }
+  .shell > .topbar { border-bottom: 0; border-radius: var(--r-lg); }
+  .topbar-find.is-open { border-radius: var(--r-lg); }
+  .app { gap: var(--sp-2); }
+  .side, .chat, #info { border-radius: var(--r-lg); overflow: hidden; }
+  .side { border-right: 0; }
+  #info { border-left: 0; }
+  @media (max-width: 860px) {
+    .shell { padding: var(--sp-1); gap: var(--sp-1); }
+    .shell > .topbar, .side, .chat { border-radius: var(--r-md); }
+  }
 }
 
 /* The Review page: a run of real conversations written two ways, Left and Right, rated blind. */
