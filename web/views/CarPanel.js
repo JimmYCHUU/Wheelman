@@ -75,11 +75,10 @@ export function CarTab({ car, media, other, act }) {
       : media?.status === 'loading' ? h('div', { class: 'car-hero is-loading', role: 'status', 'aria-label': t('car.loading') }) : null,
     h('div', { class: 'car-headline' },
       h('h3', { text: car.title || t('car.stock', { stock: car.stockNo }) }),
-      h('p', { class: 'car-meta' },
-        h('span', { text: t('car.stock', { stock: car.stockNo }) }),
-        a.code !== 'sold' && car.price ? h('span', { text: t('car.price', { price: money(car.price) }) }) : null,
-        car.odometer ? h('span', { text: km(car.odometer) }) : null),
-      // What kind of car it is, in one line: the facts a buyer asks about first.
+      // Two short lines with the same separator: which car and what it costs, then what kind of car
+      // it is. The advertised price excludes government charges; it says so when pointed at.
+      h('p', { class: 'car-meta', title: a.code !== 'sold' && car.price ? t('car.price', { price: money(car.price) }) : null,
+        text: [t('car.stock', { stock: car.stockNo }), a.code !== 'sold' && car.price ? money(car.price) : '', car.odometer ? km(car.odometer) : ''].filter(Boolean).join(' · ') }),
       facts.length ? h('p', { class: 'car-meta', text: facts.join(' · ') }) : null,
       h('p', { class: `avail ${a.code || 'unknown'}`, text: a.text || '' }),
       car.url ? h('a', { class: 'car-listing', href: car.url, target: '_blank', rel: 'noopener noreferrer' }, t('car.openListing'), icon('external')) : null),
