@@ -28,6 +28,8 @@
   .btn.primary.wait { background: var(--sheet); color: var(--text); border-color: var(--line-strong); }
   .btn.outline { border-color: var(--line-strong); color: var(--text); }
   .btn.is-on { background: var(--accent-soft); color: var(--accent-text); }
+  .btn.small { height: var(--ctl-sm); padding: 0 var(--sp-3); font-size: var(--fs-label); }
+  .btn .count { color: var(--faint); font-weight: var(--fw-medium); }
 
   .link-btn { border: 0; background: transparent; padding: 0; color: var(--accent-text); font-weight: var(--fw-semibold); text-decoration: underline; text-underline-offset: 3px; }
 
@@ -298,6 +300,8 @@
     padding: var(--sp-1) var(--sp-2) var(--sp-2) var(--sp-2);
   }
   .sheet-foot .grow { flex: 1; }
+  /* The quieter buttons under the text are tighter, so the row fits beside the panel. */
+  .sheet-foot .btn:not(.primary) { padding: 0 var(--sp-3); }
   .count { margin-right: var(--sp-2); font-size: var(--fs-caption); color: var(--faint); white-space: nowrap; }
 
   /* The lines above the editor: what the checks found, in the tone of what they found. */

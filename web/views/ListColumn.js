@@ -1,5 +1,5 @@
-// The list column: the three inboxes as tabs, any notice that needs action, the search, the three
-// lists of the section, the rows, and the footer. It reads the store and asks the actions to do
+// The list column: any notice that needs action, the search, the lists of the section (the sections
+// themselves are tabs in the top bar), the rows, and the footer. It reads the store and asks the actions to do
 // things; it never changes the state itself.
 import { h } from '../lib/h.js';
 import { icon } from '../lib/icons.js';
@@ -10,7 +10,7 @@ import { Notice } from '../components/notice.js';
 import { Row } from '../components/row.js';
 import { EmptyState } from '../components/empty.js';
 import { Skeleton } from '../components/skeleton.js';
-import { SECTIONS, SECTION_IDS, TAB_STATE, ORDER_LIST } from '../sections/registry.js';
+import { SECTIONS, TAB_STATE, ORDER_LIST } from '../sections/registry.js';
 import { newCount } from '../lib/counts.js';
 import { rowMatches } from '../lib/search.js';
 
@@ -63,15 +63,11 @@ export function noticesFor(s, section) {
 }
 
 /**
- * mountListColumn(root, store, { open, showSection, setTab, setSearch, loadMore })
+ * mountListColumn(root, store, { open, setTab, setSearch, loadMore })
  * Builds the column once and repaints each part when what it shows has changed.
  */
 export function mountListColumn(root, store, actions) {
   const state = store.state;
-  const on = (id) => id === 'dashboard' || (state.sections[id] !== null && state.sections[id] !== undefined);
-
-  const sections = Segmented({ items: [], value: state.section, onChange: (id) => actions.showSection(id), label: 'Which inbox to show', kind: 'tabs' });
-  sections.id = 'sections';
   const notices = h('div', { id: 'notices', class: 'notices' });
   const search = h('input', { id: 'q', type: 'search', placeholder: SECTIONS[state.section].search.placeholder, autocomplete: 'off', spellcheck: 'false', oninput: (e) => actions.setSearch(e.target.value) });
   const filters = Segmented({ items: [], value: state.tab, onChange: (id) => actions.setTab(id), label: 'Which conversations to show', kind: 'chips' });
@@ -81,7 +77,6 @@ export function mountListColumn(root, store, actions) {
   const foot = h('footer', { class: 'side-foot', hidden: true }, ordersLine);
 
   root.replaceChildren(
-    sections,
     notices,
     h('label', { class: 'search' }, h('span', { class: 'search-icon' }, icon('search')), h('span', { class: 'visually-hidden', text: t('action.search') }), search),
     filters,
@@ -98,14 +93,6 @@ export function mountListColumn(root, store, actions) {
     const next = e.key === 'Home' ? rows[0] : e.key === 'End' ? rows[rows.length - 1] : rows[e.key === 'ArrowDown' ? Math.min(rows.length - 1, i + 1) : Math.max(0, i - 1)];
     for (const r of rows) r.tabIndex = r === next ? 0 : -1;
     next.focus();
-  });
-
-  // The sections above the list: hidden when only the dashboard is on.
-  store.select((s) => ({ section: s.section, tick: s.listTick }), () => {
-    const items = SECTION_IDS.map((id) => ({ id, label: SECTIONS[id].label, count: on(id) ? newCount(state, id) : 0, srCount: ' ' + t(`row.newIn.${id}`, { n: on(id) ? newCount(state, id) : 0 }), hidden: !on(id) }));
-    sections.hidden = !SECTION_IDS.some((id) => id !== 'dashboard' && on(id));
-    sections.dataset.n = String(items.filter((it) => !it.hidden).length);
-    sections.update({ items, value: state.section });
   });
 
   // The notices that need action now.

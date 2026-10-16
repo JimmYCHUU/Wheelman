@@ -4,11 +4,14 @@ import { h } from '../lib/h.js';
 import { Badge } from './badge.js';
 
 /**
- * Segmented({ items: [{ id, label, count, srCount, hidden }], value, onChange, label, kind: 'tabs'|'chips' })
+ * Segmented({ items: [{ id, label, count, srCount, hidden }], value, onChange, label, kind: 'nav'|'tabs'|'chips' })
+ * 'nav' is the sections in the top bar, 'tabs' the panel's tabs, 'chips' the lists of a section.
  * Returns the container; call .update({ items, value }) to repaint. Focus survives a repaint.
  */
 export function Segmented({ items, value, onChange, label, kind = 'tabs' }) {
-  const box = h('div', { class: kind === 'tabs' ? 'sections' : 'filters', role: 'tablist', 'aria-label': label });
+  const CLASSES = { nav: ['topnav', 'topnav-tab'], tabs: ['sections', 'section'], chips: ['filters', 'filter'] };
+  const [boxClass, itemClass] = CLASSES[kind] || CLASSES.tabs;
+  const box = h('div', { class: boxClass, role: 'tablist', 'aria-label': label });
   const paint = (list, chosen) => {
     const focused = box.contains(document.activeElement) ? document.activeElement.dataset.id : null;
     box.replaceChildren();
@@ -17,10 +20,10 @@ export function Segmented({ items, value, onChange, label, kind = 'tabs' }) {
       const on = it.id === chosen;
       const sr = it.srCount ? h('span', { class: 'visually-hidden', text: it.srCount }) : null;
       const count = !it.count ? null
-        : kind === 'tabs' ? Badge({ n: it.count, srText: it.srCount || '' })
+        : kind !== 'chips' ? Badge({ n: it.count, srText: it.srCount || '' })
           : h('span', { class: 'n' }, String(it.count), sr);
       box.append(h('button', {
-        class: `${kind === 'tabs' ? 'section' : 'filter'} ${on ? 'is-on' : ''}`.trim(), type: 'button', role: 'tab',
+        class: `${itemClass} ${on ? 'is-on' : ''}`.trim(), type: 'button', role: 'tab',
         'aria-selected': on ? 'true' : 'false', tabindex: on ? '0' : '-1', 'data-id': it.id, hidden: it.hidden || null,
         onclick: () => onChange(it.id),
       }, h('span', { class: 't', text: it.label }), count));

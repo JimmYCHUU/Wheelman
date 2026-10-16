@@ -61,6 +61,18 @@
     --avatar-6: #8a4f7d;
     --avatar-7: #8f5a14;
 
+    /* The viewer: photos and videos are judged on a dark ground in both themes, as in any photo app. */
+    --viewer-bg: #030f1c;
+    --viewer-bar: #071a2d;
+    --viewer-ink: #eef4fa;
+    --viewer-muted: #a9bccf;
+    --viewer-line: #1b3550;
+    --viewer-btn: #0f2840;
+    --viewer-btn-hover: #173654;
+    --photo-ground: #dfe7f0;         /* behind a photo still on its way */
+    --scrim-soft: rgba(3, 15, 28, .55); /* the count chip and play disc laid on a photo */
+    --on-scrim: #ffffff;
+
     /* ---- elevation: two shadows, and the scrim behind a drawer or dialog. Chips and buttons have none. */
     --shadow-1: 0 1px 1px rgba(6, 29, 51, .10);
     --shadow-2: 0 2px 6px rgba(6, 29, 51, .10), 0 8px 24px rgba(6, 29, 51, .10);
@@ -123,12 +135,29 @@
     --dot: 0.5rem;
     --col-list-min: 20rem;
     --col-list-max: 25rem;
+    --col-list-narrow: 22rem;   /* the list beside the conversation and the panel */
     --col-details: 22.5rem;
     --measure-bubble: 36rem;
     --measure-pill: 34rem;
     --measure-prose: 28rem;
     --measure-welcome: 26rem;
     --measure-signin: 22rem;    /* the team's sign-in card at the shared address */
+    --col-panel: 26rem;          /* the car and customer panel on the right */
+    --find-w: 15rem;             /* Find a car in the top bar */
+    --find-w-narrow: 11rem;
+    --pop-w: 24rem;              /* the Find a car results and the status panel */
+    --pop-max-h: 70dvh;
+    --tab-mark: 0.1875rem;       /* the line under the chosen section */
+    --car-thumb-w: 4rem;         /* the photo in the car strip */
+    --car-thumb-h: 3rem;
+    --poster-w: 5.5rem;          /* a video's poster in the car panel */
+    --poster-h: 3.5rem;
+    --strip-thumb-w: 5rem;       /* the filmstrip under the viewer */
+    --strip-thumb-h: 3.5rem;
+    --ratio-photo: 4 / 3;
+    --ratio-hero: 16 / 10;
+    --play: 2.5rem;              /* the play disc on a poster */
+    --viewer-nav: 3rem;          /* the previous and next buttons in the viewer */
     --editor-min: 4.5rem;
     --editor-max: 38dvh;
     --paste-max: 30dvh;
@@ -137,6 +166,7 @@
     /* ---- stacking. */
     --z-float: 10;
     --z-drawer: 30;
+    --z-popover: 32;
     --z-dialog: 35;
     --z-toast: 40;
 
@@ -187,6 +217,7 @@
       --bubble-out-meta: #b9dcff;
       --segment-on-bg: var(--side-on);
       --segment-on-shadow: none;
+      --photo-ground: #0f2b47;
       --toast-bg: #e8f0f8;
       --toast-ink: #061d33;
 

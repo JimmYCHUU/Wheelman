@@ -8,7 +8,7 @@ import { $, h, put } from './lib/h.js';
 import { icon, mark as wheelMark } from './lib/icons.js';
 import { clock, dayKey, dayLabel, listTime, ago, money, plural, dateWords } from './lib/format.js';
 import { createStore } from './lib/store.js';
-import { t, listOf } from './lib/copy.js';
+import { t } from './lib/copy.js';
 import { SECTIONS as REGISTRY, sectionOf } from './sections/registry.js';
 import { newCount } from './lib/counts.js';
 import { Avatar } from './components/avatar.js';
@@ -16,6 +16,9 @@ import { IconButton } from './components/iconButton.js';
 import { Segmented } from './components/segmented.js';
 import { mountTopBar } from './views/TopBar.js';
 import { mountListColumn, visibleRows } from './views/ListColumn.js';
+import { CarTab, viewerGroups, replyLabel, pictureSrc } from './views/CarPanel.js';
+import { openViewer } from './views/Viewer.js';
+import { linkLine, placeLine } from './lib/insert.js';
 
 // ---- state -------------------------------------------------------------------
 
@@ -42,7 +45,11 @@ const state = {
   prompts: new Map(),    // conversation key -> what was typed on the Prompt line and not written yet
   heldAt: new Map(),     // conversation key -> when Wheelman was last told the Prompt line is open for it
   writingPoll: null,     // the one short re-check while a suggestion is being written in the background
-  infoOpen: false,
+  infoOpen: false,       // the car and customer panel on the right; open by default on a wide window
+  infoTab: null,         // 'car' or 'customer'; null picks the car when there is one
+  carView: null,         // { stockNo, vehicle, backTo }: a car opened with Find a car, shown in place of the conversation's
+  media: new Map(),      // stock number -> { status: 'loading'|'ready'|'error', data, error }: the car's photos, videos, documents
+  carSig: '',            // what the Car tab last showed, so the 20-second refresh does not redraw its photos
   copied: null,          // draft id that was just copied
   status: null,
   threadSig: '',
@@ -62,6 +69,14 @@ const store = createStore(state);
 function repaint() { state.listTick++; store.notify(); }
 
 const narrow = () => window.matchMedia('(max-width: 860px)').matches;
+/** Wide enough for the panel to sit beside the conversation; narrower, it is a drawer over it. */
+const roomy = () => window.matchMedia('(min-width: 1280px)').matches;
+
+// The panel stays as the person left it: open unless they closed it, on a wide window.
+const PANEL_KEY = 'wheelman.panel';
+const panelPref = () => { try { return localStorage.getItem(PANEL_KEY) || ''; } catch { return ''; } };
+const savePanelPref = (open) => { try { localStorage.setItem(PANEL_KEY, open ? 'open' : 'closed'); } catch { /* kept for this visit only */ } };
+state.infoOpen = roomy() && panelPref() !== 'closed';
 const inMarketplace = () => state.section === 'marketplace';
 const inAuction = () => state.section === 'auction';
 
@@ -229,37 +244,15 @@ function linked(text) {
 
 // ---- open conversation -----------------------------------------------------------
 
-/** Nothing open: what to do, in three steps, and what Wheelman has learned from replies that were really used. */
+/**
+ * Nothing open: how many are waiting and what to do, in three steps. How Wheelman is doing (what it
+ * read, learned, backed up and shares) is one press away, under the status in the top bar.
+ */
 function renderWelcome() {
   const chat = $('#chat');
   const sec = REGISTRY[state.section];
   const n = state.counts.waiting;
   const noun = n === 1 ? sec.noun[0] : sec.noun[1];
-  const learned = state.status?.learned || {};
-  const bits = [
-    learned.changed ? t('learned.changed', { n: learned.changed }) : '',
-    learned.approved ? t('learned.approved', { n: learned.approved }) : '',
-    learned.notes ? t('learned.notes', { n: learned.notes }) : '',
-  ].filter(Boolean);
-  // What it reads of the team's own replies, whoever sent them: the dashboard's in the last year
-  // (and the salespeople's own in the example bank), or the past import emails.
-  const practice = state.status?.practice || null;
-  const reads = !practice ? ''
-    : state.section === 'importquery' ? (practice.email ? t('welcome.reads.email', { n: practice.email }) : t('welcome.reads.none'))
-      : state.section === 'dashboard' ? (practice.dashboard || practice.voice ? t('welcome.reads.dashboard', { team: t('practice.team', { n: practice.dashboard }), voice: practice.voice }) : t('welcome.reads.none')) : '';
-  const readsTitle = state.section === 'importquery' ? t('welcome.reads.email.title') : t('welcome.reads.dashboard.title');
-  // The last backup: when it was written and where, so a missing one is noticed before it matters.
-  const backup = state.status?.backup || null;
-  const backupLine = !backup ? '' : backup.last ? t('welcome.backup', { when: ago(backup.last.at), dir: backup.dir }) : backup.on ? t('welcome.backup.none') : t('welcome.backup.off');
-  // Shared with the team: the address colleagues open, as a link, so it can be copied from here.
-  const shared = state.status?.share || null;
-  const sharedLine = !shared?.on ? null
-    : shared.url ? h('p', { title: t('welcome.shared.title') }, t('welcome.shared'), ' ', h('a', { href: shared.url, target: '_blank', rel: 'noopener', text: shared.url }))
-      : h('p', { text: shared.error ? t('welcome.shared.down', { why: shared.error }) : t('welcome.shared.opening') });
-  // Which AI writes: the first model in the list, and the way to the panel that changes it.
-  const first = state.status?.ai?.providers?.[0] || null;
-  const aiLine = !state.status ? null
-    : h('p', {}, first ? t('welcome.ai', { model: first.model }) : t('welcome.ai.none'), ' ', h('button', { class: 'link-btn', type: 'button', text: t('welcome.ai.change'), onclick: openAiPanel }));
   chat.replaceChildren(h('div', { class: 'welcome' },
     h('div', { class: 'welcome-mark' }, wheelMark()),
     h('h2', { text: inAuction()
@@ -271,11 +264,7 @@ function renderWelcome() {
       h('li', {}, h('span', {}, h('b', { text: inMarketplace() ? t('welcome.send') : t('welcome.copy') }), ' ', sec.welcome.paste))),
     // Marketplace replies are sent from here, by the Send button and nothing else. The rest is copied and pasted.
     h('p', { text: inMarketplace() ? t('welcome.sendOnly') : t('welcome.copyOnly') }),
-    reads ? h('p', { text: reads, title: readsTitle }) : null,
-    bits.length ? h('p', { text: t('welcome.learned', { bits: listOf(bits) }), title: t('welcome.learned.title') }) : null,
-    backupLine ? h('p', { text: backupLine, title: t('welcome.backup.title') }) : null,
-    sharedLine,
-    aiLine));
+    h('p', { text: t('welcome.findCar') })));
   state.threadSig = '';
   state.composerSig = '';
 }
@@ -335,17 +324,18 @@ function renderHead(item, els) {
   els.head.replaceChildren(
     h('button', { class: 'back', type: 'button', 'aria-label': others ? `Back to conversations. ${plural(others, 'conversation')} with new messages.` : 'Back to conversations', onclick: closeChat },
       icon('back'), others ? h('span', { class: 'badge', 'aria-hidden': 'true', text: String(others) }) : null),
-    h('button', { class: 'who', type: 'button', 'aria-expanded': state.infoOpen ? 'true' : 'false', title: 'Customer and car details', onclick: toggleInfo },
+    h('button', { class: 'who', type: 'button', 'aria-expanded': state.infoOpen && panelTab(item) === 'customer' ? 'true' : 'false', title: 'About this customer', onclick: showPerson },
       avatar(item.name, 'small'),
       h('span', { class: 'who-text' }, h('span', { class: 'who-name', text: title }), sub ? h('span', { class: `who-sub ${writing ? 'is-writing' : ''}`.trim(), text: sub }) : null)),
     h('div', { class: 'head-actions' },
       item.phone ? h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Copy phone number', title: 'Copy phone number', onclick: async () => { await copyText(item.phone); toast('Phone number copied'); } }, icon('copy'))
         : item.email ? h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Copy email address', title: 'Copy email address', onclick: async () => { await copyText(item.email); toast(t('toast.emailCopied')); } }, icon('copy')) : null,
-      h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Customer and car details', title: 'Customer and car details', onclick: toggleInfo }, icon('info'))));
+      h('button', { class: `icon-btn panel-btn ${state.infoOpen ? 'is-on' : ''}`.trim(), type: 'button', 'aria-pressed': state.infoOpen ? 'true' : 'false', 'aria-label': t('panel.label'), title: state.infoOpen ? t('panel.close') : t('panel.open'), onclick: toggleInfo }, icon('panel'))));
 
   const v = item.vehicle;
   const unmatched = !v && !!listing?.listingTitle;
   els.car.hidden = !v && !unmatched && !order;
+  els.car.classList.toggle('has-car', !!v);
   els.car.replaceChildren();
   if (order) {
     // The car this order is about, and where the order has got to.
@@ -363,17 +353,37 @@ function renderHead(item, els) {
       listing.listingUrl ? h('a', { href: listing.listingUrl, target: '_blank', rel: 'noopener noreferrer' }, 'Open on Facebook', icon('external')) : null);
   }
   if (v) {
+    // The car, with its first photo: pressing either opens it in the panel.
+    const m = state.media.get(String(v.stockNo));
+    const data = m?.data || null;
+    const first = data ? (data.photos.find((p) => p.group === 'car') || data.photos[0]) : null;
+    const count = data ? data.photos.length + data.videos.length : 0;
     put(els.car,
-      h('span', { class: 'car-title', text: v.title || `Stock ${v.stockNo}` }),
-      v.availability.code !== 'sold' && v.price ? h('span', { text: money(v.price) }) : null,
-      v.odometer ? h('span', { text: `${Number(v.odometer).toLocaleString('en-AU')} km` }) : null,
-      h('span', { class: `avail ${v.availability.code}`, text: shortAvailability(v.availability) }),
-      v.url ? h('a', { href: v.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open listing', icon('external')) : null);
+      h('button', { class: 'car-thumb', type: 'button', 'aria-label': t('car.photosAndVideos'), title: t('car.photosAndVideos'), onclick: () => showCar() },
+        first ? h('img', { src: pictureSrc(v.stockNo, first.id), alt: '', decoding: 'async' }) : icon('image')),
+      h('div', { class: 'car-words' },
+        h('span', { class: 'car-title', text: v.title || `Stock ${v.stockNo}` }),
+        h('span', { class: 'car-meta' },
+          v.availability.code !== 'sold' && v.price ? h('span', { text: money(v.price) }) : null,
+          v.odometer ? h('span', { text: `${Number(v.odometer).toLocaleString('en-AU')} km` }) : null,
+          h('span', { class: `avail ${v.availability.code}`, text: shortAvailability(v.availability) }))),
+      h('div', { class: 'car-links' },
+        h('button', { class: 'btn outline small', type: 'button', 'aria-label': count ? `${t('car.photosAndVideos')}, ${count}` : t('car.photosAndVideos'), onclick: () => showCar() }, icon('image'), h('span', { class: 't-long', text: t('car.photosAndVideos') }), count ? h('span', { class: 'count', text: String(count) }) : null),
+        v.url ? h('a', { class: 'car-open', href: v.url, target: '_blank', rel: 'noopener noreferrer' }, t('car.openListing'), icon('external')) : null));
   }
 }
 
 function shortAvailability(a) {
-  return { available: 'Available at Lidcombe', sold: 'Sold', transit: 'In transit from Japan', japan: 'Still in Japan', arrived: 'Arrived, being prepared', unknown: 'Availability unknown' }[a.code] || a.text;
+  return { available: 'Available at Lidcombe', sold: 'Sold', transit: 'In transit from Japan', japan: 'Still in Japan', arrived: 'Arrived, being prepared', own: "This customer's car", reserved: 'Reserved for another customer', unknown: 'Availability unknown' }[a.code] || a.text;
+}
+
+/** The panel open on the Car tab, for the conversation's own car. */
+function showCar() {
+  state.carView = null;
+  state.infoTab = 'car';
+  if (!state.infoOpen) { state.infoOpen = true; if (roomy()) savePanelPref(true); }
+  renderInfo();
+  $('.who')?.setAttribute('aria-expanded', 'true');
 }
 
 function threadSignature(item) {
@@ -982,6 +992,10 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
 
   ta.addEventListener('input', () => { state.edits.set(d.id, ta.value); saveEdit(d.id, ta.value); sync(); });
   ta.addEventListener('blur', () => flushEdit(d.id));
+  // Once the person has clicked or moved in the text, Add to reply puts a link where the cursor is.
+  const touched = () => { ta.dataset.touched = 'yes'; };
+  ta.addEventListener('pointerup', touched);
+  ta.addEventListener('keyup', touched);
   ta.addEventListener('scroll', () => { backdrop.scrollTop = ta.scrollTop; });
   ta.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); doCopy(); } });
   // The whole reply selected and copied by hand counts the same as pressing Copy.
@@ -1047,7 +1061,8 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
     } }, 'Could be better') : null;
 
   put(box,
-    h('div', { class: 'draft-head' }, tag, meta),
+    // The length sits beside when it was written, so the buttons under the text keep to one row.
+    h('div', { class: 'draft-head' }, tag, h('span', { class: 'draft-side' }, count, meta)),
     advice,
     h('div', { class: 'sheet' },
       h('div', { class: 'field' }, backdrop, ta),
@@ -1059,7 +1074,6 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
         approveBtn,
         betterBtn,
         h('span', { class: 'grow' }),
-        count,
         clearBtn,
         copyBtn,
         sendBtn)),
@@ -1077,91 +1091,208 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
   watcher.observe(ta.parentElement);
 }
 
-// ---- details panel ---------------------------------------------------------------
+// ---- the car and customer panel ----------------------------------------------------------
+
+/** The car the panel shows: one opened with Find a car, else the conversation's own. */
+function panelCar(item) {
+  if (state.carView) return { car: state.carView.vehicle, other: { backTo: state.carView.backTo } };
+  return { car: item?.vehicle || null, other: null };
+}
+
+/** A conversation has a Car tab when it has a car, or could have one (an ordinary conversation with none matched). */
+const hasCarTab = (item) => !!state.carView || !!item?.vehicle || (!!item && !item.order && !item.mail && !item.looking);
+
+/** The tab on screen: the car when there is one, unless the person chose the other. */
+const panelTab = (item) => (!item ? 'car' : hasCarTab(item) && (state.infoTab || 'car') === 'car' ? 'car' : 'customer');
 
 function renderInfo() {
   const panel = $('#info');
   const item = state.detail;
-  const show = state.infoOpen && !!item;
+  const show = state.infoOpen && (!!item || !!state.carView);
   panel.hidden = !show;
   $('#app').classList.toggle('has-info', show);
-  if (!show) { panel.replaceChildren(); return; }
+  paintPanelButton();
+  if (!show) { panel.replaceChildren(); state.carSig = ''; return; }
 
-  const row = (label, value) => (value ? [h('dt', { text: label }), h('dd', {}, value)] : null);
-  const v = item.vehicle;
-  const d = item.draft;
+  const tab = panelTab(item);
+  const { car, other } = panelCar(item);
+  const media = car ? state.media.get(String(car.stockNo)) : null;
+  if (car && !media) loadMedia(car.stockNo);
+  // The Car tab is drawn again only when what it shows has changed, so its photos do not flicker
+  // at every twenty-second refresh.
+  const sig = tab === 'car' ? JSON.stringify([item?.key || '', car?.stockNo, car?.availability?.code, car?.price, other?.backTo ?? null, media?.status, media?.data?.readAt, media?.data?.error, media?.error]) : '';
+  if (tab === 'car' && sig === state.carSig && panel.dataset.tab === 'car' && panel.querySelector('.car-tab')) return;
+  state.carSig = sig;
+  panel.dataset.tab = tab;
 
+  const person = item?.order ? t('panel.tab.order') : item?.mail ? t('panel.tab.enquiry') : t('panel.tab.customer');
+  const scroll = panel.querySelector('.info-body')?.scrollTop || 0;
+  const head = item && hasCarTab(item)
+    ? Segmented({ items: [{ id: 'car', label: t('panel.tab.car') }, { id: 'customer', label: person }], value: tab, label: t('panel.tabs'), kind: 'tabs',
+      onChange: (id) => { state.infoTab = id; renderInfo(); $(`#info [data-id="${id}"]`)?.focus({ preventScroll: true }); } })
+    : h('h2', { text: item ? person : t('car.another') });
+  const body = h('div', { class: 'info-body' }, tab === 'car' ? CarTab({ car, media, other, act: carActions(car) }) : customerSections(item));
   panel.replaceChildren(
-    h('header', { class: 'info-head' },
-      h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close details', onclick: toggleInfo }, icon('x')),
-      h('h2', { text: 'Details' })),
-    h('div', { class: 'info-body' },
-      h('div', { class: 'info-top' },
-        avatar(item.name),
-        h('h3', { text: item.name || 'Unknown name' }),
-        h('p', { text: item.phone || item.email || (item.marketplace ? 'Facebook Marketplace' : '') })),
-      h('section', {},
-        h('h4', { text: item.marketplace ? 'Buyer' : 'Customer' }),
-        h('dl', {},
-          row('Phone', item.phone ? h('button', { class: 'link-btn', type: 'button', onclick: async () => { await copyText(item.phone); toast('Phone number copied'); } }, `${item.phone} (copy)`) : ''),
-          row('Email', item.email ? h('button', { class: 'link-btn', type: 'button', onclick: async () => { await copyText(item.email); toast(t('toast.emailCopied')); } }, `${item.email} (copy)`) : ''),
-          row('Prefers', item.order?.prefers),
-          row('Came from', item.order ? item.order.cameFrom : sourceLabel(item.source)),
-          row('State', item.location),
-          row('Lead status', item.leadStatus ? item.leadStatus.replace(/_/g, ' ').toLowerCase() : ''),
-          row('Asking about', item.order ? '' : item.situation)),
-        item.noLead ? h('p', { class: 'fine', text: 'This number has no customer record in the dashboard.' }) : null),
-      item.marketplace ? marketplaceInfo(item.marketplace, row) : null,
-      item.mail ? mailInfo(item.mail, row, d) : null,
-      item.order ? orderInfo(item.order, row) : null,
-      // An import or auction enquiry: what they asked us to find from Japan.
-      item.looking ? h('section', {},
-        h('h4', { text: 'Looking for, from Japan' }),
-        h('dl', {},
-          row('Car', item.looking.car),
-          row('Years', item.looking.years),
-          row('Odometer', item.looking.maxKm ? `under ${Number(item.looking.maxKm).toLocaleString('en-AU')} km` : ''),
-          row('Budget', item.looking.budget ? `about ${money(item.looking.budget)} landed` : ''),
-          row('Grade', item.looking.grade ? `${item.looking.grade} or better` : ''),
-          row('Auction request', item.looking.order)),
-        item.looking.missing ? h('p', { class: 'fine', text: `Not known yet: ${item.looking.missing}.` }) : null) : null,
-      (item.looking || item.order) && !v ? null : v ? h('section', {},
-        h('h4', { text: 'Car' }),
-        h('dl', {},
-          row('Vehicle', v.title),
-          row('Stock number', v.stockNo),
-          row('Availability', v.availability.text),
-          row('Price', v.availability.code !== 'sold' && v.price ? `${money(v.price)}, government charges extra` : ''),
-          row('Odometer', v.odometer ? `${Number(v.odometer).toLocaleString('en-AU')} km` : ''),
-          row('Fuel', v.fuel),
-          row('Transmission', v.transmission),
-          row('Seats', v.seats),
-          row('Colour', v.colour ? String(v.colour).toLowerCase() : ''),
-          row('Listing', v.url ? h('a', { href: v.url, target: '_blank', rel: 'noopener noreferrer', text: 'Open on the website' }) : '')),
-        v.included?.length ? [h('h4', { text: 'Included with this car' }), h('ul', { class: 'facts' }, v.included.map((x) => h('li', { text: x })))] : null)
-        : h('section', {}, h('h4', { text: 'Car' }), h('p', { class: 'fine', text: 'No car could be matched to this conversation.' })),
-      d && d.status === 'ready' ? h('section', {},
-        h('h4', { text: 'What the suggestion relies on' }),
-        d.rungLabel ? h('p', { class: 'fine', text: `Where they are: ${d.rungLabel}.` }) : null,
-        d.nextStep ? h('p', { class: 'fine', text: `The next step it offers: ${d.nextStep}.` }) : null,
-        d.factsUsed.length ? h('ul', { class: 'facts' }, d.factsUsed.map((f) => h('li', { text: f }))) : h('p', { class: 'fine', text: 'No particular facts were listed.' }),
-        // The team's own replies the request showed: the suggestion was written with them in view.
-        d.practiceUsed ? h('p', { class: 'fine', text: item.channel === 'email' ? `Written with ${plural(d.practiceUsed, 'past import email')} the team answered in view.` : `Written with ${plural(d.practiceUsed, 'reply', 'replies')} the team sent to customers who asked something similar in view, whoever sent them.` }) : null,
-        // What our own records say about the customer that shaped the reply and is never said to them.
-        d.insiderUsed?.length ? h('p', { class: 'fine', text: `Shaped by what our records show, never stated: ${d.insiderUsed.join(', ')}.` }) : null,
-        h('p', { class: 'fine', text: d.provider === 'none' ? `Written from ${d.model || 'your wording'} at ${clock(d.createdAt)}, with no AI.${d.instruction ? ` What you added: “${d.instruction}”.` : ''}` : `Written by ${d.model || 'the AI model'} at ${clock(d.createdAt)}.${d.instruction ? ` Your instruction: “${d.instruction}”.` : ''}` })) : null,
-      // An ordinary enquiry read as an import enquiry, or not: what Wheelman read, and the owner's say.
-      item.canRule ? h('section', {},
-        h('h4', { text: t('judged.title') }),
-        h('p', { class: 'fine', text: rulingWords(item) }),
-        h('div', { class: 'rulings' }, ...rulingButtons(item))) : null,
-      item.state === 'awaiting' && !item.dismissed ? h('section', {},
-        h('h4', { text: 'Dismiss' }),
-        h('p', { class: 'fine', text: item.order
-          ? 'Takes this order out of To do, for example when you have already told them by phone. Nothing is deleted: the order stays under In progress and the message can be put back.'
-          : 'Takes this conversation out of Waiting, for example when you have already phoned them. Nothing is deleted: it stays under No reply needed and can be put back.' }),
-        h('button', { class: 'btn outline dismiss-btn', type: 'button', onclick: () => dismissItem(item) }, item.order ? 'Dismiss this message' : 'Dismiss this conversation')) : null,
-      h('section', {}, h('p', { class: 'fine', text: 'All times are Sydney time.' }))));
+    h('header', { class: 'info-head' }, head, h('span', { class: 'u-grow' }),
+      h('button', { class: 'icon-btn info-close', type: 'button', 'aria-label': t('panel.close'), title: t('panel.close'), onclick: toggleInfo }, icon('x'))),
+    body);
+  // The same tab redrawn keeps its place; another tab starts at the top.
+  if (panel.dataset.was === `${tab}|${item?.key || ''}|${car?.stockNo || ''}`) body.scrollTop = scroll;
+  panel.dataset.was = `${tab}|${item?.key || ''}|${car?.stockNo || ''}`;
+}
+
+/** The panel button in the conversation header says whether the panel is open. */
+function paintPanelButton() {
+  const btn = $('#chat .panel-btn');
+  if (!btn) return;
+  btn.classList.toggle('is-on', state.infoOpen);
+  btn.setAttribute('aria-pressed', state.infoOpen ? 'true' : 'false');
+  btn.title = state.infoOpen ? t('panel.close') : t('panel.open');
+}
+
+/** What the Car tab's buttons do, for one car. */
+function carActions(car) {
+  return {
+    view: (group, index) => {
+      const m = state.media.get(String(car.stockNo));
+      if (!m?.data) return;
+      openViewer({
+        title: car.title || t('car.stock', { stock: car.stockNo }), groups: viewerGroups(car.stockNo, m.data), group, index,
+        onCopy: (link, opts) => copyLink(link, opts),
+        onAdd: (label, link, from) => addToReply(replyLabel(from === 'videos' ? 'video' : from === 'auction' ? 'auction' : 'picture', label), link),
+      });
+    },
+    copy: (link) => copyLink(link),
+    add: (label, link) => addToReply(label, link),
+    refresh: () => loadMedia(car.stockNo, { fresh: true }),
+    back: () => { state.carView = null; state.infoTab = 'car'; renderInfo(); },
+  };
+}
+
+/**
+ * A car's photos, videos and documents, read through Wheelman and kept for this visit. The car
+ * strip and the panel are drawn again when they arrive. fresh asks the dashboard again.
+ */
+async function loadMedia(stockNo, { fresh = false } = {}) {
+  const key = String(stockNo);
+  const had = state.media.get(key);
+  if (had?.status === 'loading') return;
+  state.media.set(key, { status: 'loading', data: had?.data || null, error: '' });
+  if (fresh) paintCar(key);
+  try {
+    const data = await api(`/api/vehicles/${encodeURIComponent(key)}/media${fresh ? '?fresh=1' : ''}`);
+    state.media.set(key, { status: 'ready', data, error: '' });
+  } catch (e) {
+    state.media.set(key, { status: 'error', data: had?.data || null, error: e.message });
+  }
+  paintCar(key);
+}
+
+/** Draws again what shows this car: the car strip of the open conversation, and the panel. */
+function paintCar(key) {
+  const item = state.detail;
+  if (item?.vehicle && String(item.vehicle.stockNo) === key && $('#chat .chat-head') && !$('#chat .chat-head').contains(document.activeElement)) renderHead(item, chatFrame());
+  if (state.infoOpen) renderInfo();
+}
+
+async function copyLink(link, { quiet = false } = {}) {
+  const ok = await copyText(link);
+  if (!quiet) toast(ok ? t('toast.linkCopied') : 'Copying is blocked by the browser.');
+  return ok;
+}
+
+/**
+ * Add to reply: the link, with what it is, on its own line in the open suggestion: where the
+ * person last put the cursor, else before the sign-off or the standard block. Typed the way typing
+ * is, so Ctrl + Z takes it out again and it is saved like any change.
+ */
+function addToReply(label, link) {
+  const ta = $('#chat textarea.draft');
+  if (!ta || ta.readOnly) { toast(t('toast.noReply')); return false; }
+  const caret = ta.dataset.touched === 'yes' ? ta.selectionStart : null;
+  const { at, insert } = placeLine(ta.value, linkLine(label, link), caret);
+  ta.focus({ preventScroll: true });
+  ta.setSelectionRange(at, at);
+  let done = false;
+  try { done = document.execCommand('insertText', false, insert); } catch { done = false; }
+  if (!done) { ta.value = ta.value.slice(0, at) + insert + ta.value.slice(at); ta.dispatchEvent(new Event('input', { bubbles: true })); }
+  const end = at + insert.replace(/\n$/, '').length;
+  ta.setSelectionRange(end, end);
+  ta.dataset.touched = 'yes';
+  // On a narrow window the panel covers the conversation: it steps aside so the link is seen.
+  if (!roomy() && state.infoOpen) { state.infoOpen = false; renderInfo(); }
+  toast(t('toast.linkAdded'));
+  return true;
+}
+
+/** Find a car: the car opens in the panel, beside whatever conversation is open. */
+async function openCar(stockNo) {
+  try {
+    const { vehicle } = await api(`/api/vehicles/${encodeURIComponent(stockNo)}`);
+    const item = state.detail;
+    const theirs = item?.vehicle && String(item.vehicle.stockNo) === String(vehicle.stockNo);
+    state.carView = theirs ? null : { stockNo: vehicle.stockNo, vehicle, backTo: item?.vehicle ? (item.name ? `${item.name}'s car` : t('car.backToTheirs').replace(/^Back to /, '')) : null };
+    state.infoTab = 'car';
+    state.infoOpen = true;
+    renderInfo();
+    $('#info .info-body')?.scrollTo({ top: 0 });
+  } catch (e) { toast(e.message); }
+}
+
+/** The Customer tab: who they are, the section's own details, and what the suggestion relies on. */
+function customerSections(item) {
+  const row = (label, value) => (value ? [h('dt', { text: label }), h('dd', {}, value)] : null);
+  const d = item.draft;
+  return [
+    h('section', {},
+      h('h4', { text: item.marketplace ? 'Buyer' : 'Customer' }),
+      h('dl', {},
+        row('Name', item.name),
+        row('Phone', item.phone ? h('button', { class: 'link-btn', type: 'button', onclick: async () => { await copyText(item.phone); toast('Phone number copied'); } }, `${item.phone} (copy)`) : ''),
+        row('Email', item.email ? h('button', { class: 'link-btn', type: 'button', onclick: async () => { await copyText(item.email); toast(t('toast.emailCopied')); } }, `${item.email} (copy)`) : ''),
+        row('Prefers', item.order?.prefers),
+        row('Came from', item.order ? item.order.cameFrom : sourceLabel(item.source)),
+        row('State', item.location),
+        row('Lead status', item.leadStatus ? item.leadStatus.replace(/_/g, ' ').toLowerCase() : ''),
+        row('Asking about', item.order ? '' : item.situation)),
+      item.noLead ? h('p', { class: 'fine', text: 'This number has no customer record in the dashboard.' }) : null),
+    item.marketplace ? marketplaceInfo(item.marketplace, row) : null,
+    item.mail ? mailInfo(item.mail, row, d) : null,
+    item.order ? orderInfo(item.order, row) : null,
+    // An import or auction enquiry: what they asked us to find from Japan.
+    item.looking ? h('section', {},
+      h('h4', { text: 'Looking for, from Japan' }),
+      h('dl', {},
+        row('Car', item.looking.car),
+        row('Years', item.looking.years),
+        row('Odometer', item.looking.maxKm ? `under ${Number(item.looking.maxKm).toLocaleString('en-AU')} km` : ''),
+        row('Budget', item.looking.budget ? `about ${money(item.looking.budget)} landed` : ''),
+        row('Grade', item.looking.grade ? `${item.looking.grade} or better` : ''),
+        row('Auction request', item.looking.order)),
+      item.looking.missing ? h('p', { class: 'fine', text: `Not known yet: ${item.looking.missing}.` }) : null) : null,
+    d && d.status === 'ready' ? h('section', {},
+      h('h4', { text: 'What the suggestion relies on' }),
+      d.rungLabel ? h('p', { class: 'fine', text: `Where they are: ${d.rungLabel}.` }) : null,
+      d.nextStep ? h('p', { class: 'fine', text: `The next step it offers: ${d.nextStep}.` }) : null,
+      d.factsUsed.length ? h('ul', { class: 'facts' }, d.factsUsed.map((f) => h('li', { text: f }))) : h('p', { class: 'fine', text: 'No particular facts were listed.' }),
+      // The team's own replies the request showed: the suggestion was written with them in view.
+      d.practiceUsed ? h('p', { class: 'fine', text: item.channel === 'email' ? `Written with ${plural(d.practiceUsed, 'past import email')} the team answered in view.` : `Written with ${plural(d.practiceUsed, 'reply', 'replies')} the team sent to customers who asked something similar in view, whoever sent them.` }) : null,
+      // What our own records say about the customer that shaped the reply and is never said to them.
+      d.insiderUsed?.length ? h('p', { class: 'fine', text: `Shaped by what our records show, never stated: ${d.insiderUsed.join(', ')}.` }) : null,
+      h('p', { class: 'fine', text: d.provider === 'none' ? `Written from ${d.model || 'your wording'} at ${clock(d.createdAt)}, with no AI.${d.instruction ? ` What you added: “${d.instruction}”.` : ''}` : `Written by ${d.model || 'the AI model'} at ${clock(d.createdAt)}.${d.instruction ? ` Your instruction: “${d.instruction}”.` : ''}` })) : null,
+    // An ordinary enquiry read as an import enquiry, or not: what Wheelman read, and the owner's say.
+    item.canRule ? h('section', {},
+      h('h4', { text: t('judged.title') }),
+      h('p', { class: 'fine', text: rulingWords(item) }),
+      h('div', { class: 'rulings' }, ...rulingButtons(item))) : null,
+    item.state === 'awaiting' && !item.dismissed ? h('section', {},
+      h('h4', { text: 'Dismiss' }),
+      h('p', { class: 'fine', text: item.order
+        ? 'Takes this order out of To do, for example when you have already told them by phone. Nothing is deleted: the order stays under In progress and the message can be put back.'
+        : 'Takes this conversation out of Waiting, for example when you have already phoned them. Nothing is deleted: it stays under No reply needed and can be put back.' }),
+      h('button', { class: 'btn outline dismiss-btn', type: 'button', onclick: () => dismissItem(item) }, item.order ? 'Dismiss this message' : 'Dismiss this conversation')) : null,
+    h('section', {}, h('p', { class: 'fine', text: 'All times are Sydney time.' })),
+  ];
 }
 
 /**
@@ -1276,11 +1407,25 @@ function marketplaceInfo(m, row) {
       h('p', { class: 'fine', text: 'These notes were made automatically and have not been checked.' })] : null);
 }
 
+/** Opens or closes the panel. On a wide window the choice is kept for next time. */
 function toggleInfo() {
   state.infoOpen = !state.infoOpen;
+  if (roomy()) savePanelPref(state.infoOpen);
+  if (!state.infoOpen && !state.detail) state.carView = null;
   renderInfo();
   $('.who')?.setAttribute('aria-expanded', state.infoOpen ? 'true' : 'false');
-  if (state.infoOpen) $('#info .icon-btn')?.focus({ preventScroll: true });
+  // As a drawer it takes the focus; beside the conversation it leaves the focus where it was.
+  if (state.infoOpen && !roomy()) $('#info .info-close')?.focus({ preventScroll: true });
+}
+
+/** The name in the header: the panel on the Customer tab, or closed again from there. */
+function showPerson() {
+  if (state.infoOpen && panelTab(state.detail) === 'customer' && !state.carView) { toggleInfo(); return; }
+  state.carView = null;
+  state.infoTab = 'customer';
+  if (!state.infoOpen) { state.infoOpen = true; if (roomy()) savePanelPref(true); }
+  renderInfo();
+  $('.who')?.setAttribute('aria-expanded', 'true');
 }
 
 // ---- which AI writes: the panel behind the cog in the top bar ---------------------------------
@@ -1538,6 +1683,8 @@ async function open(key) {
   state.message = '';
   state.pasteOpen = false;
   state.older = null;
+  state.carView = null;
+  state.infoTab = null;
   $('#app').dataset.view = 'chat';
   repaint();
   try {
@@ -1545,6 +1692,7 @@ async function open(key) {
     if (state.selected !== key) return;
     state.detail = item;
     markRead(item);
+    if (item.vehicle && !state.media.has(String(item.vehicle.stockNo))) loadMedia(item.vehicle.stockNo);
     renderChat({ toBottom: true });
     if (narrow()) $('.thread')?.focus({ preventScroll: true });
   } catch (e) {
@@ -1845,10 +1993,9 @@ async function loadMore() {
 // The search box asks the server for the matches among every row, a moment after the typing stops.
 let searchTimer = null;
 
-mountTopBar($('#topbar'), store, { sync: syncNow, aiModel: openAiPanel });
+mountTopBar($('#topbar'), store, { sync: syncNow, aiModel: openAiPanel, showSection, findCar: openCar });
 mountListColumn($('#side'), store, {
   open,
-  showSection,
   setTab: async (tab) => { if (state.tab === tab) return; state.tab = tab; state.listSize = 20; repaint(); await refreshList(); },
   setSearch: (q) => { state.q = q; state.listSize = 20; repaint(); clearTimeout(searchTimer); searchTimer = setTimeout(refreshList, 250); },
   loadMore,
@@ -1858,11 +2005,18 @@ document.addEventListener('keydown', (e) => {
   const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
   if (e.key === 'Escape') {
     if ($('dialog[open]')) return; // the AI panel closes itself
-    if (state.infoOpen && (window.matchMedia('(max-width: 1180px)').matches || $('#info').contains(document.activeElement))) { toggleInfo(); $('.who')?.focus(); return; }
+    if (state.infoOpen && (!roomy() || $('#info').contains(document.activeElement))) { toggleInfo(); $('.who')?.focus(); return; }
     if (!typing && narrow() && $('#app').dataset.view === 'chat') closeChat();
     return;
   }
   if (e.key === '/' && !typing) { e.preventDefault(); $('#q').focus(); }
+});
+
+// Crossing the width where the panel fits beside the conversation: it follows the person's
+// choice there, and steps aside below it rather than covering the conversation.
+window.matchMedia('(min-width: 1280px)').addEventListener('change', (e) => {
+  state.infoOpen = e.matches ? panelPref() !== 'closed' : false;
+  renderInfo();
 });
 
 (async function start() {
