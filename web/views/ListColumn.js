@@ -31,12 +31,6 @@ export function rowTags(r, state) {
   const order = r.section === 'auction';
   const setAside = r.dismissed && r.state === 'awaiting';
   if (order && r.state !== TAB_STATE[state.tab] && ORDER_LIST[r.state]) tags.push({ text: ORDER_LIST[r.state], tone: 'neutral' });
-  // A model reply: where it stands with the owner.
-  if (r.section === 'standards' && r.standardStatus) {
-    const tone = { PROPOSED: 'warning', CHANGED: 'info', APPROVED: 'success', REJECTED: 'neutral' }[r.standardStatus] || 'neutral';
-    tags.push({ text: t(`tag.standard.${r.standardStatus.toLowerCase()}`), tone });
-    return tags;
-  }
   if (r.phoneOnly) tags.push({ text: t('tag.phoneOnly'), tone: 'neutral' });
   // An email thread with a message Gmail had folded, so part of it could not be read.
   if (r.collapsed) tags.push({ text: t('tag.folded'), tone: 'warning' });

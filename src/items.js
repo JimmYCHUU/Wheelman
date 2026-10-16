@@ -12,7 +12,6 @@ import { firstNameOf, isPlaceholderName } from './redact.js';
 import { config } from './config.js';
 import { dealFor } from './deal.js';
 import { namesStaff } from './voice.js';
-import { scenarioItem } from './modelreplies.js';
 import { loadEligibleModels, modelCodesIn, modelsIn } from './eligible.js';
 
 const MIN = 60 * 1000;
@@ -718,15 +717,14 @@ export function buildMailItem(id, { now = Date.now() } = {}) {
   return item;
 }
 
-/** Finds an item by its key: c:<conversation>, l:<lead>, mp:<Marketplace chat>, ao:<auction order>, ph:<phone conversation>, tr:<model reply> or em:<email thread>. */
+/** Finds an item by its key: c:<conversation>, l:<lead>, mp:<Marketplace chat>, ao:<auction order>, ph:<phone conversation> or em:<email thread>. */
 export function itemFromKey(key, opts = {}) {
-  const m = String(key || '').match(/^(c|l|mp|ao|ph|tr|em):(\d+)$/);
+  const m = String(key || '').match(/^(c|l|mp|ao|ph|em):(\d+)$/);
   if (!m) return null;
   const id = Number(m[2]);
   if (m[1] === 'mp') return buildMarketplaceItem(id);
   if (m[1] === 'ao') return buildOrderItem(id, opts);
   if (m[1] === 'ph') return buildPhoneItem(id);
-  if (m[1] === 'tr') return scenarioItem(id, opts); // a model reply's invented scenario
   if (m[1] === 'em') return buildMailItem(id);
   return buildItem(m[1] === 'c' ? { conversationId: id } : { leadId: id });
 }

@@ -10,10 +10,9 @@ export const BASE_ENV = {
   // No test writes a backup unless it says so, and never into the real backup folder.
   BACKUPS: '0',
   BACKUP_DIR: path.join(os.tmpdir(), `wheelman-test-backups-${process.pid}`),
-  // The example bank and the ratings of the model replies are this computer's own: a check that
-  // runs a cycle rebuilds the bank, so it is built in a scratch file, and the ratings start empty.
+  // The example bank is this computer's own: a check that runs a cycle rebuilds the bank, so it is
+  // built in a scratch file.
   EXAMPLES_PATH: path.join(os.tmpdir(), `wheelman-test-examples-${process.pid}.json`),
-  MODEL_REPLIES_STATE_PATH: path.join(os.tmpdir(), `wheelman-test-model-replies-${process.pid}.json`),
   // The website's eligible-models list, as read by the Import Query section: a scratch file, never data/.
   ELIGIBLE_MODELS_PATH: path.join(os.tmpdir(), `wheelman-test-eligible-${process.pid}.json`),
   SIGN_OFF: 'Regards,\\nTeam Carbarn',

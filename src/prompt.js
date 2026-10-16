@@ -19,7 +19,6 @@ import { labelAddress } from './address.js';
 import { allVehicles } from './db.js';
 import { saleStage, stageLines, QUIET_MOVES } from './selling.js';
 import { insiderFacts } from './insider.js';
-import { modelReplies } from './modelreplies.js';
 import { renderResearch } from './importquery.js';
 import { mailPracticeFor } from './mailpractice.js';
 
@@ -456,8 +455,6 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   const recent = learnedExamples(want, 2, now);
   const examples = [...recent, ...pickExamples(want, 6 - recent.length)];
   const fixes = corrections(want, 2, now);
-  // The replies the owner approved as the standard for messages like this one.
-  const models = modelReplies(want, 3);
 
   // For an email the research record carries the website's passages, chosen for the question.
   const website = email ? [] : relevantWebsite(item.pendingText + ' ' + item.situation.all.map(labelFor).join(' '));
@@ -630,14 +627,6 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     });
   }
 
-  if (models.length) {
-    P.push('\n=== MODEL REPLIES ===');
-    P.push('Replies the owner approved as the standard for messages like this one. They answer invented customers about invented cars. These set the standard: match the moves, the register and the length, and ask a question only when the request names one. Never copy a sentence, and never reuse their figures, cars or links.');
-    models.forEach((x, n) => {
-      P.push(`Model ${n + 1} (${x.situation || 'general'}${x.rung ? `, ${x.rung}` : ''}${x.channel === 'marketplace' ? ', Marketplace chat' : ''})\n  Customer: ${x.customer.replace(/\s*\n\s*/g, ' / ').slice(0, 300)}\n  Our reply: ${x.reply.replace(/\n+/g, ' / ')}`);
-    });
-  }
-
   if (fixes.length) {
     P.push('\n=== HOW OUR STAFF CHANGED EARLIER SUGGESTIONS ===');
     P.push('For similar messages you drafted one thing and our staff used something else. Learn from the difference in length, wording and what they left out. Do not reuse the figures.');
@@ -720,7 +709,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   if (instruction) {
     P.push('\n=== INSTRUCTION FROM OUR STAFF FOR THIS DRAFT ===');
     P.push(redact(instruction, lead).slice(0, 600));
-    P.push('Our staff have decided what this reply says. Say it to the customer in our voice and in your own words; the customer never sees this instruction, so do not mention it. On what to say, it outranks the examples, the model replies, what the team sent before and the moves in SELLING. It does not override the rules on facts, figures, links, days and promises: a figure or link given here by staff may be used, anything else still comes from this request, and if it names a time that has already passed (see NOW), do not repeat that time and do not pick another one. Write "shortly", or use [DATE?].');
+    P.push('Our staff have decided what this reply says. Say it to the customer in our voice and in your own words; the customer never sees this instruction, so do not mention it. On what to say, it outranks the examples, what the team sent before and the moves in SELLING. It does not override the rules on facts, figures, links, days and promises: a figure or link given here by staff may be used, anything else still comes from this request, and if it names a time that has already passed (see NOW), do not repeat that time and do not pick another one. Write "shortly", or use [DATE?].');
   }
 
   P.push(`\nWrite the reply now as the JSON object described.${owner.lessons.length ? ' Before you answer, check it against each of the owner\'s lessons above.' : ''}`);
@@ -735,8 +724,8 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     stage,
     user: P.join('\n'),
     exampleIds: examples.map((e) => e.id),
-    // The model replies and the past emails join the examples here so a reply lifted from one is caught as copied.
-    exampleReplies: [...examples.map((e) => e.reply), ...models.map((x) => x.reply), ...mailSent.map((s) => s.reply)],
+    // The past emails join the examples here so a reply lifted from one is caught as copied.
+    exampleReplies: [...examples.map((e) => e.reply), ...mailSent.map((s) => s.reply)],
     practiceIds: [...sent.map((s) => s.id), ...mailSent.map((s) => s.id)],
     websiteSources: website.map((w) => w.source),
     alternatives: alts,

@@ -30,6 +30,14 @@ and versions follow `MAJOR.MINOR.PATCH`.
   - Checked on 13 real Marketplace chats, each cut back to when its old suggestion was written and
     written again with the same model on a copy of the database; nothing was sent.
 
+### Removed
+- **The Standards section and the model replies.** The tab where invented model replies were
+  rated is gone from the page, with its routes, `voice/model-replies.md`,
+  `voice/model-replies.json` and `src/modelreplies.js`. None of the thirty-seven had been
+  approved, so the request never carried one and no reply changes. (The owner's words, 15 Oct
+  2026: "I don't want the Standard section. It was decided so there's no purpose of showing in
+  the dashboard.")
+
 ### Added
 - **Marketplace links say they came from Facebook.** Every link to the Carbarn website in a
   Marketplace suggestion, and in any text sent with **Send reply** (typed or pasted links

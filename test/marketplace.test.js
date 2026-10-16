@@ -547,7 +547,7 @@ test('Send: the reply goes to the engine\'s reply address, shows in the chat on 
   assert.equal(engineSeen.length, 0, 'nothing reached the engine');
 
   // Only a Marketplace chat has a send. A dashboard conversation, a lead, an order, a phone thread,
-  // a model reply, a message key or an unknown chat does not.
+  // an old model-reply key, a message key or an unknown chat does not.
   for (const key of ['c:901', 'l:801', 'ao:1', 'ph:1', 'tr:1', 'fm:1', 'm:1', 'mp:99999']) {
     assert.equal((await post(base, `/api/items/${key}/send`, { text: 'Hello' })).status, 404, key);
   }

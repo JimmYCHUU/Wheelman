@@ -1163,21 +1163,6 @@ what the team really sends. **How to say it** comes from the two voices.
   every reply, go last in the request, where they override the examples and the general
   selling advice. A rewrite that repeats seven of your words in a row is sent back. If no
   AI model is free, the note is kept and its lesson is worked out later.
-- **The model replies.** `voice/model-replies.md` holds thirty-seven invented scenarios, each
-  with a reply written to the selling playbook in the Carbarn voice (rewritten in the formal
-  register on 12 October 2026, so every one is back under **Standards** to rate): a first text about
-  availability, a price asked before a visit, a customer who turns out to be interstate, a
-  booked inspection, a buyer after the deposit, a no, Marketplace chats. While any of them is
-  waiting for a rating, a **Standards** tab is on the page, where they come up one by one in
-  the normal message box. One counts only once you have marked it **Good reply**, as written
-  or after your changes. **Could be better** keeps your note with it and writes it again for
-  you to rate; **Set this one aside** drops it, and it can be put back. An approved one is
-  shown to the AI as the standard for messages like it: the moves, the register and the
-  length, with a question only when one was needed, never the sentences, which are refused as copied. Nothing from a scenario is
-  learned, and showing one costs no AI request. Once every one is approved or set aside, the
-  tab leaves the page and the page goes back to the Dashboard; the approved ones keep setting
-  the standard. Edit the file freely: a scenario added to it brings the tab back, and the
-  ratings are kept beside it in `voice/model-replies.json`.
 
 A reply is not learned from if it still contains a blank, contains bank details, or is
 standard wording the team sends to everyone. The standard address block and the sign-off are
@@ -1594,8 +1579,6 @@ wheelman/
 │   ├── house-voice.md                 the Carbarn voice: the register every reply is written in
 │   ├── sales-playbook.md              how it sells: the ladder, the moves, the price reply, a question only when needed
 │   ├── previous/                      the voice and the playbook before 12 Oct 2026, for a side-by-side review
-│   ├── model-replies.md               the model replies, rated under Standards on the page; edit freely
-│   ├── model-replies.json             where each model reply stands: to rate, approved, set aside
 │   ├── first-reply.md                 the standard block under a first reply; edit freely
 │   ├── import-ask.md                  the first reply to an import or auction enquiry; edit freely
 │   ├── auction-offer.md               the layout of an auction offer; edit freely
@@ -1628,7 +1611,6 @@ wheelman/
 │   ├── practice.js                    what the team really sent for similar messages
 │   ├── prompt.js                      the request: facts, rules for the channel, inspection plan
 │   ├── selling.js                     where the customer is on the way to a sale, the one move and the one question
-│   ├── modelreplies.js                the model replies as conversations; the approved ones, for the request
 │   ├── llm.js                         free models in order, resting busy ones, setting aside
 │   │                                  ones that are used up for the day, the daily cap
 │   ├── log.js                         what went wrong, written to data/wheelman.log
@@ -1732,7 +1714,9 @@ each with a reply written to the playbook in the house voice, shown under Standa
 one by one in the normal message box with Good reply and Could be better; an approved one is the
 standard the AI is shown for messages like it. Every one passes Wheelman's own checks without a
 warning. A no from a customer now gets the one move of accepting it, with no next step. Checked
-on the automated tests (nine new ones) and in a browser on a throwaway copy. None rated yet.
+on the automated tests (nine new ones) and in a browser on a throwaway copy. None was ever
+rated, and on 16 October 2026 the owner had the Standards section and the model replies removed:
+the voice and the playbook were settled, so it had no purpose on the page.
 
 7 October 2026, evening: the dashboard's notification feed is read every 45 seconds, so a new
 lead sets off a check at once instead of waiting for the next three-minute one or a press of

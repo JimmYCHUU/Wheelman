@@ -20,7 +20,7 @@ import { mountListColumn, visibleRows } from './views/ListColumn.js';
 // ---- state -------------------------------------------------------------------
 
 const state = {
-  section: 'dashboard',  // 'dashboard', 'marketplace', 'auction', 'importquery' or 'standards'
+  section: 'dashboard',  // 'dashboard', 'marketplace', 'auction', or 'importquery'
   sections: { dashboard: 0, marketplace: null, auction: null, importquery: null }, // waiting in each; null means the section is switched off
   unread: { dashboard: 0, marketplace: null, auction: null, importquery: null },   // waiting conversations with messages not looked at yet
   message: '',           // Auction: the kind of message picked from "Which message?" for the open order
@@ -330,7 +330,6 @@ function renderHead(item, els) {
   const where = mail ? ['Email', mail.subject].filter(Boolean).join(' · ') : chat ? `Marketplace${listing?.account ? `, ${listing.account}` : ''}` : (item.name ? item.phone : '');
   const sub = writing ? 'writing a suggestion…'
     : order ? [where, `Order ${order.orderNo}`, order.prefers ? `prefers ${order.prefers}` : ''].filter(Boolean).join(' · ')
-      : item.standard ? [`Model reply · ${t(`tag.standard.${item.standard.status.toLowerCase()}`)}`, chat ? 'Marketplace chat' : '', item.situation && item.situation !== 'General enquiry' ? `Asking about: ${item.situation.toLowerCase()}` : ''].filter(Boolean).join(' · ')
       : [where, item.situation && item.situation !== 'General enquiry' ? `Asking about: ${item.situation.toLowerCase()}` : ''].filter(Boolean).join(' · ');
   const others = newCount(state, state.section);
   els.head.replaceChildren(
@@ -775,7 +774,7 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
   const outbound = !!order && !order.replying;
   const what = outbound ? 'message' : 'reply';
   // A Marketplace chat is the one place a reply can be sent from here. Everywhere else, copy and paste.
-  const sends = item.channel === 'marketplace' && !item.standard;
+  const sends = item.channel === 'marketplace';
   const ta = h('textarea', { class: `draft ${arriving ? 'arriving' : ''}`.trim(), rows: '3', spellcheck: 'true', placeholder: `Type your ${what} here`, 'aria-label': `Your ${what}, not sent. Change it here, then ${sends ? 'send it, or copy it' : 'copy it'}.` });
   ta.value = state.edits.has(d.id) ? state.edits.get(d.id) : d.edited ?? d.reply;
   const backdrop = h('div', { class: 'backdrop', 'aria-hidden': 'true' });
@@ -1020,8 +1019,7 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
 
   put(after, h('span', { class: 'said' }, icon('check'), 'Copied'));
 
-  // Two ways to teach Wheelman. Marketplace chats are never learned from, so they have neither;
-  // a model reply has both, because rating it is what sets the standard.
+  // Two ways to teach Wheelman. Marketplace chats are never learned from, so they have neither.
   const teach = !!item.teaches;
   const approved = d.rating === 'good';
   const approveBtn = teach ? h('button', { class: `btn ${approved ? 'is-on' : ''}`.trim(), type: 'button', 'aria-pressed': approved ? 'true' : 'false',
@@ -1152,17 +1150,12 @@ function renderInfo() {
         // What our own records say about the customer that shaped the reply and is never said to them.
         d.insiderUsed?.length ? h('p', { class: 'fine', text: `Shaped by what our records show, never stated: ${d.insiderUsed.join(', ')}.` }) : null,
         h('p', { class: 'fine', text: d.provider === 'none' ? `Written from ${d.model || 'your wording'} at ${clock(d.createdAt)}, with no AI.${d.instruction ? ` What you added: “${d.instruction}”.` : ''}` : `Written by ${d.model || 'the AI model'} at ${clock(d.createdAt)}.${d.instruction ? ` Your instruction: “${d.instruction}”.` : ''}` })) : null,
-      item.standard ? h('section', {},
-        h('h4', { text: 'Model reply' }),
-        h('p', { class: 'fine', text: `${item.standard.title}. ${STANDARD_WORDS[item.standard.status] || ''}` }),
-        item.standard.note ? h('p', { class: 'fine', text: `Your note: “${item.standard.note}”` }) : null,
-        h('button', { class: 'btn outline', type: 'button', onclick: () => setStandard(item, item.standard.status === 'REJECTED' ? 'PROPOSED' : 'REJECTED') }, item.standard.status === 'REJECTED' ? 'Put it back to rate' : 'Set this one aside')) : null,
       // An ordinary enquiry read as an import enquiry, or not: what Wheelman read, and the owner's say.
       item.canRule ? h('section', {},
         h('h4', { text: t('judged.title') }),
         h('p', { class: 'fine', text: rulingWords(item) }),
         h('div', { class: 'rulings' }, ...rulingButtons(item))) : null,
-      item.state === 'awaiting' && !item.dismissed && !item.standard ? h('section', {},
+      item.state === 'awaiting' && !item.dismissed ? h('section', {},
         h('h4', { text: 'Dismiss' }),
         h('p', { class: 'fine', text: item.order
           ? 'Takes this order out of To do, for example when you have already told them by phone. Nothing is deleted: the order stays under In progress and the message can be put back.'
@@ -1693,26 +1686,8 @@ async function approve(item) {
     d.rating = next;
     if (state.detail?.draft?.id === d.id) state.detail.draft.rating = next;
     if (state.selected === item.key) renderComposer(item, chatFrame());
-    toast(!next ? 'Approval taken back' : out.standard ? 'Approved as the standard for messages like this.' : out.learned ? 'Approved. Wheelman will write similar replies this way.' : 'Approved');
-    if (out.standard) { refreshList(); refreshDetail(); }
+    toast(!next ? 'Approval taken back' : out.learned ? 'Approved. Wheelman will write similar replies this way.' : 'Approved');
     refreshStatus();
-  } catch (e) { toast(e.message); }
-}
-
-const STANDARD_WORDS = {
-  PROPOSED: 'Not rated yet. Mark it Good reply as it stands or after your changes, or say what could be better and it is written again.',
-  CHANGED: 'Written again after your note. Rate the new version.',
-  APPROVED: 'Approved: Wheelman treats it as the standard for messages like this one.',
-  REJECTED: 'Set aside: it is not used.',
-};
-
-/** Set a model reply aside, or put it back to be rated. */
-async function setStandard(item, status) {
-  try {
-    const out = await api(`/api/standards/${item.standard.id}/status`, { body: { status } });
-    if (out.item && state.selected === item.key) { state.detail = out.item; renderChat(); }
-    toast(status === 'REJECTED' ? 'Set aside. It can be put back from Set aside.' : 'Back under To rate.');
-    refreshList();
   } catch (e) { toast(e.message); }
 }
 
@@ -1740,7 +1715,6 @@ async function improve(item, note) {
       renderInfo();
     } else if (state.selected === item.key) { renderHead(state.detail, chatFrame()); renderComposer(state.detail, chatFrame()); }
     const lesson = (out.lessons || [])[0];
-    if (out.standard) { toast(out.ok ? 'Written again from your note. Rate the new version.' : out.error || 'It could not be written again'); refreshList(); return; }
     toast(!out.learned ? 'That could not be saved' : lesson ? `Learned: ${lesson.do}` : out.pending ? 'Noted. The lesson will be worked out when the AI is free.' : 'Noted for this reply. Nothing to reuse was found in it.');
   } catch (e) {
     state.busy.delete(item.key);
@@ -1764,10 +1738,9 @@ async function refreshList() {
     const q = state.q.trim();
     const data = await api(`/api/items?section=${state.section}&tab=${state.tab}&limit=${state.listSize}${q ? `&q=${encodeURIComponent(q)}` : ''}`);
     if (seq !== state.listSeq) return false; // a newer request has replaced this one
-    // The section on screen has left the page (the last model reply rated, say): Wheelman
-    // answered with the Dashboard instead. Follow it.
+    // The section on screen has left the page (switched off, say): Wheelman answered with the
+    // Dashboard instead. Follow it.
     if (data.section && data.section !== state.section && REGISTRY[data.section]) {
-      if (state.section === 'standards') toast(t('standards.done'));
       showSection(data.section);
       return false;
     }

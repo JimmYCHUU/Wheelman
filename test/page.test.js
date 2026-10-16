@@ -103,8 +103,8 @@ test('the store calls a view once now, then only when what it selected has chang
 });
 
 test('the section registry names every section, its lists and where a key belongs', () => {
-  assert.deepEqual(SECTION_IDS, ['dashboard', 'marketplace', 'auction', 'importquery', 'standards'], 'Standards stays last: the five-tab layout gives the last tab the full third row');
-  assert.equal(sectionOf('tr:12'), 'standards');
+  assert.deepEqual(SECTION_IDS, ['dashboard', 'marketplace', 'auction', 'importquery']);
+  assert.equal(sectionOf('tr:12'), 'dashboard', 'the model replies are gone: their old keys belong to no section');
   assert.equal(sectionOf('em:3'), 'importquery');
   assert.deepEqual(SECTIONS.importquery.tabs.map((x) => x && x.id), ['all', 'waiting', null]);
   assert.deepEqual(rowTags({ section: 'importquery', collapsed: 2, state: 'awaiting', flag: 'none' }, { tab: 'waiting' }), [{ text: 'Folded in Gmail', tone: 'warning' }]);

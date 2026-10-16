@@ -207,18 +207,6 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   return { body, reply, checks };
 }
 
-/**
- * A reply written by a person (a model reply) finished and checked the way the AI's would be, with
- * no AI request. Returns the finished reply, the checks and the prompt it was judged against.
- */
-export function assessProposed(item, reply, { now = Date.now() } = {}) {
-  const prompt = buildPrompt(item, { now });
-  const chat = item.channel === 'marketplace';
-  const again = !chat && writtenToday(item, now);
-  const out = assessReply(item, prompt, { reply, needs_human: [], facts_used: [], hold: false, next_step: '', rung: prompt.stage?.rung || '' }, { chat, again, allowed: allowedMaterial(item, prompt), said: saidIn(item), now });
-  return { ...out, prompt };
-}
-
 // One write at a time for one customer message. A second plain write while one is under way (the
 // page's Write it now during a background write, or the other way round) joins it instead of asking
 // the AI again. A write from the owner's own words (the Prompt line, Rewrite, Could be better)

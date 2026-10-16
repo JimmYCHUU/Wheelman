@@ -39,10 +39,6 @@ export const COPY = {
   'tag.needsYou': 'Needs you',
   'tag.dismissed': 'Dismissed',
   'tag.phoneOnly': 'Phone only',
-  'tag.standard.proposed': 'To rate',
-  'tag.standard.changed': 'Written again',
-  'tag.standard.approved': 'Approved',
-  'tag.standard.rejected': 'Set aside',
 
   'thread.loadOlder': 'Load older messages',
   'thread.older': '{n} more',
@@ -56,8 +52,6 @@ export const COPY = {
   'row.newIn.auction': '{n, one: order with something new, other: orders with something new}',
   'row.newIn.importquery': '{n, one: enquiry with new messages, other: enquiries with new messages}',
   'tag.folded': 'Folded in Gmail',
-  'row.newIn.standards': '{n, one: model reply not looked at yet, other: model replies not looked at yet}',
-  'standards.done': 'Every model reply is rated. The Standards tab leaves the page until one needs rating again.',
 
   'notice.setup.title': 'Setup is not finished',
   'notice.setup.body': 'Open the file .env, fill in what is listed here, then restart Wheelman.',

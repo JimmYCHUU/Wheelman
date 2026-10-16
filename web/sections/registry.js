@@ -123,39 +123,9 @@ export const SECTIONS = {
   },
 };
 
-// The model replies: invented scenarios with a reply in the house voice, rated one by one. An
-// approved one sets the standard the AI matches for similar messages.
-SECTIONS.standards = {
-  id: 'standards',
-  label: 'Standards',
-  prefixes: ['tr:'],
-  noun: ['model reply', 'model replies'],
-  person: 'Customer',
-  unknown: 'Invented customer',
-  tabs: [
-    { id: 'waiting', label: 'To rate', counted: true },
-    { id: 'quiet', label: 'Approved' },
-    { id: 'other', label: 'Set aside' },
-  ],
-  search: { placeholder: 'Search situation, car or message', phone: false },
-  place: 'the dashboard',
-  placeShort: 'Dashboard',
-  phone: false,
-  empty: {
-    waiting: ['Nothing to rate', 'Every model reply has been rated. Edit voice/model-replies.md to add more.'],
-    quiet: ['Nothing approved yet', 'Model replies you mark Good reply appear here and set the standard.'],
-    other: ['Nothing set aside', 'Model replies you set aside appear here and can be put back.'],
-    search: ['Nothing matches', 'Try a situation, a car or a word from the message.'],
-  },
-  welcome: { pick: 'Pick a model reply', check: 'Read the reply', paste: 'then mark it Good reply, or say what could be better and it is written again.' },
-  backTo: 'To rate',
-  dismiss: 'Set this one aside',
-  copyTarget: '',
-};
-
 export const SECTION_IDS = Object.keys(SECTIONS);
 
-/** Which section a conversation key belongs to: c:, l: and ph: are the dashboard; mp: Marketplace; ao: Auction; em: Import Query; tr: Standards. */
+/** Which section a conversation key belongs to: c:, l: and ph: are the dashboard; mp: Marketplace; ao: Auction; em: Import Query. */
 export const sectionOf = (key) => SECTION_IDS.find((id) => SECTIONS[id].prefixes.some((p) => String(key || '').startsWith(p))) || 'dashboard';
 
 /** The list a conversation state sits on, and the name of that list for an order found by a search on another list. */
