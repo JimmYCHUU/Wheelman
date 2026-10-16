@@ -21,6 +21,8 @@ import { saleStage, stageLines, QUIET_MOVES } from './selling.js';
 import { insiderFacts } from './insider.js';
 import { renderResearch } from './importquery.js';
 import { mailPracticeFor } from './mailpractice.js';
+import { replyLinks } from './vehiclemedia.js';
+import { listOf } from '../web/lib/copy.js';
 
 const read = (name) => fs.readFileSync(path.join(config.voiceDir, name), 'utf8').replace(/\r/g, '').trim();
 
@@ -233,7 +235,7 @@ function whoThisIs(item) {
   L.push('- Never ask which vehicle they mean. Never thank them for an enquiry or treat them as someone still deciding.');
   L.push('- Do not call their vehicle "sold" or "available", do not offer other vehicles, and do not give an inspection booking link.');
   L.push('- State no amount paid or owing: use [CHECK?]. For a date when something will be ready, picked up or delivered, use [DATE?] unless our staff gave one in this conversation.');
-  L.push('- If they ask for a document or a photo (invoice, blue slip, registration papers, export certificate), do not say it has been sent. Say we will check and send it, with [CHECK?] where a person has to find it.');
+  L.push('- If they ask for a document or a photo (invoice, blue slip, registration papers, export certificate), do not say it has been sent. Say we will check and send it, with [CHECK?] where a person has to find it, unless LINKS THEY ASKED FOR says its link is added under your text: then it needs no [CHECK?].');
   return L;
 }
 
@@ -362,6 +364,28 @@ export function pricePlan(item, vehicle = item.vehicles[0], { gone = false, owne
 }
 
 /**
+ * The links the customer asked for: a video of the car, its auction sheet, its export certificate,
+ * its photos. They come from the car's own media (src/vehiclemedia.js) and are added under the
+ * AI's lines by code, each with what it is, so a link is never invented or mistyped. found is
+ * what mediaForReply read: { media, asked }, for the car the reply is about.
+ */
+export function mediaPlan(found, vehicle, { pageInBlock = false } = {}) {
+  const off = { on: false, links: [], lines: [] };
+  if (!found?.media || !vehicle || String(found.media.stockNo) !== String(vehicle.stockNo)) return off;
+  const links = replyLinks(found.media, vehicle, found.asked, { pageInBlock });
+  const lines = [];
+  if (links.length) {
+    lines.push(`The customer asked for ${listOf(links.map((l) => l.label.toLowerCase()))}. ${links.length === 1 ? 'That link is' : 'Those links are'} added under your text automatically, each with what it is.`);
+    lines.push('Do not write these links yourself. Do not say anything has been sent or attached, do not write "below", and do not use [CHECK?] for them. Answer anything else they asked in your own words.');
+  }
+  // Photos asked for on a first reply: the car's page is already in the standard block.
+  if (found.asked.photos && pageInBlock && (found.media.photos || []).some((p) => p.group === 'car')) {
+    lines.push("They asked for photos: every photo of this vehicle is on its page on our website, whose link is in the standard block. Say the photos are on the vehicle's page; do not write the link and do not write \"below\".");
+  }
+  return lines.length ? { on: links.length > 0, links, lines } : off;
+}
+
+/**
  * True when we have already sent this customer a message today (Sydney time).
  * The greeting and the sign-off are used once a day per customer, not on every message.
  */
@@ -414,7 +438,7 @@ function modelStock(vehicle, all) {
  * @param importPlan  for an import or auction enquiry: what the reply should be (see imports.js).
  *                    Its lines are given to the AI; what it adds under the AI's text is put on by the drafter.
  */
-export function buildPrompt(item, { instruction = '', coaching = null, importPlan = null, research = null, now = Date.now(), holdOutConversation = true } = {}) {
+export function buildPrompt(item, { instruction = '', coaching = null, importPlan = null, research = null, media = null, now = Date.now(), holdOutConversation = true } = {}) {
   const lead = item.lead;
   const chat = item.channel === 'marketplace';
   // An import enquiry by email: the research record carries the facts, and the SMS-only sections are off.
@@ -553,6 +577,14 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   if (standard.on) {
     P.push('\n=== STANDARD FIRST REPLY ===');
     P.push(standard.lines.join('\n'));
+  }
+
+  // The links the customer asked for (a video, the auction sheet, the export certificate, the
+  // photos), added under the AI's lines by code.
+  const mediaLinks = importPlan || email ? { on: false, links: [], lines: [] } : mediaPlan(media, primary, { pageInBlock: standard.on && !!standard.vehicleUrl });
+  if (mediaLinks.lines.length) {
+    P.push('\n=== LINKS THEY ASKED FOR ===');
+    P.push(mediaLinks.lines.join('\n'));
   }
 
   let unconfirmedText = '';
@@ -720,6 +752,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     unconfirmedText,
     inspection,
     standard,
+    media: mediaLinks,
     price,
     stage,
     user: P.join('\n'),

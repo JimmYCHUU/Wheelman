@@ -15,6 +15,7 @@ import { standardBlock, inviteBlock, repeatsBlock, tidyOpening } from './firstre
 import { priceBlock } from './pricereply.js';
 import { LEFTOVER_LABEL } from './practice.js';
 import { tagMarketplaceLinks } from './marketplace.js';
+import { mediaForReply } from './vehiclemedia.js';
 
 /**
  * What a reply may legitimately quote, split by how far it can be trusted.
@@ -34,7 +35,8 @@ function allowedMaterial(item, prompt) {
   const booking = (prompt.inspection?.urls || []).join('\n');
   return {
     // The research for an import email is ours to state: its figures and links came from our website.
-    trusted: [prompt.vehicleText, alts, booking, prompt.sameModelUrl || '', (prompt.importUrls || []).join('\n'), prompt.researchText || '', ours, prompt.user.split('=== VEHICLE FACTS ===')[0]].join('\n'),
+    // The car's media links the customer asked for are ours too: they came from the car's own record.
+    trusted: [prompt.vehicleText, alts, booking, (prompt.media?.links || []).map((l) => l.url).join('\n'), prompt.sameModelUrl || '', (prompt.importUrls || []).join('\n'), prompt.researchText || '', ours, prompt.user.split('=== VEHICLE FACTS ===')[0]].join('\n'),
     policy: [prompt.businessFactsText, prompt.websiteText].join('\n'),
     customer: [theirs, prompt.unconfirmedText || ''].join('\n'),
   };
@@ -90,10 +92,15 @@ function buyerCheck(item, body) {
  * block's address, hours, links and phone (address), the price reply's sentences (price), or the
  * invitation's (invite).
  */
+/** Pointing at a block ("our address is below", "the video is below") is not an answer. The sentence must stand on its own. */
+function pointerCheck(body) {
+  const pointer = body.match(/\b(?:is|are|see|listed|shown|given|found|details?|address|hours|links?|videos?|photos?)\s+(?:just\s+|right\s+)?below\b|\bbelow[.:]?\s*$/im);
+  return pointer ? { level: 'fail', code: 'block-pointer', tokens: [pointer[0]], message: `The reply points at the block ("${pointer[0].trim()}"). Say the answer in the sentence itself and leave out "below".` } : null;
+}
+
 function blockCheck(body, vehicleUrl, inspectionUrl = '', { askedWhere = false, address = true, price = false, invite = false } = {}) {
-  // Pointing at the block ("our address is below") is not an answer. The sentence must stand on its own.
-  const pointer = body.match(/\b(?:is|are|see|listed|shown|given|found|details?|address|hours|link)\s+(?:just\s+|right\s+)?below\b|\bbelow[.:]?\s*$/im);
-  if (pointer) return { level: 'fail', code: 'block-pointer', tokens: [pointer[0]], message: `The reply points at the block ("${pointer[0].trim()}"). Say the answer in the sentence itself and leave out "below".` };
+  const pointer = pointerCheck(body);
+  if (pointer) return pointer;
   // A customer who asked where we are, or when we are open, is answered in the AI's own sentence too.
   let again = askedWhere || !address ? '' : repeatsBlock(body);
   if (!again && (price || invite)) again = repeatsBlock(body, { address: false, price, inspection: price || invite });
@@ -146,11 +153,17 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   const confirmedTime = /\bsee you\b|\bready for you\b|look forward to seeing you/i.test(text);
   const invite = !price && !plan && !hold && prompt.inspection?.block && prompt.inspection.url && !prompt.standard.on && !confirmedTime
     ? inviteBlock(prompt.inspection.url, { online: prompt.inspection.kind === 'online', chat, tail: true }) : '';
-  const extras = [price, invite].filter(Boolean).join('\n\n');
+  const owned = [price, invite].filter(Boolean).join('\n\n');
+  // The links the customer asked for (a video, the auction sheet, the export certificate, the
+  // photos), from the car's own media. Added by code under the AI's lines, never typed by the AI.
+  const asked = !plan && !hold && prompt.media?.on ? prompt.media : null;
   // An import reply has its own lines underneath: the whole offer, or the short contact block.
   const block = plan ? (hold ? '' : plan.tail || '') : prompt.standard.on && !hold ? standardBlock({ vehicleUrl, inspectionUrl, online: !!prompt.standard.online }) : '';
   if (plan?.tokens) text = restoreAmounts(text, plan.tokens);
-  if (block || extras) text = tidyOpening(text, vehicleUrl, inspectionUrl, prompt.price?.inspectionUrl || '', invite ? prompt.inspection.url : '');
+  if (block || owned || asked) text = tidyOpening(text, vehicleUrl, inspectionUrl, prompt.price?.inspectionUrl || '', invite ? prompt.inspection.url : '', ...(asked ? asked.links.map((l) => l.url) : []));
+  // A link the AI wrote out with its own words around it stays there, once.
+  const links = asked ? asked.links.filter((l) => !text.includes(l.url)).map((l) => `${l.label}: ${l.url}`).join('\n') : '';
+  const extras = [links, owned].filter(Boolean).join('\n\n');
   // An offer opens the way the team writes it: the greeting, a blank line, then one short paragraph.
   if (offer) text = text.trim().replace(/^([^\n]{1,40},)\n+/, (m, hi) => `${hi}\n\n`).replace(/([^\n])\n(?!\n)/g, (m, c) => `${c} `);
   let body = fixGreeting(stripModelSignOff(text), sydneyHour(now));
@@ -167,7 +180,7 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
     // A figure below the advertised price is never ours to name.
     advertisedPrice: item.deal ? 0 : Number(item.vehicles[0]?.price) || 0,
     // The price reply or the invitation under the lines offers the next step itself.
-    blockNextStep: !!extras,
+    blockNextStep: !!owned,
     needsHuman: json.needs_human,
     allowedText: allowed.trusted, policyText: allowed.policy, customerText: allowed.customer,
     instruction: staffSaid, situation: item.situation, hold: !!json.hold,
@@ -176,7 +189,8 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   });
   const repeat = offer
     ? (/[$¥]\s?\d|https?:\/\//.test(body) ? { level: 'fail', code: 'block-repeat', tokens: [], message: 'The opening states a figure or a link. The block below it gives the car, the bid, the costs and the link: write only the greeting and why the car may suit.' } : null)
-    : block || extras ? blockCheck(body, vehicleUrl, inspectionUrl || prompt.inspection?.url || prompt.price?.inspectionUrl || '', { askedWhere: !plan && item.situation.all.includes('location_hours'), address: !!block, price: !!price, invite: !!invite }) : null;
+    : block || owned ? blockCheck(body, vehicleUrl, inspectionUrl || prompt.inspection?.url || prompt.price?.inspectionUrl || '', { askedWhere: !plan && item.situation.all.includes('location_hours'), address: !!block, price: !!price, invite: !!invite })
+      : links ? pointerCheck(body) : null;
   if (offer) {
     checks = [...checks.filter((c) => c.level !== 'ok'),
       // Left out of the offer once a deposit is paid, so there is nothing to paste then.
@@ -312,7 +326,10 @@ async function writeDraft(item, { instruction = '', coaching = null, save = true
     const rendered = research ? renderResearch(research) : null;
     context.research = research ? { models: research.models.map((m) => m.code), notFound: research.notFound.length, stale: research.stale } : null;
 
-    const prompt = buildPrompt(item, { instruction, coaching, importPlan: plan, research, holdOutConversation, now });
+    // The car's photos, videos and documents, when the customer asked for one: read before the
+    // request is built, given up after a few seconds so a slow dashboard never holds up a reply.
+    const media = plan || email ? null : await mediaForReply(item);
+    const prompt = buildPrompt(item, { instruction, coaching, importPlan: plan, research, media, holdOutConversation, now });
     // Where the customer was on the way to a sale, and the move asked for, so the report can read it later.
     context.rung = prompt.stage?.rung || null;
     context.insider = prompt.insider || [];

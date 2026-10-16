@@ -236,6 +236,76 @@ export async function vehiclePicture(stockNo, id) {
 /** Forget what was read, for the tests. */
 export function forgetMedia() { cache.clear(); reading.clear(); }
 
+// ---- the links a reply carries when the customer asks ---------------------------------------------
+
+const ASKING = /\?|\b(send|share|e-?mail|text|forward|show|post|upload|links?|can (i|you|we)|could (i|you)|would you|do you have|have you got|got any|any (more|other)|more|please|pls|plz|i'?d like|want)\b/i;
+const HAD = /\b(thanks?|thank you|cheers|ta)\b.{0,20}\b(for|4)\b|\b(i|we)\s+(saw|watched|got|received|have seen|'ve seen|looked at|loved)\b|\b(seen|watched|received)\s+(the|your)\b/i;
+
+/**
+ * What the customer's waiting messages ask for: a video (of the inside or the engine too), photos,
+ * the auction sheet, the export certificate. Words a customer uses, not codes.
+ */
+export function askedFor(text) {
+  // Thanks for what came, or a word that it was seen, is not a request: those parts are left out,
+  // and what is left must ask (a question, or words such as send, share, more, please).
+  const parts = String(text || '').toLowerCase().split(/[.!?\n,;]+/).filter((p) => p.trim() && !HAD.test(p));
+  const s = ASKING.test(String(text || '')) ? parts.join(' . ') : '';
+  const video = /\bvideos?\b|\bvids?\b|walk[\s-]?around|footage|\b360\b/.test(s);
+  return {
+    video,
+    inside: video && /\b(inside|interior|cabin|seats?|dash(board)?)\b/.test(s),
+    engine: video && /\b(engine|motor|under the (hood|bonnet)|tyres?|tires?)\b/.test(s),
+    photos: /\b(photos?|pictures?|pics?|images?)\b/.test(s),
+    auctionSheet: /auction\s*(sheet|report)|\bauction\s+grade\s+sheet\b/.test(s),
+    exportCertificate: /export\s*cert(ificate)?s?\b/.test(s),
+  };
+}
+
+/**
+ * The links that answer what was asked, from the car's media, each on its own line with what it
+ * is: "Walkaround 360 video: …", "Auction sheet: …", "Export certificate: …", "Photos: <the car's
+ * page>". The walkaround comes for any video; the inside and engine videos only when asked for.
+ * Photos point to the car's page on the website, where every photo is, and only for a car that is
+ * listed there and only when the page link is not already in the reply's standard block. Albums,
+ * the import approval and every other document are never added by code.
+ */
+export function replyLinks(media, vehicle, asked, { pageInBlock = false } = {}) {
+  if (!media || !asked) return [];
+  const out = [];
+  const videos = media.videos || [];
+  const video = (re) => videos.find((v) => re.test(v.label));
+  if (asked.video) {
+    const chosen = [video(/walk/i) || videos[0]];
+    if (asked.inside) chosen.push(video(/inside\s*front/i), video(/inside\s*rear/i), video(/inside|interior/i));
+    if (asked.engine) chosen.push(video(/engine/i));
+    for (const v of [...new Set(chosen.filter((x) => x && x.shareable !== false))]) out.push({ label: /video/i.test(v.label) ? v.label : `${v.label} video`, url: v.link });
+  }
+  // A document kept at the supplier's own address is never put in a reply (the owner's choice).
+  const doc = (type) => (media.documents || []).find((d) => d.type === type && d.shareable !== false);
+  if (asked.auctionSheet && doc('AUCTION_SHEET')) out.push({ label: 'Auction sheet', url: doc('AUCTION_SHEET').link });
+  if (asked.exportCertificate && doc('EXPORT_CERTIFICATE')) out.push({ label: 'Export certificate', url: doc('EXPORT_CERTIFICATE').link });
+  const listed = vehicle?.url && availability(vehicle).code === 'available';
+  if (asked.photos && listed && !pageInBlock && (media.photos || []).some((p) => p.group === 'car')) out.push({ label: 'Photos', url: vehicle.url });
+  return out;
+}
+
+/**
+ * The car's media for a reply, when the customer asked for something it may hold: read through
+ * the half-hour cache, and given up after `waitMs` so a slow dashboard never holds up a reply.
+ */
+export async function mediaForReply(item, { waitMs = 5000 } = {}) {
+  const v = item?.vehicles?.[0];
+  if (!v?.stockNo || !v.chassisNo) return null;
+  const asked = askedFor(item.pendingText);
+  if (!Object.values(asked).some(Boolean)) return null;
+  let timer = null;
+  const late = new Promise((resolve) => { timer = setTimeout(() => resolve(null), waitMs); timer.unref?.(); });
+  try {
+    const media = await Promise.race([vehicleMedia(v.stockNo), late]);
+    return media && !media.stale ? { media, asked } : null;
+  } catch { return null; } finally { clearTimeout(timer); }
+}
+
 // ---- Find a car ----------------------------------------------------------------------------------
 
 const AVAIL_RANK = { available: 0, reserved: 1, arrived: 1, transit: 2, japan: 3, unknown: 4, sold: 5 };
