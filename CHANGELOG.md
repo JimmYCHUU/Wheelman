@@ -51,6 +51,14 @@ and versions follow `MAJOR.MINOR.PATCH`.
   car's files from the conversation and from Find a car.)
 
 ### Added
+- **The link the customer asked for, in the suggestion.** A customer who asks for a video, photos,
+  the auction sheet or the export certificate gets the link under the AI's lines, added by code
+  from the car's own media with what it is ("Walkaround 360 video: …"): the walkaround for any
+  video, the inside or engine videos when asked, the photos as the car's page (not on a first
+  reply, whose block has it). The AI is told not to type them or say "below"; a typed one is
+  given once; albums and the import approval are never added by code. A slow dashboard (five
+  seconds) means no block and the usual "we will check and send it". (The owner's choice, 16 Oct
+  2026.)
 - **Find a car, the viewer and Add to reply.** Find a car in the top bar opens any car in the
   stock list in the panel. Photos and videos open large in a dark viewer with a filmstrip, the
   arrow keys and a With voice-over / Without switch for videos. Every photo, video and document

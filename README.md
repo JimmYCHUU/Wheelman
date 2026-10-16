@@ -271,6 +271,29 @@ booked or seen the car, asked to hold it, or accepted our price or the figure ou
 Never while they are making an offer, saying the price is too high, or walking away. A booking
 link we sent is an invitation, not an arranged visit. (The owner's decision, 16 Oct 2026.)
 
+### Photos, videos and documents a customer asks for
+
+When the customer's waiting messages ask for a video, photos, the auction sheet or the export
+certificate, the links are added under the AI's lines by code, from the car's own media (see
+[A car's photos, videos and documents](#a-cars-photos-videos-and-documents)), each with what it
+is:
+
+```
+Walkaround 360 video: <the walkaround, with the voice-over>
+Auction sheet: <the auction sheet>
+Export certificate: <the export certificate>
+Photos: <the car's page on the website>
+```
+
+Only what was asked for: the walkaround for any video, the inside or engine videos too when those
+are asked for, the photos as the car's page (and not at all on a first reply, whose standard block
+already carries that page, or for a car not yet listed). The albums and the import approval are
+never added by code; Add to reply on the page puts them in by hand. The AI is told the links are
+added and writes the answer around them in its own words; a link it types anyway is given once,
+and a reply that points at the links with "below" is written again. If the dashboard does not
+answer within five seconds, nothing is added and the usual rule stands: say we will check and send
+it. (The owner's choice, 16 Oct 2026: "Yes, when asked".)
+
 ### Promises, days and places
 
 After the figures and links, each suggestion is checked for things that sound fine but that
