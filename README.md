@@ -254,9 +254,22 @@ them gets "The advertised price excludes government charges." The invitation is 
 car cannot be inspected yet. The AI writes only the greeting when one is due and one or two
 sentences that answer anything else asked: never the advertised price again, never a figure, and
 never a yes or a no to an offer. A figure the customer named gets a `[PRICE?]` sentence for a
-person; a figure below the advertised price in the AI's own lines fails the `price-floor` check
-and the reply is written again. Marketplace chats get the same block. (The owner's words, 12 Oct
-2026.)
+person ("Regarding your offer, [PRICE?]."); a figure below the advertised price in the AI's own
+lines fails the `price-floor` check and the reply is written again. Marketplace chats get the same
+block. (The owner's words, 12 Oct 2026.)
+
+The price reply goes once in a conversation. When the customer comes back with an offer after it,
+or after a figure our staff typed, the reply thanks them and leaves the figure to a person, with
+no second block. A reply that turns an offer down or runs it down ("we cannot match that figure",
+"below what we can accept", "too low") fails a check and is written again. A customer who is
+leaving over the price ("all the best", "still not worth it") or is rude gets a polite close:
+thanks, and that they are welcome to message us if their plans change, with no blank, no link, no
+invitation and no deposit.
+
+The $1,000 holding deposit is proposed only once the price is agreed: when the customer has
+booked or seen the car, asked to hold it, or accepted our price or the figure our staff gave.
+Never while they are making an offer, saying the price is too high, or walking away. A booking
+link we sent is an invitation, not an arranged visit. (The owner's decision, 16 Oct 2026.)
 
 ### Promises, days and places
 
@@ -736,8 +749,14 @@ Wheelman reads the Facebook Marketplace chats from the content engine and sugges
 every chat where the buyer wrote last. It works like the Dashboard section, with these
 differences:
 
-- **Formal but short.** One to three lines, under 45 words, in the same register as a text, with
-  no greeting line and no "Regards, Team Carbarn".
+- **Courteous and short.** Two to four short lines, up to 60 words, in the same register as a
+  text. Every reply opens with a short thank-you ("Thank you for your message, Priya." on the
+  first reply, then "Thank you for your offer." or "Thank you for letting us know."), with no
+  greeting line and no "Regards, Team Carbarn". (The owner's choice, 16 Oct 2026: the replies had
+  read as rude and too brief.)
+- **Never pushy.** The invitation to see the car is given once in a chat. An offer is thanked and
+  left to a person, never called too low; a buyer leaving over the price gets a polite close; and
+  the deposit comes up only once the price is agreed (see [The price reply](#the-price-reply)).
 - **Links in the reply.** The car's page link on a first reply, and the invitation to inspect
   with the booking link when the buyer asks to see the car, added under the lines by code as on
   the dashboard. The price reply is added the same way. (Marketplace has no standard block, so
@@ -1204,7 +1223,9 @@ often you asked for a rewrite. Counts only; no customer text.
 | "Below" | A reply never points at the address block. It answers in the sentence itself |
 | The message box | An editor: change the text or clear it, and it is saved as you type. A changed reply teaches Wheelman when it is copied or approved |
 | AI models | The better models are kept for dashboard customers. Marketplace chats use the small one |
-| Marketplace | A suggestion for every chat where the buyer wrote last; formal but short (one to three lines, under 45 words), with the car's page link and the booking link when asked |
+| Marketplace | A suggestion for every chat where the buyer wrote last; courteous and short (two to four lines, up to 60 words, opening with a thank-you), with the car's page link and the booking link when asked, and the invitation once in a chat |
+| The deposit | Proposed only once the price is agreed: booked or seen, asked to hold it, or accepted our figure. Never while the customer is making an offer, says it is too dear, or is leaving |
+| Offers | Thanked and left to a person (`[PRICE?]`), never turned down or called too low; the price reply goes once |
 | Sending | Marketplace only, by the **Send reply** button. Dashboard and auction replies are copied and pasted |
 | Learning | Dashboard only |
 

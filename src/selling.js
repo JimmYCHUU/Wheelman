@@ -39,7 +39,74 @@ const FIT = new Set(['price_negotiation', 'finance', 'trade_in', 'delivery_inter
 export const DECLINED = /\b(not interested|no longer (interested|looking|need)|already (bought|purchased|got one|sorted)|bought (one |something )?(elsewhere|somewhere else|another)|gone with (another|someone else)|changed (my|our) mind|found (one|something|another)|no thanks?|not (for me|what i'?m after)|give it a miss|pass on (it|this)|i'?ll pass)\b/i;
 
 /** They cannot make the visit that was arranged: not a no to the car, but not a commitment either. */
-export const CANNOT_COME = /\b(can'?t|cannot|can not|unable to|not able to|won'?t be able to|will not be able to) (come|make it|get (there|down|up|in|over)|get to|travel|drive)\b/i;
+export const CANNOT_COME = /\b(can'?t|cannot|can not|unable to|not able to|won'?t be able to|will not be able to) (come|make it|get (there|down|up|in|over)|get to|travel|drive)\b|\b(come|visit|make it|pop in|drop in) (another|some other|a different) (time|day)\b/i;
+
+/** Leaving, kindly: the deal does not suit them. Nothing is sold to them after this. */
+export const PARTING = /\b(all the best|best of luck|good luck|never ?mind|forget (it|about it)|(i'?ll|i will) keep (saving|looking)|keep(ing)? saving|no deal|not worth (it|that)|still not worth|thanks anyway|thank you anyway|cheers anyway|maybe (next time|another time))\b/i;
+/** An insult. It is answered with the same calm courtesy, and with nothing to sell. */
+export const RUDE = /\b(dick ?head|idiot|moron|clown|wanker|f+u+c+k\w*|f\*+k\w*|bullshit|greedy|thie(f|ves)|(you'?re|your|you are|ur|u r) dreaming)\b/i;
+
+// ---- the price: agreed, or still open ------------------------------------------------------------
+
+/** They accept the price: "deal", "I'll take it", "happy with that price". */
+export const ACCEPTS_PRICE = /(^\s*((ok(ay)?|yes|sure)[\s,.!]*)?deal\b|\b(it'?s|that'?s|you'?ve got|you have|we have) a deal\b|\b(i'?ll|i will|we'?ll|we will) take (it|her|the (car|van|vehicle))\b(?!\s+(to|out|around|on|for an? |for (a )?(test|spin|drive)))|\bhappy (with|to pay) (that|the|your) (price|figure)\b|\b(that|the) (price|figure) is (fine|good|ok(ay)?)\b|\bagreed\b)/i;
+/** The price is too high for them: never an agreement, whatever else they wrote. */
+const PRICE_OBJECTION = /\b(too (expensive|dear|steep|pricey|high)|too much (for|money)|over ?priced|not worth|isn'?t worth|ain'?t worth|tapped out|can'?t afford|cannot afford|out of (my|our) (budget|price range|range)|over (my|our) budget|(my|our) (max|limit) is|that'?s my (max|limit|best))\b/i;
+/** Our own price reply, or the owner's words in it, already sent. */
+const PRICE_REPLY_SENT = /government charges are extra|(small|slight) discount (only )?for (a |the )?serious buyers?/i;
+
+const dollars = (s) => Number(String(s ?? '').replace(/[^\d.]/g, '')) || 0;
+// Units that make a number something other than money.
+const NOT_MONEY = /^\s*(km|kms|klms?|kilomet|miles?|ks\b|m\b|ms\b|mm|cc\b|l\b|litres?|seats?|doors?|months?|years?|yrs?|days?|weeks?|hours?|hrs?|mins?|am\b|pm\b|:|%)/i;
+// A bare "23" means $23,000 only where it reads as an offer: "23 will do", "would you take 23".
+const THOUSANDS_AFTER = /^\s+(will do|is my|tops|max|cash|and i\b|and im\b|for it|final|is all|ono|neg)\b/i;
+const THOUSANDS_BEFORE = /\b(take|do|pay|give|offer|consider|accept|for|at)\s*$/i;
+
+/** Dollar figures in a message, as numbers: "16k", "18 k", "$14000", "22,900", "23 will do". Kilometres, years and times are not figures. */
+export function priceFigures(text) {
+  const s = String(text || '');
+  const out = [];
+  for (const m of s.matchAll(/(\$\s?)?(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)(\s?k\b)?/gi)) {
+    const end = m.index + m[0].length;
+    if (NOT_MONEY.test(s.slice(end, end + 12))) continue;
+    let n = Number(m[2].replace(/,/g, ''));
+    if (m[3]) n *= 1000;
+    else if (!m[1] && !m[2].includes(',')) {
+      if (n < 1000) {
+        if (!THOUSANDS_AFTER.test(s.slice(end, end + 16)) && !THOUSANDS_BEFORE.test(s.slice(Math.max(0, m.index - 12), m.index))) continue;
+        n *= 1000;
+      } else if (/^\d{4}$/.test(m[2]) && n >= 1950 && n <= 2035) continue; // a year
+    }
+    out.push(n);
+  }
+  return out;
+}
+
+/**
+ * What the customer's waiting words say about the price.
+ * open: they are talking price and have not agreed it: an offer, a budget, "too dear", a best-price ask.
+ * agreed: they accept our price, or the figure our staff gave them, and name nothing lower.
+ * answered: we have already answered the price here: our price reply, or a figure our staff typed.
+ */
+export function priceTalk(item) {
+  const text = item?.pendingText || '';
+  const ours = (item?.timeline || []).filter((e) => e.who === 'us' && !e.internal && !e.auto && e.text);
+  const advertised = dollars(item?.vehicles?.[0]?.price);
+  const plausible = (n) => (advertised ? n >= advertised * 0.3 && n <= advertised * 1.5 : n >= 3000 && n <= 300000);
+  // Figures our staff gave below the advertised price: what they offered this customer.
+  const quoted = ours.flatMap((e) => priceFigures(e.text)).filter(plausible).filter((n) => !advertised || n < advertised);
+  const known = [advertised, ...quoted].filter(Boolean);
+  const floor = known.length ? Math.min(...known) : 0;
+  const offers = priceFigures(text).filter(plausible);
+  const below = offers.length > 0 && floor > 0 && Math.max(...offers) < floor;
+  const agreed = ACCEPTS_PRICE.test(text) && !PRICE_OBJECTION.test(text) && !below;
+  const talk = SITUATIONS.price_negotiation.re.test(text);
+  return {
+    open: talk && !agreed,
+    agreed,
+    answered: ours.some((e) => PRICE_REPLY_SENT.test(e.text)) || quoted.length > 0,
+  };
+}
 
 /**
  * The moves. Each is what the reply does after answering, and the one question it may ask, which
@@ -73,6 +140,14 @@ export const MOVES = {
   },
   invite_before_price: {
     text: 'The price question. Our standard price reply is added under your text by code (see PRICE REPLY): what the price includes, that government charges are extra, that we may offer a small discount to a serious buyer, and the invitation with the booking link. Write only the greeting when one is due and one or two sentences that answer anything else asked and place the vehicle. Do not repeat the advertised price, name no figure, and neither accept nor refuse an offer: a figure is [PRICE?] for a person.',
+    question: '',
+  },
+  answer_offer: {
+    text: 'We have already answered the price in this conversation, and they came back with an offer or a view of their own. Thank them for their offer in a few words. Neither accept nor refuse it: if they named a figure, write "Regarding your offer, [PRICE?]." for a person to complete (list it under needs_human); if they named none, acknowledge their view in one courteous sentence. Never say that their offer is too low or below what we accept, never argue about what the car is worth, and do not repeat what the price includes. Invite them to see the car only if we have not invited them in this conversation.',
+    question: '',
+  },
+  part_well: {
+    text: 'They are leaving: the price does not suit them, or they are annoyed. Thank them for their offer or their interest in one sentence, and leave the door open: if their plans change, they are welcome to message us at any time. Then stop. No [PRICE?] blank and no figure, no link (not even the car\'s page on a first reply), no invitation, no deposit, no other car, and no argument about the price or what the car is worth. Answer an insult with the same calm courtesy, and do not mention it.',
     question: '',
   },
   ask_trade_in_details: {
@@ -166,7 +241,7 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
     links: t.some((e) => ours(e) && /#inspection=/.test(e.text)),
     // Offered by us earlier, or watched on the website (the dashboard records that; insider.js).
     video: t.some((e) => ours(e) && /\b(video|walkaround)\b/i.test(e.text)) || !!videoViewed,
-    invited: t.some((e) => ours(e) && /welcome to (come|visit|inspect)|come (in|and see|down|by)/i.test(e.text)),
+    invited: t.some((e) => ours(e) && /welcome to (come|visit|inspect|see)|come (in|and see|down|by)|(available|ready) (for|to) (inspection|inspect|view|see)/i.test(e.text)),
   };
 
   const signals = [];
@@ -175,20 +250,27 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
   if (events.some((e) => /online purchase steps/i.test(e))) signals.push('started the online purchase steps');
   if (events.some((e) => /finance application/i.test(e))) signals.push('applied for finance');
   if (customer.some((e) => recent(e) && SITUATIONS.deposit_hold.re.test(e.text))) signals.push('asked to hold or secure it');
-  // We confirmed a visit or sent the booking link, and they wrote again without declining.
+  // We confirmed a visit and they wrote again without declining. A booking link we sent is an
+  // invitation, not an arranged visit: since Marketplace replies carry it, it would make almost
+  // every buyer who writes back look ready for the deposit.
   let arranged = -1;
-  for (let i = t.length - 1; i >= 0; i--) if (ours(t[i]) && recent(t[i]) && (/\bsee you\b/i.test(t[i].text) || /#inspection=/.test(t[i].text))) { arranged = i; break; }
+  for (let i = t.length - 1; i >= 0; i--) if (ours(t[i]) && recent(t[i]) && /\bsee you\b/i.test(t[i].text)) { arranged = i; break; }
   if (arranged >= 0) {
     const after = t.slice(arranged + 1).filter((e) => e.who === 'customer' && e.text);
     if (after.length && !after.some((e) => DECLINED.test(e.text) || CANNOT_COME.test(e.text))) signals.push('a visit was arranged and they wrote again');
   }
+  // The price: while it is open (an offer, a budget, "too dear"), nobody is asked for a deposit.
+  const price = priceTalk(item);
+  if (price.agreed) signals.push('accepted our price');
   // The message waiting for a reply is a no: the only move is to accept it.
   const declined = !item.deal && DECLINED.test(item.pendingText || '');
+  // They are leaving over the price, or are rude. Someone still asking to see the car is not leaving.
+  const parting = !item.deal && !sit.includes('inspection_booking') && (PARTING.test(item.pendingText || '') || RUDE.test(item.pendingText || ''));
 
   let rung;
   if (item.deal) rung = 'buyer';
-  else if (signals.length) rung = 'commit';
-  else if (sit.some((s) => FIT.has(s)) || (sit.includes('vehicle_details') && customer.length > 1)) rung = 'fit';
+  else if (signals.length && !price.open && !parting) rung = 'commit';
+  else if (price.open || sit.some((s) => FIT.has(s)) || (sit.includes('vehicle_details') && customer.length > 1)) rung = 'fit';
   else if (sit.includes('history_kms') || sit.includes('photos_video') || (far.far && sit.includes('inspection_booking'))) rung = 'proof';
   else rung = 'interest';
 
@@ -199,7 +281,10 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
   if (rung === 'buyer') move = sit.includes('complaint') ? 'hold' : 'after_sale_step';
   else if (sit.includes('complaint')) move = 'hold';
   else if (declined) move = 'accept_no';
+  else if (parting) move = 'part_well';
   else if (gone) move = 'offer_alternative';
+  // Our price reply goes once; after that an offer is answered for a person to decide.
+  else if (price.open) move = price.answered ? 'answer_offer' : 'invite_before_price';
   else if (rung === 'commit') move = told.deposit ? 'confirm_step' : 'propose_deposit';
   else {
     move = MOVE_BY_SITUATION[primary] || 'answer_then_invite';
@@ -227,6 +312,11 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
   };
 }
 
+/** Moves that close politely: nothing is offered after them, not even the price reply or the invitation. */
+export const QUIET_MOVES = new Set(['accept_no', 'part_well']);
+// Moves whose words end on an invitation to see the car.
+const INVITING_MOVES = new Set(['invite_inspection', 'answer_then_invite', 'offer_proof', 'answer_offer']);
+
 /** The lines the AI is given under THIS CUSTOMER'S NEXT STEP. */
 export function stageLines(stage) {
   if (!stage) return [];
@@ -236,7 +326,11 @@ export function stageLines(stage) {
   L.push(`The move: ${stage.moveText}`);
   L.push(stage.question
     ? `If you ask a question, ask only this one, in your own words: "${stage.question}". Ask nothing else.`
-    : 'Ask no question: end on the next step.');
+    : QUIET_MOVES.has(stage.move) ? 'Ask no question, and offer no next step.' : 'Ask no question: end on the next step.');
+  // On Marketplace the invitation is given once in a chat; repeating it reads as pushing.
+  if (stage.channel === 'marketplace' && (stage.told.invited || stage.told.links) && INVITING_MOVES.has(stage.move)) {
+    L.push('We have already invited them to see the car in this chat: do not invite them again and give no booking link, unless they ask to see it. End on the answer, or on one useful thing they have not been offered.');
+  }
   if (stage.allowsUrgency) {
     L.push('Urgency, once, and only as a fact about how we work: a $1,000 refundable holding deposit is what takes the car off the market, and until one is paid the car stays for sale. Never say that other people are interested, that it is selling fast, or that the price will change.');
   } else {
@@ -275,7 +369,7 @@ export function salesScore({ body = '', nextStep = '', rung = '', situations = [
     nextStep: /\?/.test(b) || findUrls(b).length > 0 || NEXT_STEP_SIGNS.test(b) || !!String(nextStep || '').trim() || !!(due && (due.priceGiven || due.inviteGiven)),
     // No question is right unless one was needed; one question is right unless none was.
     questionOnlyWhenNeeded: questions === 0 ? needed !== true : questions === 1 && needed !== false,
-    length: channel === 'marketplace' ? n > 0 && n <= 45 : channel === 'email' ? n > 0 && n <= 180 : firstReply ? n >= 12 && n <= 70 : n >= 4 && n <= 50,
+    length: channel === 'marketplace' ? n > 0 && n <= 60 : channel === 'email' ? n > 0 && n <= 180 : firstReply ? n >= 12 && n <= 70 : n >= 4 && n <= 50,
     register: !SLANG.test(b) && !SERVILE.test(b) && !hasEmoji(b) && (b.match(/!/g) || []).length <= 1,
     noUrgency: !URGENCY.test(b) && !CLAIM.test(b) && (!STAYS_FOR_SALE.test(b) || rung === 'commit'),
     dueBlocks: (!due?.price || !!due.priceGiven) && (!due?.invite || !!due.inviteGiven) && (!proofDue || /auction sheet|export certificate|walkaround|video|photos?|odometer history|ppsr/i.test(b)),
