@@ -269,6 +269,7 @@ export const COPY = {
   'panel.tab.customer': 'Customer',
   'panel.tab.order': 'Order',
   'panel.tab.enquiry': 'Enquiry',
+  'panel.tab.buyer': 'Buyer',
   'panel.tabs': 'What the panel shows',
 
   'car.photos': 'Photos',

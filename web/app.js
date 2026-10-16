@@ -1129,7 +1129,7 @@ function renderInfo() {
   state.carSig = sig;
   panel.dataset.tab = tab;
 
-  const person = item?.order ? t('panel.tab.order') : item?.mail ? t('panel.tab.enquiry') : t('panel.tab.customer');
+  const person = item?.order ? t('panel.tab.order') : item?.mail ? t('panel.tab.enquiry') : item?.marketplace ? t('panel.tab.buyer') : t('panel.tab.customer');
   const scroll = panel.querySelector('.info-body')?.scrollTop || 0;
   const head = item && hasCarTab(item)
     ? Segmented({ items: [{ id: 'car', label: t('panel.tab.car') }, { id: 'customer', label: person }], value: tab, label: t('panel.tabs'), kind: 'tabs',
@@ -1249,7 +1249,7 @@ function customerSections(item) {
   const d = item.draft;
   return [
     h('section', {},
-      h('h4', { text: item.marketplace ? 'Buyer' : 'Customer' }),
+      // The tab, or the panel's own heading, already says Customer or Buyer: no second heading here.
       h('dl', {},
         row('Name', item.name),
         row('Phone', item.phone ? h('button', { class: 'link-btn', type: 'button', onclick: async () => { await copyText(item.phone); toast('Phone number copied'); } }, `${item.phone} (copy)`) : ''),

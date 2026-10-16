@@ -14,19 +14,22 @@
     grid-template-rows: minmax(0, 1fr);
   }
   .app.has-info { grid-template-columns: minmax(var(--col-list-min), var(--col-list-narrow)) minmax(0, 1fr) var(--col-panel); }
-  .side, .chat, .info { min-width: 0; min-height: 0; }
+  .side, .chat, #info { min-width: 0; min-height: 0; }
 
   /* ---- top bar ----------------------------------------------------------------------- */
 
-  /* The brand, the four sections as tabs, Find a car, the status in a few words, the cog and Check now. */
+  /* One bar across the page, with no dividing line in it: the brand at the left, the four sections
+     in the middle of the bar, Find a car, the status in a few words, the cog and Check now at the
+     right. The two sides share the width equally, so the sections sit in the middle; a side that
+     needs more room takes it, and the sections move over rather than run under it. */
   .topbar {
     position: relative;
     min-height: var(--bar-h);
-    display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: stretch; column-gap: var(--sp-4);
-    padding: 0 var(--sp-3) 0 var(--sp-4);
+    display: grid; grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr); align-items: stretch; column-gap: var(--sp-4);
     background: var(--side); border-bottom: 1px solid var(--line);
   }
-  .topbar-brand { display: flex; align-items: center; gap: var(--sp-3); padding-right: var(--sp-2); }
+  .topbar-brand { min-width: 0; justify-self: start; display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-4); }
+  .topbar-tools { min-width: 0; justify-self: end; display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-3) 0 var(--sp-4); }
   .brand-mark { width: var(--ctl-md); height: var(--ctl-md); flex: none; display: block; }
   .brand-words { display: grid; line-height: 1; }
   .topbar-brand h1 {
@@ -37,7 +40,7 @@
   .topbar-actions { display: flex; align-items: center; gap: var(--sp-1); }
 
   /* The sections: words on the bar, the chosen one in ink with the brand line under it. */
-  .topbar-nav { min-width: 0; display: flex; align-items: stretch; overflow-x: auto; scrollbar-width: none; }
+  .topbar-nav { min-width: 0; justify-self: center; display: flex; align-items: stretch; overflow-x: auto; scrollbar-width: none; }
   .topnav { display: flex; align-items: stretch; gap: var(--sp-1); }
   .topnav-tab {
     position: relative; border: 0; background: transparent; padding: 0 var(--sp-3);
@@ -288,7 +291,7 @@
 
   /* ---- details panel ------------------------------------------------------------------------ */
 
-  .info {
+  #info {
     background: var(--side); border-left: 1px solid var(--line);
     display: flex; flex-direction: column;
   }
@@ -299,19 +302,19 @@
   .info-head h2 { padding-left: var(--sp-2); font-size: var(--fs-title); font-weight: var(--fw-semibold); }
   .info-head .sections { flex: none; background: var(--line); }
   .info-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding-bottom: var(--sp-6); }
-  .info section { padding: var(--sp-4) var(--sp-5) var(--sp-5); border-bottom: var(--sp-2) solid var(--panel); }
-  .info section:last-child { border-bottom: 0; }
-  .info h4 { margin: 0 0 var(--sp-3); font-size: var(--fs-label); font-weight: var(--fw-semibold); color: var(--text); }
-  .info dl { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: var(--sp-2) var(--sp-3); font-size: var(--fs-ui); }
-  .info dt { color: var(--faint); }
-  .info dl + h4 { margin-top: var(--sp-5); }
-  .info dd, .info .facts li, .info .fine { overflow-wrap: anywhere; }
-  .info .facts { display: grid; gap: var(--sp-2); font-size: var(--fs-ui); color: var(--muted); }
-  .info .facts li { padding-left: var(--sp-4); position: relative; }
-  .info .facts li::before { content: ""; position: absolute; left: 0; top: var(--sp-2); width: var(--sp-1); height: var(--sp-1); border-radius: var(--r-full); background: var(--line-strong); }
-  .info .fine { color: var(--faint); font-size: var(--fs-label); margin-top: var(--sp-3); }
-  .info section > h4 + .fine { margin-top: 0; }
-  .info .dismiss-btn { margin-top: var(--sp-3); }
+  #info section { padding: var(--sp-4) var(--sp-5) var(--sp-5); border-bottom: var(--sp-2) solid var(--panel); }
+  #info section:last-child { border-bottom: 0; }
+  #info h4 { margin: 0 0 var(--sp-3); font-size: var(--fs-label); font-weight: var(--fw-semibold); color: var(--text); }
+  #info dl { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: var(--sp-2) var(--sp-3); font-size: var(--fs-ui); }
+  #info dt { color: var(--faint); }
+  #info dl + h4 { margin-top: var(--sp-5); }
+  #info dd, #info .facts li, #info .fine { overflow-wrap: anywhere; }
+  #info .facts { display: grid; gap: var(--sp-2); font-size: var(--fs-ui); color: var(--muted); }
+  #info .facts li { padding-left: var(--sp-4); position: relative; }
+  #info .facts li::before { content: ""; position: absolute; left: 0; top: var(--sp-2); width: var(--sp-1); height: var(--sp-1); border-radius: var(--r-full); background: var(--line-strong); }
+  #info .fine { color: var(--faint); font-size: var(--fs-label); margin-top: var(--sp-3); }
+  #info section > h4 + .fine { margin-top: 0; }
+  #info .dismiss-btn { margin-top: var(--sp-3); }
 
   /* ---- the Car tab ---------------------------------------------------------------------------- */
 
@@ -346,7 +349,7 @@
   .car-listing { justify-self: start; margin-top: var(--sp-1); display: inline-flex; align-items: center; gap: var(--sp-1); font-size: var(--fs-label); font-weight: var(--fw-semibold); text-decoration: none; }
   .car-listing svg.icon { width: var(--icon-xs); height: var(--icon-xs); }
   .car-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); margin-bottom: var(--sp-3); }
-  .info .car-sec-head h4 { margin: 0; }
+  #info .car-sec-head h4 { margin: 0; }
   .car-sec-head .link-btn { font-size: var(--fs-label); text-decoration: none; }
 
   .photo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-1); }
@@ -385,7 +388,7 @@
   .car-tab > .car-error { margin: var(--sp-3) var(--sp-4) 0; }
   .car-sec .car-error + .btn { margin-top: var(--sp-3); }
   .car-empty { padding: var(--sp-6) var(--sp-5); color: var(--faint); font-size: var(--fs-ui); }
-  .info .car-read { padding: var(--sp-3) var(--sp-5) 0; margin: 0; }
+  #info .car-read { padding: var(--sp-3) var(--sp-5) 0; margin: 0; }
   .car-read .link-btn { font-size: inherit; }
 
   /* ---- the viewer: photos and videos large ------------------------------------------------------ */
@@ -469,38 +472,57 @@
 
   /* ---- narrow windows ------------------------------------------------------------------------ */
 
-  /* Below three columns' width the panel is a drawer over the conversation. */
-  @media (max-width: 1279px) {
-    .app.has-info { grid-template-columns: minmax(var(--col-list-min), var(--col-list-max)) minmax(0, 1fr); }
-    .info {
-      position: fixed; inset: 0 0 0 auto; z-index: var(--z-drawer); width: min(var(--col-panel), 100vw);
-      box-shadow: var(--shadow-2);
-      transition: translate var(--dur-drawer) var(--ease-drawer), opacity var(--dur-base) var(--ease-out);
-    }
-    @starting-style { .info:not([hidden]) { translate: 100% 0; opacity: .6; } }
+  /* With the panel beside the conversation, Check now sits level with the panel's close button. */
+  @media (min-width: 1280px) {
+    .shell:has(.app.has-info) .topbar-tools { padding-right: var(--sp-2); }
   }
 
-  /* The status keeps its words and loses its arrow; Find a car narrows. */
-  @media (max-width: 1100px) {
-    .brand-by, .status-btn svg.icon { display: none; }
-    .status-btn { padding: 0 var(--sp-3); }
-    .topbar-find { width: var(--find-w-narrow); }
-    .car-open { display: none; }
-  }
-
-  @media (max-width: 860px) {
-    .topbar { column-gap: var(--sp-2); padding-left: var(--sp-3); grid-template-columns: auto minmax(0, 1fr) auto auto; }
-    .brand-words { display: none; }
-    /* The sections on a row of their own under the bar. */
-    .topbar-nav { grid-column: 1 / -1; grid-row: 2; height: var(--ctl-lg); margin: 0 calc(-1 * var(--sp-3)) 0 calc(-1 * var(--sp-3)); padding: 0 var(--sp-1); border-top: 1px solid var(--line); }
-    .topbar-find { grid-column: 3; width: auto; }
-    .topbar-actions { grid-column: 4; }
+  /* Below 1440 pixels Find a car waits behind its magnifying glass, so the sections stay in the
+     middle of the bar, clear of both sides; pressed, it opens across the bar. */
+  @media (width < 1440px) {
     .find-opener { display: grid; }
     .find-field { display: none; }
+    .topbar-find { width: auto; }
     .topbar-find.is-open { position: absolute; inset: 0 0 auto 0; height: var(--bar-h); z-index: var(--z-popover); display: flex; align-items: center; padding: 0 var(--sp-3); background: var(--side); }
     .topbar-find.is-open .find-field { display: block; flex: 1; }
     .topbar-find.is-open .find-opener { display: none; }
     .find-pop { right: var(--sp-3); }
+  }
+
+  /* Below three columns' width the panel is a drawer over the conversation. */
+  @media (width < 1280px) {
+    /* The list a little narrower, so the conversation keeps its room. */
+    .app, .app.has-info { grid-template-columns: minmax(var(--col-list-min), var(--col-list-narrow)) minmax(0, 1fr); }
+    #info {
+      position: fixed; inset: 0 0 0 auto; z-index: var(--z-drawer); width: min(var(--col-panel), 100vw);
+      box-shadow: var(--shadow-2);
+      transition: translate var(--dur-drawer) var(--ease-drawer), opacity var(--dur-base) var(--ease-out);
+    }
+    @starting-style { #info:not([hidden]) { translate: 100% 0; opacity: .6; } }
+  }
+
+  /* The status keeps its words and loses its arrow. */
+  @media (max-width: 1100px) {
+    .brand-by, .status-btn svg.icon { display: none; }
+    .status-btn { padding: 0 var(--sp-3); }
+    .car-open { display: none; }
+  }
+
+  @media (max-width: 1000px) {
+    .brand-words { display: none; }
+    /* The sections a little closer together, so they keep clear of both sides. */
+    .topnav-tab { padding: 0 var(--sp-2); }
+    .topnav-tab::after { left: var(--sp-2); right: var(--sp-2); }
+  }
+
+  @media (max-width: 860px) {
+    .topbar { grid-template-columns: auto minmax(0, 1fr) auto; }
+    .topbar-brand { padding: 0 var(--sp-3); }
+    .brand-words { display: none; }
+    /* The sections on a row of their own under the bar. */
+    .topbar-nav { grid-column: 1 / -1; grid-row: 2; justify-self: stretch; height: var(--ctl-lg); padding: 0 var(--sp-1); border-top: 1px solid var(--line); }
+    .topbar-tools { justify-self: end; }
+    .topbar-tools { grid-column: 3; gap: var(--sp-1); padding: 0 var(--sp-2) 0 0; }
     .car-links .btn .t-long { display: none; }
     .car-links .btn .t-short { display: inline; }
     /* In a conversation the sections step aside; the back arrow, with its count, leads to them. */

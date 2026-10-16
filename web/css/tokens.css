@@ -142,8 +142,7 @@
     --measure-welcome: 26rem;
     --measure-signin: 22rem;    /* the team's sign-in card at the shared address */
     --col-panel: 26rem;          /* the car and customer panel on the right */
-    --find-w: 15rem;             /* Find a car in the top bar */
-    --find-w-narrow: 11rem;
+    --find-w: 12rem;             /* Find a car in the top bar */
     --pop-w: 24rem;              /* the Find a car results and the status panel */
     --pop-max-h: 70dvh;
     --tab-mark: 0.1875rem;       /* the line under the chosen section */

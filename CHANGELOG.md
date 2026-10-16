@@ -5,6 +5,21 @@ and versions follow `MAJOR.MINOR.PATCH`.
 
 ## [Unreleased]
 
+### Fixed
+- **The top bar is one bar, with the sections in its middle.** The section tabs no longer look
+  like part of the conversation under them: the bar has no dividing line inside it, the brand sits
+  at the left, the four tabs in the middle of the bar, and Find a car with the buttons at the right,
+  Check now level with the button below it. The tabs stay centred from 1100 pixels up and always
+  keep clear of both sides; under 1440 pixels Find a car waits behind its magnifying glass, and
+  under 1000 the brand shows only its mark. Auction and Import Query were cut off at 1180 pixels;
+  they now fit. Below 1280 pixels the list keeps to 22rem so the conversation keeps its room. (The
+  owner's screenshots, 16 Oct 2026: "marked parts doesn't show good alignment", then "remove that
+  border line and move those sections to middle".)
+- **The panel's heading is not repeated.** The Customer tab (Buyer on Marketplace, Order, Enquiry)
+  no longer starts with a second "Customer" heading.
+- **The blue "Needs you" tag on a Marketplace row sits in its line again.** It shared a class name
+  with the panel on the right and took the panel's layout; the panel is now styled by its own id.
+
 ### Changed
 - **Marketplace replies are courteous, and nobody is asked for a deposit while the price is
   open.** The owner found the Marketplace replies "a bit rude, extra brief and very much pushy",

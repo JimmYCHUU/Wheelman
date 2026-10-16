@@ -668,7 +668,7 @@ What to know:
 
 ### The top bar
 
-- **The sections** are tabs across the top: **Dashboard** (leads and text messages),
+- **The sections** are tabs in the middle of the top bar: **Dashboard** (leads and text messages),
   **Marketplace** (Facebook Marketplace chats), **Auction** (auction orders) and **Import Query**
   (import emails). A section that is switched off has no tab. The number beside a tab counts
   conversations with new messages you have not looked at.
@@ -825,11 +825,12 @@ supplier and the buyer the moment the car's record is read.
 
 ### Narrow windows, light and dark
 
-Below 1280 pixels the panel is a drawer over the conversation. Below about 1100 pixels the status
-keeps only its coloured dot. Beside the dashboard in a narrow window (860 pixels and less) the
-list and the conversation take turns, the arrow at the top left goes back to the list, the
-sections sit on a row of their own under the bar, and Find a car waits behind the magnifying
-glass. The page follows the computer's light or dark setting; the photo viewer is dark in both.
+Below 1440 pixels Find a car waits behind the magnifying glass in the top bar, so the sections stay
+in the middle. Below 1280 pixels the panel is a drawer over the conversation. Beside the dashboard
+in a narrow window (860 pixels and less) the list and the conversation take turns, the arrow at the
+top left goes back to the list, and the sections sit on a row of their own under the bar. The
+status always says how Wheelman is doing in words. The page follows the computer's light or dark
+setting; the photo viewer is dark in both.
 
 ## The Marketplace section
 
