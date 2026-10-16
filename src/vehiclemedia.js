@@ -32,6 +32,13 @@ const allowPicture = (u) => PICTURE_HOSTS.includes(u.hostname) || (SHARED_HOSTS[
 // A document address carrying a key, a token or a password is never shown or sent (the inspection
 // sheet's does, which is one reason it is dropped by type as well).
 const SECRET_QUERY = /[?&](key|token|secret|password|pass|auth|sig|signature|x-amz-signature|user)=/i;
+
+// The Japanese supplier's addresses. Wheelman fetches its auction photos and auction sheets for the
+// owner to look at, but such an address is never given to a customer: no Copy link, no Add to reply,
+// never in a reply. (The owner's choice, 16 Oct 2026: "Hide it from customers".)
+const SUPPLIER = (u) => /(^|\.)nichibojapan\.com$/i.test(u.hostname) || (u.hostname === 's3-ap-southeast-2.amazonaws.com' && u.pathname.startsWith('/nichibo/'));
+/** Whether a link may go to a customer: anything but the supplier's own addresses. */
+export const shareable = (url) => { try { return !SUPPLIER(new URL(url)); } catch { return false; } };
 // The supplier serves its auction photos over plain http. Only Wheelman fetches them, never the page.
 const HTTP_HOSTS = ['www.nichibojapan.com', 'nichibojapan.com'];
 /** Where a video may play from on the page. The content security policy names the same host. */
@@ -79,9 +86,10 @@ function numbered(labels) {
  * Wheelman itself fetches; it stays on the server. The id is made from the address, so it names the
  * same picture after any later read and a browser's copy of it never shows another one. Every other
  * field is safe for the page:
- *   photos    [{ id, group: 'car' | 'auction', label, link }]
- *   videos    [{ label, link, plainLink, poster, playable }]  (link: with the voice-over when there is one)
- *   documents [{ type, label, kind: 'pdf' | 'image' | 'album' | 'file', link, picture }]
+ *   photos    [{ id, group: 'car' | 'auction', label, link, shareable }]
+ *   videos    [{ label, link, plainLink, poster, playable, shareable }]  (link: with the voice-over when there is one)
+ *   documents [{ type, label, kind: 'pdf' | 'image' | 'album' | 'file', link, picture, shareable }]
+ * shareable is false for the supplier's own addresses: shown to the owner, never to a customer.
  */
 export function projectMedia(media, record) {
   const pictures = {};
@@ -109,7 +117,7 @@ export function projectMedia(media, record) {
   }
   const auction = [...new Set((Array.isArray(rec.auctionPhotos) ? rec.auctionPhotos : []).map(web).filter(Boolean))]
     .map((url, i) => ({ group: 'auction', label: `Auction photo ${i + 1}`, url }));
-  const photos = [...car, ...auction].map((p) => ({ id: picture(p.url), group: p.group, label: p.label, link: p.url }));
+  const photos = [...car, ...auction].map((p) => ({ id: picture(p.url), group: p.group, label: p.label, link: p.url, shareable: shareable(p.url) }));
 
   // The videos, the walkaround first. The voice-over version is the one the website plays.
   const videos = list.filter((m) => m && m.mediaType === 'VIDEO' && (web(m.url) || web(m.voiceOverVideoUrl)))
@@ -122,6 +130,7 @@ export function projectMedia(media, record) {
         link,
         plainLink: voice && plain && plain !== voice ? plain : '',
         poster: picture(m.thumbnailUrl),
+        shareable: shareable(link),
         playable: VIDEO_HOSTS.includes(hostOf(link)) && (!plain || VIDEO_HOSTS.includes(hostOf(plain))),
       };
     })
@@ -140,7 +149,7 @@ export function projectMedia(media, record) {
   const documents = Object.keys(DOCUMENTS).filter((t) => newestOf.has(t)).map((type) => {
     const link = newestOf.get(type).url;
     const kind = kindOf(type, link);
-    return { type, label: DOCUMENTS[type], kind, link, picture: kind === 'image' ? picture(link) : null };
+    return { type, label: DOCUMENTS[type], kind, link, picture: kind === 'image' ? picture(link) : null, shareable: shareable(link) };
   });
 
   return { photos, videos, documents, pictures };

@@ -179,6 +179,20 @@ test('a document address with a key in it is never shown; the shared Amazon addr
   }
 });
 
+test('the supplier\'s own addresses are for the owner only: never shareable with a customer', () => {
+  const rec = {
+    auctionPhotos: ['http://www.nichibojapan.com/AuctionPictures/stock/1R.jpg', 'https://s3-ap-southeast-2.amazonaws.com/nichibo/1_a.jpg', 'https://www.storage.importautos.com.au/x/auction.jpg'],
+    operation: { documents: [
+      { documentType: 'AUCTION_SHEET', url: 'http://www.nichibojapan.com/AuctionPictures/stock/1S.jpg', active: true },
+      { documentType: 'EXPORT_CERTIFICATE', url: 'https://fastlycb.s3.ap-southeast-2.amazonaws.com/docs/export.pdf', active: true },
+    ] },
+  };
+  const out = vm.projectMedia([], rec);
+  assert.deepEqual(out.photos.map((p) => p.shareable), [false, false, true]);
+  assert.deepEqual(out.documents.map((d) => [d.type, d.shareable]), [['AUCTION_SHEET', false], ['EXPORT_CERTIFICATE', true]]);
+  assert.equal(vm.shareable('not an address'), false);
+});
+
 test('Find a car says a car is reserved when another customer has paid a deposit on it', async () => {
   // Stock 1400, the Alphard, is listed as available but carries another customer's deposit.
   const sync = await import('../src/sync.js');

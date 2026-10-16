@@ -82,6 +82,9 @@ export function openViewer(opts) {
         h('button', { class: `filter ${!voice ? 'is-on' : ''}`.trim(), type: 'button', 'aria-pressed': !voice ? 'true' : 'false', onclick: () => pick(false) }, t('viewer.plain'))));
     }
     openLink.href = shownLink();
+    // A picture at the supplier's own address is for the owner only: it opens, it is not passed on.
+    copyBtn.hidden = addBtn.hidden = it.shareable === false;
+    if (it.shareable === false) extras.append(h('span', { class: 'viewer-note-inline', text: t('car.forYouShort') }));
     prev.hidden = next.hidden = group.items.length < 2;
     strip.replaceChildren(...group.items.map((x, i) => h('button', {
       class: `viewer-thumb ${i === index ? 'is-on' : ''}`.trim(), type: 'button', role: 'listitem', 'aria-label': x.label, 'aria-current': i === index ? 'true' : null,

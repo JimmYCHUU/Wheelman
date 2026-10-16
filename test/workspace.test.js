@@ -37,7 +37,7 @@ test('a link in a reply says what it is', () => {
 
 test('the viewer shows the photos, the auction photos and the videos, every picture through Wheelman', () => {
   const media = {
-    photos: [{ id: '0', group: 'car', label: 'Front', link: 'https://pics.example/f.jpg' }, { id: '1', group: 'auction', label: 'Auction photo 1', link: 'https://pics.example/a.jpg' }],
+    photos: [{ id: '0', group: 'car', label: 'Front', link: 'https://pics.example/f.jpg' }, { id: '1', group: 'auction', label: 'Auction photo 1', link: 'https://pics.example/a.jpg', shareable: false }],
     videos: [{ label: 'Walkaround 360', link: 'https://videos.example/v.mp4', plainLink: 'https://videos.example/p.mp4', poster: '2', playable: true }],
     documents: [],
   };
@@ -45,6 +45,7 @@ test('the viewer shows the photos, the auction photos and the videos, every pict
   assert.deepEqual(groups.map((g) => [g.id, g.items.length]), [['car', 1], ['auction', 1], ['videos', 1]]);
   assert.equal(groups[0].items[0].src, '/api/vehicles/T07/picture/0');
   assert.equal(groups[0].items[0].link, 'https://pics.example/f.jpg', 'Copy link gives the public address');
+  assert.deepEqual([groups[0].items[0].shareable, groups[1].items[0].shareable], [true, false], 'a supplier picture has no Copy link or Add to reply');
   assert.equal(groups[2].items[0].poster, pictureSrc('T07', '2'));
   assert.equal(pictureSrc('A B', '3'), '/api/vehicles/A%20B/picture/3');
 });

@@ -789,6 +789,11 @@ link, with what it is ("Walkaround 360 video: https://…"), on its own line in 
 where your cursor was, or else just before the sign-off or the standard block. It counts as a
 change you made; `Ctrl + Z` takes it out.
 
+The exception is anything kept at the Japanese supplier's own address, which is most auction
+photos and many auction sheets. Those open for you only, marked "for you only", with no Copy link
+or Add to reply, so the supplier's address never reaches a customer. (The owner's choice, 16 Oct
+2026.) An auction sheet kept on Carbarn's own storage can be shared like any document.
+
 Never shown: the inspection sheet (its address carries the supplier's key), the pro-forma
 invoice (our purchase cost) and a customer's signed Form 5. Wheelman drops them, our costs, the
 supplier and the buyer the moment the car's record is read.

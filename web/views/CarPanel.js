@@ -14,11 +14,11 @@ export const pictureSrc = (stockNo, id) => `/api/vehicles/${encodeURIComponent(s
 
 /** The groups the viewer shows for a car, from its media. */
 export function viewerGroups(stockNo, media) {
-  const pic = (p) => ({ kind: 'picture', label: p.label, src: pictureSrc(stockNo, p.id), link: p.link, words: p.group === 'auction' ? t('car.auction') : t('car.photos') });
+  const pic = (p) => ({ kind: 'picture', label: p.label, src: pictureSrc(stockNo, p.id), link: p.link, shareable: p.shareable !== false, words: p.group === 'auction' ? t('car.auction') : t('car.photos') });
   return [
     { id: 'car', label: t('car.photos'), items: media.photos.filter((p) => p.group === 'car').map(pic) },
     { id: 'auction', label: t('car.auction'), items: media.photos.filter((p) => p.group === 'auction').map(pic) },
-    { id: 'videos', label: t('car.videos'), items: media.videos.map((v) => ({ kind: 'video', label: v.label, link: v.link, plainLink: v.plainLink, playable: v.playable, poster: v.poster ? pictureSrc(stockNo, v.poster) : '' })) },
+    { id: 'videos', label: t('car.videos'), items: media.videos.map((v) => ({ kind: 'video', label: v.label, link: v.link, plainLink: v.plainLink, playable: v.playable, shareable: v.shareable !== false, poster: v.poster ? pictureSrc(stockNo, v.poster) : '' })) },
   ];
 }
 
@@ -101,7 +101,8 @@ export function CarTab({ car, media, other, act }) {
         photos.length ? grid(car.stockNo, photos, 'car', SHOW.car, act) : h('p', { class: 'fine', text: t('car.none.photos') })),
       auction.length ? h('section', { class: 'car-sec' },
         h('div', { class: 'car-sec-head' }, h('h4', { text: t('car.auction') }), auction.length > SHOW.auction ? h('button', { class: 'link-btn', type: 'button', onclick: () => act.view('auction', 0) }, t('car.seeAll', { n: auction.length })) : null),
-        grid(car.stockNo, auction, 'auction', SHOW.auction, act)) : null,
+        grid(car.stockNo, auction, 'auction', SHOW.auction, act),
+        auction.some((p) => p.shareable === false) ? h('p', { class: 'fine', text: t('car.forYou') }) : null) : null,
       h('section', { class: 'car-sec' },
         h('h4', { text: t('car.videos') }),
         data.videos.length ? h('ul', { class: 'media-list' }, data.videos.map((v, i) => h('li', { class: 'media-row' },
@@ -110,15 +111,18 @@ export function CarTab({ car, media, other, act }) {
             h('span', { class: 'play-disc' }, icon('play'))),
           h('div', { class: 'media-main' },
             h('button', { class: 'media-name', type: 'button', onclick: () => act.view('videos', i), text: v.label }),
-            actionsFor(replyLabel('video', v.label), v.link, act))))) : h('p', { class: 'fine', text: t('car.none.videos') })),
+            v.shareable === false ? null : actionsFor(replyLabel('video', v.label), v.link, act))))) : h('p', { class: 'fine', text: t('car.none.videos') })),
       h('section', { class: 'car-sec' },
         h('h4', { text: t('car.documents') }),
         data.documents.length ? h('ul', { class: 'media-list' }, data.documents.map((d) => h('li', { class: 'media-row doc' },
           h('span', { class: 'doc-icon' }, icon(d.kind === 'album' ? 'album' : d.kind === 'image' ? 'image' : 'file')),
           h('div', { class: 'media-main' },
             h('a', { class: 'media-name', href: d.link, target: '_blank', rel: 'noopener noreferrer' }, d.label),
-            h('span', { class: 'media-kind', text: t(`car.kind.${d.kind}`) }),
-            actionsFor(d.label, d.link, act, h('a', { class: 'mini-btn', href: d.link, target: '_blank', rel: 'noopener noreferrer' }, icon('external'), t('car.open'))))))) : h('p', { class: 'fine', text: t('car.none.documents') })),
+            h('span', { class: 'media-kind', text: d.shareable === false ? `${t(`car.kind.${d.kind}`)} · ${t('car.forYouShort')}` : t(`car.kind.${d.kind}`) }),
+            // The supplier's own address opens for the owner only: no Copy link, no Add to reply.
+            d.shareable === false
+              ? h('div', { class: 'media-actions' }, h('a', { class: 'mini-btn', href: d.link, target: '_blank', rel: 'noopener noreferrer' }, icon('external'), t('car.open')))
+              : actionsFor(d.label, d.link, act, h('a', { class: 'mini-btn', href: d.link, target: '_blank', rel: 'noopener noreferrer' }, icon('external'), t('car.open'))))))) : h('p', { class: 'fine', text: t('car.none.documents') })),
     ];
   }
 

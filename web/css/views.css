@@ -444,6 +444,7 @@
   .viewer-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .viewer-thumb.is-on { opacity: 1; border-color: var(--accent); }
   .viewer-thumb-none { color: var(--viewer-muted); }
+  .viewer-note-inline { color: var(--viewer-muted); font-size: var(--fs-label); }
 
   /* ---- hover, only where there is a real pointer --------------------------------------------- */
 

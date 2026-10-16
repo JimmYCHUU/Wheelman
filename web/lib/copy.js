@@ -310,6 +310,8 @@ export const COPY = {
   'car.kind.album': 'Google Photos album',
   'car.kind.file': 'File',
   'car.stock': 'Stock {stock}',
+  'car.forYou': "For you only: these show our supplier's address, so they have no Copy link or Add to reply.",
+  'car.forYouShort': 'for you only',
   'toast.linkCopied': 'Link copied',
   'toast.linkAdded': 'Added to the reply',
   'toast.noReply': 'Open a conversation with a suggestion first, then Add to reply puts the link in it.',
