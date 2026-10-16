@@ -22,7 +22,8 @@ please report it (see below).
   markers that code fills in. Marketplace chats are never learned from; a text seen only on the
   phone teaches only once the add-on has seen all of it, and never reaches the example bank.
 - **Local only.** The page is served on `127.0.0.1` and refuses any other host or origin, with a
-  strict content security policy. The browser add-on may post to two routes only (the phone
+  strict content security policy: pictures only from Wheelman itself, and a car's videos only from
+  Carbarn's own storage. The browser add-on may post to two routes only (the phone
   reader's reports, and an email thread from the Send to Wheelman button in Gmail), from an
   extension origin, each with its own header.
 - **Shared with the team only behind a password.** With `SHARE=1`, requests also arrive through
@@ -45,7 +46,10 @@ participant or photo identifiers; auction orders with what the customer was char
 never the dealer's costs; the latest text of each conversation seen on the phone; the email
 threads the owner sends from Gmail (the subject, and each message's sender name and address,
 time, plain text with the quoted history removed, and attachment count; never HTML, attachments,
-recipients or account identifiers); every suggestion and what the person did with it. All of it
+recipients or account identifiers); a car's photos as files, fetched once (its full dashboard record
+is reduced on reading to photo addresses and the allowed documents: never costs, the supplier, the
+VIN, the buyer, the inspection sheet, the pro-forma invoice or a signed Form 5); every suggestion
+and what the person did with it. All of it
 in one SQLite file under `data/`, which git never sees.
 
 ## Reporting a problem

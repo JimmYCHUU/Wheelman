@@ -570,7 +570,7 @@ async function api(req, res, url) {
 
   // One car, for the car panel: what the stock list says, its photos, videos and documents, and
   // one picture at a time through Wheelman's own copy. Read-only.
-  m = p.match(/^\/api\/vehicles\/([A-Za-z0-9-]{1,20})(\/media|\/picture\/(\d{1,4}))?$/);
+  m = p.match(/^\/api\/vehicles\/([A-Za-z0-9-]{1,20})(\/media|\/picture\/([a-f0-9]{24}))?$/);
   if (req.method === 'GET' && m) {
     const v = getVehicleByStock(m[1]);
     if (!v) return send(res, 404, { error: 'That stock number is not in the stock list.' });

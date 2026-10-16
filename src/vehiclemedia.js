@@ -16,15 +16,29 @@ import { config } from './config.js';
 import { fetchVehicleMedia, fetchVehicleRecord } from './dashboard.js';
 import { getVehicleByStock, allVehicles } from './db.js';
 import { availability } from './normalize.js';
+import { reservedByAnother } from './deal.js';
 import { fetchPicture } from './media.js';
 import { logLine } from './log.js';
 
 /** Where a car's pictures are kept: Carbarn's storage, the website's, and the Japanese supplier's auction photos. */
 export const PICTURE_HOSTS = [
   'www.storage.importautos.com.au', 'storage.importautos.com.au',
-  'fastlycb.s3.ap-southeast-2.amazonaws.com', 's3-ap-southeast-2.amazonaws.com',
+  'fastlycb.s3.ap-southeast-2.amazonaws.com',
   'www.nichibojapan.com', 'nichibojapan.com',
 ];
+// Amazon's regional address is shared by every bucket in the region: only the supplier's own folder counts.
+const SHARED_HOSTS = { 's3-ap-southeast-2.amazonaws.com': '/nichibo/' };
+const allowPicture = (u) => PICTURE_HOSTS.includes(u.hostname) || (SHARED_HOSTS[u.hostname] !== undefined && u.pathname.startsWith(SHARED_HOSTS[u.hostname]));
+// A document address carrying a key, a token or a password is never shown or sent (the inspection
+// sheet's does, which is one reason it is dropped by type as well).
+const SECRET_QUERY = /[?&](key|token|secret|password|pass|auth|sig|signature|x-amz-signature|user)=/i;
+
+// The Japanese supplier's addresses. Wheelman fetches its auction photos and auction sheets for the
+// owner to look at, but such an address is never given to a customer: no Copy link, no Add to reply,
+// never in a reply. (The owner's choice, 16 Oct 2026: "Hide it from customers".)
+const SUPPLIER = (u) => /(^|\.)nichibojapan\.com$/i.test(u.hostname) || (u.hostname === 's3-ap-southeast-2.amazonaws.com' && u.pathname.startsWith('/nichibo/'));
+/** Whether a link may go to a customer: anything but the supplier's own addresses. */
+export const shareable = (url) => { try { return !SUPPLIER(new URL(url)); } catch { return false; } };
 // The supplier serves its auction photos over plain http. Only Wheelman fetches them, never the page.
 const HTTP_HOSTS = ['www.nichibojapan.com', 'nichibojapan.com'];
 /** Where a video may play from on the page. The content security policy names the same host. */
@@ -68,20 +82,23 @@ function numbered(labels) {
 /**
  * What the page may show of a car, from what the two addresses sent. Pure: no fetching, no clock.
  *
- * Returns { photos, videos, documents, pictures }. `pictures` is the list of addresses Wheelman
- * itself fetches, by number; it stays on the server. Every other field is safe for the page:
- *   photos    [{ id, group: 'car' | 'auction', label, link }]
- *   videos    [{ label, link, plainLink, poster, playable }]  (link: with the voice-over when there is one)
- *   documents [{ type, label, kind: 'pdf' | 'image' | 'album' | 'file', link, picture }]
+ * Returns { photos, videos, documents, pictures }. `pictures` maps each picture's id to the address
+ * Wheelman itself fetches; it stays on the server. The id is made from the address, so it names the
+ * same picture after any later read and a browser's copy of it never shows another one. Every other
+ * field is safe for the page:
+ *   photos    [{ id, group: 'car' | 'auction', label, link, shareable }]
+ *   videos    [{ label, link, plainLink, poster, playable, shareable }]  (link: with the voice-over when there is one)
+ *   documents [{ type, label, kind: 'pdf' | 'image' | 'album' | 'file', link, picture, shareable }]
+ * shareable is false for the supplier's own addresses: shown to the owner, never to a customer.
  */
 export function projectMedia(media, record) {
-  const pictures = [];
+  const pictures = {};
   const picture = (url) => {
     const u = web(url);
     if (!u) return null;
-    let i = pictures.indexOf(u);
-    if (i === -1) { pictures.push(u); i = pictures.length - 1; }
-    return String(i);
+    const id = pictureId(u);
+    pictures[id] = u;
+    return id;
   };
   const list = Array.isArray(media) ? media : [];
   const rec = record && typeof record === 'object' ? record : {};
@@ -100,7 +117,7 @@ export function projectMedia(media, record) {
   }
   const auction = [...new Set((Array.isArray(rec.auctionPhotos) ? rec.auctionPhotos : []).map(web).filter(Boolean))]
     .map((url, i) => ({ group: 'auction', label: `Auction photo ${i + 1}`, url }));
-  const photos = [...car, ...auction].map((p) => ({ id: picture(p.url), group: p.group, label: p.label, link: p.url }));
+  const photos = [...car, ...auction].map((p) => ({ id: picture(p.url), group: p.group, label: p.label, link: p.url, shareable: shareable(p.url) }));
 
   // The videos, the walkaround first. The voice-over version is the one the website plays.
   const videos = list.filter((m) => m && m.mediaType === 'VIDEO' && (web(m.url) || web(m.voiceOverVideoUrl)))
@@ -113,6 +130,7 @@ export function projectMedia(media, record) {
         link,
         plainLink: voice && plain && plain !== voice ? plain : '',
         poster: picture(m.thumbnailUrl),
+        shareable: shareable(link),
         playable: VIDEO_HOSTS.includes(hostOf(link)) && (!plain || VIDEO_HOSTS.includes(hostOf(plain))),
       };
     })
@@ -123,7 +141,7 @@ export function projectMedia(media, record) {
   const newestOf = new Map();
   for (const d of docs) {
     const type = String(d?.documentType || '');
-    if (!DOCUMENTS[type] || d.active === false || !web(d.url)) continue;
+    if (!DOCUMENTS[type] || d.active === false || !web(d.url) || SECRET_QUERY.test(d.url)) continue;
     const at = Date.parse(d.updatedAt || d.createdAt || '') || 0;
     const had = newestOf.get(type);
     if (!had || at >= had.at) newestOf.set(type, { at, url: web(d.url) });
@@ -131,7 +149,7 @@ export function projectMedia(media, record) {
   const documents = Object.keys(DOCUMENTS).filter((t) => newestOf.has(t)).map((type) => {
     const link = newestOf.get(type).url;
     const kind = kindOf(type, link);
-    return { type, label: DOCUMENTS[type], kind, link, picture: kind === 'image' ? picture(link) : null };
+    return { type, label: DOCUMENTS[type], kind, link, picture: kind === 'image' ? picture(link) : null, shareable: shareable(link) };
   });
 
   return { photos, videos, documents, pictures };
@@ -147,9 +165,16 @@ export class MediaError extends Error {
   constructor(message, status = 502) { super(message); this.status = status; }
 }
 
-/** The car as the car panel shows it, from the stored stock list. */
+/** A picture's id: made from its address, the same name for the same picture in every read. */
+export const pictureId = (url) => crypto.createHash('sha1').update(String(url)).digest('hex').slice(0, 24);
+
+/**
+ * The car as the car panel and Find a car show it, from the stored stock list. A car another
+ * customer has paid a deposit on is said to be reserved, as it is in a conversation.
+ */
 export function carSummary(v) {
-  const a = availability(v);
+  const plain = availability(v);
+  const a = plain.code === 'available' && reservedByAnother(v) ? { code: 'reserved', text: 'Reserved: another customer has paid a deposit' } : plain;
   return { stockNo: v.stockNo, title: v.title || [v.year, v.make, v.model].filter(Boolean).join(' '), price: v.price ?? null, odometer: v.odometer ?? null, availability: a, url: v.url || '', year: v.year, fuel: v.fuel, transmission: v.transmission, seats: v.seats, colour: v.color, included: v.outline || [] };
 }
 
@@ -172,10 +197,14 @@ export async function vehicleMedia(stockNo, { fresh = false, now = Date.now() } 
   const read = (async () => {
     try {
       const chassis = String(v.chassisNo).trim();
-      // Both at once. The media list is [] for a car without website photos.
-      const [media, record] = await Promise.all([fetchVehicleMedia(chassis), fetchVehicleRecord(chassis)]);
-      const { pictures, ...safe } = projectMedia(media, record);
-      const value = { stockNo: key, title: v.title || '', readAt: now, ...safe, stale: false, error: '' };
+      // Both at once. The media list is [] for a car without website photos. When one of the two
+      // does not answer, what the other sent is shown, with a note; when neither does, an error.
+      const [mediaRead, recordRead] = await Promise.allSettled([fetchVehicleMedia(chassis), fetchVehicleRecord(chassis)]);
+      if (mediaRead.status === 'rejected' && recordRead.status === 'rejected') throw mediaRead.reason;
+      for (const r of [mediaRead, recordRead]) if (r.status === 'rejected') logLine('media', `Part of the media of stock ${key} could not be read: ${r.reason?.message || r.reason}`);
+      const partial = mediaRead.status === 'rejected' || recordRead.status === 'rejected';
+      const { pictures, ...safe } = projectMedia(mediaRead.value || [], recordRead.value || null);
+      const value = { stockNo: key, title: v.title || '', readAt: now, ...safe, stale: false, error: partial ? 'Part of this car\'s photos and documents could not be read just now.' : '' };
       cache.set(key, { at: now, value, pictures });
       while (cache.size > 200) cache.delete(cache.keys().next().value);
       return value;
@@ -191,16 +220,17 @@ export async function vehicleMedia(stockNo, { fresh = false, now = Date.now() } 
   return read;
 }
 
-/** One of the car's pictures, by its number in the last media read: Wheelman's own copy. */
+/** One of the car's pictures, by its id from the car's media: Wheelman's own copy. */
 export async function vehiclePicture(stockNo, id) {
   const v = getVehicleByStock(stockNo);
   if (!v) throw new MediaError('That stock number is not in the stock list.', 404);
+  if (!/^[a-f0-9]{24}$/.test(String(id))) throw new MediaError('No such picture for this car.', 404);
   let hit = cache.get(String(v.stockNo));
+  // Only a car not read since Wheelman started is read here; an id it does not know is simply not found.
   if (!hit) { await vehicleMedia(stockNo); hit = cache.get(String(v.stockNo)); }
-  const url = hit?.pictures?.[Number(id)];
-  if (!url || !/^\d{1,4}$/.test(String(id))) throw new MediaError('No such picture for this car.', 404);
-  const stem = crypto.createHash('sha1').update(url).digest('hex').slice(0, 24);
-  return fetchPicture(url, path.join(config.mediaDir, 'vehicles'), stem, { hosts: PICTURE_HOSTS, httpHosts: HTTP_HOSTS });
+  const url = hit?.pictures?.[id];
+  if (!url) throw new MediaError('No such picture for this car.', 404);
+  return fetchPicture(url, path.join(config.mediaDir, 'vehicles'), id, { allow: allowPicture, httpHosts: HTTP_HOSTS });
 }
 
 /** Forget what was read, for the tests. */
@@ -208,7 +238,7 @@ export function forgetMedia() { cache.clear(); reading.clear(); }
 
 // ---- Find a car ----------------------------------------------------------------------------------
 
-const AVAIL_RANK = { available: 0, arrived: 1, transit: 2, japan: 3, unknown: 4, sold: 5 };
+const AVAIL_RANK = { available: 0, reserved: 1, arrived: 1, transit: 2, japan: 3, unknown: 4, sold: 5 };
 const words = (s) => String(s || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 
 /**

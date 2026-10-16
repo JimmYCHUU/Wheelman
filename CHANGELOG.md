@@ -38,7 +38,24 @@ and versions follow `MAJOR.MINOR.PATCH`.
   2026: "I don't want the Standard section. It was decided so there's no purpose of showing in
   the dashboard.")
 
+### Changed
+- **The page, redesigned around the conversation and the car.** The four sections are tabs
+  across the top bar, with their counts, which gives the list its full height. The long status
+  sentence became a few words ("Up to date") that open a status panel with the whole story, and
+  the welcome page keeps only what to do. On a wide window a panel sits beside the conversation
+  with two tabs: **Car** (the main photo, name, price, kilometres, where it is, the photos,
+  auction photos, videos, documents and what is included) and **Customer** (everything the old
+  details panel showed, without the large repeated name). The car strip shows the car's first
+  photo and **Photos and videos**. Below 1280 pixels the panel is a drawer; on a phone the
+  sections take a row of their own. (The owner's choices, 16 Oct 2026: "Chat + car panel", the
+  car's files from the conversation and from Find a car.)
+
 ### Added
+- **Find a car, the viewer and Add to reply.** Find a car in the top bar opens any car in the
+  stock list in the panel. Photos and videos open large in a dark viewer with a filmstrip, the
+  arrow keys and a With voice-over / Without switch for videos. Every photo, video and document
+  has **Copy link** and **Add to reply**, which puts the labelled link on its own line in the
+  suggestion, at the cursor or before the sign-off, as a change that `Ctrl + Z` takes back.
 - **A car's photos, videos and documents, on the server.** Two read-only dashboard addresses,
   by the car's chassis number (now kept with each car in the stock list, never shown to the AI):
   the website's photos and videos, and the car's record, which is read only for its auction

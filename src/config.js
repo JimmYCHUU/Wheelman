@@ -14,6 +14,8 @@ export const config = {
   dbPath: env.DB_PATH || path.join(root, 'data', 'app.db'),
   // Photos from texts, fetched once and kept beside the database. Tests keep theirs in a temporary folder.
   mediaDir: env.MEDIA_DIR || (env.DB_PATH === ':memory:' ? path.join(os.tmpdir(), `wheelman-media-${process.pid}`) : path.join(path.dirname(env.DB_PATH || path.join(root, 'data', 'app.db')), 'media')),
+  // Pictures from this computer itself (http://127.0.0.1): only the tests' stand-ins serve them.
+  mediaAllowLocal: env.MEDIA_ALLOW_LOCAL === '1',
   sessionPath: path.join(root, 'data', '.session.json'),
   knowledgeDir: path.join(root, 'knowledge'),
   // The website's "import this model" pages, saved by fetch-website. One file per model.

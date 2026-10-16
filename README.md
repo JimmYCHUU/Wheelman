@@ -641,23 +641,39 @@ What to know:
 
 ## The page
 
+### The top bar
+
+- **The sections** are tabs across the top: **Dashboard** (leads and text messages),
+  **Marketplace** (Facebook Marketplace chats), **Auction** (auction orders) and **Import Query**
+  (import emails). A section that is switched off has no tab. The number beside a tab counts
+  conversations with new messages you have not looked at.
+- **Find a car** finds any car in the stock list by its stock number or by words of its name
+  ("1033", "hiace", "toyota noah"). Cars on offer come first, sold ones last. Pick one with the
+  mouse or the arrow keys and Enter, and it opens in the panel on the right, with its photos,
+  videos and documents, beside whatever conversation is open.
+- **The status** says in a few words how Wheelman is doing: "Up to date", "Checking",
+  "Dashboard not reached". Press it for the whole story: when the dashboard was last checked,
+  the AI requests used today and the month's budget, the lead alerts, the phone add-on, which AI
+  models write and in what order (with **Change**), what Wheelman reads of the team's replies and
+  has learned, the last backup, and the team link when the page is shared.
+- The cog chooses which AI writes. The round arrow checks for new messages now.
+
 ### The list on the left
 
-A switch at the top chooses the section: **Dashboard** for leads and text messages,
-**Marketplace** for Facebook Marketplace chats. Every row is one conversation, newest first.
+Every row is one conversation, newest first.
 
 - A **blue number** on a row is how many new messages that customer has sent since you last
   opened the conversation. Opening it clears the number.
-- The numbers on **Waiting**, on the section switch and in the browser tab count
+- The numbers on **Waiting**, on the section tabs and in the browser tab count
   conversations with new messages you have not looked at. They clear the same way. A customer
   stays under Waiting until a reply is sent.
 - **Blank to fill:** at the start of a row means the suggestion has a gap only you can fill.
 - **Check the reply:** means a figure or link in the suggestion is not in our records.
-- Three chips choose what is shown:
+- Two chips choose what is shown (Auction has its own three: To do, In progress, Finished):
+  - **All**: every conversation, newest message first, whoever wrote it. A dismissed one stays,
+    marked.
   - **Waiting**: customers who said something and have not been answered.
-  - **No reply needed**: customers who only said thanks, opted out with STOP, or are no longer
-    looking, plus any conversation you dismissed.
-  - **Not customers**: texts from suppliers, couriers and marketers on the same phone.
+  Texts from suppliers, couriers and marketers on the same phone are never listed.
 - The search box finds a name, part of a phone number, or a word from a message.
 - The list column shows a notice only for a problem that needs action now.
 
@@ -666,8 +682,8 @@ A switch at the top chooses the section: **Dashboard** for leads and text messag
 - Customer messages are on the left in white. Ours are on the right in pale blue, with the
   name of whoever sent them.
 - Small centred notes show dates, website events such as a booked inspection, and staff notes.
-- The strip under the customer's name shows the car: price, kilometres, availability.
-- Click the customer's name, or the round "i" button, for the details panel.
+- The strip under the customer's name shows the car: its first photo, price, kilometres and
+  availability, **Photos and videos** with how many there are, and **Open listing**.
 
 ### The message box
 
@@ -726,22 +742,69 @@ The suggestion waits in the message box, marked **not sent**. The box is an edit
 | `[DATE?]` | An arrival or pickup date it cannot know |
 | `[CHECK?]` | Extra work on the car, or a fact it was not given |
 
-### The details panel
+### The car and customer panel
 
-The customer, the car with everything included with it, the facts the suggestion relied on,
-and which of our records' notes on the customer shaped it (a finance decision, how they found us,
-how widely they are enquiring): those are never said to the customer. For an import or auction enquiry it shows what the customer asked us to find instead of
-a car from our stock: the model, the years, the kilometre limit, the budget, and what we
-still do not know. **Dismiss** is at the bottom of this panel, away from Copy and Rewrite. It takes a
+On a wide window (1280 pixels and more) a panel sits to the right of the conversation, with two
+tabs. It stays open or closed the way you left it; the button at the top right of the
+conversation, or the cross in the panel, opens and closes it. On a narrower window it slides in
+over the conversation when you ask for it.
+
+- **Car**: the car the customer is asking about. Its main photo, its name, price, kilometres and
+  where it is, a link to its page on the website, then its photos, auction photos, videos and
+  documents, and what is included with it.
+- **Customer** (**Order** for an auction order, **Enquiry** for an import email): the customer's
+  details, the Marketplace, email or order details, the facts the suggestion relied on, and which
+  of our records' notes on the customer shaped it (a finance decision, how they found us, how
+  widely they are enquiring): those are never said to the customer. For an import or auction
+  enquiry it shows what the customer asked us to find: the model, the years, the kilometre limit,
+  the budget, and what we still do not know.
+
+Pressing the customer's name opens the Customer tab; pressing the car's photo or **Photos and
+videos** on the car strip opens the Car tab.
+
+**Dismiss** is at the bottom of the Customer tab, away from Copy and Rewrite. It takes a
 conversation out of Waiting, for example when you have already phoned the customer. Nothing is
 deleted: press **Undo** in the message that appears, or open the conversation later under
 **No reply needed** and press **Put back in Waiting**. It also comes back by itself if the
 customer writes again.
 
+### A car's photos, videos and documents
+
+Read from the dashboard when the car is first opened, and kept for half an hour (**Read again**
+at the foot of the Car tab asks again).
+
+- **Photos**: the website's photos, in the order a buyer walks round the car (front, side, rear,
+  seats, dashboard, odometer, boot). An older car without them shows its older photos.
+- **Auction photos**: the photos from the auction in Japan.
+- **Videos**: the walkaround, the inside front and rear, the engine bay and tyres, for cars that
+  have been filmed at the yard. They play with the voice-over, as on the website, or without.
+- **Documents**: the auction sheet, the export certificate, the import approval (VIA) and the
+  Google Photos albums (Sydney photos, raw footage, compliance photos). Each opens in a new tab.
+
+Pressing a photo or a video opens the viewer over the page: large, with the arrow keys or the
+side buttons to move, a strip of the others underneath, and **Escape** to close.
+
+Every photo, video and document has **Copy link** and **Add to reply**. Add to reply puts the
+link, with what it is ("Walkaround 360 video: https://…"), on its own line in the suggestion:
+where your cursor was, or else just before the sign-off or the standard block. It counts as a
+change you made; `Ctrl + Z` takes it out.
+
+The exception is anything kept at the Japanese supplier's own address, which is most auction
+photos and many auction sheets. Those open for you only, marked "for you only", with no Copy link
+or Add to reply, so the supplier's address never reaches a customer. (The owner's choice, 16 Oct
+2026.) An auction sheet kept on Carbarn's own storage can be shared like any document.
+
+Never shown: the inspection sheet (its address carries the supplier's key), the pro-forma
+invoice (our purchase cost) and a customer's signed Form 5. Wheelman drops them, our costs, the
+supplier and the buyer the moment the car's record is read.
+
 ### Narrow windows, light and dark
 
-Beside the dashboard in a narrow window, the list and the conversation take turns; the arrow
-at the top left goes back to the list. The page follows the computer's light or dark setting.
+Below 1280 pixels the panel is a drawer over the conversation. Below about 1100 pixels the status
+keeps only its coloured dot. Beside the dashboard in a narrow window (860 pixels and less) the
+list and the conversation take turns, the arrow at the top left goes back to the list, the
+sections sit on a row of their own under the bar, and Find a car waits behind the magnifying
+glass. The page follows the computer's light or dark setting; the photo viewer is dark in both.
 
 ## The Marketplace section
 
@@ -1371,6 +1434,14 @@ claim outside what the records allow; and the block or the proof that was due.
   their address, licence, date of birth or deposit link. None of it goes to an AI.
 - A customer's own payment link that appears in a text is removed before the text goes to an
   AI, like a phone number.
+- For a car's photos, videos and documents, the car's full dashboard record is read, and
+  reduced at once to its photo addresses and the allowed documents (auction sheet, export
+  certificate, import approval, photo albums). Our costs, the supplier, the VIN, the buyer's
+  details, the inspection sheet (its address carries the supplier's key), the pro-forma invoice
+  and any signed Form 5 are dropped there and then: never kept, logged, shown or sent to an AI.
+  The answer is kept in memory for half an hour; the photos are kept as files beside the
+  database, like the photos in texts. The chassis number is kept with each car and is never
+  sent to an AI or to the page.
 - From the phone, Wheelman stores the name or number as the Messages list shows it, the
   latest text of each conversation and its time. Nothing more: no photos, no other contact
   details. The texts are never learned from, and go through the same removal of details as
@@ -1586,7 +1657,9 @@ wheelman/
 │   ├── people.example.json            whose writing sets the voice (invented names; the real file is local)
 │   └── exclusions.json                templates and conversations kept out of the example bank
 ├── src/
-│   ├── dashboard.js                   dashboard client: sign in and six GET addresses
+│   ├── dashboard.js                   dashboard client: sign in and eight GET addresses
+│   ├── vehiclemedia.js                a car's photos, videos and documents, reduced to what may be shown; Find a car
+│   ├── media.js                       pictures fetched once and served from Wheelman's own copy
 │   ├── notifications.js               the dashboard's notification feed: a new lead sets off a check at once
 │   ├── marketplace.js                 content engine client: three GET addresses
 │   ├── auction.js                     live auction client: three GET addresses and the cost calculator
@@ -1624,7 +1697,10 @@ wheelman/
 ├── web/                               the page: index.html · app.js · fonts · signin.html (the team's sign-in)
 │   ├── css/                           tokens (every colour, size, space, corner, shadow, duration)
 │   │                                  · base · components · views · utilities, in layers
-│   ├── lib/                           blank.js: what a blank is, shared with the server's checks
+│   ├── views/                         TopBar (sections, status, Find a car) · ListColumn · CarPanel
+│   │                                  (the Car tab) · Viewer (photos and videos large) · FindCar
+│   ├── lib/                           blank.js: what a blank is, shared with the server's checks;
+│   │                                  insert.js: where Add to reply puts a link; copy.js: every word
 │   └── assets/                        brand.svg: the mark, placed with <use>
 ├── scripts/                           check-login · check-model · replay · report
 │                                      build-voice · fetch-website · import-history
