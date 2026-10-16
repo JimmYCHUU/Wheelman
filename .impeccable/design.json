@@ -38,6 +38,23 @@
           "oklch(95.0% 0.008 253.9)"
         ]
       },
+      "tray": {
+        "role": "neutral",
+        "displayName": "Tray",
+        "canonical": "#dde5ef",
+        "oklch": "oklch(91.9% 0.016 253.9)",
+        "theme": "light",
+        "tonalRamp": [
+          "oklch(15.0% 0.016 253.9)",
+          "oklch(26.4% 0.016 253.9)",
+          "oklch(37.9% 0.016 253.9)",
+          "oklch(49.3% 0.016 253.9)",
+          "oklch(60.7% 0.016 253.9)",
+          "oklch(72.1% 0.016 253.9)",
+          "oklch(83.6% 0.016 253.9)",
+          "oklch(95.0% 0.016 253.9)"
+        ]
+      },
       "side": {
         "role": "neutral",
         "displayName": "List White",
@@ -767,6 +784,23 @@
           "oklch(72.1% 0.059 250.4)",
           "oklch(83.6% 0.059 250.4)",
           "oklch(95.0% 0.059 250.4)"
+        ]
+      },
+      "tray-dark": {
+        "role": "neutral",
+        "displayName": "Tray (dark)",
+        "canonical": "#020c18",
+        "oklch": "oklch(15.0% 0.032 248.2)",
+        "theme": "dark",
+        "tonalRamp": [
+          "oklch(15.0% 0.032 248.2)",
+          "oklch(26.4% 0.032 248.2)",
+          "oklch(37.9% 0.032 248.2)",
+          "oklch(49.3% 0.032 248.2)",
+          "oklch(60.7% 0.032 248.2)",
+          "oklch(72.1% 0.032 248.2)",
+          "oklch(83.6% 0.032 248.2)",
+          "oklch(95.0% 0.032 248.2)"
         ]
       },
       "side-dark": {
@@ -1644,7 +1678,7 @@
       {
         "name": "drawer",
         "value": "1279px",
-        "purpose": "max-width: the panel leaves the grid and becomes a fixed drawer on the right (26rem); crossing below closes it."
+        "purpose": "max-width: the panel leaves the grid and becomes a drawer, a 1rem-cornered tile floating 0.5rem in from the right, top and bottom (26rem); crossing below closes it."
       },
       {
         "name": "compact-bar",
@@ -1654,18 +1688,18 @@
       {
         "name": "narrow",
         "value": "860px",
-        "purpose": "max-width: one column, list or conversation; the brand shows only its mark; the section tabs drop to a second row and hide while a conversation is open; Find a car waits behind a search icon; back button with a count; the draft maxes at 20dvh."
+        "purpose": "max-width: one column, list or conversation; the brand shows only its mark; the section tabs drop to a second row and hide while a conversation is open; Find a car waits behind a search icon; back button with a count; the draft maxes at 20dvh; the tiles sit 0.25rem apart with 0.75rem corners."
       }
     ],
     "layout": {
-      "frame": "body.shell is a flex column the height of the window; the document does not scroll",
-      "topBar": "min-height 3.5rem; grid: brand | tabs (minmax(0, 1fr)) | Find a car | status, cog, check now",
+      "frame": "body.shell is a flex column the height of the window on the tray, with 0.5rem padding and 0.5rem gaps (0.25rem at 860px and under); the top bar, the list, the conversation and the panel are tiles with 1rem corners (0.75rem at 860px and under) and no lines between them; the document does not scroll",
+      "topBar": "min-height 3.5rem; grid: minmax(max-content, 1fr) auto minmax(max-content, 1fr), 1rem column gap: brand | tabs, centred | Find a car, status, cog, check now",
       "columns": {
         "list": "minmax(20rem, 25rem); minmax(20rem, 22rem) while the panel is open",
         "conversation": "minmax(0, 1fr)",
         "panel": "26rem (only while open; a drawer at 1279px and under)"
       },
-      "firstViewport": "At 1440 by 900 with the panel open: list 352px, conversation 672px, panel 416px.",
+      "firstViewport": "At 1440 by 900 with the panel open: list 352px, conversation 640px, panel 416px, with 0.5rem of tray around and between them.",
       "thread": "min-height 30dvh (22dvh narrow); side padding clamp(0.75rem, 6%, 4.5rem); bubbles min(36rem, 72%), 86% narrow; pills min(34rem, 85%)",
       "editor": "draft grows from 4.5rem to 28dvh (20dvh narrow), then scrolls; the message box area scrolls before the thread gives up its share",
       "zIndex": {
@@ -1819,7 +1853,7 @@
   ],
   "narrative": {
     "northStar": "The Unsent Draft",
-    "overview": "Wheelman is Carbarn's reply assistant, and it looks and behaves like a desktop messaging app with the car beside it. A bar across the top holds the name and the four sections as tabs. Conversations are listed in a column on the left, one conversation is open in the middle, and the car the customer is asking about is on the right. The message box at the bottom of the conversation already holds a suggested reply. That reply is a draft: it is labelled \"not sent\", it can be edited in place, and the main button only copies it. The car's photos, videos and documents are one press from that draft. Everything on the page supports reading one conversation, checking one draft and putting the right car in it.\n\nThe look is quiet and familiar on purpose, in Carbarn's own colours. Bars and columns are white and pale blue, separated by 1px lines and small shifts in tone. The thread sits on a pale blue ground one step deeper than the panels, so the white and blue bubbles read against it. Carbarn's blue marks what is chosen, what is new and what to press. Red, amber and navy appear only as status, always with words beside them. The car photos carry the colour; the interface stays quiet around them, and photos and videos open large in a near-black viewer in both themes, as in any photo app. Text is navy, set in Manrope, the typeface of carbarn.com.au, in sentence case throughout. The one exception is the name: WHEELMAN in Montserrat capitals beside a white steering wheel on a blue disc, with \"by Carbarn\" under it. Light and dark both ship and follow the computer's setting; the dark theme is built on navy and there is no theme switch.\n\nDensity is that of a working tool: 15px body text, 36px controls, 56px bars, 64px list rows, 2px between bubbles from the same sender. Two earlier layouts were rejected by the owner: a page of cards with every customer open at once and coded labels (29 Sep 2026), and a details sidebar of label-value rows with a section switch that took the top of the list (redesigned 16 Oct 2026). This system keeps one conversation and its car in view and says things in words.",
+    "overview": "Wheelman is Carbarn's reply assistant, and it looks and behaves like a desktop messaging app with the car beside it. A bar across the top holds the name and the four sections as tabs. Conversations are listed in a column on the left, one conversation is open in the middle, and the car the customer is asking about is on the right. The message box at the bottom of the conversation already holds a suggested reply. That reply is a draft: it is labelled \"not sent\", it can be edited in place, and the main button only copies it. The car's photos, videos and documents are one press from that draft. Everything on the page supports reading one conversation, checking one draft and putting the right car in it.\n\nThe look is quiet and familiar on purpose, in Carbarn's own colours. The top bar and the three columns are white and pale blue tiles with rounded corners, set apart by narrow gaps of a darker tray rather than by lines; inside a tile, parts are separated by 1px lines and small shifts in tone. The thread sits on a pale blue ground one step deeper than the panels, so the white and blue bubbles read against it. Carbarn's blue marks what is chosen, what is new and what to press. Red, amber and navy appear only as status, always with words beside them. The car photos carry the colour; the interface stays quiet around them, and photos and videos open large in a near-black viewer in both themes, as in any photo app. Text is navy, set in Manrope, the typeface of carbarn.com.au, in sentence case throughout. The one exception is the name: WHEELMAN in Montserrat capitals beside a white steering wheel on a blue disc, with \"by Carbarn\" under it. Light and dark both ship and follow the computer's setting; the dark theme is built on navy and there is no theme switch.\n\nDensity is that of a working tool: 15px body text, 36px controls, 56px bars, 64px list rows, 2px between bubbles from the same sender. Two earlier layouts were rejected by the owner: a page of cards with every customer open at once and coded labels (29 Sep 2026), and a details sidebar of label-value rows with a section switch that took the top of the list (redesigned 16 Oct 2026). This system keeps one conversation and its car in view and says things in words.",
     "keyCharacteristics": [
       "A top bar, then three columns in one fixed-height frame: conversation list, open conversation, and the car and customer panel.",
       "The four sections are tabs in the top bar, each with a count; the list column holds only the list.",
@@ -1827,8 +1861,8 @@
       "The car is always in view: a photo on the strip above the thread, the full car in the panel, any car through Find a car.",
       "One blue accent, Carbarn's. Red, amber and navy are status colours that always come with words.",
       "Manrope for all text, sentence case, tabular figures. The Montserrat wordmark is the only capitals.",
-      "Flat white and pale blue surfaces, 1px dividers, two shadow levels. Photos are the only rich colour.",
-      "Pill-shaped controls, 8px corners on bubbles and photos, 16px on the car's main photo and on floating panels, circles for avatars, icon buttons and the mark.",
+      "Four rounded tiles on a darker tray, with gaps in place of lines between them; inside, flat white and pale blue surfaces, 1px dividers, two shadow levels. Photos are the only rich colour.",
+      "Pill-shaped controls, 8px corners on bubbles and photos, 16px on the four tiles, the car's main photo and floating panels, circles for avatars, icon buttons and the mark.",
       "Short motion: 160ms press feedback, 220ms for photos, the draft, the viewer and the tab underline, 260ms for the drawer, none on keyboard moves and none under reduced motion.",
       "Light and a navy-based dark from one set of custom properties; the viewer is dark in both."
     ],
@@ -1874,6 +1908,11 @@
         "section": "typography"
       },
       {
+        "name": "The Tiles Rule",
+        "body": "The top bar, the list, the conversation and the panel are four tiles with Round corners on the Tray, 0.5rem apart and 0.5rem in from the window's edges (the owner's choice, 16 Oct 2026). The gaps separate them, never a line. Inside a tile nothing is boxed again: headers, the car strip, rows and bands run edge to edge within it.",
+        "section": "layout"
+      },
+      {
         "name": "The Docked Draft Rule",
         "body": "The suggestion is always in the message box at the bottom of the conversation column. The thread holds only what was really said, plus pills.",
         "section": "layout"
@@ -1890,7 +1929,7 @@
       },
       {
         "name": "The Two Shadows Rule",
-        "body": "Only these two shadows exist. The bar, columns, headers, rows, chips, tabs and ordinary buttons have none. The panel gets a shadow only when it overlays the conversation; as a grid column it has a 1px line.",
+        "body": "Only these two shadows exist. The bar, columns, headers, rows, chips, tabs and ordinary buttons have none. The panel gets a shadow only when it floats over the conversation as a drawer; as a grid column it is a tile like the others, with the Tray around it.",
         "section": "elevation"
       }
     ],
@@ -1918,7 +1957,7 @@
       "Don't signal status with colour alone or with a code. Write the words.",
       "Don't add uppercase or letter-spaced labels. The wordmark is the only capitals, and Montserrat belongs to it alone.",
       "Don't add a third typeface or load a font from outside; Manrope and Montserrat are served from `web/fonts`. Don't add a library either. The page loads nothing from outside: car pictures come through Wheelman's own addresses, videos from Carbarn's own storage, and its content security policy forbids inline styles and scripts.",
-      "Don't add a third shadow, or put a shadow on the bar, a column, a header, a row, a chip, a tab or an ordinary button.",
+      "Don't add a third shadow, or put a shadow on the bar, a column, a header, a row, a chip, a tab or an ordinary button. Don't separate the four tiles with lines, or box anything again inside a tile: the Tray between them is their only divider.",
       "Don't animate the conversation list when it is moved through with the keyboard. Rows change instantly.",
       "Don't insert customer text as HTML, and don't use real customer names, numbers, messages or cars in examples of this system; use invented ones."
     ]

@@ -5,6 +5,7 @@ colors:
   # Light theme (default). Keys are the custom property names in web/css/tokens.css.
   brand: "#0073ea"
   panel: "#f2f6fb"
+  tray: "#dde5ef"
   side: "#ffffff"
   side-hover: "#f3f8fe"
   side-on: "#e6f1fe"
@@ -50,6 +51,7 @@ colors:
   # Dark theme. Same custom properties, redefined under prefers-color-scheme: dark.
   brand-dark: "#3d9bff"
   panel-dark: "#0b2640"
+  tray-dark: "#020c18"
   side-dark: "#061d33"
   side-hover-dark: "#0b2640"
   side-on-dark: "#103252"
@@ -191,6 +193,7 @@ components:
     textColor: "{colors.text}"
     padding: "0 0.75rem 0 1rem"
     height: "3.5rem"
+    rounded: "{rounded.lg}"
   section-tab:
     backgroundColor: "transparent"
     textColor: "{colors.muted}"
@@ -530,7 +533,7 @@ components:
 
 Wheelman is Carbarn's reply assistant, and it looks and behaves like a desktop messaging app with the car beside it. A bar across the top holds the name and the four sections as tabs. Conversations are listed in a column on the left, one conversation is open in the middle, and the car the customer is asking about is on the right. The message box at the bottom of the conversation already holds a suggested reply. That reply is a draft: it is labelled "not sent", it can be edited in place, and the main button only copies it. The car's photos, videos and documents are one press from that draft. Everything on the page supports reading one conversation, checking one draft and putting the right car in it.
 
-The look is quiet and familiar on purpose, in Carbarn's own colours. Bars and columns are white and pale blue, separated by 1px lines and small shifts in tone. The thread sits on a pale blue ground one step deeper than the panels, so the white and blue bubbles read against it. Carbarn's blue marks what is chosen, what is new and what to press. Red, amber and navy appear only as status, always with words beside them. The car photos carry the colour; the interface stays quiet around them, and photos and videos open large in a near-black viewer in both themes, as in any photo app. Text is navy, set in Manrope, the typeface of carbarn.com.au, in sentence case throughout. The one exception is the name: WHEELMAN in Montserrat capitals beside a white steering wheel on a blue disc, with "by Carbarn" under it. Light and dark both ship and follow the computer's setting; the dark theme is built on navy and there is no theme switch.
+The look is quiet and familiar on purpose, in Carbarn's own colours. The top bar and the three columns are white and pale blue tiles with rounded corners, set apart by narrow gaps of a darker tray rather than by lines; inside a tile, parts are separated by 1px lines and small shifts in tone. The thread sits on a pale blue ground one step deeper than the panels, so the white and blue bubbles read against it. Carbarn's blue marks what is chosen, what is new and what to press. Red, amber and navy appear only as status, always with words beside them. The car photos carry the colour; the interface stays quiet around them, and photos and videos open large in a near-black viewer in both themes, as in any photo app. Text is navy, set in Manrope, the typeface of carbarn.com.au, in sentence case throughout. The one exception is the name: WHEELMAN in Montserrat capitals beside a white steering wheel on a blue disc, with "by Carbarn" under it. Light and dark both ship and follow the computer's setting; the dark theme is built on navy and there is no theme switch.
 
 Density is that of a working tool: 15px body text, 36px controls, 56px bars, 64px list rows, 2px between bubbles from the same sender. Two earlier layouts were rejected by the owner: a page of cards with every customer open at once and coded labels (29 Sep 2026), and a details sidebar of label-value rows with a section switch that took the top of the list (redesigned 16 Oct 2026). This system keeps one conversation and its car in view and says things in words.
 
@@ -541,8 +544,8 @@ Density is that of a working tool: 15px body text, 36px controls, 56px bars, 64p
 - The car is always in view: a photo on the strip above the thread, the full car in the panel, any car through Find a car.
 - One blue accent, Carbarn's. Red, amber and navy are status colours that always come with words.
 - Manrope for all text, sentence case, tabular figures. The Montserrat wordmark is the only capitals.
-- Flat white and pale blue surfaces, 1px dividers, two shadow levels. Photos are the only rich colour.
-- Pill-shaped controls, 8px corners on bubbles and photos, 16px on the car's main photo and on floating panels, circles for avatars, icon buttons and the mark.
+- Four rounded tiles on a darker tray, with gaps in place of lines between them; inside, flat white and pale blue surfaces, 1px dividers, two shadow levels. Photos are the only rich colour.
+- Pill-shaped controls, 8px corners on bubbles and photos, 16px on the four tiles, the car's main photo and floating panels, circles for avatars, icon buttons and the mark.
 - Short motion: 160ms press feedback, 220ms for photos, the draft, the viewer and the tab underline, 260ms for the drawer, none on keyboard moves and none under reduced motion.
 - Light and a navy-based dark from one set of custom properties; the viewer is dark in both.
 
@@ -569,7 +572,8 @@ Identity only, never meaning.
 - **Avatar grounds** (`avatar-0` to `avatar-7`, plus `avatar-default`): eight muted hues, tuned to sit with the blue, assigned from a hash of the customer's name so the same person always gets the same colour. A missing name gets the slate default and a person icon. Initials and icon are `avatar-ink`, white. The values are the same in both themes.
 
 ### Neutral
-- **Panel Mist** (`panel`): page ground, the conversation and panel headers, the area around the message box, the fill of chips, the search and Find a car fields and the segmented track, the 8px bands between sections in the panel, and the empty conversation.
+- **Panel Mist** (`panel`): the ground of the Review and sign-in pages, the conversation and panel headers, the area around the message box, the fill of chips, the search and Find a car fields and the segmented track, the 8px bands between sections in the panel, and the empty conversation.
+- **Tray** (`tray`: #dde5ef light, #020c18 dark): the ground the four tiles sit on (the top bar, the list, the conversation and the panel), seen only in the 0.5rem gaps around and between them. One step deeper than Panel Mist in light and darker than the list in dark, so the tiles stand apart without a line or a shadow.
 - **List White** (`side`): the top bar, the conversation list, the car strip, the panel and the status pill. In dark it is Carbarn's navy. `side-hover` is a row or result under the pointer; `side-on` is the open row and the highlighted Find a car result.
 - **Thread Blue** (`thread`): the ground behind bubbles. Used nowhere else.
 - **Incoming Bubble** (`bubble-in`): the customer's messages.
@@ -624,7 +628,7 @@ Identity only, never meaning.
 
 ## Layout
 
-The page is the height of the window and the document itself never scrolls. It is a column: the top bar (3.5rem), then a grid that fills the rest. Without the panel the grid is the conversation list (minimum 20rem, maximum 25rem) and the conversation, which takes the rest. With the panel open the list narrows to at most 22rem, the conversation takes the rest, and the panel is 26rem. At 1440 by 900 that is a 352px list, a 672px conversation and a 416px panel. Each column scrolls its own content.
+The page is the height of the window and the document itself never scrolls. It is a column on the Tray, 0.5rem in from the window's edges: the top bar (3.5rem), then, 0.5rem below it, a grid that fills the rest. Without the panel the grid is the conversation list (minimum 20rem, maximum 25rem) and the conversation, which takes the rest. With the panel open the list narrows to at most 22rem, the conversation takes the rest, and the panel is 26rem, with 0.5rem of Tray between each. At 1440 by 900 that is a 352px list, a 640px conversation and a 416px panel. Each column scrolls its own content.
 
 The top bar is one bar across the page with no dividing line inside it, so it reads as the frame of the whole page, not as part of the conversation under it (the owner's correction, 16 Oct 2026). The brand sits at the left; the section tabs sit in the middle of the bar; Find a car, the status pill, the cog and the "check now" button sit at the right, the last button level with the button below it (the panel button in the conversation header, or the panel's close button when the panel is open). The two sides share the width equally so the tabs stay centred; a side that needs more room takes it, and the tabs move over rather than run under it, always at least 1rem clear of both sides. The list column stacks: notices (only when something needs action, at most two, at most 40% of the column), the search field, the filter chips, the scrolling rows, and a footer that appears only in Auction. The conversation column stacks: a header 3.5rem tall, the car strip, the thread, and the message box docked at the bottom. The panel's header matches the conversation header's height so the two bands line up.
 
@@ -633,15 +637,17 @@ The thread is anchored to the bottom: with few messages they sit just above the 
 Spacing is a 4px grid with 2px for hairline gaps: `sp-05` 0.125rem, `sp-1` 0.25rem, `sp-2` 0.5rem, `sp-3` 0.75rem, `sp-4` 1rem, `sp-5` 1.25rem, `sp-6` 1.5rem, `sp-8` 2rem, `sp-10` 2.5rem. Horizontal padding inside bars and columns is mostly 1rem; panel sections are padded 1rem by 1.25rem; controls sit 0.25 to 0.5rem apart.
 
 Responsive behaviour:
-- **1279px and under:** the panel leaves the grid and becomes a drawer fixed to the right edge (26rem, or the full width if narrower), over the conversation. Crossing below this width closes it; above it, the panel opens or stays closed as the owner last left it. The list keeps to 22rem at most, so the conversation keeps its room.
+- **1279px and under:** the panel leaves the grid and becomes a drawer over the conversation: a Round tile floating 0.5rem in from the right, top and bottom edges, 26rem wide, or the full width less those edges if narrower. Crossing below this width closes it; above it, the panel opens or stays closed as the owner last left it. The list keeps to 22rem at most, so the conversation keeps its room.
 - **Under 1440px:** Find a car waits behind a search icon that opens it across the bar, so the tabs stay centred and clear of both sides.
 - **1100px and under:** "by Carbarn", the chevron on the status pill and "Open listing" on the car strip are hidden.
 - **1000px and under:** the brand shows only its mark, and the tabs sit a little closer together.
-- **860px and under:** one column. The page shows either the list or the conversation; a back button with the count of other conversations waiting appears in the conversation header. The brand shows only its mark. The section tabs move to a second row under the bar (2.5rem tall), starting at its left edge, and are hidden while a conversation is open. The car strip's button shortens to "23 photos". Bubbles widen to 86%, thread and message-box gutters tighten to 0.75rem, the draft's maximum height drops from 28% to 20% of the window height, the quieter buttons under the draft lose their icons, and the word count is hidden.
+- **860px and under:** one column. The page shows either the list or the conversation; a back button with the count of other conversations waiting appears in the conversation header. The brand shows only its mark. The section tabs move to a second row under the bar (2.5rem tall), starting at its left edge, and are hidden while a conversation is open. The car strip's button shortens to "23 photos". Bubbles widen to 86%, thread and message-box gutters tighten to 0.75rem, the draft's maximum height drops from 28% to 20% of the window height, the quieter buttons under the draft lose their icons, and the word count is hidden. The tiles sit 0.25rem apart and 0.25rem in from the window's edges, with Soft corners.
 
 Layering, lowest first: the jump-to-newest and Load older buttons over the thread, the panel drawer, the Find a car results, the toast. The status panel, the AI dialog and the viewer open in the browser's top layer, above everything.
 
 ### Named Rules
+**The Tiles Rule.** The top bar, the list, the conversation and the panel are four tiles with Round corners on the Tray, 0.5rem apart and 0.5rem in from the window's edges (the owner's choice, 16 Oct 2026). The gaps separate them, never a line. Inside a tile nothing is boxed again: headers, the car strip, rows and bands run edge to edge within it.
+
 **The Docked Draft Rule.** The suggestion is always in the message box at the bottom of the conversation column. The thread holds only what was really said, plus pills.
 
 **The Bottom-Anchored Thread Rule.** The thread opens at its newest message and stays there as the message box grows or new messages arrive, until the user scrolls up more than about 60px. Then a round button appears at the bottom right to return, showing the unanswered count.
@@ -650,7 +656,7 @@ Layering, lowest first: the jump-to-newest and Load older buttons over the threa
 
 ## Elevation & Depth
 
-Mostly flat. Regions are told apart by tone (white bars and list, pale panel, slightly deeper blue thread) and 1px lines, not by shadow. Shadows are small, tinted with the navy of the text, and have two jobs: lifting a message-like object off its ground, and marking something that floats over other content. In dark the same two tokens switch to stronger black shadows, and the raised look of the message box comes from its lighter surface. Photos get no shadow; they sit on their own rounded corners. The viewer has none either: its depth is the near-black ground.
+Mostly flat. The four tiles are told apart by the Tray between them; inside a tile, regions are told apart by tone (white bars and list, pale panel, slightly deeper blue thread) and 1px lines. Neither uses a shadow. Shadows are small, tinted with the navy of the text, and have two jobs: lifting a message-like object off its ground, and marking something that floats over other content. In dark the same two tokens switch to stronger black shadows, and the raised look of the message box comes from its lighter surface. Photos get no shadow; they sit on their own rounded corners. The viewer has none either: its depth is the near-black ground.
 
 ### Shadow Vocabulary
 - **Resting lift** (`box-shadow: 0 1px 1px rgba(6, 29, 51, .10)`; dark `0 1px 1px rgba(0, 0, 0, .35)`): bubbles, date and event pills, the message box, the quiet panel, the paste box, the sticky Load older button, and the selected segment of a switch in light (in dark it has none).
@@ -658,7 +664,7 @@ Mostly flat. Regions are told apart by tone (white bars and list, pale panel, sl
 - **Scrim** (`rgba(6, 29, 51, .40)`; dark `rgba(0, 0, 0, .55)`): behind the AI dialog. The viewer's backdrop is its own near-black ground.
 
 ### Named Rules
-**The Two Shadows Rule.** Only these two shadows exist. The bar, columns, headers, rows, chips, tabs and ordinary buttons have none. The panel gets a shadow only when it overlays the conversation; as a grid column it has a 1px line.
+**The Two Shadows Rule.** Only these two shadows exist. The bar, columns, headers, rows, chips, tabs and ordinary buttons have none. The panel gets a shadow only when it floats over the conversation as a drawer; as a grid column it is a tile like the others, with the Tray around it.
 
 ## Shapes
 
@@ -666,11 +672,11 @@ Six corner steps, each with its own kind of thing:
 - **Hairline (`xs`, 0.25rem):** tags, the buttons that name a blank, the highlight behind a blank or a failed figure, loading bars, and the top corners of the tab underline.
 - **Gentle (`sm`, 0.5rem):** things that hold a message, a picture or a piece of advice: bubbles, pills, advice lines, the strip thumbnail, photo tiles, video posters, document tiles, filmstrip thumbnails, Find a car results, segments, the name button in the header.
 - **Soft (`md`, 0.75rem):** the message box, the quiet panel, the paste box, notices, the segmented track, the "Another car" band, the import-enquiry line.
-- **Round (`lg`, 1rem):** the car's main photo and everything that floats: the status panel, the Find a car results, the AI dialog.
+- **Round (`lg`, 1rem):** the four tiles (the top bar, the list, the conversation and the panel, as a drawer too) and Find a car when it opens across the bar, the car's main photo, and everything that floats: the status panel, the Find a car results, the AI dialog. At 860px and under the tiles take Soft corners.
 - **Pill (`pill`):** every control with its own fill or outline, whatever its height: buttons, chips, the search and Find a car fields, the status pill, selects and instruction fields, badges, the photo count chip, the toast.
 - **Circle (`full`):** avatars, icon buttons, status dots, the jump button, the play disc, the viewer's previous and next buttons, the numbered steps in the empty conversation, and the brand mark.
 
-Conversation rows, bars and columns are square and run edge to edge.
+Inside a tile, conversation rows, headers and bands are square and run edge to edge; the tile's own corners clip them.
 
 Photos keep the car's own shape: cover-cropped to 4:3 in the grid and the strip thumbnail (64 by 48), 16:10 for the main photo, and contained, never cropped, in the viewer.
 
@@ -678,7 +684,7 @@ The brand mark is a disc in the style of Carbarn's round icon: a Carbarn Blue ci
 
 The first bubble in a run from one sender has its top corner on the sender's side squared off and a small triangular tail there (0.5rem wide, 0.75rem tall), pointing left for the customer and right for staff. Later bubbles in the run have no tail. A text seen only on the phone carries a 1px dashed outline in its own text colour.
 
-Borders are 1px. `line` divides bars, columns and rows; the divider between rows starts 4.5rem in, under the text, so avatars are not underlined. `line-strong` outlines the bordered buttons, the fields and the message box. Sections in the panel are separated by a 0.5rem band of the panel colour.
+Borders are 1px. `line` divides the bands inside a tile (a header from what is under it) and the rows; the divider between rows starts 4.5rem in, under the text, so avatars are not underlined. `line-strong` outlines the bordered buttons, the fields and the message box. Sections in the panel are separated by a 0.5rem band of the panel colour.
 
 Icons are one drawn set: 24px grid, 1.75 stroke, round caps and joins, no fills, coloured by the surrounding text. They render at 1.25rem by default, 1rem inside buttons, fields and advice lines, 0.875rem beside a small link, on the status pill and in the photo count chip. The play triangle in a play disc is filled; the brand mark is the only other filled drawing.
 
@@ -692,7 +698,7 @@ The name of the product, at the left of the top bar.
 - The block is not a link or a button and has no states.
 
 ### Top bar and section tabs
-A white bar 3.5rem tall with a 1px line under it.
+A white tile 3.5rem tall with Round corners and no line under it; the Tray shows between it and the columns.
 - **Tabs:** Dashboard, Marketplace, Auction, Import Query, as words on the bar, 0.75rem side padding, Muted at 0.875rem / 500. A badge after each label counts the conversations there with something new, and is hidden at zero. A section that is switched off has no tab; with only the Dashboard there are no tabs.
 - **Chosen:** Navy Ink at 650, with a 3px Carbarn Blue line along the bottom edge, inset 0.75rem each side, its top corners rounded. The line scales in from the centre over 220ms. Hover on another tab darkens its label. Arrow keys, Home and End move between tabs.
 - **Behaviour:** switching resets the list to its first chip, clears the search and closes the open conversation. The four sections are never mixed.
@@ -740,7 +746,7 @@ Exactly one of two or three, in a track: the panel's Car | Customer, and the vie
 - **State:** the selected segment takes the switch's "on" ground (List White in light, the open-row colour in dark), Navy Ink at 650 and the resting lift in light. Hover darkens another segment's label. Press scales to 0.97.
 
 ### Cards / Containers
-There are no cards. The containers are message-shaped:
+There are no cards: the four tiles are the page's frame, and nothing inside them is boxed again. The containers inside are message-shaped:
 - **Message box:** see below.
 - **Quiet panel:** in place of the message box when no draft applies (already replied, opted out, dismissed, not written yet, failed). Sheet colour, 0.75rem corners, resting lift, 0.75rem by 1rem padding, one sentence in Muted at 0.875rem and at most two buttons beside it. The sentence turns Check Red for opted out and failed.
 - **Loading:** while a suggestion is written the message box shows "Writing a suggestion" over a sheet holding three bars (38%, 92%, 64% wide, 0.75rem tall) with a slow shimmer between Line and Strong Line. The list shows six skeleton rows (a grey circle and two shimmering lines) while it loads.
@@ -906,6 +912,6 @@ Dismiss is not in the message box. It lives in the last section of the Customer 
 - **Don't** signal status with colour alone or with a code. Write the words.
 - **Don't** add uppercase or letter-spaced labels. The wordmark is the only capitals, and Montserrat belongs to it alone.
 - **Don't** add a third typeface or load a font from outside; Manrope and Montserrat are served from `web/fonts`. Don't add a library either. The page loads nothing from outside: car pictures come through Wheelman's own addresses, videos from Carbarn's own storage, and its content security policy forbids inline styles and scripts.
-- **Don't** add a third shadow, or put a shadow on the bar, a column, a header, a row, a chip, a tab or an ordinary button.
+- **Don't** add a third shadow, or put a shadow on the bar, a column, a header, a row, a chip, a tab or an ordinary button. Don't separate the four tiles with lines, or box anything again inside a tile: the Tray between them is their only divider.
 - **Don't** animate the conversation list when it is moved through with the keyboard. Rows change instantly.
 - **Don't** insert customer text as HTML, and don't use real customer names, numbers, messages or cars in examples of this system; use invented ones.

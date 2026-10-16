@@ -13,6 +13,7 @@
     /* ---- colour: Carbarn's palette. Blue wordmark, navy text, pale blue surfaces, white ground. */
     --brand: #0073ea;
     --panel: #f2f6fb;
+    --tray: #dde5ef;               /* the ground the tiles sit on */
     --side: #ffffff;
     --side-hover: #f3f8fe;
     --side-on: #e6f1fe;
@@ -184,6 +185,7 @@
     :root {
       --brand: #3d9bff;
       --panel: #0b2640;
+      --tray: #020c18;
       --side: #061d33;
       --side-hover: #0b2640;
       --side-on: #103252;
