@@ -71,7 +71,7 @@
     font-size: var(--fs-label); line-height: var(--lh-body);
   }
   .status-panel h2 { margin-bottom: var(--sp-3); font-size: var(--fs-title); font-weight: var(--fw-semibold); }
-  .status-panel h3 { margin: var(--sp-4) 0 var(--sp-2); font-size: var(--fs-label); font-weight: var(--fw-semibold); color: var(--accent-text); }
+  .status-panel h3 { margin: var(--sp-4) 0 var(--sp-2); font-size: var(--fs-label); font-weight: var(--fw-semibold); color: var(--text); }
   .status-lines { display: grid; gap: var(--sp-2); color: var(--muted); }
   .status-lines li { position: relative; padding-left: var(--sp-4); }
   .status-lines li::before { content: ""; position: absolute; left: 0; top: var(--sp-2); width: var(--sp-1); height: var(--sp-1); border-radius: var(--r-full); background: var(--line-strong); }
@@ -192,11 +192,12 @@
   .car-words { flex: 1; min-width: 0; display: grid; gap: var(--sp-05); }
   .car-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-05) var(--sp-3); }
   .car-links { flex: none; display: flex; align-items: center; gap: var(--sp-3); }
+  .car-links .btn .t-short { display: none; }
   .car-line > a, .car-open { display: inline-flex; align-items: center; gap: var(--sp-1); font-weight: var(--fw-semibold); text-decoration: none; white-space: nowrap; }
   .car-line > a { margin-left: auto; }
   .car-line a svg.icon { width: var(--icon-xs); height: var(--icon-xs); }
 
-  .thread-wrap { flex: 1; min-height: 0; position: relative; display: flex; }
+  .thread-wrap { flex: 1; min-height: var(--thread-min); position: relative; display: flex; }
   .latest {
     position: absolute; right: var(--sp-4); bottom: var(--sp-4); z-index: var(--z-float);
     width: var(--ctl-lg); height: var(--ctl-lg); border: 0; border-radius: var(--r-full);
@@ -240,8 +241,10 @@
 
   /* ---- message box area ------------------------------------------------------------------ */
 
+  /* The message box gives way before the conversation does: on a short window it scrolls, and the
+     thread keeps its share (--thread-min). */
   .composer {
-    flex: none;
+    flex: 0 1 auto; min-height: 0; overflow-y: auto;
     background: var(--panel); border-top: 1px solid var(--line);
     padding: var(--sp-3) var(--sp-4) var(--sp-3);
     display: grid; gap: var(--sp-2);
@@ -298,7 +301,7 @@
   .info-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding-bottom: var(--sp-6); }
   .info section { padding: var(--sp-4) var(--sp-5) var(--sp-5); border-bottom: var(--sp-2) solid var(--panel); }
   .info section:last-child { border-bottom: 0; }
-  .info h4 { margin: 0 0 var(--sp-3); font-size: var(--fs-label); font-weight: var(--fw-semibold); color: var(--accent-text); }
+  .info h4 { margin: 0 0 var(--sp-3); font-size: var(--fs-label); font-weight: var(--fw-semibold); color: var(--text); }
   .info dl { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: var(--sp-2) var(--sp-3); font-size: var(--fs-ui); }
   .info dt { color: var(--faint); }
   .info dl + h4 { margin-top: var(--sp-5); }
@@ -476,10 +479,10 @@
     @starting-style { .info:not([hidden]) { translate: 100% 0; opacity: .6; } }
   }
 
-  /* The status keeps its dot, Find a car narrows. */
+  /* The status keeps its words and loses its arrow; Find a car narrows. */
   @media (max-width: 1100px) {
-    .status-words, .brand-by { display: none; }
-    .status-btn { padding: 0 var(--sp-2); }
+    .brand-by, .status-btn svg.icon { display: none; }
+    .status-btn { padding: 0 var(--sp-3); }
     .topbar-find { width: var(--find-w-narrow); }
     .car-open { display: none; }
   }
@@ -498,6 +501,9 @@
     .topbar-find.is-open .find-opener { display: none; }
     .find-pop { right: var(--sp-3); }
     .car-links .btn .t-long { display: none; }
+    .car-links .btn .t-short { display: inline; }
+    /* In a conversation the sections step aside; the back arrow, with its count, leads to them. */
+    .shell:has(.app[data-view="chat"]) .topbar-nav { display: none; }
     .app, .app.has-info { grid-template-columns: minmax(0, 1fr); }
     .app[data-view="list"] .chat { display: none; }
     .app[data-view="chat"] .side { display: none; }
@@ -507,7 +513,11 @@
     .msg { max-width: 86%; }
     .thread { padding-inline: var(--sp-3); }
     .composer { padding-inline: var(--sp-3); }
-    .draft { max-height: 32dvh; }
+    .draft { max-height: var(--editor-max-narrow); }
+    /* The quieter buttons in words only, on one row; Clear and Copy reply on the next, at the right. */
+    .sheet-foot > .btn:not(.primary) { padding: 0 var(--sp-2); }
+    .sheet-foot > .btn:not(.primary) svg.icon { display: none; }
+    .thread-wrap { min-height: var(--thread-min-narrow); }
     .count { display: none; }
   }
 

@@ -357,7 +357,11 @@ function renderHead(item, els) {
     const m = state.media.get(String(v.stockNo));
     const data = m?.data || null;
     const first = data ? (data.photos.find((p) => p.group === 'car') || data.photos[0]) : null;
-    const count = data ? data.photos.length + data.videos.length : 0;
+    // How many, in words: "23 photos · 4 videos" (the car's own photos; the auction ones are in the panel).
+    const shots = data ? (data.photos.filter((p) => p.group === 'car').length || data.photos.length) : 0;
+    const films = data ? data.videos.length : 0;
+    const longWords = !data || !(shots || films) ? t('car.photosAndVideos') : [shots ? t('car.n.photos', { n: shots }) : '', films ? t('car.n.videos', { n: films }) : ''].filter(Boolean).join(' · ');
+    const shortWords = shots ? t('car.n.photos', { n: shots }) : t('car.photos');
     put(els.car,
       h('button', { class: 'car-thumb', type: 'button', 'aria-label': t('car.photosAndVideos'), title: t('car.photosAndVideos'), onclick: () => showCar() },
         first ? h('img', { src: pictureSrc(v.stockNo, first.id), alt: '', decoding: 'async' }) : icon('image')),
@@ -368,7 +372,7 @@ function renderHead(item, els) {
           v.odometer ? h('span', { text: `${Number(v.odometer).toLocaleString('en-AU')} km` }) : null,
           h('span', { class: `avail ${v.availability.code}`, text: shortAvailability(v.availability) }))),
       h('div', { class: 'car-links' },
-        h('button', { class: 'btn outline small', type: 'button', 'aria-label': count ? `${t('car.photosAndVideos')}, ${count}` : t('car.photosAndVideos'), onclick: () => showCar() }, icon('image'), h('span', { class: 't-long', text: t('car.photosAndVideos') }), count ? h('span', { class: 'count', text: String(count) }) : null),
+        h('button', { class: 'btn outline small', type: 'button', title: t('car.photosAndVideos'), onclick: () => showCar() }, icon('image'), h('span', { class: 't-long', text: longWords }), h('span', { class: 't-short', text: shortWords })),
         v.url ? h('a', { class: 'car-open', href: v.url, target: '_blank', rel: 'noopener noreferrer' }, t('car.openListing'), icon('external')) : null));
   }
 }
@@ -880,8 +884,9 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
       lines.push(h('div', { class: 'tip warn' }, h('span', { class: 'tip-text', text: c.message })));
     }
     if (isEdited()) {
+      // One line: the head of the box already says "changed by you".
       lines.push(h('div', { class: 'tip warn' },
-        h('span', { text: teaches ? 'You have changed the text. What you typed has not been checked. Wheelman learns from your changes when you copy the reply.' : 'You have changed the text. What you typed has not been checked.' }),
+        h('span', { class: 'tip-text', text: teaches ? 'Not checked yet. Wheelman learns from your changes when you copy the reply.' : 'What you typed has not been checked.' }),
         backToSuggestion()));
     } else if (!lines.length) {
       // Only claim a match for text that was actually checked.
@@ -1073,10 +1078,9 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
           ? h('button', { class: 'btn', type: 'button', title: 'Read the live auction again and write this message with the figures as they are now.', onclick: () => write(item, d.instruction || '') }, icon('refresh'), 'Refresh figures') : null,
         approveBtn,
         betterBtn,
-        h('span', { class: 'grow' }),
-        clearBtn,
-        copyBtn,
-        sendBtn)),
+        // Clear, Copy and Send stay together at the right: when the row wraps, the quieter
+        // buttons move, never Copy reply.
+        h('span', { class: 'sheet-actions' }, clearBtn, copyBtn, sendBtn))),
     rewriteRow,
     teach ? betterRow : null,
     after);

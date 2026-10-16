@@ -300,6 +300,7 @@
     padding: var(--sp-1) var(--sp-2) var(--sp-2) var(--sp-2);
   }
   .sheet-foot .grow { flex: 1; }
+  .sheet-actions { flex: none; margin-left: auto; display: flex; align-items: center; gap: var(--sp-1); }
   /* The quieter buttons under the text are tighter, so the row fits beside the panel. */
   .sheet-foot .btn:not(.primary) { padding: 0 var(--sp-3); }
   .count { margin-right: var(--sp-2); font-size: var(--fs-caption); color: var(--faint); white-space: nowrap; }

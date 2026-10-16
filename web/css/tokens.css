@@ -159,7 +159,10 @@
     --play: 2.5rem;              /* the play disc on a poster */
     --viewer-nav: 3rem;          /* the previous and next buttons in the viewer */
     --editor-min: 4.5rem;
-    --editor-max: 38dvh;
+    --editor-max: 28dvh;
+    --editor-max-narrow: 20dvh;
+    --thread-min: 30dvh;        /* the conversation always keeps this much of the window */
+    --thread-min-narrow: 22dvh;
     --paste-max: 30dvh;
     --thread-gutter: clamp(0.75rem, 6%, 4.5rem);  /* the side margins of the thread */
 

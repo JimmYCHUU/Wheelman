@@ -60,6 +60,8 @@ export function CarTab({ car, media, other, act }) {
   const auction = data ? data.photos.filter((p) => p.group === 'auction') : [];
   const hero = photos[0] || auction[0] || null;
   const a = car.availability || {};
+  const cap = (x) => { const w = String(x || '').trim().toLowerCase(); return w ? w[0].toUpperCase() + w.slice(1) : ''; };
+  const facts = [cap(car.fuel), cap(car.transmission), car.seats ? t('car.seats', { n: car.seats }) : '', cap(car.colour)].filter(Boolean);
 
   const head = [
     other ? h('div', { class: 'car-other' },
@@ -68,14 +70,17 @@ export function CarTab({ car, media, other, act }) {
     hero
       ? h('button', { class: 'car-hero', type: 'button', 'aria-label': t('car.openPhoto', { label: hero.label }), onclick: () => act.view(photos[0] ? 'car' : 'auction', 0) },
         h('img', { src: pictureSrc(car.stockNo, hero.id), alt: '', decoding: 'async' }),
-        h('span', { class: 'car-hero-count' }, icon('image'), `${photos.length + auction.length} ${t('car.count.photos', { n: photos.length + auction.length })}`))
+        // The count of the group the main photo opens, the same number "See all" gives under it.
+        h('span', { class: 'car-hero-count' }, icon('image'), t('car.n.photos', { n: photos.length || auction.length })))
       : media?.status === 'loading' ? h('div', { class: 'car-hero is-loading', role: 'status', 'aria-label': t('car.loading') }) : null,
     h('div', { class: 'car-headline' },
       h('h3', { text: car.title || t('car.stock', { stock: car.stockNo }) }),
       h('p', { class: 'car-meta' },
         h('span', { text: t('car.stock', { stock: car.stockNo }) }),
-        a.code !== 'sold' && car.price ? h('span', { text: money(car.price) }) : null,
+        a.code !== 'sold' && car.price ? h('span', { text: t('car.price', { price: money(car.price) }) }) : null,
         car.odometer ? h('span', { text: km(car.odometer) }) : null),
+      // What kind of car it is, in one line: the facts a buyer asks about first.
+      facts.length ? h('p', { class: 'car-meta', text: facts.join(' · ') }) : null,
       h('p', { class: `avail ${a.code || 'unknown'}`, text: a.text || '' }),
       car.url ? h('a', { class: 'car-listing', href: car.url, target: '_blank', rel: 'noopener noreferrer' }, t('car.openListing'), icon('external')) : null),
   ];
@@ -118,18 +123,10 @@ export function CarTab({ car, media, other, act }) {
     ];
   }
 
-  const row = (label, value) => (value ? [h('dt', { text: label }), h('dd', {}, value)] : null);
-  const about = h('section', { class: 'car-sec' },
-    h('h4', { text: t('car.about') }),
-    h('dl', {},
-      row('Availability', a.text),
-      row('Price', a.code !== 'sold' && car.price ? `${money(car.price)}, government charges extra` : ''),
-      row('Odometer', car.odometer ? km(car.odometer) : ''),
-      row('Fuel', car.fuel),
-      row('Transmission', car.transmission),
-      row('Seats', car.seats),
-      row('Colour', car.colour ? String(car.colour).toLowerCase() : '')),
-    car.included?.length ? [h('h4', { text: t('car.included') }), h('ul', { class: 'facts' }, car.included.map((x) => h('li', { text: x })))] : null);
+  // What comes with the car, as the dashboard lists it. The other facts are in the line under its name.
+  const about = car.included?.length ? h('section', { class: 'car-sec' },
+    h('h4', { text: t('car.included') }),
+    h('ul', { class: 'facts' }, car.included.map((x) => h('li', { text: x })))) : null;
 
   const foot = data?.readAt ? h('p', { class: 'car-read fine' }, t('car.read', { ago: ago(data.readAt) }), ' ', h('button', { class: 'link-btn', type: 'button', onclick: act.refresh }, t('car.refresh'))) : null;
   return h('div', { class: 'car-tab' }, head, body, about, foot);
