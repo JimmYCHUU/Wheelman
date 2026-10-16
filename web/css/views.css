@@ -518,7 +518,7 @@
     .sheet-foot > .btn:not(.primary) { padding: 0 var(--sp-2); }
     .sheet-foot > .btn:not(.primary) svg.icon { display: none; }
     .thread-wrap { min-height: var(--thread-min-narrow); }
-    .count { display: none; }
+    .draft-side .count { display: none; }
   }
 
   /* ---- the team's sign-in at the shared address: one card, one field, one button. */

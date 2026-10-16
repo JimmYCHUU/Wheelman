@@ -70,7 +70,7 @@
     --viewer-btn: #0f2840;
     --viewer-btn-hover: #173654;
     --photo-ground: #dfe7f0;         /* behind a photo still on its way */
-    --scrim-soft: rgba(3, 15, 28, .55); /* the count chip and play disc laid on a photo */
+    --scrim-soft: rgba(3, 15, 28, .68); /* the count chip and play disc laid on a photo */
     --on-scrim: #ffffff;
 
     /* ---- elevation: two shadows, and the scrim behind a drawer or dialog. Chips and buttons have none. */
@@ -136,7 +136,6 @@
     --col-list-min: 20rem;
     --col-list-max: 25rem;
     --col-list-narrow: 22rem;   /* the list beside the conversation and the panel */
-    --col-details: 22.5rem;
     --measure-bubble: 36rem;
     --measure-pill: 34rem;
     --measure-prose: 28rem;

@@ -72,11 +72,11 @@ export function openViewer(opts) {
     } else {
       stage.replaceChildren(h('img', { class: 'viewer-media', src: it.src, alt: it.label, decoding: 'async' }));
     }
-    caption.replaceChildren(h('strong', { text: it.label }), h('span', { text: t('viewer.of', { n: index + 1, total: group.items.length }) }));
+    caption.replaceChildren(h('strong', { text: it.label }), h('span', { text: `· ${t('viewer.of', { n: index + 1, total: group.items.length })}` }));
     // With or without the voice-over, for a video that has both.
     extras.replaceChildren();
     if (it.kind === 'video' && it.playable && it.plainLink) {
-      const pick = (v) => { voice = v; paint(); };
+      const pick = (v) => { voice = v; paint(); extras.querySelector('[aria-pressed="true"]')?.focus({ preventScroll: true }); };
       extras.append(h('div', { class: 'viewer-voice', role: 'group', 'aria-label': t('viewer.voiceLabel') },
         h('button', { class: `filter ${voice ? 'is-on' : ''}`.trim(), type: 'button', 'aria-pressed': voice ? 'true' : 'false', onclick: () => pick(true) }, t('viewer.voice')),
         h('button', { class: `filter ${!voice ? 'is-on' : ''}`.trim(), type: 'button', 'aria-pressed': !voice ? 'true' : 'false', onclick: () => pick(false) }, t('viewer.plain'))));
@@ -85,13 +85,14 @@ export function openViewer(opts) {
     prev.hidden = next.hidden = group.items.length < 2;
     strip.replaceChildren(...group.items.map((x, i) => h('button', {
       class: `viewer-thumb ${i === index ? 'is-on' : ''}`.trim(), type: 'button', role: 'listitem', 'aria-label': x.label, 'aria-current': i === index ? 'true' : null,
-      onclick: () => { index = i; paint(); },
+      onclick: () => { index = i; paint(); strip.children[index]?.focus({ preventScroll: true }); },
     }, (x.kind === 'video' ? x.poster : x.src) ? h('img', { src: x.kind === 'video' ? x.poster : x.src, alt: '', loading: 'lazy' }) : h('span', { class: 'viewer-thumb-none' }, icon('play')),
     x.kind === 'video' ? h('span', { class: 'play-disc small' }, icon('play')) : null)));
     strip.children[index]?.scrollIntoView({ block: 'nearest', inline: 'center' });
   }
 
   dialog.addEventListener('keydown', (e) => {
+    if (e.defaultPrevented || tabs.contains(e.target)) return;
     if (['INPUT', 'TEXTAREA', 'VIDEO'].includes(document.activeElement?.tagName) && e.key !== 'Escape') return;
     if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); go(1); }

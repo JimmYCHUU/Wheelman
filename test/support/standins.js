@@ -99,12 +99,13 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
     m = p.match(/^\/carbarnau\/api\/v2\/vehicles\/media\/([A-Za-z0-9-]+)$/);
     if (m) {
       if (world?.mediaDown) return json(res, 503, { error: 'Service Unavailable' });
-      return json(res, 200, JSON.parse(JSON.stringify((world.vehicleMedia || {})[m[1]] || []).replaceAll('{base}', base())));
+      return json(res, 200, JSON.parse(JSON.stringify((world?.vehicleMedia || {})[m[1]] || []).replaceAll('{base}', base())));
     }
     m = p.match(/^\/carbarnau\/api\/v1\/vehicles\/chassis\/([A-Za-z0-9-]+)$/);
     if (m) {
-      if (world?.mediaDown) return json(res, 503, { error: 'Service Unavailable' });
-      const rec = (world.vehicleRecords || {})[m[1]];
+      // world.recordDown takes only the record down: the media list still answers.
+      if (world?.mediaDown || world?.recordDown) return json(res, 503, { error: 'Service Unavailable' });
+      const rec = (world?.vehicleRecords || {})[m[1]];
       return rec ? json(res, 200, JSON.parse(JSON.stringify(rec).replaceAll('{base}', base()))) : json(res, 404, { error: 'Not Found' });
     }
     m = p.match(/^\/pic\/([\w.-]+)$/);

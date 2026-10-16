@@ -64,8 +64,9 @@ test('the reduction keeps the photos, videos and allowed documents, and nothing 
   assert.deepEqual(out.documents.map((d) => [d.type, d.kind]), [['AUCTION_SHEET', 'image'], ['EXPORT_CERTIFICATE', 'pdf'], ['RAW_FOOTAGE_LINK', 'album']]);
   assert.match(out.documents[1].link, /export\.pdf$/);
   assert.ok(out.documents[0].picture !== null, 'the auction sheet can be shown as a picture');
-  // Every picture has a number; the addresses stay in `pictures`, on the server.
-  assert.ok(out.photos.every((p) => /^\d+$/.test(p.id)));
+  // Every picture has an id made from its address; the addresses stay in `pictures`, on the server.
+  assert.ok(out.photos.every((p) => /^[a-f0-9]{24}$/.test(p.id) && out.pictures[p.id] === p.link));
+  assert.equal(vm.projectMedia(filled(VEHICLE_MEDIA['ZRR80-0101010']), null).photos[0].id, out.photos[0].id, 'the same picture keeps its id in another read');
   const { pictures, ...safe } = out;
   assert.doesNotMatch(JSON.stringify(safe), NEVER);
   assert.doesNotMatch(JSON.stringify(pictures), NEVER);
@@ -76,7 +77,7 @@ test('an older car without website photos shows its older photo lists; nothing a
   assert.deepEqual(older.photos.filter((p) => p.group === 'car').map((p) => p.label), ['Outside 1', 'Inside 1']);
   assert.deepEqual(older.videos, []);
   const none = vm.projectMedia(null, null);
-  assert.deepEqual([none.photos, none.videos, none.documents, none.pictures], [[], [], [], []]);
+  assert.deepEqual([none.photos, none.videos, none.documents, none.pictures], [[], [], [], {}]);
   // A video on any other host is offered to open, not played on the page.
   const elsewhere = vm.projectMedia([{ mediaType: 'VIDEO', label: 'Walkaround', url: 'https://video.example/walk.mp4' }], {});
   assert.equal(elsewhere.videos[0].playable, false);
@@ -112,7 +113,8 @@ test('a picture comes from Wheelman\'s own copy; a number it does not know, or a
   assert.match(r.cache, /max-age=86400/);
   await get(`/api/vehicles/1159/picture/${front.id}`);
   assert.equal(calls.filter((c) => c.path.startsWith('/pic/')).length, before + 1, 'fetched once, then served from the copy');
-  assert.equal((await get('/api/vehicles/1159/picture/999')).status, 404);
+  assert.equal((await get('/api/vehicles/1159/picture/aaaabbbbccccddddeeeeffff')).status, 404);
+  assert.equal((await get('/api/vehicles/1159/picture/0')).status, 404, 'a bare number is not an id');
   assert.equal((await get('/api/vehicles/9999/media')).status, 404);
   // The page's policy lets videos play from Carbarn's storage and nowhere else.
   assert.match(r.csp, /media-src 'self' https:\/\/fastlycb\.s3\.ap-southeast-2\.amazonaws\.com;/);
@@ -140,6 +142,49 @@ test('when the dashboard does not answer, the last answer stays with a note; wit
     assert.equal(none.status, 502);
     assert.match(none.body.error, /could not be read/);
   } finally { world.mediaDown = false; }
+});
+
+test('when only the record does not answer, the website photos and videos are still shown, with a note', async () => {
+  vm.forgetMedia();
+  world.recordDown = true;
+  try {
+    const r = await get('/api/vehicles/1159/media');
+    assert.equal(r.status, 200);
+    assert.equal(r.body.photos.filter((p) => p.group === 'car').length, 4);
+    assert.equal(r.body.videos.length, 2);
+    assert.deepEqual(r.body.documents, []);
+    assert.match(r.body.error, /Part of this car's photos and documents could not be read/);
+  } finally { world.recordDown = false; vm.forgetMedia(); }
+});
+
+test('a document address with a key in it is never shown; the shared Amazon address counts only for the supplier\'s folder', async () => {
+  const rec = { operation: { documents: [
+    { documentType: 'EXPORT_CERTIFICATE', url: 'https://fastlycb.s3.ap-southeast-2.amazonaws.com/docs/export.pdf?token=abc', active: true },
+    { documentType: 'AUCTION_SHEET', url: 'https://www.nichibojapan.com/sheet.jpg?user=AU&key=x', active: true },
+  ] }, auctionPhotos: ['https://s3-ap-southeast-2.amazonaws.com/nichibo/1.jpg', 'https://s3-ap-southeast-2.amazonaws.com/someone-else/2.jpg'] };
+  const out = vm.projectMedia([], rec);
+  assert.deepEqual(out.documents, []);
+  // The picture route refuses the other bucket's address even though it was listed.
+  vm.forgetMedia();
+  world.vehicleRecords['ZRR80-0101010'] = { ...VEHICLE_RECORDS['ZRR80-0101010'], auctionPhotos: rec.auctionPhotos };
+  world.vehicleMedia['ZRR80-0101010'] = [];
+  try {
+    const media = (await get('/api/vehicles/1159/media')).body;
+    const other = media.photos.find((p) => /someone-else/.test(p.link));
+    assert.equal((await get(`/api/vehicles/1159/picture/${other.id}`)).status, 502);
+  } finally {
+    world.vehicleRecords['ZRR80-0101010'] = VEHICLE_RECORDS['ZRR80-0101010'];
+    world.vehicleMedia['ZRR80-0101010'] = VEHICLE_MEDIA['ZRR80-0101010'];
+    vm.forgetMedia();
+  }
+});
+
+test('Find a car says a car is reserved when another customer has paid a deposit on it', async () => {
+  // Stock 1400, the Alphard, is listed as available but carries another customer's deposit.
+  const sync = await import('../src/sync.js');
+  await sync.syncVehicles({ force: true });
+  const [alphard] = (await get('/api/vehicles?q=1400')).body.cars;
+  assert.equal(alphard.availability.code, 'reserved');
 });
 
 test('a car stored before chassis numbers were kept says when its photos can be read', async () => {

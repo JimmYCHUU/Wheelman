@@ -1293,7 +1293,7 @@ function customerSections(item) {
       h('h4', { text: 'Dismiss' }),
       h('p', { class: 'fine', text: item.order
         ? 'Takes this order out of To do, for example when you have already told them by phone. Nothing is deleted: the order stays under In progress and the message can be put back.'
-        : 'Takes this conversation out of Waiting, for example when you have already phoned them. Nothing is deleted: it stays under No reply needed and can be put back.' }),
+        : 'Takes this conversation out of Waiting, for example when you have already phoned them. Nothing is deleted: it stays under All, marked, and can be put back.' }),
       h('button', { class: 'btn outline dismiss-btn', type: 'button', onclick: () => dismissItem(item) }, item.order ? 'Dismiss this message' : 'Dismiss this conversation')) : null,
     h('section', {}, h('p', { class: 'fine', text: 'All times are Sydney time.' })),
   ];
@@ -1696,7 +1696,7 @@ async function open(key) {
     if (state.selected !== key) return;
     state.detail = item;
     markRead(item);
-    if (item.vehicle && !state.media.has(String(item.vehicle.stockNo))) loadMedia(item.vehicle.stockNo);
+    if (item.vehicle && (!state.media.has(String(item.vehicle.stockNo)) || state.media.get(String(item.vehicle.stockNo)).status === 'error')) loadMedia(item.vehicle.stockNo);
     renderChat({ toBottom: true });
     if (narrow()) $('.thread')?.focus({ preventScroll: true });
   } catch (e) {

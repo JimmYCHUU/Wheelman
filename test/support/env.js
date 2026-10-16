@@ -45,6 +45,8 @@ export const BASE_ENV = {
   PHONE_ADDON_ID: '',
   PHONE_WRITE_AT_ONCE: '0', // a test switches it on when it is what the test is about: a background write would otherwise take other tests' scripted answers
   PORT: '0',
+  // The stand-ins serve their pictures from this computer; the real app never fetches one from here.
+  MEDIA_ALLOW_LOCAL: '1',
   // Sharing with the team is off, with no password, unless a test switches it on. No test ever
   // starts a tunnel.
   SHARE: '0',

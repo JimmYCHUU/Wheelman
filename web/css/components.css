@@ -13,6 +13,7 @@
   .icon-btn:active { transform: scale(.94); }
   .icon-btn:disabled { opacity: .5; cursor: default; }
   .icon-btn.is-busy svg.icon { animation: spin .7s linear infinite; }
+  .icon-btn.is-on { background: var(--accent-soft); color: var(--accent-text); }
 
   .btn {
     height: var(--ctl-md); padding: 0 var(--sp-4); border-radius: var(--r-pill); border: 1px solid transparent;

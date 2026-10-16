@@ -6,7 +6,7 @@ import { icon } from '../lib/icons.js';
 import { t } from '../lib/copy.js';
 import { money, km } from '../lib/format.js';
 
-const SHORT = { available: 'Available', sold: 'Sold', transit: 'On the way', japan: 'In Japan', arrived: 'Being prepared', unknown: '' };
+const SHORT = { available: 'Available', reserved: 'Reserved', own: "Customer's car", sold: 'Sold', transit: 'On the way', japan: 'In Japan', arrived: 'Being prepared', unknown: '' };
 
 /** mountFindCar(root, { open(stockNo) }) */
 export function mountFindCar(root, { open }) {
@@ -32,7 +32,8 @@ export function mountFindCar(root, { open }) {
     input.removeAttribute('aria-activedescendant');
     active = -1;
   };
-  const shut = () => { close(); root.classList.remove('is-open'); };
+  const forget = () => { seq++; clearTimeout(timer); };
+  const shut = () => { forget(); close(); root.classList.remove('is-open'); };
 
   function paint(q) {
     list.replaceChildren(...cars.map((c, i) => {
@@ -53,7 +54,7 @@ export function mountFindCar(root, { open }) {
 
   async function search() {
     const q = input.value.trim();
-    if (!q) { cars = []; close(); return; }
+    if (!q) { forget(); cars = []; close(); return; }
     const mine = ++seq;
     try {
       const res = await fetch(`/api/vehicles?q=${encodeURIComponent(q)}`);
@@ -70,6 +71,7 @@ export function mountFindCar(root, { open }) {
   function pick(i) {
     const c = cars[i];
     if (!c) return;
+    forget();
     input.value = '';
     cars = [];
     shut();
