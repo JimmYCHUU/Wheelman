@@ -17,6 +17,10 @@ const READ_ALLOWLIST = [
   /^\/carbarnau\/api\/v1\/sales\/auction$/,
   // The dashboard's notification feed: read to hear about a new lead sooner. Never marked as read.
   /^\/carbarnau\/api\/notifications$/,
+  // One car's photos and videos, and its full record (read for its documents and older photo lists
+  // only: src/vehiclemedia.js keeps nothing else of it). Both by the chassis number.
+  /^\/carbarnau\/api\/v2\/vehicles\/media\/[A-Za-z0-9-]{3,40}$/,
+  /^\/carbarnau\/api\/v1\/vehicles\/chassis\/[A-Za-z0-9-]{3,40}$/,
   /^\/carbarnau\/auth\/v1\/api\/user\/validate-session$/,
 ];
 const SIGNIN = '/carbarnau/auth/v1/api/user/signin';
@@ -171,4 +175,18 @@ export async function fetchNotifications(limit = 80) {
 
 export async function whoAmI() {
   return get('/carbarnau/auth/v1/api/user/validate-session');
+}
+
+/** One car's photos and videos, as the website shows them. [] for a car that has none. */
+export async function fetchVehicleMedia(chassisNo) {
+  const j = await get(`/carbarnau/api/v2/vehicles/media/${chassisNo}`);
+  return Array.isArray(j) ? j : [];
+}
+
+/**
+ * One car's full record. It carries costs, the supplier and the buyer as well as the documents:
+ * callers reduce it at once (src/vehiclemedia.js) and keep nothing else.
+ */
+export async function fetchVehicleRecord(chassisNo) {
+  return get(`/carbarnau/api/v1/vehicles/chassis/${chassisNo}`);
 }

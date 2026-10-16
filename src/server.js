@@ -19,7 +19,9 @@ import { validateMailReport, storeMailThread } from './mail.js';
 import { recentPractice, PRACTICE_DAYS } from './practice.js';
 import { recentMailPractice } from './mailpractice.js';
 import { loadExamples } from './examples.js';
-import { oldRowsStamp, messageMedia } from './db.js';
+import { oldRowsStamp, messageMedia, getVehicleByStock } from './db.js';
+import { fetchPicture } from './media.js';
+import { vehicleMedia, vehiclePicture, findCars, carSummary, VIDEO_HOSTS } from './vehiclemedia.js';
 import { logLine } from './log.js';
 import { businessFactsForPrompt, loadBusinessFacts } from './knowledge.js';
 import * as worker from './worker.js';
@@ -50,7 +52,8 @@ function send(res, status, body, type = 'application/json; charset=utf-8', extra
     ...extra,
     'x-content-type-options': 'nosniff',
     'referrer-policy': 'no-referrer',
-    'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
+    // Pictures only from Wheelman itself; a car's videos also from Carbarn's own storage, where they play from.
+    'content-security-policy': `default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; media-src 'self' ${VIDEO_HOSTS.map((h) => `https://${h}`).join(' ')}; connect-src 'self'; frame-ancestors 'none'`,
   });
   res.end(data);
 }
@@ -267,25 +270,7 @@ function orderOf(item) {
 }
 
 // Photos are kept beside the database once fetched, under their message id, so each is fetched once.
-const MEDIA_MAX_BYTES = 15 * 1024 * 1024;
-const MEDIA_TYPES = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp' };
-async function cachedMedia(id, index, url) {
-  fs.mkdirSync(config.mediaDir, { recursive: true });
-  const kept = fs.readdirSync(config.mediaDir).find((f) => f.startsWith(`${id}-${index}.`));
-  if (kept) {
-    const type = Object.keys(MEDIA_TYPES).find((t) => MEDIA_TYPES[t] === path.extname(kept)) || 'application/octet-stream';
-    return { body: fs.readFileSync(path.join(config.mediaDir, kept)), type };
-  }
-  if (!/^https:\/\/|^http:\/\/127\.0\.0\.1[:/]/i.test(url)) throw new Error('not a secure address');
-  const r = await fetch(url, { method: 'GET', redirect: 'follow', signal: AbortSignal.timeout(30000) });
-  if (!r.ok) throw new Error(`the address answered ${r.status}`);
-  const type = String(r.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-  if (!MEDIA_TYPES[type]) throw new Error(`not an image (${type || 'no type'})`);
-  const body = Buffer.from(await r.arrayBuffer());
-  if (body.length > MEDIA_MAX_BYTES) throw new Error('too large');
-  fs.writeFileSync(path.join(config.mediaDir, `${id}-${index}${MEDIA_TYPES[type]}`), body);
-  return { body, type };
-}
+const cachedMedia = (id, index, url) => fetchPicture(url, config.mediaDir, `${id}-${index}`);
 
 const threadOf = (item, shown) => {
   const pendingKeys = new Set(item.pending.map((e) => e.key));
@@ -576,6 +561,28 @@ async function api(req, res, url) {
     const item = itemFromKey(m[1], { message: url.searchParams.get('message') || '' });
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
     return send(res, 200, { item: present(item) });
+  }
+
+  // Find a car: cars from the stored stock list matching a stock number or words of the title.
+  if (req.method === 'GET' && p === '/api/vehicles') {
+    return send(res, 200, { cars: findCars(String(url.searchParams.get('q') || '').slice(0, 60)) });
+  }
+
+  // One car, for the car panel: what the stock list says, its photos, videos and documents, and
+  // one picture at a time through Wheelman's own copy. Read-only.
+  m = p.match(/^\/api\/vehicles\/([A-Za-z0-9-]{1,20})(\/media|\/picture\/(\d{1,4}))?$/);
+  if (req.method === 'GET' && m) {
+    const v = getVehicleByStock(m[1]);
+    if (!v) return send(res, 404, { error: 'That stock number is not in the stock list.' });
+    if (!m[2]) return send(res, 200, { vehicle: carSummary(v) });
+    try {
+      if (m[2] === '/media') return send(res, 200, await vehicleMedia(m[1], { fresh: url.searchParams.get('fresh') === '1' }));
+      const { body, type } = await vehiclePicture(m[1], m[3]);
+      return send(res, 200, body, type, { 'cache-control': 'private, max-age=86400' });
+    } catch (e) {
+      if (m[3] && !e.status) logLine('media', `Picture ${m[3]} of stock ${m[1]} could not be fetched: ${e.message}`);
+      return send(res, e.status || 502, { error: e.status ? e.message : 'The picture could not be fetched. Try again in a moment.' });
+    }
   }
 
   // A photo from a text: fetched once from the address the dashboard stored with the message, kept
