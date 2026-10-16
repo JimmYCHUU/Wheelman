@@ -49,6 +49,8 @@
     --bubble-out-meta: var(--accent-text);  /* the sender line on our own bubbles */
     --segment-on-bg: var(--side);           /* the chosen section in the switch */
     --segment-on-shadow: var(--shadow-1);
+    --tab-on-bg: var(--side);               /* the chosen section pill in the top bar */
+    --tab-on-shadow: 0 1px 3px rgba(6, 29, 51, .16), 0 0 0 1px var(--line);
     --toast-bg: #061d33;
     --toast-ink: #f2f7fc;
     --avatar-ink: #ffffff;
@@ -146,7 +148,7 @@
     --find-w: 12rem;             /* Find a car in the top bar */
     --pop-w: 24rem;              /* the Find a car results and the status panel */
     --pop-max-h: 70dvh;
-    --tab-mark: 0.1875rem;       /* the line under the chosen section */
+    --tile-gap: 0.375rem;        /* 6px: the tray around and between the tiles */
     --car-thumb-w: 4rem;         /* the photo in the car strip */
     --car-thumb-h: 3rem;
     --poster-w: 5.5rem;          /* a video's poster in the car panel */
@@ -220,6 +222,8 @@
       --bubble-out-meta: #b9dcff;
       --segment-on-bg: var(--side-on);
       --segment-on-shadow: none;
+      --tab-on-bg: #183c61;
+      --tab-on-shadow: 0 1px 3px rgba(0, 0, 0, .45);
       --photo-ground: #0f2b47;
       --toast-bg: #e8f0f8;
       --toast-ink: #061d33;

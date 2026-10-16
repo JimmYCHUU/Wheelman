@@ -1597,6 +1597,11 @@
     },
     "shadows": [
       {
+        "name": "tab-on-shadow",
+        "value": "0 1px 3px rgba(6, 29, 51, .16), 0 0 0 1px var(--line)",
+        "purpose": "The chosen section pill in the top bar, raised off its track; 0 1px 3px rgba(0, 0, 0, .45) in dark, on a #183c61 pill (tab-on-bg)."
+      },
+      {
         "name": "shadow-1",
         "value": "0 1px 1px rgba(6, 29, 51, .10)",
         "purpose": "Resting lift: bubbles, date and event pills, the message box, the quiet panel, the paste box, the sticky Load older button, the selected segment of a switch (light only)."
@@ -1626,7 +1631,7 @@
       {
         "name": "ease-out",
         "value": "cubic-bezier(.23, 1, .32, 1)",
-        "purpose": "Press feedback, the toast, the jump button, photos and the draft arriving, the viewer, the tab underline."
+        "purpose": "Press feedback, the toast, the jump button, photos and the draft arriving, the viewer."
       },
       {
         "name": "ease-drawer",
@@ -1636,12 +1641,12 @@
       {
         "name": "dur-fast",
         "value": "160ms",
-        "purpose": "Press scale (0.97 buttons, chips and segments; 0.94 icon buttons, the jump button and the viewer arrows; 0.96 blank and back buttons), colour and border changes, the toast and the jump button appearing, the play disc growing under the pointer."
+        "purpose": "Press scale (0.97 buttons, chips, segments and section tabs; 0.94 icon buttons, the jump button and the viewer arrows; 0.96 blank and back buttons), colour and border changes, the toast and the jump button appearing, the play disc growing under the pointer."
       },
       {
         "name": "dur-base",
         "value": "220ms",
-        "purpose": "A new suggestion fading in from a 2px blur; the strip thumbnail, the main photo and the viewer picture arriving; the viewer opening; the section tab underline scaling in; the drawer fading from 60% opacity; photo tiles zooming 4% under the pointer."
+        "purpose": "A new suggestion fading in from a 2px blur; the strip thumbnail, the main photo and the viewer picture arriving; the viewer opening; the drawer fading from 60% opacity; photo tiles zooming 4% under the pointer."
       },
       {
         "name": "dur-drawer",
@@ -1678,7 +1683,7 @@
       {
         "name": "drawer",
         "value": "1279px",
-        "purpose": "max-width: the panel leaves the grid and becomes a drawer, a 1rem-cornered tile floating 0.5rem in from the right, top and bottom (26rem); crossing below closes it."
+        "purpose": "max-width: the panel leaves the grid and becomes a drawer, a 1rem-cornered tile floating 0.375rem in from the right, top and bottom (26rem); crossing below closes it."
       },
       {
         "name": "compact-bar",
@@ -1688,18 +1693,18 @@
       {
         "name": "narrow",
         "value": "860px",
-        "purpose": "max-width: one column, list or conversation; the brand shows only its mark; the section tabs drop to a second row and hide while a conversation is open; Find a car waits behind a search icon; back button with a count; the draft maxes at 20dvh; the tiles sit 0.25rem apart with 0.75rem corners."
+        "purpose": "max-width: one column, list or conversation; the brand shows only its mark; the section track drops to a row of its own, with no line above it, and hides while a conversation is open; Find a car waits behind a search icon; back button with a count; the draft maxes at 20dvh; the tiles sit 0.25rem apart with 0.75rem corners."
       }
     ],
     "layout": {
-      "frame": "body.shell is a flex column the height of the window on the tray, with 0.5rem padding and 0.5rem gaps (0.25rem at 860px and under); the top bar, the list, the conversation and the panel are tiles with 1rem corners (0.75rem at 860px and under) and no lines between them; the document does not scroll",
+      "frame": "body.shell is a flex column the height of the window on the tray, with 0.375rem padding and 0.375rem gaps (0.25rem at 860px and under); the top bar, the list, the conversation and the panel are tiles with 1rem corners (0.75rem at 860px and under) and no lines between them; the document does not scroll",
       "topBar": "min-height 3.5rem; grid: minmax(max-content, 1fr) auto minmax(max-content, 1fr), 1rem column gap: brand | tabs, centred | Find a car, status, cog, check now",
       "columns": {
         "list": "minmax(20rem, 25rem); minmax(20rem, 22rem) while the panel is open",
         "conversation": "minmax(0, 1fr)",
         "panel": "26rem (only while open; a drawer at 1279px and under)"
       },
-      "firstViewport": "At 1440 by 900 with the panel open: list 352px, conversation 640px, panel 416px, with 0.5rem of tray around and between them.",
+      "firstViewport": "At 1440 by 900 with the panel open: list 352px, conversation 648px, panel 416px, with 0.375rem of tray around and between them.",
       "thread": "min-height 30dvh (22dvh narrow); side padding clamp(0.75rem, 6%, 4.5rem); bubbles min(36rem, 72%), 86% narrow; pills min(34rem, 85%)",
       "editor": "draft grows from 4.5rem to 28dvh (20dvh narrow), then scrolls; the message box area scrolls before the thread gives up its share",
       "zIndex": {
@@ -1725,7 +1730,7 @@
         "find-w": "15rem",
         "pop-w": "24rem",
         "pop-max-h": "70dvh",
-        "tab-mark": "0.1875rem",
+        "tile-gap": "0.375rem",
         "car-thumb": "4rem x 3rem",
         "poster": "5.5rem x 3.5rem",
         "strip-thumb": "5rem x 3.5rem",
@@ -1750,7 +1755,7 @@
       "defaultSize": "1.25rem; 1rem in buttons, fields and advice lines; 0.875rem beside small links, on the status pill and in the count chip",
       "brandMark": "Separate from the icon set: one drawing on a 48-unit grid, kept once as a symbol in web/assets/brand.svg: a disc in the current colour (set to --brand, so lighter in dark) with a white steering wheel in 4.5-unit strokes with round ends. Used at 2.25rem in the top bar and 5rem in the empty conversation; web/icon.svg is the same drawing in #0073ea for the browser tab."
     },
-    "theming": "Light by default; the navy-based dark values are applied by @media (prefers-color-scheme: dark) on the same custom properties in web/css/tokens.css. Roles that differ beyond the palette: bubble-out-meta, segment-on-bg (side, then side-on), segment-on-shadow (shadow-1, then none), photo-ground, the toast pair, the shadows and the scrim. The viewer palette, the photo scrim and the avatar hues are the same in both. No manual switch. Frontmatter lists dark values under the same key with a -dark suffix.",
+    "theming": "Light by default; the navy-based dark values are applied by @media (prefers-color-scheme: dark) on the same custom properties in web/css/tokens.css. Roles that differ beyond the palette: tab-on-bg (side, then #183c61), tab-on-shadow, bubble-out-meta, segment-on-bg (side, then side-on), segment-on-shadow (shadow-1, then none), photo-ground, the toast pair, the shadows and the scrim. The viewer palette, the photo scrim and the avatar hues are the same in both. No manual switch. Frontmatter lists dark values under the same key with a -dark suffix.",
     "stylesheets": "web/css/tokens.css, base.css, components.css, views.css, utilities.css, in cascade layers tokens, base, components, views, utilities. npm run check-css fails any font size, corner, colour or space outside tokens.css that is not a token."
   },
   "components": [
@@ -1863,13 +1868,13 @@
       "Manrope for all text, sentence case, tabular figures. The Montserrat wordmark is the only capitals.",
       "Four rounded tiles on a darker tray, with gaps in place of lines between them; inside, flat white and pale blue surfaces, 1px dividers, two shadow levels. Photos are the only rich colour.",
       "Pill-shaped controls, 8px corners on bubbles and photos, 16px on the four tiles, the car's main photo and floating panels, circles for avatars, icon buttons and the mark.",
-      "Short motion: 160ms press feedback, 220ms for photos, the draft, the viewer and the tab underline, 260ms for the drawer, none on keyboard moves and none under reduced motion.",
+      "Short motion: 160ms press feedback, 220ms for photos, the draft and the viewer, 260ms for the drawer, none on keyboard moves and none under reduced motion.",
       "Light and a navy-based dark from one set of custom properties; the viewer is dark in both."
     ],
     "rules": [
       {
         "name": "The One Blue Rule",
-        "body": "Carbarn's blue is the only accent. Solid blue is the primary button, the badges, the wordmark, the mark and the chosen tab's underline, the \"checked\" dot and the focus ring; the tint with blue text marks things that are on. A second accent hue would break the reading \"blue means chosen, new, or press here\".",
+        "body": "Carbarn's blue is the only accent. Solid blue is the primary button, the badges, the wordmark, the mark, the \"checked\" dot and the focus ring; the tint with blue text marks things that are on. A second accent hue would break the reading \"blue means chosen, new, or press here\".",
         "section": "colors"
       },
       {
@@ -1909,7 +1914,7 @@
       },
       {
         "name": "The Tiles Rule",
-        "body": "The top bar, the list, the conversation and the panel are four tiles with Round corners on the Tray, 0.5rem apart and 0.5rem in from the window's edges (the owner's choice, 16 Oct 2026). The gaps separate them, never a line. Inside a tile nothing is boxed again: headers, the car strip, rows and bands run edge to edge within it.",
+        "body": "The top bar, the list, the conversation and the panel are four tiles with Round corners on the Tray, 0.375rem apart and 0.375rem in from the window's edges (the owner's choice, 16 Oct 2026; narrowed from 0.5rem the same day). The gaps separate them, never a line. Inside a tile nothing is boxed again: headers, the car strip, rows and bands run edge to edge within it.",
         "section": "layout"
       },
       {
@@ -1929,13 +1934,13 @@
       },
       {
         "name": "The Two Shadows Rule",
-        "body": "Only these two shadows exist. The bar, columns, headers, rows, chips, tabs and ordinary buttons have none. The panel gets a shadow only when it floats over the conversation as a drawer; as a grid column it is a tile like the others, with the Tray around it.",
+        "body": "Only these two shadows exist, and the lift under the chosen section in the top bar (the owner asked for the tabs \"popped up\", 16 Oct 2026). The bar, columns, headers, rows, chips, the other tabs and ordinary buttons have none. The panel gets a shadow only when it floats over the conversation as a drawer; as a grid column it is a tile like the others, with the Tray around it.",
         "section": "elevation"
       }
     ],
     "dos": [
       "Do take every colour, size, space, corner, shadow and duration from `web/css/tokens.css`, give any new colour a light value and a dark value there, and keep `npm run check-css` passing.",
-      "Do keep solid blue for the primary button, the badges, the wordmark, the mark and the chosen tab's underline, the \"checked\" dot and the focus ring, and use Blue Tint with Blue Text for anything that is switched on.",
+      "Do keep solid blue for the primary button, the badges, the wordmark, the mark, the \"checked\" dot and the focus ring, and use Blue Tint with Blue Text for anything that is switched on.",
       "Do set headings in Navy Ink at 650; blue is for what is chosen, new or pressable.",
       "Do show the name as it is built: the white steering wheel on a Carbarn Blue disc, WHEELMAN in Montserrat 800 capitals, and \"by Carbarn\" under it.",
       "Do put a plain sentence in every red, amber or navy block, and use the strong value as text on its own soft ground.",
@@ -1957,7 +1962,7 @@
       "Don't signal status with colour alone or with a code. Write the words.",
       "Don't add uppercase or letter-spaced labels. The wordmark is the only capitals, and Montserrat belongs to it alone.",
       "Don't add a third typeface or load a font from outside; Manrope and Montserrat are served from `web/fonts`. Don't add a library either. The page loads nothing from outside: car pictures come through Wheelman's own addresses, videos from Carbarn's own storage, and its content security policy forbids inline styles and scripts.",
-      "Don't add a third shadow, or put a shadow on the bar, a column, a header, a row, a chip, a tab or an ordinary button. Don't separate the four tiles with lines, or box anything again inside a tile: the Tray between them is their only divider.",
+      "Don't add another shadow, or put a shadow on the bar, a column, a header, a row, a chip, a tab or an ordinary button. Don't separate the four tiles with lines, or box anything again inside a tile: the Tray between them is their only divider.",
       "Don't animate the conversation list when it is moved through with the keyboard. Rows change instantly.",
       "Don't insert customer text as HTML, and don't use real customer names, numbers, messages or cars in examples of this system; use invented ones."
     ]
