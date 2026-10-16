@@ -98,13 +98,14 @@ export function mountTopBar(root, store, actions) {
   const ai = IconButton({ icon: 'settings', label: t('action.aiModel'), id: 'ai-model', onClick: () => actions.aiModel?.() });
   const find = h('div', { class: 'topbar-find' });
 
+  // Three parts on the page's own columns: the brand over the list, the sections over the
+  // conversation, and Find a car with the buttons over the panel (views.css lays them out).
   root.replaceChildren(
     h('div', { class: 'topbar-brand' },
       h('span', { class: 'brand-mark' }, mark()),
       h('span', { class: 'brand-words' }, h('h1', { text: t('app.name') }), h('span', { class: 'brand-by', text: t('app.by') }))),
     h('nav', { class: 'topbar-nav', 'aria-label': 'Sections' }, tabs),
-    find,
-    h('div', { class: 'topbar-actions' }, status, ai, sync),
+    h('div', { class: 'topbar-tools' }, find, h('div', { class: 'topbar-actions' }, status, ai, sync)),
     panel);
   mountFindCar(find, { open: (stockNo) => actions.findCar?.(stockNo) });
 

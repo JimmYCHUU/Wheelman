@@ -5,6 +5,19 @@ and versions follow `MAJOR.MINOR.PATCH`.
 
 ## [Unreleased]
 
+### Fixed
+- **The top bar lines up with the page under it.** It now sits on the page's own columns: the
+  brand fills the list's width with the list's dividing line, the first section tab's words start
+  exactly where the customer's avatar does, and Find a car with the buttons sits at the right,
+  over the panel and behind its line when the panel is open, Check now level with the button
+  below it. Below 1280 pixels the list keeps to 22rem and Find a car waits behind its magnifying
+  glass, so all four section tabs fit (Auction and Import Query were cut off at 1180 pixels). (The
+  owner's screenshot, 16 Oct 2026: "marked parts doesn't show good alignment".)
+- **The panel's heading is not repeated.** The Customer tab (Buyer on Marketplace, Order, Enquiry)
+  no longer starts with a second "Customer" heading.
+- **The blue "Needs you" tag on a Marketplace row sits in its line again.** It shared a class name
+  with the panel on the right and took the panel's layout; the panel is now styled by its own id.
+
 ### Changed
 - **Marketplace replies are courteous, and nobody is asked for a deposit while the price is
   open.** The owner found the Marketplace replies "a bit rude, extra brief and very much pushy",

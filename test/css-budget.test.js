@@ -25,3 +25,21 @@ test('the page loads the five stylesheets in layer order, and the tokens declare
   for (const name of ['--fs-body', '--sp-2', '--r-pill', '--ctl-md', '--row-h', '--shadow-1', '--dur-fast', '--z-toast']) assert.ok(tokens.includes(`${name}:`), `${name} is defined`);
   assert.ok(!fs.existsSync(path.join(root, 'web', 'styles.css')), 'the old single stylesheet is gone');
 });
+
+test('the top bar sits on the page\'s own columns, and the panel\'s styles never reach a tag', () => {
+  const views = fs.readFileSync(path.join(root, 'web', 'css', 'views.css'), 'utf8');
+  // Each way the page sets its columns, the top bar sets the same ones (plus its tools at the right).
+  const flat = views.replace(/\s+/g, ' ');
+  const has = (rule) => assert.ok(flat.includes(rule), rule);
+  const WIDE = 'minmax(var(--col-list-min), var(--col-list-max)) minmax(0, 1fr)';
+  const NARROWER = 'minmax(var(--col-list-min), var(--col-list-narrow)) minmax(0, 1fr)';
+  has(`grid-template-columns: ${WIDE};`);
+  has(`grid-template-columns: ${WIDE} auto;`);
+  has(`.app, .app.has-info { grid-template-columns: ${NARROWER}; }`);
+  has(`.topbar { grid-template-columns: ${NARROWER} auto; }`);
+  has(`.app.has-info { grid-template-columns: ${NARROWER} var(--col-panel); }`);
+  has(`.shell:has(.app.has-info) .topbar { grid-template-columns: ${NARROWER} var(--col-panel); }`);
+  // A tag in the "info" tone shares that class name with nothing: the panel is styled by its id.
+  const bare = views.split('\n').filter((l) => /(^|[\s,{(])\.info(?=[\s{:,.])/.test(l.replace(/\/\*.*?\*\//g, '')));
+  assert.deepEqual(bare, [], 'no style is written for the bare .info class');
+});
