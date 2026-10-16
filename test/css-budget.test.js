@@ -47,8 +47,23 @@ test('the page is rounded tiles on a tray, with gaps in place of dividing lines'
   const tokens = fs.readFileSync(path.join(root, 'web', 'css', 'tokens.css'), 'utf8');
   // The owner's choice, 16 Oct 2026: "bento box styled rounded corners".
   assert.equal((tokens.match(/--tray:/g) || []).length, 2, 'the tray has a light and a dark value');
-  assert.ok(views.includes('.shell { background: var(--tray); padding: var(--sp-2); gap: var(--sp-2); }'));
+  assert.ok(views.includes('.shell { background: var(--tray); padding: var(--tile-gap); gap: var(--tile-gap); }'));
+  assert.ok(views.includes('.app { gap: var(--tile-gap); }'));
+  // Then, "Decrease the border white spaces a little bit": 6px, not 8.
+  assert.match(tokens, /--tile-gap: 0\.375rem;/);
   assert.ok(views.includes('.shell > .topbar { border-bottom: 0; border-radius: var(--r-lg); }'));
   assert.ok(views.includes('.side, .chat, #info { border-radius: var(--r-lg); overflow: hidden; }'));
   assert.ok(views.includes('.side { border-right: 0; }') && views.includes('#info { border-left: 0; }'), 'no line between the tiles');
+});
+
+test('the sections are pills on a track, the chosen one raised off it', () => {
+  const views = fs.readFileSync(path.join(root, 'web', 'css', 'views.css'), 'utf8').replace(/\s+/g, ' ');
+  const tokens = fs.readFileSync(path.join(root, 'web', 'css', 'tokens.css'), 'utf8');
+  // The owner, 16 Oct 2026: "make these pills type (poped up)".
+  assert.ok(views.includes('.topnav { display: flex; align-items: center; gap: var(--sp-05); padding: var(--sp-05); border-radius: var(--r-pill); background: var(--panel); }'));
+  assert.match(views, /\.topnav-tab \{[^}]*border-radius: var\(--r-pill\);/);
+  assert.ok(views.includes('.topnav-tab.is-on { background: var(--tab-on-bg); color: var(--text); font-weight: var(--fw-semibold); box-shadow: var(--tab-on-shadow); }'));
+  assert.ok(!views.includes('.topnav-tab::after'), 'no line under the chosen section');
+  assert.equal((tokens.match(/--tab-on-bg:/g) || []).length, 2, 'the raised pill has a light and a dark value');
+  assert.equal((tokens.match(/--tab-on-shadow:/g) || []).length, 2, 'and so does its lift');
 });

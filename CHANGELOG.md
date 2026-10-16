@@ -21,6 +21,12 @@ and versions follow `MAJOR.MINOR.PATCH`.
   with the panel on the right and took the panel's layout; the panel is now styled by its own id.
 
 ### Changed
+- **The section tabs are pills, and the gaps between the tiles are a little narrower.** The four
+  sections sit as pills on a pale rounded track in the middle of the top bar. The chosen one is
+  raised off the track (white with a soft shadow in light, a lighter navy in dark) in place of the
+  blue line under it. The gaps around and between the tiles are 6 pixels instead of 8 on a computer.
+  On a phone the tabs keep their own row under the bar, with no line above it. (The owner, 16 Oct
+  2026: "Decrease the border white spaces a little bit, Also make these pills type (poped up)".)
 - **The page is four rounded tiles.** The top bar, the conversation list, the conversation and the
   car panel are tiles with rounded corners on a slightly darker ground, with a small gap between
   them in place of the straight dividing lines. Inside each tile nothing changes. In a smaller

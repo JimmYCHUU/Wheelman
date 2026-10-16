@@ -39,23 +39,18 @@
   .brand-by { margin-top: var(--sp-1); font-size: var(--fs-caption); font-weight: var(--fw-semibold); color: var(--faint); letter-spacing: 0.01em; }
   .topbar-actions { display: flex; align-items: center; gap: var(--sp-1); }
 
-  /* The sections: words on the bar, the chosen one in ink with the brand line under it. */
-  .topbar-nav { min-width: 0; justify-self: center; display: flex; align-items: stretch; overflow-x: auto; scrollbar-width: none; }
-  .topnav { display: flex; align-items: stretch; gap: var(--sp-1); }
+  /* The sections: pills on a pale track in the middle of the bar, the chosen one raised off it. */
+  .topbar-nav { min-width: 0; justify-self: center; display: flex; align-items: center; overflow-x: auto; scrollbar-width: none; }
+  .topnav { display: flex; align-items: center; gap: var(--sp-05); padding: var(--sp-05); border-radius: var(--r-pill); background: var(--panel); }
   .topnav-tab {
-    position: relative; border: 0; background: transparent; padding: 0 var(--sp-3);
+    height: var(--ctl-md); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-pill); background: transparent;
     display: inline-flex; align-items: center; gap: var(--sp-2);
     color: var(--muted); font-size: var(--fs-ui); font-weight: var(--fw-medium); white-space: nowrap;
-    transition: color var(--dur-fast) ease;
+    transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur-fast) ease, color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
   }
-  .topnav-tab::after {
-    content: ""; position: absolute; left: var(--sp-3); right: var(--sp-3); bottom: 0; height: var(--tab-mark);
-    border-radius: var(--r-xs) var(--r-xs) 0 0; background: var(--brand);
-    transform: scaleX(0); transition: transform var(--dur-base) var(--ease-out);
-  }
-  .topnav-tab.is-on { color: var(--text); font-weight: var(--fw-semibold); }
-  .topnav-tab.is-on::after { transform: scaleX(1); }
-  .topnav-tab:focus-visible { outline-offset: calc(-1 * var(--sp-1)); }
+  .topnav-tab:active { transform: scale(.97); }
+  .topnav-tab.is-on { background: var(--tab-on-bg); color: var(--text); font-weight: var(--fw-semibold); box-shadow: var(--tab-on-shadow); }
+  .topnav-tab:focus-visible { outline-offset: calc(-1 * var(--sp-05)); }
 
   /* The status: a dot and a few words; the whole story in the panel it opens. */
   .status-btn {
@@ -454,7 +449,7 @@
   @media (hover: hover) and (pointer: fine) {
     .section:hover:not(.is-on) { color: var(--text); }
     .viewer .section:hover:not(.is-on) { color: var(--viewer-ink); }
-    .topnav-tab:hover:not(.is-on) { color: var(--text); }
+    .topnav-tab:hover:not(.is-on) { color: var(--text); background: color-mix(in srgb, var(--text) 5%, transparent); }
     .status-btn:hover { background: var(--side-hover); color: var(--text); }
     .find-row:hover:not(.is-on) { background: var(--side-hover); }
     .who:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
@@ -494,7 +489,7 @@
     /* The list a little narrower, so the conversation keeps its room. */
     .app, .app.has-info { grid-template-columns: minmax(var(--col-list-min), var(--col-list-narrow)) minmax(0, 1fr); }
     #info {
-      position: fixed; inset: var(--sp-2) var(--sp-2) var(--sp-2) auto; z-index: var(--z-drawer); width: min(var(--col-panel), calc(100vw - 2 * var(--sp-2)));
+      position: fixed; inset: var(--tile-gap) var(--tile-gap) var(--tile-gap) auto; z-index: var(--z-drawer); width: min(var(--col-panel), calc(100vw - 2 * var(--tile-gap)));
       border-radius: var(--r-lg);
       box-shadow: var(--shadow-2);
       transition: translate var(--dur-drawer) var(--ease-drawer), opacity var(--dur-base) var(--ease-out);
@@ -513,7 +508,6 @@
     .brand-words { display: none; }
     /* The sections a little closer together, so they keep clear of both sides. */
     .topnav-tab { padding: 0 var(--sp-2); }
-    .topnav-tab::after { left: var(--sp-2); right: var(--sp-2); }
   }
 
   @media (max-width: 860px) {
@@ -521,7 +515,7 @@
     .topbar-brand { padding: 0 var(--sp-3); }
     .brand-words { display: none; }
     /* The sections on a row of their own under the bar. */
-    .topbar-nav { grid-column: 1 / -1; grid-row: 2; justify-self: stretch; height: var(--ctl-lg); padding: 0 var(--sp-1); border-top: 1px solid var(--line); }
+    .topbar-nav { grid-column: 1 / -1; grid-row: 2; justify-self: stretch; padding: 0 var(--sp-2) var(--sp-2); }
     .topbar-tools { justify-self: end; }
     .topbar-tools { grid-column: 3; gap: var(--sp-1); padding: 0 var(--sp-2) 0 0; }
     .car-links .btn .t-long { display: none; }
@@ -568,10 +562,10 @@
 /* Bento: the top bar, the list, the conversation and the panel as rounded tiles on a tray, with
    gaps between them in place of dividing lines. Inside a tile nothing is boxed again. */
 @layer views {
-  .shell { background: var(--tray); padding: var(--sp-2); gap: var(--sp-2); }
+  .shell { background: var(--tray); padding: var(--tile-gap); gap: var(--tile-gap); }
   .shell > .topbar { border-bottom: 0; border-radius: var(--r-lg); }
   .topbar-find.is-open { border-radius: var(--r-lg); }
-  .app { gap: var(--sp-2); }
+  .app { gap: var(--tile-gap); }
   .side, .chat, #info { border-radius: var(--r-lg); overflow: hidden; }
   .side { border-right: 0; }
   #info { border-left: 0; }
