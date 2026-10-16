@@ -238,12 +238,18 @@ export function forgetMedia() { cache.clear(); reading.clear(); }
 
 // ---- the links a reply carries when the customer asks ---------------------------------------------
 
+const ASKING = /\?|\b(send|share|e-?mail|text|forward|show|post|upload|links?|can (i|you|we)|could (i|you)|would you|do you have|have you got|got any|any (more|other)|more|please|pls|plz|i'?d like|want)\b/i;
+const HAD = /\b(thanks?|thank you|cheers|ta)\b.{0,20}\b(for|4)\b|\b(i|we)\s+(saw|watched|got|received|have seen|'ve seen|looked at|loved)\b|\b(seen|watched|received)\s+(the|your)\b/i;
+
 /**
  * What the customer's waiting messages ask for: a video (of the inside or the engine too), photos,
  * the auction sheet, the export certificate. Words a customer uses, not codes.
  */
 export function askedFor(text) {
-  const s = String(text || '').toLowerCase();
+  // Thanks for what came, or a word that it was seen, is not a request: those parts are left out,
+  // and what is left must ask (a question, or words such as send, share, more, please).
+  const parts = String(text || '').toLowerCase().split(/[.!?\n,;]+/).filter((p) => p.trim() && !HAD.test(p));
+  const s = ASKING.test(String(text || '')) ? parts.join(' . ') : '';
   const video = /\bvideos?\b|\bvids?\b|walk[\s-]?around|footage|\b360\b/.test(s);
   return {
     video,

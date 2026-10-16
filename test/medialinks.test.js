@@ -67,6 +67,12 @@ test('what the customer asks for, in their own words', () => {
   assert.equal(vm.askedFor('Can you send more pics').photos, true);
   assert.equal(vm.askedFor('Is it still available?').video, false);
   assert.equal(vm.askedFor('Video of the engine running?').engine, true);
+  // Thanks for what came, or a word that it was seen, asks for nothing.
+  assert.equal(vm.askedFor('Thanks for the video, when can I see it?').video, false);
+  assert.equal(vm.askedFor('I saw the photos. Is it still available?').photos, false);
+  const both = vm.askedFor('Thanks for the photos, can you send a video as well?');
+  assert.deepEqual([both.photos, both.video], [false, true]);
+  assert.equal(vm.askedFor('The video was great').video, false, 'a remark is not a request');
 });
 
 test('the links answer only what was asked: the walkaround for a video, the inside videos when asked, the documents by name', () => {
@@ -75,8 +81,8 @@ test('the links answer only what was asked: the walkaround for a video, the insi
   const car = { stockNo: '1159', url: PAGE, status: 'PUBLISHED', soldStatus: 'UnSold', stockIn: 'Online' };
   const ask = (text, opts) => vm.replyLinks(media, car, vm.askedFor(text), opts).map((l) => `${l.label}: ${l.url}`);
   assert.deepEqual(ask('a video please'), ['Walkaround 360 video: w']);
-  assert.deepEqual(ask('a video of the inside'), ['Walkaround 360 video: w', 'Inside Front video: f', 'Inside Rear video: r']);
-  assert.deepEqual(ask('video of the engine and the auction sheet'), ['Walkaround 360 video: w', 'Engine Bay & Tyres video: e', 'Auction sheet: s']);
+  assert.deepEqual(ask('a video of the inside please'), ['Walkaround 360 video: w', 'Inside Front video: f', 'Inside Rear video: r']);
+  assert.deepEqual(ask('any video of the engine, and the auction sheet?'), ['Walkaround 360 video: w', 'Engine Bay & Tyres video: e', 'Auction sheet: s']);
   assert.deepEqual(ask('export certificate?'), ['Export certificate: x']);
   assert.deepEqual(ask('more photos'), [`Photos: ${PAGE}`]);
   assert.deepEqual(ask('more photos', { pageInBlock: true }), [], 'the page link is in the standard block already');
