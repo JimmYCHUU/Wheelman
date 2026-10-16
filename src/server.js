@@ -10,15 +10,11 @@ import { listOrderRows, MESSAGES, messagesFor, wantedText, carTitle, lotName, lo
 import { draftOrderMessage } from './ordermessages.js';
 import { draftFor, writingNow } from './drafter.js';
 import { availability } from './normalize.js';
-import { firstNameOf, isPlaceholderName, redact } from './redact.js';
-import { maskGreetingNames } from './voice.js';
+import { firstNameOf, isPlaceholderName } from './redact.js';
 import { signedName } from './signature.js';
 import { rowMatches } from '../web/lib/search.js';
 import { RUNG_LABELS } from './selling.js';
-import { loadModelReplies, scenarioOf, scenarioItem, setScenarioStatus, standardsCounts, modelRepliesStamp, STATUSES } from './modelreplies.js';
-import { assessProposed } from './drafter.js';
-import { insertDraft } from './db.js';
-import { comparable, currentText, canLearnFrom } from './learn.js';
+import { canLearnFrom } from './learn.js';
 import { validateMailReport, storeMailThread } from './mail.js';
 import { recentPractice, PRACTICE_DAYS } from './practice.js';
 import { recentMailPractice } from './mailpractice.js';
@@ -162,9 +158,7 @@ function summary(item) {
   const lastShown = [...item.timeline].reverse().find((e) => !e.internal) || last;
   return {
     key: item.itemKey,
-    section: item.standard ? 'standards' : item.channel === 'marketplace' ? 'marketplace' : item.channel === 'email' || item.moved === 'importquery' ? 'importquery' : 'dashboard',
-    // A model reply's scenario: its title and where it stands with the owner.
-    standardStatus: item.standard?.status || null,
+    section: item.channel === 'marketplace' ? 'marketplace' : item.channel === 'email' || item.moved === 'importquery' ? 'importquery' : 'dashboard',
     account: item.marketplace?.account || '',
     // An email thread: the customer's address, and how many of its messages Gmail had folded.
     email: item.mail?.customerEmail || '',
@@ -187,22 +181,8 @@ function summary(item) {
     unread: item.state === 'awaiting' && !isSeen(item.itemKey, item.anchorKey) && (item.lastInboundAt || 0) >= Date.now() - RECENT_HOURS * 3600e3 ? item.pending.length : 0,
     preview: { who: lastShown.who, text: lastShown.text || lastShown.event || (lastShown.media ? 'Photo' : ''), media: lastShown.media || null },
     flag: flagLevel(draft),
-    car: item.standard ? item.standard.title : item.mail ? (item.mail.car || item.mail.subject) : item.vehicles[0]?.title || item.marketplace?.listingTitle || (item.imports ? wantedFrom(item).car : ''),
+    car: item.mail ? (item.mail.car || item.mail.subject) : item.vehicles[0]?.title || item.marketplace?.listingTitle || (item.imports ? wantedFrom(item).car : ''),
   };
-}
-
-/**
- * A model reply's scenario opens with the hand-written reply finished and checked the way the AI's
- * would be, written once as a draft with no AI request. Rewrites and coaching then work as usual.
- */
-function ensureScenarioDraft(item, { now = Date.now() } = {}) {
-  if (!item?.standard || latestDraft(item.itemKey, item.anchorKey)) return;
-  const { reply, checks, prompt } = assessProposed(item, item.standard.proposed, { now });
-  insertDraft({
-    itemKey: item.itemKey, anchorKey: item.anchorKey, situation: item.situation.primary, status: 'ready', reply,
-    needsHuman: [], factsUsed: [], nextStep: '', rung: prompt.stage?.rung || '', checks, provider: 'none', model: 'the model reply as written', exampleIds: [],
-    context: { situations: item.situation.all, firstReply: item.isFirstReply, channel: item.channel, newEnquiry: !!item.isNewEnquiry, buyer: !!item.deal, standard: true, rung: prompt.stage?.rung || null, move: prompt.stage?.move || null },
-  });
 }
 
 /** What an import customer asked us to find, for the details panel. No figure of ours, only theirs. */
@@ -347,7 +327,7 @@ function present(item) {
     marketplace: marketplaceOf(item),
     mail: mailOf(item),
     // Whether the teaching buttons (Good reply, Could be better) belong here: the one gate in learn.js decides.
-    teaches: !!item.standard || canLearnFrom(item.itemKey),
+    teaches: canLearnFrom(item.itemKey),
     firstName: firstNameOf(item.lead || {}),
     source: item.lead?.source || '',
     leadStatus: item.lead?.status || '',
@@ -363,25 +343,21 @@ function present(item) {
     judged: item.judged ? { sign: item.judged.sign, why: item.judged.why, car: item.judged.car?.title || '' } : null,
     ruling: item.ruling ? { kind: item.ruling.kind, section: item.ruling.section } : null,
     moved: item.moved || null,
-    canRule: /^[cl]:/.test(item.itemKey) && !item.standard,
-    canMove: config.mail.switchedOn && /^[cl]:/.test(item.itemKey) && !item.standard,
+    canRule: /^[cl]:/.test(item.itemKey),
+    canMove: config.mail.switchedOn && /^[cl]:/.test(item.itemKey),
     vehicle: v ? { title: v.title, stockNo: v.stockNo, price: v.price, odometer: v.odometer, availability: shownAvailability(item, v), url: v.url, year: v.year, fuel: v.fuel, transmission: v.transmission, seats: v.seats, colour: v.color, included: v.outline || [] } : null,
     thread: threadOf(item, shown),
     earlier: item.timeline.length - shown.length,
     draft: draftOf(item),
     // A suggestion is being written for this message right now, by the page or in the background.
     writing: writingNow(item.itemKey, item.anchorKey),
-    standard: item.standard ? { id: item.standard.id, title: item.standard.title, status: item.standard.status, note: item.standard.note, rung: item.standard.rung, situation: item.standard.situation } : null,
   };
 }
 
-const SECTIONS = ['dashboard', 'marketplace', 'auction', 'importquery', 'standards'];
-// Standards: the model replies, on the page only while one is waiting for a rating. Once every
-// one is approved or set aside the tab goes (the approved ones still set the standard), and it
-// comes back when the file gains a scenario or "Could be better" writes one again.
+const SECTIONS = ['dashboard', 'marketplace', 'auction', 'importquery'];
 // Import Query: email threads sent from Gmail; off when the intake is switched off.
-const sectionOn = (s) => (s === 'marketplace' ? config.marketplace.enabled : s === 'standards' ? standardsCounts().toRate > 0 : s === 'importquery' ? config.mail.switchedOn : true);
-const KEY = '((?:c|l|mp|ao|ph|tr|em):\\d+)';
+const sectionOn = (s) => (s === 'marketplace' ? config.marketplace.enabled : s === 'importquery' ? config.mail.switchedOn : true);
+const KEY = '((?:c|l|mp|ao|ph|em):\\d+)';
 const itemRoute = (tail = '') => new RegExp(`^/api/items/${KEY}${tail}$`);
 
 const listCache = new Map();
@@ -420,19 +396,13 @@ function olderRows(section, hours) {
  */
 function sectionRows(section, hours = Infinity) {
   const minute = section === 'auction' ? `|${Math.floor(Date.now() / 60000)}` : '';
-  const files = section === 'standards' ? `|${modelRepliesStamp()}` : '';
-  const stamp = `${dataStamp()}${minute}${files}`;
+  const stamp = `${dataStamp()}${minute}`;
   const key = `${section}|${hours}`;
   const hit = listCache.get(key);
   if (hit && hit.stamp === stamp) return hit.value;
 
   let value;
-  if (section === 'standards') {
-    // To rate, Approved, Set aside, each in the order of the file.
-    const now = Date.now();
-    const rows = loadModelReplies().map((s) => scenarioItem(s.id, { now })).filter(Boolean).map(summary);
-    value = { waiting: rows.filter((r) => r.standardStatus === 'PROPOSED' || r.standardStatus === 'CHANGED'), quiet: rows.filter((r) => r.standardStatus === 'APPROVED'), other: rows.filter((r) => r.standardStatus === 'REJECTED') };
-  } else if (section === 'auction') {
+  if (section === 'auction') {
     // To do, In progress, Finished.
     const rows = listOrderRows();
     value = { waiting: rows.filter((r) => r.state === 'awaiting'), quiet: rows.filter((r) => r.state === 'answered'), other: rows.filter((r) => r.state === 'closed') };
@@ -463,7 +433,7 @@ function sectionRows(section, hours = Infinity) {
   value.all = [...value.waiting, ...value.quiet, ...(value.answered || [])].sort(byLastMessage);
   value.unread = value.waiting.filter((r) => r.unread).length;
   // Building the rows can itself write (a first-time match key), which moves the stamp.
-  listCache.set(key, { stamp: `${dataStamp()}${minute}${files}`, value });
+  listCache.set(key, { stamp: `${dataStamp()}${minute}`, value });
   while (listCache.size > 12) listCache.delete(listCache.keys().next().value);
   return value;
 }
@@ -605,23 +575,7 @@ async function api(req, res, url) {
   if (req.method === 'GET' && m) {
     const item = itemFromKey(m[1], { message: url.searchParams.get('message') || '' });
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
-    if (item.standard) ensureScenarioDraft(item);
     return send(res, 200, { item: present(item) });
-  }
-
-  // The model replies: every scenario and where it stands.
-  if (req.method === 'GET' && p === '/api/standards') {
-    return send(res, 200, { counts: standardsCounts(), scenarios: loadModelReplies().map((s) => ({ id: s.id, key: `tr:${s.id}`, title: s.title, situation: s.situation, rung: s.rung, channel: s.channel, status: s.status, note: s.note, at: s.at })) });
-  }
-
-  // Set a scenario aside, or put it back to be rated.
-  m = p.match(/^\/api\/standards\/(\d+)\/status$/);
-  if (req.method === 'POST' && m) {
-    const body = await readBody(req);
-    if (!STATUSES.includes(body.status)) return send(res, 400, { error: 'Not a status.' });
-    if (!scenarioOf(Number(m[1]))) return send(res, 404, { error: 'No such scenario.' });
-    setScenarioStatus(Number(m[1]), { status: body.status });
-    return send(res, 200, { ok: true, item: present(itemFromKey(`tr:${m[1]}`)) });
   }
 
   // A photo from a text: fetched once from the address the dashboard stored with the message, kept
@@ -727,7 +681,7 @@ async function api(req, res, url) {
     const body = await readBody(req);
     const item = itemFromKey(m[1]);
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
-    if (!/^[cl]:/.test(item.itemKey) || item.standard) return send(res, 400, { error: 'Only a dashboard conversation can be ruled on or moved.' });
+    if (!/^[cl]:/.test(item.itemKey)) return send(res, 400, { error: 'Only a dashboard conversation can be ruled on or moved.' });
     const kind = ['import', 'general', ''].includes(body.kind) ? body.kind : null;
     const section = body.section === 'importquery' ? 'importquery' : 'dashboard';
     if (kind === null) return send(res, 400, { error: 'Say whether it is an import enquiry.' });
@@ -830,15 +784,6 @@ async function api(req, res, url) {
     if (!draft) return send(res, 404, { error: 'Suggestion not found.' });
     setDraftRating(draft.id, rating);
     onRated(draft.id, rating);
-    // A model reply: "Good reply" approves the text as it stands in the box as the standard, with the
-    // invented name back to {{NAME}} and without the standard block; nothing is learned.
-    if (/^tr:/.test(draft.item_key)) {
-      const id = Number(draft.item_key.slice(3));
-      const scenario = itemFromKey(draft.item_key);
-      if (rating === 'good') setScenarioStatus(id, { status: 'APPROVED', reply: maskGreetingNames(redact(comparable(currentText(draft)), scenario?.lead)) });
-      else setScenarioStatus(id, { status: 'PROPOSED' });
-      return send(res, 200, { ok: true, learned: false, standard: true, why: '' });
-    }
     // "Good reply": the suggestion becomes a model for similar messages. Taking it back forgets it.
     const item = itemFromKey(draft.item_key);
     const result = item ? onApproved(item, draft.id, rating === 'good') : { learned: false, why: 'conversation not found' };
@@ -853,14 +798,6 @@ async function api(req, res, url) {
     if (!draft) return send(res, 404, { error: 'Suggestion not found.' });
     const item = itemFromKey(draft.item_key);
     const note = String(body.note || '').slice(0, 600);
-    // A model reply: the note is kept with the scenario and the reply is written again; nothing is learned.
-    if (item?.standard) {
-      if (!note.trim()) return send(res, 200, { ok: false, learned: false, why: 'nothing was said', lessons: [] });
-      setScenarioStatus(item.standard.id, { status: 'CHANGED', note });
-      setDraftRating(draft.id, 'edit');
-      const next = await draftFor(item, { coaching: { note, draft: draft.reply } });
-      return send(res, 200, { item: present(itemFromKey(draft.item_key) || item), ok: next.status === 'ready', error: next.error || '', learned: false, standard: true, lessons: [], pending: false });
-    }
     const result = item ? await onAdvice(item, draft.id, note) : { learned: false, why: 'conversation not found' };
     if (!result.learned) return send(res, 200, { ok: false, learned: false, why: result.why || '', lessons: [] });
     setDraftRating(draft.id, 'edit');
