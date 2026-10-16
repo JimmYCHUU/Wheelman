@@ -76,7 +76,7 @@ test('the sales score, as the review and the report judge a reply: six points in
   assert.equal(selling.salesScore({ body: 'It has done 60,000 km. You are welcome to come and see it.', rung: 'proof', situations: ['history_kms'] }).parts.dueBlocks, false);
   assert.equal(selling.salesScore({ body: 'Sorry to bother you, it is available!!', situations: ['availability'] }).parts.register, false, 'apologetic, and two exclamation marks');
   assert.equal(selling.salesScore({ body: 'Yes, available at Lidcombe. Book an inspection below.', channel: 'marketplace' }).parts.length, true);
-  assert.equal(selling.salesScore({ body: new Array(50).fill('word').join(' '), channel: 'marketplace' }).parts.length, false, 'over 45 words in a chat');
+  assert.equal(selling.salesScore({ body: new Array(62).fill('word').join(' '), channel: 'marketplace' }).parts.length, false, 'over 60 words in a chat');
 });
 
 test('a run is written whole, listed newest first, read by name, and never from a name that is not plain', () => {

@@ -5,6 +5,31 @@ and versions follow `MAJOR.MINOR.PATCH`.
 
 ## [Unreleased]
 
+### Changed
+- **Marketplace replies are courteous, and nobody is asked for a deposit while the price is
+  open.** The owner found the Marketplace replies "a bit rude, extra brief and very much pushy",
+  asking for a deposit when the customer was not matching our price (16 Oct 2026). The cause: a
+  booking link we sent counted as an arranged visit, and since Marketplace replies carry that link,
+  every buyer who wrote back, "still not worth it" included, was put on "ready to commit" and
+  offered the $1,000 deposit. Now:
+  - A booking link is an invitation, not an arranged visit. The deposit is proposed only once the
+    price is agreed: booked or seen, asked to hold it, or accepted our price or the figure our
+    staff gave ("deal", "I'll take it"). Never while the customer is making an offer, says the price
+    is too high, or is walking away. This applies on the dashboard too.
+  - More offers are recognised as price questions: "would u consider 16k", "23 will do", "can do
+    14k if you're neg", "my budget is $14000", "give me fair price", "too dear".
+  - The price reply goes once in a conversation. A counter-offer after it (or after a figure our
+    staff typed) is thanked and left to a person: "Regarding your offer, [PRICE?]."
+  - A customer leaving over the price ("all the best", "keep saving", "not worth it") or being
+    rude gets a polite close with no blank, no link, no invitation and no deposit.
+  - A reply that turns an offer down or runs it down ("we cannot match that figure", "below what
+    we can accept", "too low") fails a check and is written again.
+  - Marketplace replies open with a short thank-you ("Thank you for your message, Priya."), run to
+    two to four short lines and up to 60 words (was under 45), still with no greeting line and no
+    sign-off, and invite the buyer to see the car once in a chat.
+  - Checked on 13 real Marketplace chats, each cut back to when its old suggestion was written and
+    written again with the same model on a copy of the database; nothing was sent.
+
 ### Added
 - **Marketplace links say they came from Facebook.** Every link to the Carbarn website in a
   Marketplace suggestion, and in any text sent with **Send reply** (typed or pasted links

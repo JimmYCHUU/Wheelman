@@ -191,6 +191,20 @@ test('the buyer\'s name and number never reach the AI service, and the reply is 
   assert.ok(!d.checks.some((c) => c.level === 'fail'), JSON.stringify(d.checks));
 });
 
+test('a Marketplace reply is courteous: it opens with a thank-you, has room for it, and never runs down an offer', async () => {
+  const { items } = await load();
+  const { systemPrompt, buildPrompt } = await import('../src/prompt.js');
+  const rules = systemPrompt('marketplace');
+  assert.match(rules, /Open with a short thank-you/);
+  assert.match(rules, /up to sixty words/);
+  assert.match(rules, /No greeting line/, 'still no "Good morning" line');
+  assert.match(rules, /Never tell a buyer that their offer is too low/);
+  assert.match(rules, /Invite them to see the car once/);
+  assert.doesNotMatch(rules, /cut to the bone|forty-five|under 45 words/);
+  const asked = buildPrompt(items.itemFromKey('mp:501')).user;
+  assert.match(asked, /CHANNEL: Facebook Marketplace chat.*two to four short lines/);
+});
+
 test('an SMS suggestion still gets its greeting and sign-off', async () => {
   const { finishReply } = await import('../src/checks.js');
   assert.equal(finishReply('Hi {{NAME}},\n\nYes it is.', { first_name: 'Priya' }), 'Hello Priya,\n\nYes it is.\n\nRegards,\nTeam Carbarn');
@@ -223,7 +237,7 @@ test('a long Marketplace reply is flagged, and a price difference with the Faceb
   chats.get(504).row.car.price = '$27,900';
   chats.get(504).row.last_message_at = iso(9);
   await sync.syncMarketplace();
-  ai.script = [{ reply: 'Yes it is available. ' + 'We are open every day and you are welcome to come and see it any time that suits you. '.repeat(3), needs_human: [], facts_used: [], hold: false }];
+  ai.script = [{ reply: 'Yes it is available. ' + 'We are open every day and you are welcome to come and see it any time that suits you. '.repeat(4), needs_human: [], facts_used: [], hold: false }];
   const d = await drafter.draftFor(items.itemFromKey('mp:504'), { save: false });
   assert.ok(d.checks.some((c) => c.code === 'long' && /Marketplace chat/.test(c.message)), JSON.stringify(d.checks));
   const note = d.checks.find((c) => c.code === 'listing-price');

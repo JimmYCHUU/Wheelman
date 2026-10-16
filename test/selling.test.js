@@ -90,6 +90,85 @@ test('where the customer is: interest, proof, fit, commit, buyer', () => {
   assert.equal(selling.saleStage({ imports: { kind: 'ask' }, situation: { all: ['import_sourcing'] }, timeline: [] }), null, 'so does an import enquiry');
 });
 
+// The price: a buyer who has not agreed it is never asked for the deposit, whatever came before.
+const car = [{ id: 9, price: 23900, soldStatus: 'UnSold', stockIn: 'Online', status: 'PUBLISHED' }];
+const LINK = 'You can book an inspection here:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80/1300#inspection=onsite';
+const linkSent = [{ who: 'customer', text: 'Is it still available?' }, { who: 'us', text: `Yes, it is available.\n${LINK}` }];
+const visitSet = [{ who: 'customer', text: 'Can I come Saturday at 10?' }, { who: 'us', text: 'See you Saturday at 10.' }];
+const PRICE_BLOCK = 'The price includes 6 months NSW registration. Government charges are extra.\n\nWe generally keep our prices competitive considering everything included, but we may offer a small discount for a serious buyer.';
+
+test('a booking link we sent is an invitation, not an arranged visit', () => {
+  const s = stage({ vehicles: car, situations: ['vehicle_details'], texts: [...linkSent, { who: 'customer', text: 'Does it have a tow bar?' }] });
+  assert.notEqual(s.rung, 'commit');
+  assert.ok(!s.signals.length, s.signals.join('; '));
+  assert.equal(s.allowsUrgency, false);
+  const later = stage({ vehicles: car, texts: [...visitSet, { who: 'customer', text: "It's ok I can come another time" }] });
+  assert.notEqual(later.rung, 'commit', 'coming another time is not a commitment');
+});
+
+test('no deposit while the price is not agreed: an offer, a budget, or "too dear" keeps them working out the cost', async () => {
+  const { classify } = await import('../src/situations.js');
+  for (const text of ['Would you take 19k?', 'Hi would u consider 16k', 'My budget is $14000, could you consider it?', '22 will do', 'Too expensive for me', 'Give me fair price', 'Can do 14k if you are neg', 'Ok then my offer is 10000 plus my van']) {
+    assert.ok(classify(text).all.includes('price_negotiation'), `"${text}" is a price question`);
+    for (const before of [linkSent, visitSet]) {
+      const s = stage({ vehicles: car, situations: classify(text).all, texts: [...before, { who: 'customer', text }] });
+      assert.equal(s.rung, 'fit', `${text}: ${s.rung}`);
+      assert.ok(!['propose_deposit', 'confirm_step'].includes(s.move), `${text}: ${s.move}`);
+      assert.equal(s.allowsUrgency, false, text);
+    }
+  }
+  // Asking to hold it on our terms is still a commitment; asking to hold it at their own lower figure is not.
+  assert.equal(stage({ vehicles: car, situations: ['deposit_hold'], texts: [{ who: 'customer', text: 'Can you hold it for me until Saturday?' }] }).move, 'propose_deposit');
+  assert.notEqual(stage({ vehicles: car, situations: ['deposit_hold', 'price_negotiation'], texts: [{ who: 'customer', text: 'I can put a deposit down if you do 20k' }] }).move, 'propose_deposit');
+});
+
+test('a buyer who accepts our price, or the figure our staff gave, is ready for the deposit', () => {
+  const offered = [{ who: 'customer', text: 'Best price?' }, { who: 'us', text: 'We can do $22,900 for you.' }];
+  const yes = stage({ vehicles: car, texts: [...offered, { who: 'customer', text: 'Ok 22,900 is fine, I will take it' }] });
+  assert.deepEqual([yes.rung, yes.move, yes.allowsUrgency], ['commit', 'propose_deposit', true]);
+  assert.ok(yes.signals.includes('accepted our price'), yes.signals.join('; '));
+  assert.equal(stage({ vehicles: car, texts: [...offered, { who: 'customer', text: 'Deal' }] }).move, 'propose_deposit');
+  const less = stage({ vehicles: car, situations: ['price_negotiation'], texts: [...offered, { who: 'customer', text: 'I will take it for 21k' }] });
+  assert.equal(less.rung, 'fit', 'less than our figure is still an offer');
+  for (const text of ["I'll take it to my mechanic first", 'I will take it for a test drive on Saturday'])
+    assert.ok(!stage({ vehicles: car, texts: [...offered, { who: 'customer', text }] }).signals.includes('accepted our price'), text);
+});
+
+test('a buyer walking away over the price, or being rude, gets a polite close: no blank, no link, no deposit', () => {
+  for (const text of ["I'll keep saving, 18 k is all I have and I don't need the warranty. Anyway all the best", 'Still not worth it mate', 'You are dreaming, idiot', 'Never mind, too dear for me. Good luck with it']) {
+    const s = stage({ vehicles: car, texts: [...linkSent, { who: 'customer', text }] });
+    assert.deepEqual([s.move, s.question, s.allowsUrgency], ['part_well', '', false], text);
+    assert.notEqual(s.rung, 'commit', text);
+  }
+  const words = selling.MOVES.part_well.text;
+  assert.match(words, /\[PRICE\?\]/, 'the move says no blank');
+  assert.match(words, /no link/i);
+  assert.match(words, /deposit/i);
+  assert.match(selling.stageLines(stage({ vehicles: car, texts: [{ who: 'customer', text: 'Still not worth it mate' }] })).join('\n'), /offer no next step/i);
+  // Someone still coming to see it is not leaving.
+  assert.notEqual(stage({ vehicles: car, situations: ['inspection_booking'], texts: [{ who: 'customer', text: 'Never mind the kms, can I come and see it Saturday?' }] }).move, 'part_well');
+});
+
+test('a counter-offer after we answered the price is answered with a blank, not with the price reply again', () => {
+  const s = stage({ vehicles: car, situations: ['price_negotiation'], texts: [{ who: 'customer', text: 'Best price?' }, { who: 'us', text: PRICE_BLOCK }, { who: 'customer', text: 'Would you take 20k?' }] });
+  assert.deepEqual([s.move, s.rung], ['answer_offer', 'fit']);
+  assert.match(s.moveText, /\[PRICE\?\]/);
+  assert.match(s.moveText, /never (say|tell)/i);
+  const typed = stage({ vehicles: car, situations: ['price_negotiation'], texts: [{ who: 'customer', text: 'Best price?' }, { who: 'us', text: 'We can do $22,900 for you.' }, { who: 'customer', text: 'Would you take 20k?' }] });
+  assert.equal(typed.move, 'answer_offer', 'a figure our staff typed answers the price question too');
+  assert.equal(stage({ vehicles: car, situations: ['price_negotiation'], texts: [{ who: 'customer', text: 'Would you take 20k?' }] }).move, 'invite_before_price', 'the first price question still gets the price reply');
+});
+
+test('on Marketplace the invitation to see the car is given once', () => {
+  const invited = [{ who: 'customer', text: 'Is it available?' }, { who: 'us', text: 'Yes, it is available, and you are welcome to inspect it at our Lidcombe showroom.' }, { who: 'customer', text: 'Is it the 2.5 or the 3.5?' }];
+  const chat = stage({ channel: 'marketplace', vehicles: car, situations: ['vehicle_details'], texts: invited });
+  assert.match(selling.stageLines(chat).join('\n'), /already invited them/);
+  const sms = stage({ vehicles: car, situations: ['vehicle_details'], texts: invited });
+  assert.doesNotMatch(selling.stageLines(sms).join('\n'), /already invited them/);
+  const fresh = stage({ channel: 'marketplace', vehicles: car, situations: ['availability'], texts: [{ who: 'customer', text: 'Is it available?' }] });
+  assert.doesNotMatch(selling.stageLines(fresh).join('\n'), /already invited them/);
+});
+
 test('the lines the AI is told', () => {
   const lines = selling.stageLines(stage({ situations: ['deposit_hold'], texts: [{ who: 'customer', text: 'Can you hold it?' }] })).join('\n');
   assert.match(lines, /Where they are: ready to commit/);
@@ -199,6 +278,51 @@ test('the register: slang and apologies are pointed out, "plus on-roads" is refu
   assert.ok(codes(run(words(76))).includes('warn:long'));
   assert.ok(!codes(run(words(54), { inConversation: true })).includes('warn:long'));
   assert.ok(codes(run(words(56), { inConversation: true })).includes('warn:long'));
-  assert.ok(!codes(run(words(44), { channel: 'marketplace' })).includes('warn:long'));
-  assert.ok(codes(run(words(46), { channel: 'marketplace' })).includes('warn:long'));
+  assert.ok(!codes(run(words(59), { channel: 'marketplace' })).includes('warn:long'), 'a Marketplace reply has room for its thank-you: up to 60 words');
+  assert.ok(codes(run(words(61), { channel: 'marketplace' })).includes('warn:long'));
+  assert.ok(!codes(run('Thank you for your offer.', { stage: { rung: 'fit', move: 'part_well', allowsUrgency: false, aim: 'x' } })).includes('warn:next-step'), 'a polite close gets no next step');
+});
+
+test('a reply that refuses or runs down an offer is sent back: the figure is a person\'s decision', () => {
+  const facts = 'Vehicle: 2021 Toyota Noah X. Advertised price $28,900.';
+  const run = (body) => checks.checkDraft({ reply: body, body, allowedText: facts });
+  const codes = (r) => r.map((c) => `${c.level}:${c.code}`);
+  for (const body of ['Thank you for your offer. We cannot match that figure, but [PRICE?].', 'We cannot offer that discount.', 'An offer of [PRICE?] is below what we can accept.', 'Thank you, but your offer is too low.', 'That is too far below our asking price.']) {
+    assert.ok(codes(run(body)).includes('fail:wording'), body);
+  }
+  assert.match(checks.retryNote(run('We cannot offer that discount.')), /Never say that their offer is too low/);
+  for (const body of ['Thank you for your offer. Regarding your offer, [PRICE?].', 'We cannot hold a vehicle without a deposit.', 'We do not offer rent-to-own plans, but finance can be arranged.']) {
+    assert.ok(!codes(run(body)).includes('fail:wording'), body);
+  }
+});
+
+test('the Marketplace length band in the replay score matches the check', () => {
+  const words = (n) => Array.from({ length: n }, () => 'alpha').join(' ');
+  assert.equal(selling.salesScore({ body: words(58), channel: 'marketplace' }).parts.length, true);
+  assert.equal(selling.salesScore({ body: words(62), channel: 'marketplace' }).parts.length, false);
+});
+
+test('a buyer leaving over the price gets no price reply and no invitation; a second offer gets no second price reply', () => {
+  const priced = (convId, leadId, name, phone, last) => {
+    lead(leadId, convId, name, phone, { stocks: ['1300'] });
+    conv(convId, leadId, `${name} Test`, phone.replace(/^0/, '+61').replace(/\s/g, ''));
+    msg(convId, 'IN', 'Is the Noah still available? Can I come and see it?', 5 * HOUR);
+    msg(convId, 'OUT', `Hello ${name},\nYes, it is.\n${LINK}`, 4 * HOUR);
+    msg(convId, 'IN', 'What is your best price?', 3 * HOUR);
+    msg(convId, 'OUT', PRICE_BLOCK, 2 * HOUR);
+    msg(convId, 'IN', last, 10 * MIN);
+    return items.buildItem({ conversationId: convId });
+  };
+
+  const leaving = promptModule.buildPrompt(priced(61, 41, 'Omar', '0491 570 161', "25k and I'm tapped out, all the best"), { now });
+  assert.equal(leaving.stage.move, 'part_well');
+  assert.equal(leaving.price.on, false, 'no price reply for a buyer who is leaving');
+  assert.ok(!/=== PRICE REPLY ===/.test(leaving.user));
+  assert.ok(!leaving.inspection.block, 'and no invitation added under the text');
+  assert.ok(!/takes the car off the market/.test(leaving.user.split('=== BUSINESS FACTS ===')[0]), 'and no deposit line');
+
+  const again = promptModule.buildPrompt(priced(62, 42, 'Lena', '0491 570 162', 'Would you take 25k?'), { now });
+  assert.equal(again.stage.move, 'answer_offer');
+  assert.equal(again.price.on, false, 'the price reply was sent already');
+  assert.match(again.user, /\[PRICE\?\]/);
 });

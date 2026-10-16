@@ -6,7 +6,7 @@ import { restore, leftoverPlaceholders, NAME_TOKEN } from './redact.js';
 import { findUrls, untagged, hasEmoji, wordCount, stripEmoji, similarity } from './text.js';
 import { sydneyHour } from './time.js';
 import { promiseChecks } from './promises.js';
-import { FILLER, URGENCY, STAYS_FOR_SALE, CLAIM, NEXT_STEP_SIGNS, SLANG, SERVILE } from './selling.js';
+import { FILLER, URGENCY, STAYS_FOR_SALE, CLAIM, NEXT_STEP_SIGNS, SLANG, SERVILE, QUIET_MOVES } from './selling.js';
 import { oldAddressIn, CURRENT_ADDRESS } from './address.js';
 
 export const MARKERS = ['[PRICE?]', '[TRADE-IN VALUE?]', '[DELIVERY COST?]', '[DATE?]', '[CHECK?]', '[DEPOSIT LINK?]', '[ELIGIBILITY?]', '[LANDED COST?]', '[DEPOSIT?]', '[TIMELINE?]'];
@@ -24,6 +24,8 @@ const BANNED = [
   [/\b\d+(\.\d+)?\s?% ?(p\.?a\.?|per annum|interest|comparison)/i, 'quotes an interest rate', 'fail'],
   // The law wants one price with what it includes; "plus on-roads" is the wording it forbids.
   [/\bplus on[- ]?road(s| costs?)?\b/i, 'says "plus on-roads": say what the price includes and that government charges are extra', 'fail'],
+  // An offer is thanked and left to a person ([PRICE?]); turning it down reads as rude, and it is not the AI's call.
+  [/\b(cannot|can ?not|can'?t|unable to|not able to) (match|accept|meet|do|offer|consider|go (that|so) low on) ((that|this|your|the|such an?) )?(figure|offer|price|amount|discount|number)\b|\bbelow what we (can |could |are able to )?accept\b|\b(that|your|the) (offer|figure|price) is (too|far too|way too|much too) low\b|\btoo far below (our|the) (asking|advertised|listed)/i, 'turns down or runs down the customer\'s offer: thank them for it, and leave the figure to a person with [PRICE?]', 'fail'],
 ];
 
 // What our records say about a customer, said to them. Shape the reply by it; never state it.
@@ -270,7 +272,7 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   if (bangs > 1) add('warn', 'exclaim', `Contains ${bangs} exclamation marks.`);
 
   const words = wordCount(String(body).replace(/https?:\/\/\S+/g, ''));
-  if (channel === 'marketplace') { if (words > 45) add('warn', 'long', `Long for a Marketplace chat (${words} words). One to three short lines, under 45 words.`); }
+  if (channel === 'marketplace') { if (words > 60) add('warn', 'long', `Long for a Marketplace chat (${words} words). Two to four short lines, up to 60 words.`); }
   else if (channel === 'email') {
     // An email has room, and a cost breakdown (one line per part) may run longer still.
     const breakdown = (String(body).match(/^.*\$\d[\d,]*/gm) || []).length >= 4;
@@ -314,9 +316,10 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   const urgency = String(body).match(URGENCY);
   if (urgency) add('fail', 'urgency', `"${urgency[0]}": never say that other people are interested, that the car is selling fast or that the price will change.`, [urgency[0]]);
   const stays = String(body).match(STAYS_FOR_SALE);
-  if (stays && !stage?.allowsUrgency) add('warn', 'urgency', 'Says the deposit takes the car off the market. Say this only once the customer has shown real interest: booked to see it, seen it, or asked to hold it.', [stays[0]]);
+  if (stays && !stage?.allowsUrgency) add('warn', 'urgency', 'Says the deposit takes the car off the market. Say this only once the customer has shown real interest and agreed the price: booked to see it, seen it, asked to hold it, or accepted our figure.', [stays[0]]);
   // A price reply or an invitation under the text is a next step in itself (blockNextStep).
-  if (stage && !hold && !blockNextStep && stage.rung !== 'buyer' && stage.move !== 'hold' && stage.move !== 'accept_no' && !/\?/.test(body) && !findUrls(body).length && !NEXT_STEP_SIGNS.test(body)) {
+  // A polite close (a no, or a buyer leaving over the price) offers nothing more.
+  if (stage && !hold && !blockNextStep && stage.rung !== 'buyer' && stage.move !== 'hold' && !QUIET_MOVES.has(stage.move) && !/\?/.test(body) && !findUrls(body).length && !NEXT_STEP_SIGNS.test(body)) {
     add('warn', 'next-step', `No next step offered${String(nextStep || '').trim() ? ` (the model called its next step "${String(nextStep).trim().slice(0, 60)}")` : ''}. Aim for: ${stage.aim}.`);
   }
 
@@ -349,6 +352,7 @@ export function retryNote(checks, { channel = 'sms' } = {}) {
     + (fails.some((c) => c.code === 'urgency') ? '\nDo not say or imply that other people are interested, that the car is selling fast, or that the price will change. If the request allows urgency, the one true fact is that a $1,000 refundable holding deposit takes the car off the market; otherwise say nothing about urgency.' : '')
     + (fails.some((c) => c.code === 'price-floor') ? '\nNever name a figure below the advertised price. The standard price reply is added under your text; a counter-offer is [PRICE?] for a person.' : '')
     + (fails.some((c) => c.code === 'wording' && /on-roads/.test(c.message)) ? '\nNever "plus on-roads": say what the price includes and that government charges are extra.' : '')
+    + (fails.some((c) => c.code === 'wording' && /customer's offer/.test(c.message)) ? '\nNever say that their offer is too low, below what we accept, or that we cannot match or accept it. Thank them for the offer and leave the figure to a person: "Regarding your offer, [PRICE?]."' : '')
     + (fails.some((c) => c.code === 'insider-leak') ? '\nNever tell the customer what our records show about them: no score, no status, no source, no other dealers, no finance decision. Use it only to choose what to say.' : '')
     + (fails.some((c) => c.code === 'old-address') ? `\nNever write our old address or a map link. Our address is ${CURRENT_ADDRESS}. The block gives it on a first reply; write it yourself only when the customer asked where we are.` : '')
     + (fails.some((c) => c.code === 'claim') ? '\nSay nothing about accidents, condition, approval, cooling-off or warranty beyond what VEHICLE FACTS and BUSINESS FACTS state, in their words.' : '');

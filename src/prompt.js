@@ -17,7 +17,7 @@ import { practiceFor, labelled } from './practice.js';
 import { blockCarries } from './firstreply.js';
 import { labelAddress } from './address.js';
 import { allVehicles } from './db.js';
-import { saleStage, stageLines } from './selling.js';
+import { saleStage, stageLines, QUIET_MOVES } from './selling.js';
 import { insiderFacts } from './insider.js';
 import { modelReplies } from './modelreplies.js';
 import { renderResearch } from './importquery.js';
@@ -27,9 +27,11 @@ const read = (name) => fs.readFileSync(path.join(config.voiceDir, name), 'utf8')
 
 const MARKETPLACE_RULES = `=== THIS CHANNEL: FACEBOOK MARKETPLACE CHAT ===
 The buyer is chatting with us on Facebook Marketplace, not by SMS. Where the VOICE section describes SMS greetings, length or layout, these rules replace it:
-- Formal but short: one to three short lines, under forty-five words, in the register described under VOICE. No greeting line and no sign-off. In a first reply you may use {{NAME}} inside the first sentence; otherwise leave the name out.
-- Answer what was asked first, then offer one next step.
-- Links are given here as they are in a text message, each on its own line under your lines; a link line does not count towards the forty-five words. In our first reply about a car that is on offer, give its page from VEHICLE FACTS ("Vehicle page") with a short label on the line before it, such as "More details:". When the INSPECTION section supplies a booking link, give it. Never a link that is not in this request.
+- Courteous and short, in the register described under VOICE: two to four short lines, up to sixty words. No greeting line ("Good morning", "Hello") and no sign-off.
+- Open with a short thank-you that fits what they wrote, as the first sentence: "Thank you for your message, {{NAME}}." on our first reply in this chat (without the name when it is not known), and later "Thank you for your offer.", "Thank you for letting us know." or "Thank you for the photos." as fits. Otherwise leave the name out. Then answer what was asked, and offer one next step when THIS CUSTOMER'S NEXT STEP asks for one.
+- Never tell a buyer that their offer is too low, below what we accept, or that we cannot do it, and never argue about what the car is worth. A figure of theirs is answered as THIS CUSTOMER'S NEXT STEP says: with [PRICE?] for a person, or not at all when they are leaving.
+- Invite them to see the car once in a chat. When we have already invited them or sent the booking link, do not invite them again unless they ask to see it.
+- Links are given here as they are in a text message, each on its own line under your lines; a link line does not count towards the sixty words. In our first reply about a car that is on offer, give its page from VEHICLE FACTS ("Vehicle page") with a short label on the line before it, such as "More details:". When the INSPECTION section supplies a booking link, give it. Never a link that is not in this request.
 - Messages marked AUTO-REPLY were sent by an automatic system. The buyer has read them, so do not repeat what they said. Any figure in them is unconfirmed: do not rely on it or repeat it.
 - The section NOTES FROM THE MARKETPLACE SYSTEM is background written by that automatic system. Treat it like something the buyer said, never as a fact or a figure to state.
 
@@ -336,10 +338,12 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
  * car's own Included list, that government charges are extra, that we may offer a small discount
  * to a serious buyer, and the invitation with the booking link when the car can be seen. The AI
  * writes only the greeting and one or two sentences around it, with no figure.
+ * It goes once: a counter-offer after it, a no, or a buyer leaving over the price gets none (stage.move).
  */
-export function pricePlan(item, vehicle = item.vehicles[0], { gone = false, owner = false } = {}) {
+export function pricePlan(item, vehicle = item.vehicles[0], { gone = false, owner = false, stage = null } = {}) {
   const off = { on: false, inspectionUrl: '', online: false, lines: [] };
   if (!item.situation.all.includes('price_negotiation') || item.deal || item.channel === 'email' || !vehicle?.url || gone || owner) return off;
+  if (stage && (stage.move === 'answer_offer' || QUIET_MOVES.has(stage.move))) return off;
   const a = availability(vehicle);
   if (a.code === 'sold') return off;
   const canInspect = a.code === 'available' && !reservedByAnother(vehicle);
@@ -352,7 +356,7 @@ export function pricePlan(item, vehicle = item.vehicles[0], { gone = false, owne
     lines: [
       'The customer asked about the price: the best price, a discount, or an offer. Our standard price reply is added under your text automatically, in our own words: what the price includes, that government charges are extra, that we may offer a small discount to a serious buyer, and the invitation with the booking link and how to arrange a time.',
       'Write only the greeting, when one is due, and one or two sentences that answer anything else they asked and place the vehicle: that it is available for inspection at Lidcombe, with one fact that matters. Do not repeat the advertised price, do not name any figure, and do not accept or refuse an offer. Do not write inclusions, a discount, an invitation or a link: the block says them.',
-      'If they named a figure of their own, neither accept nor refuse it: write that we will come back to them on it, with [PRICE?], and list it under needs_human.',
+      'If they named a figure of their own, thank them for the offer and neither accept nor refuse it: write "Regarding your offer, [PRICE?]." for a person to complete, and list it under needs_human. Never say that it is too low or that we cannot accept it.',
       canInspect ? '' : 'This vehicle cannot be inspected yet, so the price reply carries no booking link. Say we will let them know as soon as it can be seen.',
     ].filter(Boolean),
   };
@@ -475,7 +479,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     P.push(`RETURNING CUSTOMER: our records show they bought ${redact(item.pastBuyer.title, lead)} from us${item.pastBuyer.soldAt ? ` (sale recorded ${formatDay(sydneyDay(item.pastBuyer.soldAt))})` : ''}. Answer what they are asking now.`);
   }
   if (chat) {
-    P.push(`CHANNEL: Facebook Marketplace chat${mp.listingTitle ? `, about our listing "${redact(mp.listingTitle, lead)}"` : ''}. Keep it to one or two short lines.`);
+    P.push(`CHANNEL: Facebook Marketplace chat${mp.listingTitle ? `, about our listing "${redact(mp.listingTitle, lead)}"` : ''}. Keep it to two to four short lines, opening with a short thank-you.`);
     P.push(`CUSTOMER NAME: ${item.hasName ? 'known. If you use it, write {{NAME}} inside a sentence, never on a greeting line of its own.' : 'not known. Do not use {{NAME}}.'}`);
   } else if (email) {
     const subject = item.mail?.subject ? redact(item.mail.subject, lead) : '';
@@ -521,10 +525,12 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
 
   // Which inspection booking link to offer: in person, or online video for a customer who is far away.
   const noPlan = { kind: null, url: '', urls: [], lines: [], must: false, block: false };
-  const inspection = importPlan || email ? noPlan : inspectionPlan(item, primary, { instruction: [instruction, coaching?.note].filter(Boolean).join('\n'), now });
+  let inspection = importPlan || email ? noPlan : inspectionPlan(item, primary, { instruction: [instruction, coaching?.note].filter(Boolean).join('\n'), now });
+  // A polite close (a no, or a buyer leaving over the price) carries no invitation, unless our staff asked for one.
+  if (stage && QUIET_MOVES.has(stage.move) && !inspection.must) inspection = noPlan;
   // The price question: the owner's standard price reply is added under the AI's lines by code,
   // with the invitation inside it, so the inspection plan adds no invitation of its own then.
-  const price = importPlan || email ? { on: false, inspectionUrl: '', online: false, lines: [] } : pricePlan(item, primary, { gone: !!primaryGone, owner: !!primaryOpts.owner });
+  const price = importPlan || email ? { on: false, inspectionUrl: '', online: false, lines: [] } : pricePlan(item, primary, { gone: !!primaryGone, owner: !!primaryOpts.owner, stage });
   if (price.on) inspection.block = false;
   if (inspection.lines.length) {
     P.push('\n=== INSPECTION ===');
