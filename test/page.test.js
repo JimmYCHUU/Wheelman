@@ -8,6 +8,7 @@ import { newCount, totalNew } from '../web/lib/counts.js';
 import { createStore } from '../web/lib/store.js';
 import { SECTIONS, SECTION_IDS, sectionOf, TAB_STATE, ORDER_LIST } from '../web/sections/registry.js';
 import { visibleRows, rowTags } from '../web/views/ListColumn.js';
+import { moveChoices } from '../web/views/MoveMenu.js';
 
 // 6 October 2026, 2 pm in Sydney (daylight saving: UTC+11).
 const NOW = Date.UTC(2026, 9, 6, 3, 0, 0);
@@ -155,4 +156,16 @@ test('a row carries at most two tags, in the settled words and tones', () => {
   assert.deepEqual(rowTags({ section: 'dashboard', state: 'awaiting', flag: 'input' }, state), [{ text: 'Blank to fill', tone: 'warning' }]);
   assert.deepEqual(rowTags({ section: 'marketplace', state: 'awaiting', needsPerson: true, unanswered: 1 }, state), [{ text: 'Needs you', tone: 'info' }]);
   assert.deepEqual(rowTags({ section: 'dashboard', state: 'answered' }, state), []);
+});
+
+test('the Move menu offers the sections a conversation is not in, in plain words, and the way back to its own', () => {
+  const labels = (item) => moveChoices(item).map((c) => c.label);
+  assert.deepEqual(labels({ section: 'dashboard', home: 'dashboard', moves: ['auction', 'importquery'] }), ['Move to Auction', 'Move to Import Query']);
+  assert.deepEqual(labels({ section: 'auction', home: 'dashboard', moves: ['dashboard', 'importquery'] }), ['Move back to Dashboard', 'Move to Import Query']);
+  assert.deepEqual(labels({ section: 'importquery', home: 'importquery', moves: ['dashboard', 'auction'] }), ['Move to Dashboard', 'Move to Auction']);
+  assert.deepEqual(labels({ section: 'dashboard', home: 'marketplace', moves: ['auction', 'importquery', 'marketplace'] }), ['Move to Auction', 'Move to Import Query', 'Move back to Marketplace']);
+  assert.deepEqual(moveChoices({ section: 'auction', home: 'auction', moves: [] }), [], 'an order never moves');
+  // Each says, in a sentence, how the customer is answered there.
+  for (const c of moveChoices({ section: 'dashboard', home: 'marketplace', moves: ['importquery', 'auction', 'marketplace'] })) assert.ok(c.hint.length > 10, c.section);
+  for (const key of ['move.button', 'move.title', 'move.foot', 'toast.movedTo', 'move.info.moved', 'move.info.imports', 'move.info.order']) assert.ok(COPY[key], key);
 });

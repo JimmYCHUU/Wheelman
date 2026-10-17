@@ -152,7 +152,7 @@ export function mountListColumn(root, store, actions) {
     const orders = waiting + quiet + other;
     foot.hidden = section !== 'auction' || !orders;
     if (!foot.hidden) {
-      ordersLine.textContent = t('footer.orders', { orders: `${orders} ${orders === 1 ? 'order' : 'orders'}`, waiting, quiet, other });
+      ordersLine.textContent = t('footer.orders', { orders: `${orders} ${orders === 1 ? 'order or enquiry' : 'orders and enquiries'}`, waiting, quiet, other });
       ordersLine.title = t('footer.orders.title');
     }
   });

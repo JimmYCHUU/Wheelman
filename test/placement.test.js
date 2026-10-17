@@ -65,7 +65,7 @@ test('a lead from the Imports list with no order is listed in Auction as an enqu
   assert.equal(row.section, 'auction');
   assert.match(row.stage, /^Enquiry: /);
   const { item } = await get('/api/items/l:9101');
-  assert.equal(item.section, 'auction');
+  assert.deepEqual([item.section, item.listed, item.isImport], ['auction', 'imports', true], 'answered as an import enquiry, and the page can say why it is here');
 });
 
 // ---- moving ---------------------------------------------------------------------------------------
@@ -73,7 +73,7 @@ test('a lead from the Imports list with no order is listed in Auction as an enqu
 test('a conversation moves between Dashboard, Auction and Import Query in every direction, and Undo takes it back', async () => {
   lead(9102, 'Bea', 'Hi, what are your opening hours on Sunday?');
   let { item } = await get('/api/items/l:9102');
-  assert.deepEqual([item.section, item.moves], ['dashboard', ['importquery', 'auction']]);
+  assert.deepEqual([item.section, item.moves], ['dashboard', ['auction', 'importquery']]);
 
   let out = await post('/api/items/l:9102/move', { section: 'auction' });
   assert.equal(out.status, 200);
@@ -206,7 +206,7 @@ test('a Facebook chat and an email can leave their own section and come back; ea
   let out = await post('/api/items/mp:501/move', { section: 'dashboard' });
   assert.equal(out.status, 200);
   assert.deepEqual([out.json.from, out.json.item.section, out.json.item.channel, out.json.item.teaches], ['marketplace', 'dashboard', 'marketplace', false]);
-  assert.deepEqual(out.json.item.moves, ['importquery', 'auction', 'marketplace'], 'it can go back to Marketplace');
+  assert.deepEqual(out.json.item.moves, ['auction', 'importquery', 'marketplace'], 'it can go back to Marketplace');
   assert.ok((await keys('dashboard')).includes('mp:501'));
   assert.ok(!(await keys('marketplace')).includes('mp:501'));
   out = await post('/api/items/mp:501/move', { section: 'marketplace' });

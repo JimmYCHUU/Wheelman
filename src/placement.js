@@ -19,8 +19,8 @@
 import { config } from './config.js';
 
 export const SECTIONS = ['dashboard', 'marketplace', 'auction', 'importquery'];
-/** The sections the owner can move a conversation into. */
-export const MOVABLE = ['dashboard', 'importquery', 'auction'];
+/** The sections the owner can move a conversation into, in the order of the section tabs. */
+export const MOVABLE = ['dashboard', 'auction', 'importquery'];
 
 /** Whether a section is switched on: Marketplace and Import Query can be switched off. */
 export const sectionOn = (s) => (s === 'marketplace' ? config.marketplace.enabled : s === 'importquery' ? config.mail.switchedOn : SECTIONS.includes(s));

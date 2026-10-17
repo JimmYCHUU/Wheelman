@@ -29,7 +29,7 @@ import { onCopied, onRated, onApproved, onAdvice, onEdited } from './learn.js';
 import { displayNameFor } from './people.js';
 import { reservedByAnother } from './deal.js';
 import { wantedFrom, enquiryStage } from './imports.js';
-import { SECTIONS, sectionOn, movesFor } from './placement.js';
+import { SECTIONS, sectionOn, movesFor, onImportsList } from './placement.js';
 import { learnedStats } from './db.js';
 import { validateReport, storePhoneReport } from './phone.js';
 import { sendReply, fetchConversation, normalizeMpMessage, tagMarketplaceLinks } from './marketplace.js';
@@ -267,6 +267,8 @@ function orderOf(item) {
     messages: messagesFor(o).map((type) => ({ type, label: MESSAGES[type], due: s.kind === 'send' && s.next.type === type })).sort((a, b) => Number(b.due) - Number(a.due)),
     message: item.message,
     replying: s.kind === 'reply' && item.anchorKey === s.anchorKey,
+    // How the customer wrote, so how the reply goes: 'sms' (pasted into the dashboard) or 'whatsapp'.
+    replyVia: s.replyVia || '',
   };
 }
 
@@ -327,12 +329,17 @@ function present(item) {
     // An ordinary enquiry read as an import enquiry (why, and the car), and the owner's ruling on it.
     judged: item.judged ? { sign: item.judged.sign, why: item.judged.why, car: item.judged.car?.title || '' } : null,
     ruling: item.ruling ? { kind: item.ruling.kind } : null,
+    // Answered the import way: from the Imports list or the website's import form, read so, ruled so, or listed with the auction customers.
+    isImport: !!item.imports,
     canRule: /^[cl]:/.test(item.itemKey),
     // Where it belongs, where it is listed when the owner moved it (else null), and where it may go.
     home: item.home,
     moved: item.section !== item.home ? item.section : null,
     moves: movesFor(item),
     canMove: movesFor(item).includes('importquery'),
+    // Why it is listed where it is, when it is not where it came in: 'moved' (the owner), 'imports'
+    // (the dashboard's Imports list), 'order' (an auction order under way), or ''.
+    listed: item.move ? 'moved' : item.section === 'auction' && item.home === 'auction' ? (onImportsList(item) ? 'imports' : 'order') : '',
     vehicle: v ? { title: v.title, stockNo: v.stockNo, price: v.price, odometer: v.odometer, availability: shownAvailability(item, v), url: v.url, year: v.year, fuel: v.fuel, transmission: v.transmission, seats: v.seats, colour: v.color, included: v.outline || [] } : null,
     thread: threadOf(item, shown),
     earlier: item.timeline.length - shown.length,
