@@ -189,6 +189,28 @@ test('the list follows the section a conversation was moved to: a text in Import
   assert.ok(qs.templatesFor);
 });
 
+test('a conversation moved to another section is written that section\'s message: an email in Auction, a text in Import Query', async () => {
+  // An email moved to Auction: one of Auction's messages, in the email's own format (greeted and signed).
+  assert.equal((await post(`/api/items/${mailKey}/move`, { section: 'auction' })).status, 200);
+  try {
+    const out = await post(`/api/items/${mailKey}/draft`, { message: 'first_estimate' });
+    assert.equal(out.json.ok, true, out.json.error);
+    const d = out.json.item.draft;
+    assert.equal(d.template, 'first_estimate');
+    assert.match(d.reply, /^Hello Wren,/);
+    assert.ok(d.reply.includes('Hiace'), d.reply);
+  } finally { await post(`/api/items/${mailKey}/move`, { section: 'importquery' }); }
+  // A text moved to Import Query: Import Query's message, with the website's figures for the model they named.
+  assert.equal((await post('/api/items/c:203/move', { section: 'importquery' })).status, 200);
+  try {
+    const out = await post('/api/items/c:203/draft', { message: 'eligible_cost' });
+    assert.equal(out.json.ok, true, out.json.error);
+    const d = out.json.item.draft;
+    assert.ok(d.reply.includes('Toyota Hiace') && d.reply.includes('$57,781'), d.reply);
+    assert.ok(!/Hello Isla/.test(d.reply) || /Regards/.test(d.reply), 'a text is greeted as a text');
+  } finally { await post('/api/items/c:203/move', { section: 'dashboard' }); }
+});
+
 test('a message shown that no longer fits stays in the list, so the list always says what is in the box', async () => {
   const { item } = await get('/api/items/c:202?message=trade_in');
   assert.equal(item.template, 'trade_in');
@@ -224,6 +246,20 @@ test('a message about the car is not offered without one, nor for a sold car; a 
   for (const id of ['warranty', 'history', 'registration']) assert.ok(!sold.includes(id), `${id} offered for a sold car`);
   const text = (await qs.composeSectionTemplate(conversation({ vehicles: [car({ url: '' })] }), 'still_available', { now })).text;
   assert.ok(!/Vehicle details:/.test(text), text);
+});
+
+test('a text in Import Query that names an eligible model is offered "Ready to search", as an email is', async () => {
+  const qs = await import('../src/sectiontemplates.js');
+  const text = conversation({
+    section: 'importquery', isFirstReply: false, pendingText: 'Yes please, what would it cost landed?',
+    situation: { primary: 'import_sourcing', all: ['import_sourcing'] },
+    imports: { kind: 'import', forms: [{ kind: 'import', make: 'Toyota', model: 'Hiace', modelCode: 'GDH206', car: 'Toyota Hiace', judged: true }], order: null, judged: 'placed' },
+    timeline: [{ who: 'us', text: 'Thank you for your enquiry.', at: now - 2 * HOUR }, { who: 'customer', text: 'Yes please, what would it cost landed?', at: now - HOUR }],
+  });
+  const ids = qs.templatesFor(text).map((t) => t.id);
+  assert.ok(ids.includes('ready_to_search'), ids.join(', '));
+  const none = qs.templatesFor({ ...text, imports: { kind: 'import', forms: [], order: null, judged: 'placed' } }).map((t) => t.id);
+  assert.ok(!none.includes('ready_to_search'), none.join(', '));
 });
 
 test('"Where and when we are open" signs off only on the first message of the day, and gives the hours once', async () => {

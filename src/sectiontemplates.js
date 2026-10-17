@@ -21,7 +21,7 @@ import { priceFigures, PARTING, DECLINED } from './selling.js';
 import { topicsIn, researchFor } from './importquery.js';
 import { greetingFor } from './checks.js';
 import { sydneyHour, sydneyDay } from './time.js';
-import { money } from './imports.js';
+import { money, wantedFrom } from './imports.js';
 import { draftFromTemplate } from './templatedraft.js';
 
 /** The template file for each section. A conversation moved to another section gets that section's list. */
@@ -73,7 +73,8 @@ export function fitSignals(item) {
   if (PARTING.test(text) || DECLINED.test(text)) s.add('parting');
   if (fileFor(item) === IMPORT_FILE) {
     for (const t of topicsIn(`${item.mail?.subject || ''}\n${text}`)) s.add(t);
-    if (item.mail?.car) s.add('eligible');
+    // The model they named, from an email's words or from a moved text's (judged car in item.imports).
+    if (item.mail?.car || wantedFrom(item).make) s.add('eligible');
   }
   return s;
 }
