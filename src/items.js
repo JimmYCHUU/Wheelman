@@ -1,7 +1,7 @@
 // Builds the list of "work items": customers who have said something and are waiting for a reply.
 
-import { openDb, getLead, getLeadByConversation, getLeadByPhone, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor, getMailThread, getMailMessages, listMailThreads, itemRuling, itemMove, movedKeys, getAuctionOrder } from './db.js';
-import { orderKey, orderMarks, orderStatus, orderRow, occasionFor, orderTexts, MESSAGES } from './orders.js';
+import { openDb, getLead, getLeadByConversation, getLeadByPhone, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor, getMailThread, getMailMessages, listMailThreads, itemRuling, itemMove, movedKeys, getAuctionOrder, liveOrderCustomers } from './db.js';
+import { orderKey, orderMarks, orderStatus, orderRow, occasionFor, listOrderRows, MESSAGES } from './orders.js';
 import { sameMessage, windowFor } from './phone.js';
 import { phoneKeys } from './normalize.js';
 import { readInquiry, isSilentInquiry, isReaction, isAcknowledgement, isOptOut, menuReply, sameText, squash, resolveStock, stockFromUrl, findUrls, unwrapRelay } from './text.js';
@@ -17,15 +17,59 @@ import { naturalSection, sectionFor } from './placement.js';
 
 /**
  * Where a conversation is listed (src/placement.js): its own section, or where the owner moved it.
- * `liveOrder`: the customer's auction order that is still going. In Auction, its row stands for
- * the customer: the conversation is listed under it (`underOrder`), not as a row of its own.
+ * `liveOrder`: the customer's auction order that is still going. In Auction, when that order reads
+ * this very conversation, the order's row stands for the customer: the conversation is listed
+ * under it (`underOrder`), not as a row of its own. Anything the order does not read stays a row.
  */
 function place(item, move, { liveOrder = null } = {}) {
   item.home = naturalSection(item, { liveOrder });
   item.move = move || null;
   item.section = sectionFor(item, move, item.home);
-  item.underOrder = item.section === 'auction' && liveOrder ? orderKey(liveOrder.id) : null;
+  const reads = liveOrder && (liveOrder.conversationId ? item.conversationId === liveOrder.conversationId : !item.conversationId && !!liveOrder.leadId && item.lead?.id === liveOrder.leadId);
+  item.underOrder = item.section === 'auction' && reads ? orderKey(liveOrder.id) : null;
   return item;
+}
+
+/**
+ * The customer conversation an order reads: the one on its own number, else its lead's. { lead,
+ * conversationId, key }; key is that conversation's own (c:<id>, or l:<lead> with no texts yet).
+ */
+export function orderConversation(o) {
+  const lead = o.leadId ? getLead(o.leadId) : null;
+  const conversationId = o.conversationId ?? lead?.conversation_id ?? null;
+  return { lead, conversationId, key: conversationId ? `c:${conversationId}` : lead ? `l:${lead.id}` : '' };
+}
+
+/**
+ * Whether the order answers its customer's conversation: it is their newest order still going,
+ * and the owner has not moved that conversation to another section that is switched on.
+ */
+export function orderAnswersTexts(o, conv = orderConversation(o)) {
+  if (!o || o.closed || o.stage === 'COMPLETED' || !conv.key) return false;
+  const current = getAuctionOrder(o.leadId, o.customer?.phone);
+  if (current && current.id !== o.id) return false;
+  const move = itemMove(conv.key, conv.lead?.id || null);
+  return !move || sectionFor({ itemKey: conv.key }, move, 'auction') === 'auction';
+}
+
+/**
+ * What the customer's conversation holds since the order opened, while the order answers it:
+ * their messages (texts, website enquiries, texts seen on the phone) and ours, oldest first, each
+ * { anchor, direction 'IN'|'OUT', text, at }. The messages before it opened were dealt with then.
+ * `entries`: that conversation's timeline, when the caller has built it already.
+ */
+export function orderTexts(o, { conv = orderConversation(o), entries = null, now = Date.now() } = {}) {
+  if (!orderAnswersTexts(o, conv)) return [];
+  const timeline = entries || buildTimeline(conv.lead, conv.conversationId, { now });
+  return timeline
+    .filter((e) => (e.at || 0) > (o.createdAt || 0))
+    .map((e) => ({ anchor: e.key, direction: e.who === 'customer' ? 'IN' : 'OUT', text: e.text || e.event || '', at: e.at || 0 }))
+    .filter((t) => t.direction === 'OUT' || (t.text.trim() && !isAcknowledgement(t.text)));
+}
+
+/** The Auction section's order rows, each knowing what waits on it in its customer's conversation. */
+export function orderRows(opts = {}) {
+  return listOrderRows({ ...opts, textsFor: (o) => orderTexts(o, opts) });
 }
 
 const MIN = 60 * 1000;
@@ -559,15 +603,16 @@ export function buildOrderItem(id, { message = '', now = Date.now() } = {}) {
   const o = getOrder(Number(id));
   if (!o || o.goneAt) return null;
   const key = orderKey(o.id);
-  const marks = { ...orderMarks().of(key), texts: orderTexts(o) };
+  // The texts and website enquiries the dashboard has for this customer: context, shown as they
+  // are, and while the order answers them, what is waiting on it.
+  const conv = orderConversation(o);
+  const entries = conv.lead || conv.conversationId ? buildTimeline(conv.lead, conv.conversationId, { now }) : [];
+  const marks = { ...orderMarks().of(key), texts: orderTexts(o, { entries, conv }) };
   const status = orderStatus(o, marks, { now });
   const lead = { id: o.leadId, first_name: o.customer.firstName, last_name: o.customer.lastName, phone: o.customer.phone, email: o.customer.email, status: '', source: 'Auction order', state: '', stocks: [], inquiries: [] };
 
-  const timeline = [];
-  // The texts and website enquiries the dashboard has for this customer: context, shown as they are.
-  const smsLead = o.leadId ? getLead(o.leadId) : null;
-  const convId = o.conversationId ?? smsLead?.conversation_id ?? null;
-  if (smsLead || convId) timeline.push(...buildTimeline(smsLead, convId, { now }));
+  const timeline = [...entries];
+  const convId = conv.conversationId;
 
   // A step of the order is a record of ours, not something said to the customer: it is marked
   // internal, so it never counts as "we have written to them".
@@ -590,11 +635,9 @@ export function buildOrderItem(id, { message = '', now = Date.now() } = {}) {
   }
   timeline.sort((a, b) => (a.at - b.at) || (a.who === 'customer' ? -1 : 1));
 
-  // What waits on us: a pasted WhatsApp message, or a text. A text the timeline keeps under its
-  // website enquiry's key (a portal relays it both ways) is the same message, found by its time.
+  // What waits on us: a pasted WhatsApp message, or a message on the dashboard.
   const waitingKeys = new Set(status.waiting.map((p) => p.anchor));
-  const waitingTextAt = new Set(status.waiting.filter((p) => p.via === 'sms').map((p) => p.at));
-  const pending = timeline.filter((e) => waitingKeys.has(e.key) || (e.who === 'customer' && /^(m|i):/.test(e.key) && waitingTextAt.has(e.at)));
+  const pending = timeline.filter((e) => waitingKeys.has(e.key));
   const pendingText = pending.map((e) => e.text).filter(Boolean).join('\n');
   // A reply to what the customer wrote is about whatever they asked, on top of being an order.
   const asked = pending.length ? classify(pendingText, { events: [], leadStatus: '', buyer: false }).all.filter((s) => s !== 'general') : [];
@@ -638,6 +681,8 @@ export function buildOrderItem(id, { message = '', now = Date.now() } = {}) {
     underOrder: null,
     orderStatus: status,
     orderRow: orderRow(o, marks, { now }),
+    // The customer's conversation, and whether this order answers it (else it is answered where it is listed).
+    orderTexts: conv.key ? { key: conv.key, here: orderAnswersTexts(o, conv) } : null,
     // The kind of message in the box: the one picked, else the one that is due.
     message: chosen || (status.kind === 'send' ? status.next.type : ''),
   };
@@ -682,7 +727,12 @@ export function buildPhoneItem(id, { now = Date.now() } = {}) {
   item.autoDraft = false;
   item.phoneOnly = true;
   item.imports = null;
-  return place(item, itemMove(item.itemKey));
+  place(item, itemMove(item.itemKey));
+  // Moved into Auction or Import Query: an import enquiry, the car read from their words.
+  if (item.section === 'auction' || item.section === 'importquery') {
+    item.imports = judgedContext(null, { sign: 'placed', car: carIn(timeline.filter((e) => e.who === 'customer').map((e) => e.text)), why: 'you moved it' });
+  }
+  return item;
 }
 
 // ---- email threads from Gmail (the Import Query section) -----------------------------------
@@ -811,16 +861,22 @@ export function listItems({ maxAgeHours = config.draftMaxAgeHours, olderThanHour
     return items.slice(0, limit);
   }
 
-  // Auction: the leads on the dashboard's Imports list, and what the owner moved here. A customer
-  // whose auction order is under way is listed by that order instead (src/orders.js).
+  // Auction: the leads on the dashboard's Imports list, the customers whose auction order is under
+  // way, and what the owner moved here. A conversation its order reads is listed by that order
+  // instead (orderRows); whatever else such a customer sends is a row of its own.
   if (source === 'auction') {
     const platform = String(config.dashboard.importsPlatform || '').toUpperCase();
+    const leadRef = (l) => (l.conversation_id ? { conversationId: l.conversation_id, leadId: l.id } : { leadId: l.id });
+    const inWindow = (from, to = from) => (from >= cutoff || to >= cutoff) && from < before && to < before;
     for (const l of db.prepare('SELECT id, conversation_id FROM leads WHERE upper(platform) = ? AND (lead_at >= ? OR updated_at >= ?) AND lead_at < ? AND updated_at < ? ORDER BY updated_at DESC').all(platform, cutoff, cutoff, before, before)) {
-      keep(buildItem(l.conversation_id ? { conversationId: l.conversation_id, leadId: l.id } : { leadId: l.id }));
+      keep(buildItem(leadRef(l)));
     }
     for (const c of db.prepare('SELECT id FROM conversations WHERE upper(lead_platform) = ? AND latest_at >= ? AND latest_at < ?').all(platform, cutoff, before)) {
       if (!kept.has(`c:${c.id}`)) keep(buildItem({ conversationId: c.id }));
     }
+    const ordered = liveOrderCustomers();
+    for (const l of ordered.leads) if (inWindow(l.lead_at || 0, l.updated_at || 0) && !kept.has(l.conversation_id ? `c:${l.conversation_id}` : `l:${l.id}`)) keep(buildItem(leadRef(l)));
+    for (const c of ordered.conversations) if (inWindow(c.latest_at || 0) && !kept.has(`c:${c.id}`)) keep(buildItem({ conversationId: c.id }));
     keepMoved();
     items.sort(newest);
     return items.slice(0, limit);

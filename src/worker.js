@@ -3,9 +3,8 @@
 
 import { config, missingSettings } from './config.js';
 import { syncAll, syncMarketplace } from './sync.js';
-import { listItems, itemFromKey, buildOrderItem } from './items.js';
+import { listItems, itemFromKey, buildOrderItem, orderRows } from './items.js';
 import { prepareOrders } from './ordermessages.js';
-import { listOrderRows } from './orders.js';
 import { draftFor } from './drafter.js';
 import { latestDraft, isDismissed, draftsAwaitingOutcome, recordOutcome, markSuperseded, setMeta, getMeta, openDb, mpDraftsLastDay, rekeyPhoneThreads } from './db.js';
 import { providers, usage, modelStatus, lastModel } from './llm.js';
@@ -213,7 +212,7 @@ export async function draftWaiting({ max = 25 } = {}) {
     // Then Auction: the import and auction enquiries listed there, and the orders whose customer
     // has texted since we last wrote. (A message pasted from WhatsApp is answered as it is pasted.)
     queue.push(...listItems({ source: 'auction', states: ['awaiting'] }));
-    for (const r of listOrderRows()) if (r.dueKind === 'reply') { const order = itemFromKey(r.key); if (order?.autoDraft) queue.push(order); }
+    for (const r of orderRows()) if (r.dueKind === 'reply') { const order = itemFromKey(r.key); if (order?.autoDraft) queue.push(order); }
     let marketplaceLeft = 0;
     if (config.marketplace.enabled) {
       marketplaceLeft = Math.max(0, config.marketplace.dailyDrafts - mpDraftsLastDay());

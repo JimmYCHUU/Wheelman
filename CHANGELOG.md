@@ -18,9 +18,11 @@ and versions follow `MAJOR.MINOR.PATCH`.
   section which it is supposed to do", and a lead who asked us to import a car with the full
   specification should be moved to Auction: "there's nothing to ask him about".)
 - **One row per auction customer.** Once a customer has an order under way, the order stands for
-  them in Auction. A text from them since the order opened puts the order in To do as a reply to
-  what they wrote, written for a text; our text back answers it. The background writer writes for
-  these, and for the enquiries listed in Auction.
+  them in Auction. A text or website enquiry from them since the order opened puts the order in To
+  do as a reply to what they wrote, written for a text; our text back answers it, and Dismiss sets
+  aside everything that was waiting. Anything else from that customer is a row of its own in
+  Auction. The order's panel can send their texts to Dashboard and back. The background writer
+  writes for these, and for the enquiries listed in Auction.
 
 ### Changed
 - **Moves have their own record.** "Moved to Import Query" used to ride on the import ruling;

@@ -7,12 +7,16 @@ import { icon } from '../lib/icons.js';
 import { t } from '../lib/copy.js';
 import { SECTIONS } from '../sections/registry.js';
 
-/** The choices, in the server's order: { section, label, hint }. Its own section reads "Move back to". */
+/**
+ * The choices, in the server's order: { section, label, hint }. Its own section reads "Move back
+ * to". A Facebook chat or an email keeps its own way of answering in Auction, so its hint says so.
+ */
 export function moveChoices(item) {
+  const own = (section) => (section === 'auction' && ['marketplace', 'email'].includes(item.channel) ? `move.hint.auction.${item.channel}` : `move.hint.${section}`);
   return (item.moves || []).filter((s) => SECTIONS[s]).map((section) => ({
     section,
     label: t(section === item.home ? 'move.back' : 'move.to', { section: SECTIONS[section].label }),
-    hint: t(`move.hint.${section}`),
+    hint: t(own(section)),
   }));
 }
 

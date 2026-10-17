@@ -380,9 +380,11 @@ change. The toast has **Undo**, and back in its own section the move is forgotte
 
 A move is kept with the lead, so it follows into the text conversation that starts later. Moved
 into Auction or Import Query, a conversation is answered as an import enquiry, its car read from
-the customer's words even when a car of that model is on the yard; in Auction, until we have
-offered a car, each reply searches the live auction with what they asked for, so a customer who
-already gave the car and the details gets an offer, not the same questions again. Nothing is
+the customer's words even when a car of that model is on the yard. The first reply after you
+move it into Auction searches the live auction with what they asked for, however far the
+conversation has gone, so a customer who already gave the car and the details gets an offer, not
+the same questions again; after that, as for any import enquiry, only something new sets off a
+search. Nothing is
 learned while a conversation is in Auction, and nothing written while it was there teaches
 after it leaves. A Facebook chat never teaches, wherever it is listed.
 
@@ -930,10 +932,14 @@ Imports list, and any conversation you moved here. Their rows say where the enqu
 (Enquiry: asking for details · ready to search · car offered · compliance only), and they are
 answered the import way: what they are looking for is asked first, then the Japan auctions are
 searched and the best car is offered. **One row per customer:** once a customer has an order
-under way, the order stands for them and their own conversation is no longer a row of its own.
-A text from them since the order opened (within the last week) puts the order in To do as a
-reply to what they wrote, written for a text and pasted into the dashboard; our text back
-answers it. Move their conversation back to Dashboard and its texts are answered there instead.
+under way, the order stands for them and the conversation it reads (the one on the order's
+number, else its lead's) is no longer a row of its own. A text or website enquiry from them
+since the order opened (within the last week) puts the order in To do as a reply to what they
+wrote, written for a text and pasted into the dashboard; our text back answers it, and Dismiss
+sets aside everything that was waiting. Anything else from that customer, such as a new lead on
+the same number, is a row of its own in Auction, never lost. The order's panel has **Their
+texts**, with **Answer their texts in Dashboard** (and back) when you would rather answer that
+conversation as an ordinary one.
 
 ### The three lists
 

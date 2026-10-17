@@ -1407,7 +1407,26 @@ function orderInfo(o, row) {
         row('Paid', m.paid ? money(m.paid) : ''),
         row('Still due', m.due > 0 ? money(m.due) : m.total ? 'Nothing' : '')),
       m.payments.length ? h('p', { class: 'fine', text: `Payments: ${m.payments.map((p) => `${money(p.amount)} on ${day(p.at)}`).join(', ')}.` }) : null) : null,
+    // Their own conversation on the dashboard: answered on this order, or in Dashboard.
+    o.texts ? h('section', {},
+      h('h4', { text: t('order.texts.title') }),
+      h('p', { class: 'fine', text: t(o.texts.here ? 'order.texts.here' : 'order.texts.elsewhere') }),
+      h('div', { class: 'rulings' },
+        h('button', { class: 'btn outline', type: 'button', onclick: () => moveTexts(o.texts, o.texts.here ? 'dashboard' : 'auction') }, t(o.texts.here ? 'order.texts.toDashboard' : 'order.texts.toOrder')))) : null,
   ];
+}
+
+/** Where an auction customer's texts are answered: on their order, or in Dashboard. Undo puts them back. */
+async function moveTexts(texts, section) {
+  const again = async () => { document.activeElement?.blur?.(); await refreshDetail(); refreshList(); };
+  try {
+    const out = await api(`/api/items/${texts.key}/move`, { body: { section } });
+    toast(t(section === 'dashboard' ? 'toast.textsToDashboard' : 'toast.textsToOrder'), { label: 'Undo', run: async () => {
+      try { await api(`/api/items/${texts.key}/move`, { body: { section: out.from } }); } catch (e) { toast(e.message); return; }
+      await again();
+    } });
+    await again();
+  } catch (e) { toast(e.message); }
 }
 
 /** The Marketplace part of the details panel: the seller account, the listing, and what the auto-reply noted. */

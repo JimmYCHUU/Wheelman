@@ -9,11 +9,12 @@
 // from the auction feed, never written by the AI. The deposit link is left as a blank for a person.
 
 import { config } from './config.js';
-import { getAuctionOrder } from './db.js';
+import { getAuctionOrder, firstDraftSince } from './db.js';
 import { readImportForm } from './text.js';
 import { searchLots, getLot, estimateFor, soldComparables, lotIdFromUrl } from './auction.js';
 import { formatSydney, formatDay } from './time.js';
 import { template, fill, fillParts } from './templates.js';
+import { carIn } from './importjudge.js';
 
 export const money = (n) => `$${Math.round(n).toLocaleString('en-AU')}`;
 export const yen = (n) => `¥${Math.round(n).toLocaleString('en-AU')}`;
@@ -115,9 +116,12 @@ export function wantedFrom(item, instruction = '') {
   let make = o.make || fromForms('make');
   let model = o.model || fromForms('model');
   if (!make) { const [first, ...rest] = String(fromForms('car')).split(/\s+/); make = first || ''; model = model || rest.join(' '); }
+  // Nothing names the car: the one their own words name from the import list, if any.
+  const named = make ? null : carIn(theirWords);
+  if (named) { make = named.make; model = named.model; }
   const w = {
     make, model,
-    modelCode: o.modelCode || fromForms('modelCode'),
+    modelCode: o.modelCode || fromForms('modelCode') || named?.modelCode || '',
     car: [make, model].filter(Boolean).join(' '),
     yearFrom: o.yearFrom || said.yearFrom, yearTo: o.yearTo || said.yearTo,
     maxKm: said.maxKm || fromForms('maxKm') || 0,
@@ -285,6 +289,12 @@ function named(text, { looseBid = false } = {}) {
 /** The auction car we last sent this customer a link to. */
 export const lastOfferedLot = (item) => { for (let i = item.timeline.length - 1; i >= 0; i--) { const e = item.timeline[i]; if (e.who === 'us' && !e.internal) { const id = lotIdFromUrl(e.text); if (id) return id; } } return ''; };
 
+/** True when no suggestion has been written for this conversation since `at`, or the first one since was for the message waiting now. */
+function firstReplySince(item, at) {
+  const first = firstDraftSince(item.itemKey, at);
+  return !first || first.anchorKey === item.anchorKey;
+}
+
 /** True once a deposit is paid or the request has moved past its first stage: no longer an enquiry to quote. */
 const underWay = (order) => !!order && ((order.depositState && order.depositState !== 'NONE') || (order.stage && order.stage !== 'INITIAL_DEPOSIT'));
 
@@ -309,9 +319,10 @@ export async function planImport(item, { instruction = '', now = Date.now() } = 
   const wantsSearch = /\b(find|search|look for|auction|another (car|one|option)|other options?)\b/i.test(instruction) || Object.values(toldBy(instruction)).some(Boolean);
   const newDetails = Object.values(specificsIn(item.pendingText)).some(Boolean);
   const pointed = staff.lotId || theirs.lotId || staff.bidYen || theirs.bidYen;
-  // An auction customer we have not yet offered a car: what they asked for is searched for, however
-  // far the conversation has gone. (A conversation the owner moved into Auction is one.)
-  const unoffered = item.section === 'auction' && !lastOfferedLot(item);
+  // Moved into Auction by the owner and not offered a car yet: the first reply since the move (or
+  // that same reply written again) searches with what they asked for, however far the conversation
+  // has gone. After that, as for any import enquiry, only something new sets off a search.
+  const unoffered = item.move?.section === 'auction' && !lastOfferedLot(item) && firstReplySince(item, item.move.at);
 
   if (!pointed) {
     // Nothing to go on yet: ask what they are looking for.

@@ -50,14 +50,20 @@ Moving changes only the section.
 
 ## Calls made in building, for the owner to check
 
-1. An auction order never moves. A lead whose customer has an order under way (not finished),
-   from any platform, is listed under its order in Auction: one row per customer. He can move
-   the conversation back to Dashboard, and its texts are then answered there.
+1. An auction order never moves. A customer with an order under way (not finished), from any
+   platform, is an auction customer. The conversation the order reads (the one on the order's
+   number, else its lead's) is listed under the order: one row per customer. Anything else from
+   that customer is a row of its own in Auction. The order's panel sends their texts to Dashboard
+   and back.
 2. Every Imports AU lead goes to Auction, compliance-only ones included.
-3. In Auction, until we have offered a car, each reply searches the live auction with what the
-   customer asked for, so moving such a customer in leads to an offer, not questions.
-4. A text counts as waiting on an order only if it came after the order opened and within the
-   last week; older ones show in the thread.
+3. The first reply after the owner moves a conversation into Auction (or that reply written
+   again) searches the live auction with what the customer asked for, so moving such a customer
+   in leads to an offer, not questions. After that, as for any import enquiry, only something new
+   sets off a search. (First built as "every reply until a car is offered"; narrowed after review,
+   since it applied to every Imports lead.)
+4. A text or website enquiry counts as waiting on an order only if it came after the order
+   opened and within the last week; older ones show in the thread. Dismiss sets aside the message
+   it was pressed on and every one before it.
 5. Nothing is learned while a conversation is in Auction, and nothing written while it was
    there teaches after it leaves. Facebook chats never teach, wherever they are listed. The
    team's real sent replies are still read as examples.

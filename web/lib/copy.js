@@ -125,6 +125,17 @@ export const COPY = {
   'move.hint.importquery': 'Answered as an import question, with the facts from our importing pages.',
   'move.hint.auction': 'Answered as an auction customer: what they want is searched for in the Japan auctions.',
   'move.hint.marketplace': 'Back with the Facebook chats, answered the Marketplace way.',
+  // A Facebook chat or an email in Auction is listed with the auction customers but keeps its own way of answering.
+  'move.hint.auction.marketplace': 'Listed with the auction customers. Replies stay in the Facebook chat style.',
+  'move.hint.auction.email': 'Listed with the auction customers, and answered with the facts from our importing pages.',
+  // An auction order and its customer's texts on the dashboard.
+  'order.texts.title': 'Their texts',
+  'order.texts.here': 'Their texts and website enquiries on the dashboard are answered on this order: a new one puts it in To do.',
+  'order.texts.elsewhere': 'Their texts are answered in Dashboard, as an ordinary conversation, not on this order.',
+  'order.texts.toDashboard': 'Answer their texts in Dashboard',
+  'order.texts.toOrder': 'Answer their texts on this order',
+  'toast.textsToDashboard': 'Their texts are answered in Dashboard now.',
+  'toast.textsToOrder': 'Their texts are answered on this order now.',
   'move.foot': 'It keeps its messages, and the reply still goes out the way it came in.',
   'move.info.title': 'Where it is listed',
   'move.info.moved': 'You moved this conversation to {section}. It came in as {home}, and the reply still goes out the way it came in.',

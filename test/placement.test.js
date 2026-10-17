@@ -183,7 +183,7 @@ test('a customer with an auction order is one row in Auction, the order, and a n
   // A text more than a week old is not raised as waiting on the order: it shows in its thread.
   const o601 = db.getOrder(601);
   const orders = await import('../src/orders.js');
-  assert.equal(orders.orderStatus(o601, { copied: new Map(), dismissed: new Set(), pastes: [], lastCopyAt: 0, texts: orders.orderTexts(o601) }, { now: now + 8 * 24 * HOUR }).kind === 'reply', false);
+  assert.equal(orders.orderStatus(o601, { copied: new Map(), dismissed: new Set(), pastes: [], lastCopyAt: 0, texts: items.orderTexts(o601) }, { now: now + 8 * 24 * HOUR }).kind === 'reply', false);
 
   // Our text back answers it.
   conversation(99105, 9105, 'Vic', [['OUT', 'Hello Vic, two are coming up on Friday.', 2 * MIN]]);
@@ -287,4 +287,98 @@ test('the background writer writes for enquiries in Auction and for orders a cus
   const order = items.itemFromKey('ao:602');
   assert.match(order.anchorKey, /^m:/);
   assert.equal(db.latestDraft(order.itemKey, order.anchorKey)?.status, 'ready', 'the order, for their text');
+});
+
+
+// ---- found in review: nothing is lost under an order, and each rule holds once ----------------------
+
+/** An auction order for one of our invented leads, on the number given. */
+const storeOrder = (id, leadId, phone) => {
+  const [o] = rawOrders(now);
+  const who = { ...o.invoiceTo, mobileNumber: phone };
+  sync.storeAuctionOrders([{ ...o, id, orderNo: `AS-${id}`, leadId, invoiceTo: who, deliveryTo: who }], { complete: false, now });
+};
+const orderRow = async (key) => (await get('/api/items?section=auction&tab=waiting&limit=1000')).items.find((r) => r.key === key);
+
+test("an auction customer's enquiry that the order does not read is listed in Auction as its own row, never lost", async () => {
+  lead(9111, 'Kai', 'Auction alert for a Subaru XV Hybrid', { platform: 'IMPORTS', source: 'Auction', conversationId: 99111, phone: '0491 570 921' });
+  conversation(99111, 9111, 'Kai', [['IN', 'Hi, about the XV', 3 * 24 * HOUR]]);
+  storeOrder(603, 9111, '0491 570 921');
+  // A new website lead from the same number, with no text conversation: the order reads only its own lead's conversation.
+  lead(9112, 'Kai', 'Do you also have any Noahs on the yard?', { phone: '0491 570 921' });
+  assert.ok((await keys('auction')).includes('l:9112'), 'listed with the auction customers');
+
+  // A new website enquiry on the order's own lead: waiting on the order, like a text.
+  db.upsertLead({ id: 9111, conversationId: 99111, firstName: 'Kai', lastName: 'Invented', phone: '0491 570 921', email: 'kai@example.com', source: 'Auction', status: 'NEW', platform: 'IMPORTS', state: '', leadAt: now - 4 * 24 * HOUR, updatedAt: now - MIN, stocks: [], statusHistory: [],
+    inquiries: [{ id: 91110, type: 'Auction', subject: 'Enquiry', text: 'Auction alert for a Subaru XV Hybrid', stockNo: '', at: now - 4 * 24 * HOUR, status: 'NEW', url: '', leadType: '', staffNotes: [] },
+      { id: 91111, type: 'Import', subject: 'Enquiry', text: 'Could you also look for a 2016 one with lower kilometres?', stockNo: '', at: now - 2 * MIN, status: 'NEW', url: '', leadType: '', staffNotes: [] }] });
+  const row = await orderRow('ao:603');
+  assert.deepEqual([row?.dueKind, row?.preview.text], ['reply', 'Could you also look for a 2016 one with lower kilometres?']);
+
+  // The order's number belongs to another conversation than its lead's: the lead's own conversation is a row of its own.
+  lead(9113, 'Lou', 'Auction alert for a Subaru XV Hybrid', { platform: 'IMPORTS', source: 'Auction', conversationId: 99113, phone: '0491 570 923' });
+  db.upsertConversation({ id: 99114, phone: '+61491570924', channel: 'SMS', status: 'OPEN', leadId: null, customerName: 'Lou Invented', latestDirection: 'IN', latestAt: now - 3 * 24 * HOUR, latestBody: 'This is my other number' });
+  storeOrder(604, 9113, '0491 570 924');
+  conversation(99113, 9113, 'Lou', [['IN', 'Any update on my order?', 5 * MIN]]);
+  assert.equal(db.getOrder(604).conversationId, 99114, 'the order reads the conversation on its own number');
+  assert.ok((await keys('auction')).includes('c:99113'), "the lead's own conversation is not hidden");
+});
+
+test('Dismiss on an order clears every message that was waiting, not only the newest', async () => {
+  lead(9115, 'Mo', 'Auction alert for a Subaru XV Hybrid', { platform: 'IMPORTS', source: 'Auction', conversationId: 99115, phone: '0491 570 925' });
+  storeOrder(605, 9115, '0491 570 925');
+  conversation(99115, 9115, 'Mo', [['IN', 'Hello?', 6 * MIN], ['IN', 'Did you get my message?', 4 * MIN]]);
+  assert.equal((await orderRow('ao:605')).dueKind, 'reply');
+  assert.equal((await post('/api/items/ao:605/dismiss')).status, 200);
+  assert.notEqual((await orderRow('ao:605'))?.dueKind, 'reply');
+});
+
+test('an Imports lead that nobody moved is searched for only when it tells us something new', async () => {
+  lead(9116, 'Noor', 'Hi, can you get me a Honda N-Box? 2019 or newer, under 40,000 km.', { platform: 'IMPORTS', source: 'Import', conversationId: 99116, phone: '0491 570 926' });
+  conversation(99116, 9116, 'Noor', [['OUT', 'Hello Noor, thank you, we will look into it.', 30 * MIN], ['IN', 'Thanks, I will pay the deposit tomorrow.', 10 * MIN]]);
+  const item = items.itemFromKey('c:99116');
+  assert.equal(item.section, 'auction');
+  await drafter.draftFor(item);
+  assert.ok(!/We searched the live auction/.test(lastPrompt()), 'no search for a message with nothing new');
+});
+
+test('treated as an import enquiry and then moved to Auction, the car is read from their words', async () => {
+  lead(9117, 'Ivy', 'Looking for a Toyota Alphard Welcab, 2018 or newer, budget $50k.', { phone: '0491 570 927' });
+  await post('/api/items/l:9117/ruling', { kind: 'import' });
+  await settled('l:9117');
+  await post('/api/items/l:9117/move', { section: 'auction' });
+  const after = await settled('l:9117');
+  assert.match(lastPrompt(), /=== IMPORT ENQUIRY ===[\s\S]*Alphard Welcab/);
+  assert.equal(db.latestDraft(after.itemKey, after.anchorKey).context.importStage, 'none');
+});
+
+test("an order says where its customer's texts are answered, and they can be sent to Dashboard and back", async () => {
+  let order = (await get('/api/items/ao:605')).item.order;
+  assert.deepEqual(order.texts, { key: 'c:99115', here: true });
+  await post('/api/items/c:99115/move', { section: 'dashboard' });
+  order = (await get('/api/items/ao:605')).item.order;
+  assert.deepEqual(order.texts, { key: 'c:99115', here: false });
+  assert.ok((await keys('dashboard')).includes('c:99115'));
+  await post('/api/items/c:99115/move', { section: 'auction' });
+  assert.equal((await get('/api/items/ao:605')).item.order.texts.here, true);
+  assert.equal(db.itemMove('c:99115', 9115), null);
+});
+
+test('a conversation last seen weeks ago leaves Dashboard as soon as an order opens for it', async () => {
+  db.upsertLead({ id: 9118, conversationId: 99118, firstName: 'Oz', lastName: 'Invented', phone: '0491 570 928', email: 'oz@example.com', source: 'Contact Us Form', status: 'NEW', platform: 'carbarnau', state: '', leadAt: now - 30 * 24 * HOUR, updatedAt: now - 30 * 24 * HOUR, stocks: [], statusHistory: [], inquiries: [] });
+  conversation(99118, 9118, 'Oz', [['IN', 'Is the Noah still available?', 30 * 24 * HOUR]]);
+  assert.ok((await keys('dashboard')).includes('c:99118'));
+  storeOrder(606, 9118, '0491 570 928');
+  assert.ok(!(await keys('dashboard')).includes('c:99118'), 'under its order now');
+});
+
+test('a number seen only on the phone, moved to Auction, is answered as an import enquiry', async () => {
+  const phone = await import('../src/phone.js');
+  const t0 = Date.now();
+  phone.storePhoneReport(phone.validateReport({ v: 1, seenAt: t0, hidden: true, path: '/web/conversations', signedOut: false, found: { listItems: 1, parsed: 1 },
+    threads: [{ ref: 'r9', name: '0491 570 929', kind: 'number', unread: true, latest: { direction: 'in', text: 'Can you find me a Honda N-Box from Japan?', media: null, truncated: false, when: '3 min', at: t0 - 3 * MIN, precision: 'minute' } }] }));
+  const key = (await keys('dashboard', 'all')).find((k) => k.startsWith('ph:') && items.itemFromKey(k)?.phone === '0491 570 929');
+  assert.ok(key, 'listed in Dashboard');
+  const out = await post(`/api/items/${key}/move`, { section: 'auction' });
+  assert.deepEqual([out.json.item.section, out.json.item.isImport], ['auction', true]);
 });

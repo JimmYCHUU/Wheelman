@@ -168,4 +168,11 @@ test('the Move menu offers the sections a conversation is not in, in plain words
   // Each says, in a sentence, how the customer is answered there.
   for (const c of moveChoices({ section: 'dashboard', home: 'marketplace', moves: ['importquery', 'auction', 'marketplace'] })) assert.ok(c.hint.length > 10, c.section);
   for (const key of ['move.button', 'move.title', 'move.foot', 'toast.movedTo', 'move.info.moved', 'move.info.imports', 'move.info.order']) assert.ok(COPY[key], key);
+  // An order says where its customer's texts are answered, and moves them.
+  for (const key of ['order.texts.title', 'order.texts.here', 'order.texts.elsewhere', 'order.texts.toDashboard', 'order.texts.toOrder', 'toast.textsToDashboard', 'toast.textsToOrder']) assert.ok(COPY[key], key);
+  // A Facebook chat or an email moved to Auction is not searched for at auction: its hint says so.
+  const hint = (channel) => moveChoices({ section: 'dashboard', home: 'dashboard', channel, moves: ['auction'] })[0].hint;
+  assert.match(hint('sms'), /searched for in the Japan auctions/);
+  assert.doesNotMatch(hint('marketplace'), /searched/);
+  assert.doesNotMatch(hint('email'), /searched/);
 });

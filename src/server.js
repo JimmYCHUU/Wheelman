@@ -4,9 +4,9 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
-import { listItems, itemFromKey } from './items.js';
+import { listItems, itemFromKey, orderRows } from './items.js';
 import { latestDraft, getDraft, dismiss, undismiss, isDismissed, setDraftRating, markSeen, isSeen, dataStamp, uncopy, addOrderMessage, removeOrderMessage, setItemRuling, clearItemRuling, setItemMove, clearItemMove } from './db.js';
-import { listOrderRows, MESSAGES, messagesFor, wantedText, carTitle, lotName, lotPageUrl, cleanPaste } from './orders.js';
+import { MESSAGES, messagesFor, wantedText, carTitle, lotName, lotPageUrl, cleanPaste } from './orders.js';
 import { draftOrderMessage } from './ordermessages.js';
 import { draftFor, writingNow } from './drafter.js';
 import { availability } from './normalize.js';
@@ -269,6 +269,8 @@ function orderOf(item) {
     replying: s.kind === 'reply' && item.anchorKey === s.anchorKey,
     // How the customer wrote, so how the reply goes: 'sms' (pasted into the dashboard) or 'whatsapp'.
     replyVia: s.replyVia || '',
+    // The customer's own conversation: answered on this order (here), or where it is listed.
+    texts: item.orderTexts,
   };
 }
 
@@ -420,7 +422,7 @@ function sectionRows(section, hours = Infinity) {
   let value;
   if (section === 'auction') {
     // To do, In progress, Finished: the orders, and the enquiries that have no order yet.
-    const rows = listOrderRows();
+    const rows = orderRows();
     const asks = enquiryRows();
     const rank = (r) => (r.dueKind === 'reply' ? 0 : r.state === 'awaiting' ? 1 : 2);
     const order = (a, b) => rank(a) - rank(b) || (b.lastAt || 0) - (a.lastAt || 0);

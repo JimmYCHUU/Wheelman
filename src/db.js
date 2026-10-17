@@ -382,6 +382,7 @@ export function oldRowsStamp() {
       (SELECT COUNT(*) || ':' || IFNULL(MAX(at), 0) FROM seen) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(at), 0) FROM item_rulings) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(at), 0) FROM item_moves) || '/' ||
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(changed_at), 0) || ':' || IFNULL(SUM(gone_at IS NULL), 0) FROM auction_orders) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(changed_at), 0) || ':' || IFNULL(SUM(conversation_id), 0) FROM phone_threads) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(last_message_at), 0) FROM mp_conversations) || '/' ||
       (SELECT COUNT(*) FROM mp_messages) || '/' ||
@@ -556,24 +557,22 @@ export function setOrderWatch(id, watch, now = Date.now()) {
  * Matched by the lead the dashboard names on the order, or else by the customer's phone number.
  */
 export function getAuctionOrder(leadId, phone = '') {
-  const d = openDb();
   const live = "gone_at IS NULL AND (closed IS NULL OR closed = '')";
-  let r = leadId ? d.prepare(`SELECT * FROM auction_orders WHERE lead_id = ? AND ${live} ORDER BY created_at DESC LIMIT 1`).get(leadId) : null;
+  let r = leadId ? stmt(`SELECT * FROM auction_orders WHERE lead_id = ? AND ${live} ORDER BY created_at DESC LIMIT 1`).get(leadId) : null;
   const key = String(phone || '').replace(/\D/g, '').slice(-9);
-  if (!r && key.length === 9) r = d.prepare(`SELECT * FROM auction_orders WHERE phone_key = ? AND ${live} ORDER BY created_at DESC LIMIT 1`).get(key);
+  if (!r && key.length === 9) r = stmt(`SELECT * FROM auction_orders WHERE phone_key = ? AND ${live} ORDER BY created_at DESC LIMIT 1`).get(key);
   const o = parseOrder(r);
   if (!o || !o.orderNo) return null;
-  return { id: o.id, leadId: o.leadId, orderNo: o.orderNo, stage: o.stage || '', lotPhase: o.lotPhase || '', source: o.source || '', lotId: o.lot?.id || '', depositState: o.depositState || '', wanted: o.wanted || {}, createdAt: o.createdAt };
+  return {
+    id: o.id, leadId: o.leadId, orderNo: o.orderNo, stage: o.stage || '', lotPhase: o.lotPhase || '', source: o.source || '', lotId: o.lot?.id || '', depositState: o.depositState || '', wanted: o.wanted || {}, createdAt: o.createdAt,
+    // The text conversation the order reads its customer's messages from (see orderConversation in items.js).
+    conversationId: o.conversationId ?? leadConversationId(o.leadId),
+  };
 }
 
 /** The text conversation a lead has, if any. */
 export function leadConversationId(leadId) {
   return leadId ? stmt('SELECT conversation_id AS c FROM leads WHERE id = ?').get(Number(leadId))?.c ?? null : null;
-}
-
-/** The newest texts of a conversation, oldest first: { id, direction 'IN'|'OUT', text, at, status }. */
-export function recentTexts(conversationId, limit = 30) {
-  return stmt('SELECT id, direction, body AS text, at, status FROM messages WHERE conversation_id = ? ORDER BY at DESC, id DESC LIMIT ?').all(Number(conversationId), limit).reverse();
 }
 
 /** A message the owner pasted into an order. Returns its id. */
@@ -925,10 +924,28 @@ export function clearItemMove(itemKey, leadId = null) {
   stmt('DELETE FROM item_moves WHERE item_key = ? OR (lead_id IS NOT NULL AND lead_id = ?)').run(itemKey, leadId ?? null);
 }
 
-/** Whether the owner moved this lead's conversation out of Auction: its texts are then answered where it is listed, not on the order. */
-export function movedOutOfAuction(leadId, conversationId) {
-  return !!stmt("SELECT 1 FROM item_moves WHERE section != 'auction' AND ((lead_id IS NOT NULL AND lead_id = ?) OR item_key = ? OR item_key = ?) LIMIT 1")
-    .get(leadId ?? null, conversationId ? `c:${conversationId}` : '', leadId ? `l:${leadId}` : '');
+/**
+ * The leads and text conversations of customers with an auction order still going, matched the
+ * way getAuctionOrder matches them: by the order's lead, its conversation, or its number. They
+ * are auction customers, listed in Auction (under the order when it reads that conversation).
+ * { leads: [{ id, conversation_id, lead_at, updated_at }], conversations: [{ id, latest_at }] }
+ */
+export function liveOrderCustomers() {
+  const live = stmt("SELECT lead_id, conversation_id, phone_key FROM auction_orders WHERE gone_at IS NULL AND (closed IS NULL OR closed = '')").all();
+  if (!live.length) return { leads: [], conversations: [] };
+  const leadIds = new Set(live.map((r) => r.lead_id).filter(Boolean));
+  const convIds = new Set(live.map((r) => r.conversation_id).filter(Boolean));
+  const keys = new Set(live.map((r) => r.phone_key).filter(Boolean));
+  const onNumber = (phone) => String(phone || '').split(/[|,/]/).some((p) => keys.has(p.replace(/\D/g, '').slice(-9)));
+  return {
+    leads: stmt('SELECT id, conversation_id, phone, lead_at, updated_at FROM leads').all().filter((l) => leadIds.has(l.id) || onNumber(l.phone)),
+    conversations: stmt('SELECT id, phone, latest_at FROM conversations').all().filter((c) => convIds.has(c.id) || onNumber(c.phone)),
+  };
+}
+
+/** The first suggestion written for a conversation since a time: { anchorKey }, or null. */
+export function firstDraftSince(itemKey, at) {
+  return stmt('SELECT anchor_key AS anchorKey FROM drafts WHERE item_key = ? AND created_at >= ? ORDER BY created_at, id LIMIT 1').get(itemKey, at || 0) || null;
 }
 
 /** The keys of the conversations the owner moved into a section, latest first. */
