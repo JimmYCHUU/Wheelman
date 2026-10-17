@@ -603,7 +603,8 @@ export function buildOrderItem(id, { message = '', now = Date.now() } = {}) {
   return {
     channel: 'auction',
     mediaOnly: false,
-    autoDraft: false,
+    // A text from the customer is answered without being asked, as on the dashboard.
+    autoDraft: status.kind === 'reply' && status.replyVia === 'sms',
     autoReason: '',
     noLead: false,
     hasLeadRecord: true,

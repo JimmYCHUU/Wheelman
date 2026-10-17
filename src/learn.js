@@ -41,6 +41,15 @@ function sinceVoice(rows) {
 
 /** Only dashboard conversations and leads, and import emails, teach Wheelman. */
 export const canLearnFrom = (itemKey) => /^(?:[cl]|em):\d+$/.test(String(itemKey || ''));
+/**
+ * Whether this conversation teaches where it is listed now: one that can teach at all, and is not
+ * in the Auction section. Nothing is learned from Auction, whatever the conversation came from.
+ */
+export const teachesHere = (item) => !!item && canLearnFrom(item.itemKey) && item.section !== 'auction';
+/** A suggestion written while its conversation was in Auction teaches nothing, even after it is moved out. */
+const writtenInAuction = (draft) => draft?.context?.section === 'auction';
+const NOT_HERE = 'not a dashboard conversation or an import email';
+const notHereWhy = (item) => (item?.section === 'auction' ? 'in the Auction section' : NOT_HERE);
 /** Which kind of reply a request wants lessons for: emails learn from emails, everything else from texts. */
 const wantChannel = (q) => (q?.channel === 'email' ? 'email' : 'sms');
 const sameChannel = (row, q) => (row.channel || 'sms') === wantChannel(q);
@@ -96,8 +105,9 @@ function aboutOf(item, draft, upto) {
  * @param source    'copied' | 'sent'
  */
 export function learnFrom(item, draft, finalText, source, { at = Date.now() } = {}) {
-  if (!item || !draft || !canLearnFrom(item.itemKey)) return { learned: false, why: 'not a dashboard conversation or an import email' };
-  if (draft.item_key !== undefined && !canLearnFrom(draft.item_key)) return { learned: false, why: 'not a dashboard conversation or an import email' };
+  if (!item || !draft || !teachesHere(item)) return { learned: false, why: notHereWhy(item) };
+  if (draft.item_key !== undefined && !canLearnFrom(draft.item_key)) return { learned: false, why: NOT_HERE };
+  if (writtenInAuction(draft)) return { learned: false, why: 'written in the Auction section' };
   if (draft.rating === 'bad' && source === 'copied') return { learned: false, why: 'rated not usable' };
 
   const lead = item.lead;
@@ -155,7 +165,7 @@ export function onCopied(item, draftId, text) {
   if (/^ao:\d+$/.test(String(draft.item_key || ''))) { recordCopied(draftId, String(text || '').slice(0, 4000)); return { learned: false, why: 'an auction order' }; }
   // A Marketplace suggestion, or one for a text seen only on the phone: note that Copy was
   // pressed, keep none of the text, learn nothing.
-  if (!canLearnFrom(draft.item_key) || !canLearnFrom(item?.itemKey)) { recordCopiedTime(draftId); return { learned: false, why: 'not a dashboard conversation or an import email' }; }
+  if (!canLearnFrom(draft.item_key) || !canLearnFrom(item?.itemKey)) { recordCopiedTime(draftId); return { learned: false, why: NOT_HERE }; }
   recordCopied(draftId, String(text || '').slice(0, 4000));
   return learnFrom(item, draft, text, 'copied');
 }
@@ -176,7 +186,7 @@ export function onEdited(item, draftId, text) {
   recordEdit(draftId, edited ? clean : null);
   let rating = draft.rating || '';
   // A reply that was approved and is then changed: the approval follows the text. Emptied, it is taken back.
-  if (rating === 'good' && item && canLearnFrom(draft.item_key) && canLearnFrom(item.itemKey)) {
+  if (rating === 'good' && item && canLearnFrom(draft.item_key) && teachesHere(item) && !writtenInAuction(draft)) {
     if (clean.trim()) onApproved(item, draftId, true);
     else { setDraftRating(draftId, ''); onApproved(item, draftId, false); rating = ''; }
   }
@@ -201,7 +211,7 @@ export function onRated(draftId, rating) {
 export function onApproved(item, draftId, approved = true) {
   const draft = getDraft(draftId);
   if (!draft) return { learned: false, why: 'suggestion not found' };
-  if (!canLearnFrom(draft.item_key) || !canLearnFrom(item?.itemKey)) return { learned: false, why: 'not a dashboard conversation' };
+  if (!canLearnFrom(draft.item_key) || !teachesHere(item) || writtenInAuction(draft)) return { learned: false, why: item?.section === 'auction' || writtenInAuction(draft) ? 'in the Auction section' : 'not a dashboard conversation' };
   if (!approved) {
     if (getLearned(draftId)?.source === 'approved') deleteLearned(draftId);
     return { learned: false, why: 'approval taken back' };
@@ -296,7 +306,7 @@ export async function onAdvice(item, draftId, note) {
   const said = squash(String(note || '')).slice(0, 600);
   if (!draft) return { learned: false, why: 'suggestion not found' };
   if (!said) return { learned: false, why: 'nothing was said' };
-  if (!canLearnFrom(draft.item_key) || !canLearnFrom(item?.itemKey)) return { learned: false, why: 'not a dashboard conversation' };
+  if (!canLearnFrom(draft.item_key) || !teachesHere(item) || writtenInAuction(draft)) return { learned: false, why: item?.section === 'auction' || writtenInAuction(draft) ? 'in the Auction section' : 'not a dashboard conversation' };
   const { customerText, upto } = askedBefore(item, draft);
   const { situations, firstReply } = aboutOf(item, draft, upto);
   const row = {

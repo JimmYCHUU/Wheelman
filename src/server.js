@@ -14,7 +14,7 @@ import { firstNameOf, isPlaceholderName } from './redact.js';
 import { signedName } from './signature.js';
 import { rowMatches } from '../web/lib/search.js';
 import { RUNG_LABELS } from './selling.js';
-import { canLearnFrom } from './learn.js';
+import { teachesHere } from './learn.js';
 import { validateMailReport, storeMailThread } from './mail.js';
 import { recentPractice, PRACTICE_DAYS } from './practice.js';
 import { recentMailPractice } from './mailpractice.js';
@@ -313,7 +313,7 @@ function present(item) {
     marketplace: marketplaceOf(item),
     mail: mailOf(item),
     // Whether the teaching buttons (Good reply, Could be better) belong here: the one gate in learn.js decides.
-    teaches: canLearnFrom(item.itemKey),
+    teaches: teachesHere(item),
     firstName: firstNameOf(item.lead || {}),
     source: item.lead?.source || '',
     leadStatus: item.lead?.status || '',

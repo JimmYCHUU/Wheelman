@@ -197,3 +197,94 @@ test('a customer with an auction order is one row in Auction, the order, and a n
   row = (await get('/api/items?section=auction&tab=waiting')).items.find((r) => r.key === 'ao:601');
   assert.notEqual(row?.dueKind, 'reply');
 });
+
+// ---- Facebook chats and emails ---------------------------------------------------------------------
+
+test('a Facebook chat and an email can leave their own section and come back; each is still answered the way it came in', async () => {
+  await sync.syncMarketplace();
+  assert.ok((await keys('marketplace')).includes('mp:501'));
+  let out = await post('/api/items/mp:501/move', { section: 'dashboard' });
+  assert.equal(out.status, 200);
+  assert.deepEqual([out.json.from, out.json.item.section, out.json.item.channel, out.json.item.teaches], ['marketplace', 'dashboard', 'marketplace', false]);
+  assert.deepEqual(out.json.item.moves, ['importquery', 'auction', 'marketplace'], 'it can go back to Marketplace');
+  assert.ok((await keys('dashboard')).includes('mp:501'));
+  assert.ok(!(await keys('marketplace')).includes('mp:501'));
+  out = await post('/api/items/mp:501/move', { section: 'marketplace' });
+  assert.deepEqual([out.json.item.section, db.itemMove('mp:501')], ['marketplace', null]);
+
+  const mail = await import('../src/mail.js');
+  const stored = mail.storeMailThread(mail.validateMailReport({ v: 1, kind: 'mail', thread: { ref: 'thread-f:placement-1' }, subject: 'A Honda N-Box', messages: [{ ref: 'msg-f:p1', fromEmail: 'wren@example.com', fromName: 'Wren Invented', text: 'Hi, can you find me a Honda N-Box, 2019 or newer?', at: now - HOUR }] }, { now }), { now });
+  out = await post(`/api/items/${stored.key}/move`, { section: 'auction' });
+  assert.deepEqual([out.json.from, out.json.item.section, out.json.item.channel], ['importquery', 'auction', 'email']);
+  assert.ok((await keys('auction')).includes(stored.key));
+  assert.ok(!(await keys('importquery')).includes(stored.key));
+  out = await post(`/api/items/${stored.key}/move`, { section: 'dashboard' });
+  assert.equal(out.json.item.section, 'dashboard');
+  assert.ok((await keys('dashboard')).includes(stored.key));
+  out = await post(`/api/items/${stored.key}/move`, { section: 'importquery' });
+  assert.deepEqual([out.json.item.section, db.itemMove(stored.key)], ['importquery', null]);
+
+  // An auction order never moves.
+  assert.equal((await post('/api/items/ao:601/move', { section: 'dashboard' })).status, 400);
+});
+
+test('a move follows the lead into the text conversation that starts later, and Import Query switched off sends it home', async () => {
+  lead(9106, 'Wil', 'Hi, what time do you open on Saturday?', { phone: '0491 570 916' });
+  await post('/api/items/l:9106/move', { section: 'auction' });
+  conversation(99106, 9106, 'Wil', [['IN', 'Hello again', 5 * MIN]]);
+  lead(9106, 'Wil', 'Hi, what time do you open on Saturday?', { phone: '0491 570 916', conversationId: 99106 });
+  assert.equal(items.itemFromKey('c:99106').section, 'auction');
+  assert.ok((await keys('auction')).includes('c:99106'));
+
+  await post('/api/items/c:99106/move', { section: 'importquery' });
+  config.mail.switchedOn = false;
+  try {
+    const item = items.itemFromKey('c:99106');
+    assert.deepEqual([item.section, item.home], ['dashboard', 'dashboard'], 'a section that is off lists nothing');
+    assert.ok(!(await post('/api/items/c:99106/move', { section: 'importquery' })).json.item);
+  } finally { config.mail.switchedOn = true; }
+  assert.equal(items.itemFromKey('c:99106').section, 'importquery', 'and is where it was once the section is on again');
+});
+
+// ---- learning ------------------------------------------------------------------------------------------
+
+test('nothing is learned while a conversation is in Auction, and it teaches again once it is back in Dashboard', async () => {
+  lead(9107, 'Xan', 'Hi, is the Noah still available?', { conversationId: 99107, phone: '0491 570 917' });
+  conversation(99107, 9107, 'Xan', [['IN', 'Hi, is the Noah still available?', 20 * MIN]]);
+  await post('/api/items/c:99107/move', { section: 'auction' });
+  let item = await settled('c:99107');
+  assert.equal((await get('/api/items/c:99107')).item.teaches, false, 'no teaching buttons in Auction');
+  const inAuction = db.latestDraft(item.itemKey, item.anchorKey);
+  assert.equal(inAuction.context.section, 'auction');
+  let out = await post(`/api/drafts/${inAuction.id}/copied`, { text: 'Hello Xan, yes it is here, come and see it any day.' });
+  assert.deepEqual([out.json.learned, db.getLearned(inAuction.id)], [false, null]);
+
+  await post('/api/items/c:99107/move', { section: 'dashboard' });
+  assert.equal((await get('/api/items/c:99107')).item.teaches, true);
+  // What was written while it was in Auction still teaches nothing.
+  out = await post(`/api/drafts/${inAuction.id}/copied`, { text: 'Hello Xan, yes it is here. Come any day.' });
+  assert.equal(out.json.learned, false);
+  item = items.itemFromKey('c:99107');
+  const d = await drafter.draftFor(item, { instruction: 'say yes' });
+  out = await post(`/api/drafts/${d.id}/copied`, { text: 'Hello Xan, yes, the Noah is here. When would suit you to see it?' });
+  assert.equal(out.json.learned, true);
+});
+
+// ---- written without being asked ---------------------------------------------------------------------
+
+test('the background writer writes for enquiries in Auction and for orders a customer has texted', async () => {
+  const worker = await import('../src/worker.js');
+  lead(9108, 'Yan', 'Auction alert for a Subaru XV Hybrid', { platform: 'IMPORTS', source: 'Auction', conversationId: 99108, phone: '0491 570 918' });
+  conversation(99108, 9108, 'Yan', [['IN', 'Can you find me a Subaru XV Hybrid, 2015, under 120,000 km?', 10 * MIN]]);
+  lead(9109, 'Zed', 'Auction alert for a Subaru XV Hybrid', { platform: 'IMPORTS', source: 'Auction', conversationId: 99109, phone: '0491 570 919' });
+  const [o] = rawOrders(now);
+  sync.storeAuctionOrders([{ ...o, id: 602, orderNo: 'AS-602', leadId: 9109 }], { complete: false, now });
+  conversation(99109, 9109, 'Zed', [['IN', 'Did we win the auction yesterday?', 6 * MIN]]);
+
+  await worker.draftWaiting({ max: 50 });
+  const enquiry = items.itemFromKey('c:99108');
+  assert.equal(db.latestDraft(enquiry.itemKey, enquiry.anchorKey)?.status, 'ready', 'the enquiry in Auction');
+  const order = items.itemFromKey('ao:602');
+  assert.match(order.anchorKey, /^m:/);
+  assert.equal(db.latestDraft(order.itemKey, order.anchorKey)?.status, 'ready', 'the order, for their text');
+});
