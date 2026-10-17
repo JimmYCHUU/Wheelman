@@ -1,18 +1,32 @@
 // Builds the list of "work items": customers who have said something and are waiting for a reply.
 
-import { openDb, getLead, getLeadByConversation, getLeadByPhone, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor, getMailThread, getMailMessages, listMailThreads, itemRuling, movedItemKeys } from './db.js';
+import { openDb, getLead, getLeadByConversation, getLeadByPhone, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor, getMailThread, getMailMessages, listMailThreads, itemRuling, itemMove, movedKeys, getAuctionOrder } from './db.js';
 import { orderKey, orderMarks, orderStatus, orderRow, occasionFor, MESSAGES } from './orders.js';
 import { sameMessage, windowFor } from './phone.js';
 import { phoneKeys } from './normalize.js';
 import { readInquiry, isSilentInquiry, isReaction, isAcknowledgement, isOptOut, menuReply, sameText, squash, resolveStock, stockFromUrl, findUrls, unwrapRelay } from './text.js';
 import { classify, labelFor } from './situations.js';
 import { importContext, judgedContext } from './imports.js';
-import { judgeImport } from './importjudge.js';
+import { judgeImport, carIn } from './importjudge.js';
 import { firstNameOf, isPlaceholderName } from './redact.js';
 import { config } from './config.js';
 import { dealFor } from './deal.js';
 import { namesStaff } from './voice.js';
 import { loadEligibleModels, modelCodesIn, modelsIn } from './eligible.js';
+import { naturalSection, sectionFor } from './placement.js';
+
+/**
+ * Where a conversation is listed (src/placement.js): its own section, or where the owner moved it.
+ * `liveOrder`: the customer's auction order that is still going. In Auction, its row stands for
+ * the customer: the conversation is listed under it (`underOrder`), not as a row of its own.
+ */
+function place(item, move, { liveOrder = null } = {}) {
+  item.home = naturalSection(item, { liveOrder });
+  item.move = move || null;
+  item.section = sectionFor(item, move, item.home);
+  item.underOrder = item.section === 'auction' && liveOrder ? orderKey(liveOrder.id) : null;
+  return item;
+}
 
 const MIN = 60 * 1000;
 
@@ -433,7 +447,16 @@ export function buildItem({ conversationId = null, leadId = null }) {
       item.imports = judgedContext(lead, item.judged);
     }
   }
-  item.moved = ruling?.section === 'importquery' && config.mail.switchedOn ? 'importquery' : null;
+  // A customer whose auction order is under way is an auction customer. A finished order does
+  // not count: a later enquiry about a car on the yard is an ordinary one.
+  const order = item.imports?.order || getAuctionOrder(lead?.id || null, item.phone);
+  place(item, itemMove(item.itemKey, lead?.id || null), { liveOrder: order && order.stage !== 'COMPLETED' ? order : null });
+  // Listed in Auction or Import Query: an import enquiry, unless the owner said it is not one. The
+  // car is read from their words, whether or not one of that model is on the yard.
+  if (!item.imports && ruling?.kind !== 'general' && (item.section === 'auction' || item.section === 'importquery')) {
+    const texts = [...(lead?.inquiries || []).map((i) => i.text), ...timeline.filter((e) => e.who === 'customer').map((e) => e.text)];
+    item.imports = judgedContext(lead, { sign: 'placed', car: carIn(texts), why: item.move ? 'you moved it' : 'it is listed with the auction customers' });
+  }
   if (item.imports && !item.deal && !item.situation.all.includes('import_sourcing')) {
     const rest = item.situation.all.filter((s) => s !== 'general');
     item.situation.all = item.situation.primary === 'complaint' ? [...rest, 'import_sourcing'] : ['import_sourcing', ...rest];
@@ -516,7 +539,7 @@ export function buildMarketplaceItem(id, { now = Date.now() } = {}) {
     sending: !!timeline[timeline.length - 1]?.sending,
     engine: { enabled: !!e.enabled, stage: e.stage || '', locked: !!e.locked, lockReason: e.lockReason || '', lockDetail: e.lockDetail || '', urgency: e.urgency || '', nextAction: e.nextAction || '', notes: e.notes || [] },
   };
-  return item;
+  return place(item, itemMove(item.itemKey));
 }
 
 // ---- auction orders -----------------------------------------------------------------
@@ -605,6 +628,10 @@ export function buildOrderItem(id, { message = '', now = Date.now() } = {}) {
     vehicles: [],
     imports: null,
     order: o,
+    section: 'auction',
+    home: 'auction',
+    move: null,
+    underOrder: null,
     orderStatus: status,
     orderRow: orderRow(o, marks, { now }),
     // The kind of message in the box: the one picked, else the one that is due.
@@ -651,7 +678,7 @@ export function buildPhoneItem(id, { now = Date.now() } = {}) {
   item.autoDraft = false;
   item.phoneOnly = true;
   item.imports = null;
-  return item;
+  return place(item, itemMove(item.itemKey));
 }
 
 // ---- email threads from Gmail (the Import Query section) -----------------------------------
@@ -714,7 +741,7 @@ export function buildMailItem(id, { now = Date.now() } = {}) {
     car: mailCar(`${t.subject || ''}\n${timeline.filter((e) => e.who === 'customer').map((e) => e.text).join('\n')}`, now),
     draftsOff: false,
   };
-  return item;
+  return place(item, itemMove(item.itemKey));
 }
 
 /** Finds an item by its key: c:<conversation>, l:<lead>, mp:<Marketplace chat>, ao:<auction order>, ph:<phone conversation> or em:<email thread>. */
@@ -730,22 +757,39 @@ export function itemFromKey(key, opts = {}) {
 }
 
 /**
- * Customers, newest first. source: 'dashboard', 'marketplace' or 'importquery'. maxAgeHours limits the list to
- * conversations with activity that recent; Infinity lists every conversation ever stored.
- * olderThanHours leaves out the recent ones instead, so the two halves can be built and kept apart.
+ * Customers, newest first. source: 'dashboard', 'marketplace', 'importquery' or 'auction' (the
+ * conversations listed in Auction; the orders themselves are listed by src/orders.js). maxAgeHours
+ * limits the list to conversations with activity that recent; Infinity lists every conversation
+ * ever stored. olderThanHours leaves out the recent ones instead, so the two halves can be built
+ * and kept apart. A conversation is kept only in the section it is listed in (src/placement.js).
  */
 export function listItems({ maxAgeHours = config.draftMaxAgeHours, olderThanHours = 0, states = ['awaiting'], limit = 200, source = 'dashboard' } = {}) {
   const db = openDb();
   const cutoff = Number.isFinite(maxAgeHours) ? Date.now() - maxAgeHours * 60 * MIN : 0;
   const before = olderThanHours > 0 ? Date.now() - olderThanHours * 60 * MIN : Number.MAX_SAFE_INTEGER;
   const items = [];
+  const kept = new Set();
   const keep = (item) => {
-    if (!item) return;
+    if (!item || kept.has(item.itemKey)) return;
+    kept.add(item.itemKey);
+    // Listed in another section, or under the customer's auction order.
+    if (item.section !== source || item.underOrder) return;
     if (!states.includes(item.state)) return;
     if (item.lastInboundAt && item.lastInboundAt < cutoff) return;
     items.push(item);
   };
   const newest = (a, b) => (b.lastInboundAt || b.lastActivityAt) - (a.lastInboundAt || a.lastActivityAt);
+  // Conversations the owner moved here from another section. They keep their keys, and their
+  // replies still go out the way they came in; only the list they sit on changes.
+  const keepMoved = () => {
+    for (const key of movedKeys(source)) {
+      if (kept.has(key)) continue;
+      const item = itemFromKey(key);
+      if (!item || (item.lastInboundAt || item.lastActivityAt || 0) >= before) continue;
+      if (cutoff && (item.lastActivityAt || 0) < cutoff) continue;
+      keep(item);
+    }
+  };
 
   if (source === 'marketplace') {
     for (const r of db.prepare('SELECT id FROM mp_conversations WHERE last_message_at >= ? AND last_message_at < ? ORDER BY last_message_at DESC').all(cutoff, before)) keep(buildMarketplaceItem(r.id));
@@ -758,14 +802,22 @@ export function listItems({ maxAgeHours = config.draftMaxAgeHours, olderThanHour
   if (source === 'importquery') {
     if (!config.mail.switchedOn) return [];
     for (const r of listMailThreads({ cutoff, before })) keep(buildMailItem(r.id));
-    // Dashboard conversations the owner moved here. They keep their keys and their replies still
-    // go out from the dashboard; only the list they sit on changes.
-    for (const key of movedItemKeys('importquery')) {
-      const item = itemFromKey(key);
-      if (!item?.moved || items.some((x) => x.itemKey === item.itemKey)) continue;
-      if ((item.lastInboundAt || item.lastActivityAt || 0) >= before) continue;
-      keep(item);
+    keepMoved();
+    items.sort(newest);
+    return items.slice(0, limit);
+  }
+
+  // Auction: the leads on the dashboard's Imports list, and what the owner moved here. A customer
+  // whose auction order is under way is listed by that order instead (src/orders.js).
+  if (source === 'auction') {
+    const platform = String(config.dashboard.importsPlatform || '').toUpperCase();
+    for (const l of db.prepare('SELECT id, conversation_id FROM leads WHERE upper(platform) = ? AND (lead_at >= ? OR updated_at >= ?) AND lead_at < ? AND updated_at < ? ORDER BY updated_at DESC').all(platform, cutoff, cutoff, before, before)) {
+      keep(buildItem(l.conversation_id ? { conversationId: l.conversation_id, leadId: l.id } : { leadId: l.id }));
     }
+    for (const c of db.prepare('SELECT id FROM conversations WHERE upper(lead_platform) = ? AND latest_at >= ? AND latest_at < ?').all(platform, cutoff, before)) {
+      if (!kept.has(`c:${c.id}`)) keep(buildItem({ conversationId: c.id }));
+    }
+    keepMoved();
     items.sort(newest);
     return items.slice(0, limit);
   }
@@ -782,11 +834,8 @@ export function listItems({ maxAgeHours = config.draftMaxAgeHours, olderThanHour
   if (config.phone.switchedOn) {
     for (const t of listPhoneThreads({ cutoff })) if (!t.conversation_id && !t.lead_id && t.latest_at < before) keys.set(`ph:${t.id}`, { phoneThreadId: t.id });
   }
-  for (const ref of keys.values()) {
-    const item = ref.phoneThreadId ? buildPhoneItem(ref.phoneThreadId) : buildItem(ref);
-    if (item?.moved) continue; // moved into Import Query by the owner: listed there
-    keep(item);
-  }
+  for (const ref of keys.values()) keep(ref.phoneThreadId ? buildPhoneItem(ref.phoneThreadId) : buildItem(ref));
+  keepMoved();
   items.sort(newest);
   return items.slice(0, limit);
 }

@@ -55,3 +55,20 @@ export function judgeImport(texts, { stockAttached = false, now = Date.now() } =
   if (words) return { sign: 'words', car: null, why: 'they ask for a car found in Japan' };
   return null;
 }
+
+/**
+ * The car the customer's words name from the import list, with no other test: for a conversation
+ * the owner has put in Auction or Import Query, where it is an import enquiry whatever the words.
+ * A model code first, then a make and model named together. Null when no car from the list is named.
+ */
+export function carIn(texts, { now = Date.now() } = {}) {
+  const text = (Array.isArray(texts) ? texts : [texts]).map((t) => String(t || '')).filter(Boolean).join('\n');
+  if (!text.trim()) return null;
+  let models = [];
+  try { ({ models } = loadEligibleModels(now)); } catch { models = []; }
+  if (!models.length) return null;
+  const code = modelCodesIn(text, models).known[0];
+  if (code) return carOf(code.models[0]);
+  const fam = modelsIn(text, models)[0];
+  return fam && fam.score >= 3 ? carOf(fam.best) : null;
+}

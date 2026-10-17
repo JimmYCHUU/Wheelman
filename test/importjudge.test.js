@@ -111,7 +111,7 @@ test("the owner's ruling wins: not an import enquiry, one after all, moved to Im
   // "Not an import enquiry": the ordinary reply, written again since the suggestion was untouched.
   let out = await post('/api/items/l:901/ruling', { kind: 'general' });
   assert.equal(out.status, 200);
-  assert.deepEqual([out.json.item.ruling, out.json.item.judged, out.json.item.section, out.json.writing], [{ kind: 'general', section: 'dashboard' }, null, 'dashboard', true]);
+  assert.deepEqual([out.json.item.ruling, out.json.item.judged, out.json.item.section, out.json.writing], [{ kind: 'general' }, null, 'dashboard', true]);
   let item = items.itemFromKey('l:901');
   assert.equal(item.imports, null);
   await settled(item);
@@ -151,7 +151,7 @@ test("the owner's ruling wins: not an import enquiry, one after all, moved to Im
   // What is refused.
   assert.equal((await post('/api/items/l:999999/ruling', { kind: 'import' })).status, 404);
   assert.equal((await post('/api/items/l:901/ruling', { kind: 'maybe' })).status, 400);
-  assert.equal((await post('/api/items/l:901/ruling', { kind: 'general', section: 'importquery' })).status, 400, 'only an import enquiry can be moved');
+  assert.equal((await post('/api/items/l:901/ruling', { kind: 'general', section: 'marketplace' })).status, 400, 'nothing moves into Marketplace');
 });
 
 test("the AI's own reading is offered on the page and changes nothing by itself", async () => {
