@@ -1,7 +1,7 @@
 // Builds the list of "work items": customers who have said something and are waiting for a reply.
 
 import { openDb, getLead, getLeadByConversation, getLeadByPhone, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor, getMailThread, getMailMessages, listMailThreads, itemRuling, itemMove, movedKeys, getAuctionOrder } from './db.js';
-import { orderKey, orderMarks, orderStatus, orderRow, occasionFor, MESSAGES } from './orders.js';
+import { orderKey, orderMarks, orderStatus, orderRow, occasionFor, orderTexts, MESSAGES } from './orders.js';
 import { sameMessage, windowFor } from './phone.js';
 import { phoneKeys } from './normalize.js';
 import { readInquiry, isSilentInquiry, isReaction, isAcknowledgement, isOptOut, menuReply, sameText, squash, resolveStock, stockFromUrl, findUrls, unwrapRelay } from './text.js';
@@ -559,7 +559,7 @@ export function buildOrderItem(id, { message = '', now = Date.now() } = {}) {
   const o = getOrder(Number(id));
   if (!o || o.goneAt) return null;
   const key = orderKey(o.id);
-  const marks = orderMarks().of(key);
+  const marks = { ...orderMarks().of(key), texts: orderTexts(o) };
   const status = orderStatus(o, marks, { now });
   const lead = { id: o.leadId, first_name: o.customer.firstName, last_name: o.customer.lastName, phone: o.customer.phone, email: o.customer.email, status: '', source: 'Auction order', state: '', stocks: [], inquiries: [] };
 
@@ -590,8 +590,11 @@ export function buildOrderItem(id, { message = '', now = Date.now() } = {}) {
   }
   timeline.sort((a, b) => (a.at - b.at) || (a.who === 'customer' ? -1 : 1));
 
-  const waitingKeys = new Set(status.waiting.map((p) => `in:${p.id}`));
-  const pending = timeline.filter((e) => waitingKeys.has(e.key));
+  // What waits on us: a pasted WhatsApp message, or a text. A text the timeline keeps under its
+  // website enquiry's key (a portal relays it both ways) is the same message, found by its time.
+  const waitingKeys = new Set(status.waiting.map((p) => p.anchor));
+  const waitingTextAt = new Set(status.waiting.filter((p) => p.via === 'sms').map((p) => p.at));
+  const pending = timeline.filter((e) => waitingKeys.has(e.key) || (e.who === 'customer' && /^(m|i):/.test(e.key) && waitingTextAt.has(e.at)));
   const pendingText = pending.map((e) => e.text).filter(Boolean).join('\n');
   // A reply to what the customer wrote is about whatever they asked, on top of being an order.
   const asked = pending.length ? classify(pendingText, { events: [], leadStatus: '', buyer: false }).all.filter((s) => s !== 'general') : [];

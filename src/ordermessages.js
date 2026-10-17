@@ -525,7 +525,7 @@ export function planOrderReply(item) {
     w.targetBidYen ? 'they gave a target bid ({{TARGET_BID}})' : '', w.budgetAud ? 'they gave a landed budget ({{BUDGET}})' : ''].filter(Boolean).join('; ');
   const deposit = { NONE: 'not paid yet', PARTIAL: 'part paid' }[o.depositState] || 'paid';
   const lines = [
-    'This customer has an auction order with us: we find a car for them at auction in Japan, bid on it once they approve, and import and comply it. They wrote to us on WhatsApp, and their message was typed in for you.',
+    `This customer has an auction order with us: we find a car for them at auction in Japan, bid on it once they approve, and import and comply it. ${item.orderStatus?.replyVia === 'sms' ? 'They texted us, and the reply goes back by text.' : 'They wrote to us on WhatsApp, and their message was typed in for you.'}`,
     `Where the order has got to: ${stage.label}.`,
     wanted ? `What they asked us to find: ${wanted}.` : '',
     w.notes ? `Their own notes on the order: ${maskAmounts(safe(w.notes), tokens).slice(0, 500)}` : '',

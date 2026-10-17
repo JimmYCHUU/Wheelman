@@ -6,6 +6,8 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { applyTestEnv } from './support/env.js';
 import { startStandins, aiBehaviour } from './support/standins.js';
 import { world, orders as rawOrders } from './support/fixtures.js';
@@ -23,7 +25,7 @@ const ai = aiBehaviour({ behave: () => ({
 before(async () => {
   standins = await startStandins({ world: world(now), ai });
   ({ config } = await import('../src/config.js'));
-  pointConfigAt(config, standins, { port: 0 });
+  pointConfigAt(config, standins, { port: 0, sessionPath: path.join(os.tmpdir(), `wheelman-placement-session-${process.pid}.json`) });
   db = await import('../src/db.js');
   items = await import('../src/items.js');
   sync = await import('../src/sync.js');
@@ -153,4 +155,45 @@ test('a car named in their words is read for the search once the conversation is
   assert.match(lastPrompt(), /=== IMPORT ENQUIRY ===/);
   assert.match(lastPrompt(), /Alphard Welcab/);
   assert.equal(db.latestDraft(after.itemKey, after.anchorKey).context.importStage, 'none', 'searched: none in the coming auctions');
+});
+
+// ---- one row per auction customer ----------------------------------------------------------------
+
+test('a customer with an auction order is one row in Auction, the order, and a new text from them is answered there', async () => {
+  lead(9105, 'Vic', 'Auction alert for a Subaru XV Hybrid', { platform: 'IMPORTS', source: 'Auction', conversationId: 99105, phone: '0491 570 915' });
+  conversation(99105, 9105, 'Vic', [['IN', 'Hi, I asked about an XV on your website', 3 * 24 * HOUR]]);
+  const [o] = rawOrders(now);
+  sync.storeAuctionOrders([{ ...o, id: 601, orderNo: 'AS-601', leadId: 9105 }], { complete: false, now });
+  assert.ok((await keys('auction')).includes('ao:601'));
+  for (const tab of ['waiting', 'quiet', 'other']) assert.ok(!(await keys('auction', tab)).includes('c:99105'), `the order stands for the customer (${tab})`);
+  assert.ok(!(await keys('dashboard')).includes('c:99105'));
+
+  // A text from them after the order opened (the one before it was dealt with when it opened).
+  conversation(99105, 9105, 'Vic', [['IN', 'Is anything coming up at auction this week?', 5 * MIN]]);
+  let row = (await get('/api/items?section=auction&tab=waiting')).items.find((r) => r.key === 'ao:601');
+  assert.deepEqual([row.dueKind, row.preview.text], ['reply', 'Is anything coming up at auction this week?']);
+  const { item } = await get('/api/items/ao:601');
+  assert.equal(item.order.replying, true);
+  const out = await post('/api/items/ao:601/draft', {});
+  assert.equal(out.status, 200);
+  assert.match(ai.seen[ai.seen.length - 1].messages[0].content, /replies by text message \(SMS\) to customers who have an auction order/);
+  assert.match(lastPrompt(), /They texted us/);
+  assert.match(lastPrompt(), /Is anything coming up at auction this week\?/);
+
+  // A text more than a week old is not raised as waiting on the order: it shows in its thread.
+  const o601 = db.getOrder(601);
+  const orders = await import('../src/orders.js');
+  assert.equal(orders.orderStatus(o601, { copied: new Map(), dismissed: new Set(), pastes: [], lastCopyAt: 0, texts: orders.orderTexts(o601) }, { now: now + 8 * 24 * HOUR }).kind === 'reply', false);
+
+  // Our text back answers it.
+  conversation(99105, 9105, 'Vic', [['OUT', 'Hello Vic, two are coming up on Friday.', 2 * MIN]]);
+  row = (await get('/api/items?section=auction&tab=waiting')).items.find((r) => r.key === 'ao:601');
+  assert.notEqual(row?.dueKind, 'reply');
+
+  // Moved to Dashboard: listed there again, and its texts are answered there, not on the order.
+  await post('/api/items/c:99105/move', { section: 'dashboard' });
+  conversation(99105, 9105, 'Vic', [['IN', 'Also, do you have any Noahs?', MIN]]);
+  assert.ok((await keys('dashboard')).includes('c:99105'));
+  row = (await get('/api/items?section=auction&tab=waiting')).items.find((r) => r.key === 'ao:601');
+  assert.notEqual(row?.dueKind, 'reply');
 });

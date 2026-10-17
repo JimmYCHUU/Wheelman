@@ -566,6 +566,16 @@ export function getAuctionOrder(leadId, phone = '') {
   return { id: o.id, leadId: o.leadId, orderNo: o.orderNo, stage: o.stage || '', lotPhase: o.lotPhase || '', source: o.source || '', lotId: o.lot?.id || '', depositState: o.depositState || '', wanted: o.wanted || {}, createdAt: o.createdAt };
 }
 
+/** The text conversation a lead has, if any. */
+export function leadConversationId(leadId) {
+  return leadId ? stmt('SELECT conversation_id AS c FROM leads WHERE id = ?').get(Number(leadId))?.c ?? null : null;
+}
+
+/** The newest texts of a conversation, oldest first: { id, direction 'IN'|'OUT', text, at, status }. */
+export function recentTexts(conversationId, limit = 30) {
+  return stmt('SELECT id, direction, body AS text, at, status FROM messages WHERE conversation_id = ? ORDER BY at DESC, id DESC LIMIT ?').all(Number(conversationId), limit).reverse();
+}
+
 /** A message the owner pasted into an order. Returns its id. */
 export function addOrderMessage(orderId, direction, text, at = Date.now()) {
   const info = stmt('INSERT INTO order_messages(order_id, direction, text, at) VALUES(?, ?, ?, ?)').run(Number(orderId), direction === 'out' ? 'out' : 'in', String(text), at);
@@ -913,6 +923,12 @@ export function setItemMove(itemKey, leadId, section, now = Date.now()) {
 /** Takes the move away: the conversation is listed in its own section again. */
 export function clearItemMove(itemKey, leadId = null) {
   stmt('DELETE FROM item_moves WHERE item_key = ? OR (lead_id IS NOT NULL AND lead_id = ?)').run(itemKey, leadId ?? null);
+}
+
+/** Whether the owner moved this lead's conversation out of Auction: its texts are then answered where it is listed, not on the order. */
+export function movedOutOfAuction(leadId, conversationId) {
+  return !!stmt("SELECT 1 FROM item_moves WHERE section != 'auction' AND ((lead_id IS NOT NULL AND lead_id = ?) OR item_key = ? OR item_key = ?) LIMIT 1")
+    .get(leadId ?? null, conversationId ? `c:${conversationId}` : '', leadId ? `l:${leadId}` : '');
 }
 
 /** The keys of the conversations the owner moved into a section, latest first. */
