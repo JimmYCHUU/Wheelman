@@ -4,6 +4,7 @@
 //   # at the start of a line          a note for whoever edits the file; never sent
 //   @name: some text                  a short piece of wording that code chooses between
 //   ===== name =====                  starts a named part, when one file holds several messages
+//   @label: / @fits: (inside a part)  that part's own details: its name on the page, when it fits
 //   {word}                            a fact, filled in by code
 //   {if_word}                         prints nothing; the paragraph it is in is kept only when the fact is true
 //   {{NAME}}                          the customer's first name, put in last (see restore in redact.js)
@@ -15,7 +16,11 @@ import { config } from './config.js';
 
 const cache = new Map();
 
-/** Reads voice/<name>. Returns { text, snippets, sections }, or null when the file is missing. Edits take effect at once. */
+/**
+ * Reads voice/<name>. Returns { text, snippets, sections, meta }, or null when the file is missing.
+ * `meta[part]` holds the @ lines written inside that part (its label, when it fits); @ lines before
+ * the first part are the file's short pieces (`snippets`). Edits take effect at once.
+ */
 export function template(name) {
   const file = path.join(config.voiceDir, name);
   let stat;
@@ -25,19 +30,21 @@ export function template(name) {
   const lines = fs.readFileSync(file, 'utf8').replace(/^﻿/, '').replace(/\r/g, '').split('\n').filter((l) => !l.startsWith('#'));
   const snippets = {};
   const sections = {};
+  const meta = {};
   const body = [];
   let part = null;
   const tidy = (rows) => rows.join('\n').replace(/\n{3,}/g, '\n\n').trim();
   for (const l of lines) {
     const head = l.match(/^={3,}\s*([a-z0-9_]+)\s*={3,}\s*$/i);
-    if (head) { part = head[1].toLowerCase(); sections[part] = []; continue; }
+    if (head) { part = head[1].toLowerCase(); sections[part] = []; meta[part] = {}; continue; }
     const m = l.match(/^@([a-z0-9_]+):\s*(.+)$/);
     // "\n" typed in a snippet is a line break, so one line of the file can hold a short list.
+    if (m && part) { meta[part][m[1]] = m[2].trim(); continue; }
     if (m) { snippets[m[1]] = m[2].trim().replace(/\\n/g, '\n'); continue; }
     (part ? sections[part] : body).push(l);
   }
   for (const k of Object.keys(sections)) sections[k] = tidy(sections[k]);
-  const value = { text: tidy(body), snippets, sections };
+  const value = { text: tidy(body), snippets, sections, meta };
   cache.set(file, { mtime: stat.mtimeMs, value });
   return value;
 }

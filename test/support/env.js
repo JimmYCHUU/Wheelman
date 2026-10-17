@@ -44,6 +44,8 @@ export const BASE_ENV = {
   PHONE_ADDON: '1',
   PHONE_ADDON_ID: '',
   PHONE_WRITE_AT_ONCE: '0', // a test switches it on when it is what the test is about: a background write would otherwise take other tests' scripted answers
+  // Auction messages are the owner's wording word for word unless a test is about fitting them (test/templates.test.js).
+  AUCTION_FIT: '0',
   PORT: '0',
   // The stand-ins serve their pictures from this computer; the real app never fetches one from here.
   MEDIA_ALLOW_LOCAL: '1',

@@ -122,13 +122,18 @@ const THREAD_LIMIT = 20;
 const LIST_LIMIT = 1000;
 const LIST_PAGE = 20; // rows the list opens with; "Load older conversations" adds this many each time
 
+// An auction order's message is kept under its kind: each kind its own (a reply to what they wrote has none).
+const templateOf = (item) => (item.order ? item.message || '' : undefined);
+
 function draftOf(item) {
-  const draft = latestDraft(item.itemKey, item.anchorKey);
+  const draft = latestDraft(item.itemKey, item.anchorKey, templateOf(item));
   return draft ? {
     id: draft.id, status: draft.status, reply: draft.reply || '', checks: draft.checks, factsUsed: draft.factsUsed,
     // What the person has typed over the suggestion: null when untouched, '' when they cleared it.
     edited: typeof draft.edited_text === 'string' ? draft.edited_text : null, editedAt: draft.edited_at || null,
     model: draft.model, provider: draft.provider, createdAt: draft.created_at, instruction: draft.instruction || '', error: draft.error || '', rating: draft.rating || '',
+    // The template it was written from, if any (its kind, for an auction message).
+    template: draft.template || '',
     // Marketplace only: when Send was pressed on this suggestion.
     sentHereAt: draft.sent_here_at || null,
     // An import email: what was looked up on the website, found and not found, with its sources.
@@ -696,7 +701,7 @@ async function api(req, res, url) {
     if (item.order && !(item.orderStatus.kind === 'reply' && !picked.message)) {
       // A message to an auction customer is written from its template. No AI is asked.
       if (!item.message) return send(res, 400, { error: 'Choose which message to write first.' });
-      draft = await draftOrderMessage(item, { type: item.message, facts: instruction });
+      draft = await draftOrderMessage(item, { type: item.message, facts: instruction, fitWith: config.auction.fit ? draftFor : null });
     } else {
       draft = await draftFor(item, { instruction });
     }

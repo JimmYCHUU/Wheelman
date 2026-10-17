@@ -12,6 +12,7 @@ import { searchLots, getLot, estimateFor, soldComparables, lotIdFromUrl, tidyNam
 import { chooseLot, suggestedBid, bidBasisLine, offerBlock, costLines, specificsIn, money, yen } from './imports.js';
 import { MESSAGES, carTitle, lotName, wantedCar, lotPageUrl, modelPageUrl, stageOf } from './orders.js';
 import { restore, redact } from './redact.js';
+import { maskTemplate } from './fitter.js';
 import { availability } from './normalize.js';
 import { sydneyDay, formatSydney } from './time.js';
 import { logLine } from './log.js';
@@ -418,22 +419,29 @@ export async function composeMessage(o, type, { told = factsIn(''), now = Date.n
     const left = blanksIn(text).some((b) => b !== '[DEPOSIT LINK?]');
     notes.push(`${byHand} ${left ? 'What could not be looked up is left as blanks for you to fill in.' : 'The car is as you typed it: nothing about it was checked against the auction.'}`);
   }
-  return { text, facts, notes, review };
+  // The wording, its facts and the lines under it are returned too, so the message can be fitted
+  // to the customer with every fact kept out of the AI's hands (src/fitter.js).
+  return { text, facts, notes, review, part, values: v, tail };
 }
 
 /** Blanks in a finished message, such as [SOLD PRICE?]. Each kind once. */
 export const blanksIn = (text) => [...new Set(String(text || '').match(/\[[A-Z][A-Z0-9 &'/-]{1,30}\?\]/g) || [])];
 
 /**
- * Writes one message for an auction order and keeps it as the suggestion for that order.
- * `facts` is what the owner typed into "Add what you know". No AI request is made.
+ * Writes one message for an auction order and keeps it as the suggestion for that order, under
+ * its kind (`type`): each kind has its own suggestion. `facts` is what the owner typed into "Add
+ * what you know". With `fitWith` (draftFor in src/drafter.js, passed in so the two modules do not
+ * import each other) the message is fitted to the customer by the AI, its figures kept out of the
+ * AI's hands (src/fitter.js); written again with new facts and the same wording, the earlier
+ * fitting is used again with no request. Without it, no AI request is made.
  */
-export async function draftOrderMessage(item, { type, facts = '', now = Date.now(), save = true } = {}) {
+export async function draftOrderMessage(item, { type, facts = '', now = Date.now(), save = true, fitWith = null } = {}) {
   const o = item.order;
-  const base = { itemKey: item.itemKey, anchorKey: item.anchorKey, situation: type, instruction: facts, context: { channel: 'auction', message: type, stage: stageOf(o).code } };
+  const base = { itemKey: item.itemKey, anchorKey: item.anchorKey, situation: type, instruction: facts, template: type, context: { channel: 'auction', message: type, template: type, stage: stageOf(o).code } };
   try {
     if (!MESSAGES[type]) throw new NotNow('Choose which message to write first.');
-    const { text, facts: used, notes, review } = await composeMessage(o, type, { told: factsIn(facts), now });
+    const composed = await composeMessage(o, type, { told: factsIn(facts), now });
+    const { text, facts: used, notes, review } = composed;
     const reply = restore(text, item.lead);
     const blanks = blanksIn(reply);
     const left = unfilled(reply);
@@ -443,6 +451,15 @@ export async function draftOrderMessage(item, { type, facts = '', now = Date.now
       ...(review ? [{ level: 'input', code: 'auction-review', tokens: [], message: 'The cost calculator marks this car for a manual check (tax or import limits). Confirm the figures before sending.' }] : []),
       ...notes.map((n) => ({ level: 'warn', code: 'auction', tokens: [], message: n })),
     ];
+    if (fitWith && save && !left.length) {
+      const masked = maskTemplate(composed);
+      const before = latestDraft(item.itemKey, item.anchorKey, type);
+      const again = before?.status === 'ready' && before.context?.fitted && before.context.masked === masked.masked;
+      return await fitWith(item, { template: {
+        id: type, label: MESSAGES[type], masked, wordChecks: checks, factsUsed: used, typed: facts,
+        fitted: again ? before.context.fitted : null, fittedBy: again ? { provider: before.provider, model: before.model } : null,
+      } });
+    }
     if (!checks.length) checks.push({ level: 'ok', code: 'ok', tokens: [], message: 'Written from your wording, with the figures from your records.' });
     const d = { ...base, status: 'ready', reply, needsHuman: [], factsUsed: used, checks, provider: 'none', model: 'your wording', exampleIds: [] };
     if (save) d.id = insertDraft(d);
@@ -551,10 +568,12 @@ export function planOrderReply(item) {
 /**
  * Keeps the Auction section ready without anyone asking: looks at the live auction for orders
  * that are still searching (each at most once an hour, a few per round), and writes the message
- * that is due for any order that has none yet. No AI is asked.
- * `build` is buildOrderItem, passed in so this module and items.js do not import each other.
+ * that is due for any order that has none yet. `build` is buildOrderItem, passed in so this module
+ * and items.js do not import each other. `fitWith` (draftFor) fits each message to its customer
+ * by the AI when the settings say so (AUCTION_FIT and AUCTION_FIT_BACKGROUND); without it no AI
+ * is asked and the message is the owner's wording word for word.
  */
-export async function prepareOrders(build, { now = Date.now(), maxWatch = 4 } = {}) {
+export async function prepareOrders(build, { now = Date.now(), maxWatch = 4, fitWith = null } = {}) {
   let watched = 0, written = 0;
   for (const o of listOrders({ now })) {
     if (o.closed || o.stage !== 'INITIAL_DEPOSIT' || watched >= maxWatch || now - (o.watchedAt || 0) < 60 * 60 * 1000) continue;
@@ -563,10 +582,10 @@ export async function prepareOrders(build, { now = Date.now(), maxWatch = 4 } = 
   for (const o of listOrders({ now })) {
     const item = build(o.id, { now });
     if (!item || item.orderStatus.kind !== 'send') continue;
-    const have = latestDraft(item.itemKey, item.anchorKey);
+    const have = latestDraft(item.itemKey, item.anchorKey, item.message);
     // One that could not be written (the auction was unreachable, say) is tried again after half an hour.
     if (have && !(have.status === 'failed' && now - have.created_at > 30 * 60 * 1000)) continue;
-    const d = await draftOrderMessage(item, { type: item.message, now });
+    const d = await draftOrderMessage(item, { type: item.message, now, fitWith: config.auction.fit && config.auction.fitInBackground ? fitWith : null });
     if (d.status === 'ready') written++;
   }
   return { ordersWatched: watched, orderMessagesWritten: written };

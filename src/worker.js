@@ -276,7 +276,7 @@ export async function cycle() {
   try { if (providers().length && Date.now() >= state.pausedUntil) await distilPending(2); } catch { /* next time */ }
   // Auction orders: look at the live auction for the ones still searching, and write the message
   // that is due. These come from the wording file, so no AI is asked and no key is needed.
-  try { await prepareOrders(buildOrderItem); } catch (e) { logLine('auction', `Preparing auction orders failed: ${e.message}`); }
+  try { await prepareOrders(buildOrderItem, { fitWith: draftFor }); } catch (e) { logLine('auction', `Preparing auction orders failed: ${e.message}`); }
   await draftWaiting();
   // Once a day, a backup of everything that lives only on this computer, in case the window is
   // never closed properly (a crash, a power cut) and the backup on closing never comes.

@@ -53,6 +53,11 @@ export const config = {
     bidStepYen: num(env.AUCTION_BID_STEP_YEN, 50000),
     // How far over the customer's budget a car may be and still be offered (0.15 = 15%).
     budgetSlack: num(env.AUCTION_BUDGET_SLACK, 0.15),
+    // Whether an auction message is fitted to the customer by the AI (one request each; the
+    // figures stay as code put them in). Off: every message is the owner's wording word for word.
+    fit: !/^(0|false|no|off)$/i.test((env.AUCTION_FIT ?? '1').trim()),
+    // Whether the message that is due is fitted in the background too, or only when one is picked or written on the page.
+    fitInBackground: !/^(0|false|no|off)$/i.test((env.AUCTION_FIT_BACKGROUND ?? '1').trim()),
   },
 
   site: {

@@ -524,8 +524,9 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     P.push(`CHANNEL: Email, an enquiry about importing a car from Japan.${subject ? ` Subject: "${subject}".` : ''} Write the body of the reply email; every email is greeted.`);
     P.push(`CUSTOMER NAME: ${item.hasName ? 'known. Open with "Hello {{NAME}}," on its own line.' : 'not known. Open with "Hello," on its own line and do not use {{NAME}}.'}`);
   } else {
-    // An auction offer is a quote in its own right: it is greeted even when we wrote earlier today.
-    P.push(writtenToday(item, now) && importPlan?.stage !== 'offer'
+    // An auction offer is a quote in its own right, and a template keeps its own greeting: both
+    // are greeted even when we wrote earlier today.
+    P.push(writtenToday(item, now) && importPlan?.stage !== 'offer' && importPlan?.stage !== 'template'
       ? `CUSTOMER NAME: ${item.hasName ? 'known.' : 'not known. Do not use {{NAME}}.'} We have already written to this customer today, so do not greet them again: no "Hi" line and no opening with their name. Start with the answer.`
       : `CUSTOMER NAME: ${item.hasName ? 'known. Open with the greeting for this hour (see NOW) and {{NAME}}, on its own line.' : 'not known. Open with the greeting for this hour (see NOW) without a name, and do not use {{NAME}}.'}`);
     // Whether the record is complete, never what it holds. Some of the owner's lessons depend on it.
@@ -650,7 +651,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   }
 
   if (importPlan?.lines?.length) {
-    P.push(`\n=== ${importPlan.stage === 'offer' ? 'AUCTION CAR FOR THIS CUSTOMER' : importPlan.stage === 'order' ? "THIS CUSTOMER'S AUCTION ORDER" : 'IMPORT ENQUIRY'} ===`);
+    P.push(`\n=== ${importPlan.heading || (importPlan.stage === 'offer' ? 'AUCTION CAR FOR THIS CUSTOMER' : importPlan.stage === 'order' ? "THIS CUSTOMER'S AUCTION ORDER" : 'IMPORT ENQUIRY')} ===`);
     P.push(importPlan.lines.join('\n'));
   }
 
