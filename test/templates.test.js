@@ -27,7 +27,7 @@ const ai = aiBehaviour({ behave: (req) => {
   let reply = m ? m[1] : 'Hello {{NAME}},\nThank you.';
   if (fitting === 'keep') reply = reply.replace('Thank you for your', 'Many thanks for your');
   if (fitting === 'lose') reply = reply.replace(/\{\{K1\}\}/, 'your car');
-  if (fitting === 'invent') reply = reply.replace('Thank you for your', 'For only $9,999, thank you for your');
+  if (fitting === 'invent') reply = reply.replace('\n\n', '\n\nIt can be yours for only $9,999.\n\n');
   return { reply, next_step: '', rung: '', facts_used: [], needs_human: [], hold: false };
 } });
 
@@ -148,4 +148,82 @@ test('an auction message is fitted to the customer by the AI, with every figure 
   for (const secret of ['226,000', '10,277', '1,650', 'Nina', 'Halvorsen']) assert.ok(!sent.includes(secret), `"${secret}" reached the AI`);
   assert.equal(d.template, 'first_estimate');
   assert.notEqual(d.provider, 'none');
+});
+
+test('a fitting that loses a fact or adds a figure is tried once more, then the template is used word for word', async () => {
+  config.auction.fit = true;
+  for (const mode of ['lose', 'invent']) {
+    fitting = mode;
+    const before = asked();
+    const out = await post('/api/items/ao:501/draft', { message: 'search_update' });
+    const d = out.json.item.draft;
+    assert.equal(asked() - before, 2, `${mode}: asked twice`);
+    assert.equal(d.provider, 'none', mode);
+    assert.ok(d.checks.some((c) => c.code === 'template-word-for-word'), `${mode}: the page says it is word for word`);
+    assert.ok(!/9,999|your car/.test(d.reply), `${mode}: nothing of the bad fitting is kept`);
+    assert.match(d.reply, /^Hello Nina,/);
+  }
+  fitting = 'keep';
+});
+
+test('each template keeps its own suggestion: going back to one already written asks nothing, and "Car found, short" is not "Car found, full"', async () => {
+  config.auction.fit = true;
+  fitting = 'keep';
+  await post('/api/items/ao:501/draft', { message: 'first_estimate' });
+  let out = await post('/api/items/ao:501/draft', { message: 'lot_offer' });
+  assert.equal(out.json.item.draft.template, 'lot_offer');
+  const offer = out.json.item.draft.reply;
+  const before = asked();
+  const short = (await get('/api/items/ao:501?message=lot_short')).item;
+  assert.equal(short.draft, null, 'the short one has not been written yet');
+  const full = (await get('/api/items/ao:501?message=lot_offer')).item;
+  assert.equal(full.draft.reply, offer, 'the full one is still there');
+  const first = (await get('/api/items/ao:501?message=first_estimate')).item;
+  assert.match(first.draft.reply, /Many thanks for your Subaru XV Hybrid enquiry/, 'the first one, as it was fitted');
+  assert.equal(asked(), before, 'no request for any of that');
+});
+
+test('what you add is put into the same fitting with no new request, as long as the wording around it is the same', async () => {
+  config.auction.fit = true;
+  fitting = 'keep';
+  let out = await post('/api/items/ao:503/draft', { message: 'bid_lost' });
+  assert.match(out.json.item.draft.reply, /\[SOLD PRICE\?\]/);
+  const before = asked();
+  out = await post('/api/items/ao:503/draft', { message: 'bid_lost', instruction: 'we bid 300000, sold for 1.31m' });
+  assert.equal(asked(), before, 'no new request');
+  const d = out.json.item.draft;
+  assert.ok(d.reply.includes('¥300,000') && d.reply.includes('¥1,310,000'), d.reply);
+  assert.ok(!d.reply.includes('[SOLD PRICE?]'));
+  assert.equal(d.instruction, 'we bid 300000, sold for 1.31m', 'what you added is kept with it');
+});
+
+test('with no AI to ask, the message is still written, word for word', async () => {
+  config.auction.fit = true;
+  ai.down = true;
+  try {
+    const out = await post('/api/items/ao:501/draft', { message: 'deposit_reminder' });
+    const d = out.json.item.draft;
+    assert.equal(d.status, 'ready');
+    assert.equal(d.provider, 'none');
+    assert.match(d.reply, /^Hello Nina,/);
+    assert.ok(d.checks.some((c) => c.code === 'template-word-for-word'));
+  } finally { ai.down = false; }
+});
+
+test('the message that is due is fitted in the background only while the settings say so', async () => {
+  const messages = await import('../src/ordermessages.js');
+  const drafter = await import('../src/drafter.js');
+  config.auction.fit = true;
+  config.auction.fitInBackground = false;
+  let before = asked();
+  await messages.prepareOrders(items.buildOrderItem, { now, fitWith: drafter.draftFor });
+  assert.equal(asked(), before, 'switched off: word for word, no request');
+  const pia = db.latestDraft('ao:504', items.buildOrderItem(504).anchorKey, 'secured');
+  assert.equal(pia.provider, 'none');
+  config.auction.fitInBackground = true;
+  db.openDb().prepare("DELETE FROM drafts WHERE item_key = 'ao:504'").run();
+  before = asked();
+  await messages.prepareOrders(items.buildOrderItem, { now, fitWith: drafter.draftFor });
+  assert.ok(asked() > before, 'switched on: fitted');
+  assert.notEqual(db.latestDraft('ao:504', items.buildOrderItem(504).anchorKey, 'secured').provider, 'none');
 });

@@ -9,6 +9,7 @@ import { createStore } from '../web/lib/store.js';
 import { SECTIONS, SECTION_IDS, sectionOf, TAB_STATE, ORDER_LIST } from '../web/sections/registry.js';
 import { visibleRows, rowTags } from '../web/views/ListColumn.js';
 import { moveChoices } from '../web/views/MoveMenu.js';
+import { pickerOptions } from '../web/views/TemplatePicker.js';
 
 // 6 October 2026, 2 pm in Sydney (daylight saving: UTC+11).
 const NOW = Date.UTC(2026, 9, 6, 3, 0, 0);
@@ -175,4 +176,14 @@ test('the Move menu offers the sections a conversation is not in, in plain words
   assert.match(hint('sms'), /searched for in the Japan auctions/);
   assert.doesNotMatch(hint('marketplace'), /searched/);
   assert.doesNotMatch(hint('email'), /searched/);
+});
+
+test('the template picker lists the templates in the order given, the one due marked, with a first choice that fits the moment', () => {
+  const templates = [{ id: 'first_estimate', label: 'Thanks, with estimate and deposit', due: true }, { id: 'lot_offer', label: 'Car found, full' }];
+  assert.deepEqual(pickerOptions(templates), [
+    { value: '', text: 'Choose a message' },
+    { value: 'first_estimate', text: 'Thanks, with estimate and deposit (due now)' },
+    { value: 'lot_offer', text: 'Car found, full' },
+  ]);
+  assert.equal(pickerOptions(templates, { first: 'A reply to what they wrote' })[0].text, 'A reply to what they wrote');
 });

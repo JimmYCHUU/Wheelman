@@ -6,6 +6,15 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- **Auction messages are fitted to the customer.** The owner's wording is filled in by code as
+  before, then one AI request fits it to this customer and what they last wrote. Before the AI
+  sees it, every fact, figure, link, phone number and blank becomes a marker, and code puts each
+  back exactly; a lost, repeated or made-up marker, or a figure of the AI's own, means one more
+  try and then the wording word for word, which the page says. Each kind of message keeps its own
+  suggestion, so switching back asks nothing, and "Car found, short" no longer shows the text of
+  "Car found, full". "Add what you know" reuses the fitting with no new request. `AUCTION_FIT` and
+  `AUCTION_FIT_BACKGROUND` switch it off. Step 2 of the templates plan (the owner, 17 Oct 2026:
+  templates "the system is going to polish ... and make it more structured and personalized").
 - **Imports AU leads are in Auction, and any conversation can be moved.** A lead on the
   dashboard's Imports list is an auction customer: it is listed in Auction with a stage in plain
   words (Enquiry: asking for details, ready to search, car offered, compliance only), not in
