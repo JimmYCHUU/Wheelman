@@ -9,7 +9,7 @@ import { config } from './config.js';
 import { template, fill, fillParts, unfilled } from './templates.js';
 import { insertDraft, latestDraft, allVehicles, saleForVehicle, getVehicleByStock, setOrderWatch, listOrders } from './db.js';
 import { searchLots, getLot, estimateFor, soldComparables, lotIdFromUrl, tidyName } from './auction.js';
-import { chooseLot, suggestedBid, bidBasisLine, offerBlock, costLines, specificsIn, money, yen } from './imports.js';
+import { chooseLot, suggestedBid, bidBasisLine, offerBlock, costLines, specificsIn, money, yen, wantedFrom, enquiryStage } from './imports.js';
 import { MESSAGES, carTitle, lotName, wantedCar, lotPageUrl, modelPageUrl, stageOf } from './orders.js';
 import { restore, redact } from './redact.js';
 import { maskTemplate } from './fitter.js';
@@ -424,6 +424,44 @@ export async function composeMessage(o, type, { told = factsIn(''), now = Date.n
   return { text, facts, notes, review, part, values: v, tail };
 }
 
+// ---- enquiries in Auction ----------------------------------------------------------------------
+
+/** The messages that fit an auction customer before there is an order: the "Which message?" list of an enquiry in Auction. */
+export const ENQUIRY_MESSAGES = ['first_estimate', 'lot_offer', 'lot_short', 'lots_coming', 'search_update', 'deposit_reminder'];
+
+/**
+ * The "Which message?" list of a conversation in Auction that has no order yet: an import enquiry
+ * answered by text. [{ id, label, due }]: the one that suits where it has got to is marked due
+ * (a car to offer once they said what they want; still searching once one was offered). Empty for
+ * anything else: an order has its own list, and the other sections get theirs with their templates.
+ */
+export function enquiryTemplates(item) {
+  if (item.order || item.section !== 'auction' || !item.imports || item.channel !== 'sms') return [];
+  const due = { enquiry_ready: 'lot_offer', enquiry_offered: 'search_update' }[enquiryStage(item).code] || '';
+  return ENQUIRY_MESSAGES.map((id) => ({ id, label: MESSAGES[id], due: id === due }));
+}
+
+/**
+ * A stand-in order for an enquiry, from what the customer asked for, so its messages are written
+ * from the same wording as an order's. Nothing on it is an order of ours: no deposit, no charge,
+ * no car; what only a person knows (the deposit amount) stays a blank.
+ */
+export function enquiryOrder(item, { now = Date.now() } = {}) {
+  const w = wantedFrom(item);
+  return {
+    id: 0, orderNo: '', leadId: item.lead?.id || null, stage: 'INITIAL_DEPOSIT', lotPhase: 'SOURCING', depositState: 'NONE', closed: '',
+    wanted: {
+      make: w.make, model: w.model, modelCode: w.modelCode, variant: '', yearFrom: w.yearFrom, yearTo: w.yearTo, budgetAud: w.budgetAud || 0, targetBidYen: w.bidYen || 0,
+      // Their kilometre limit and grade, in words the order's own reading understands.
+      notes: [w.maxKm ? `under ${w.maxKm.toLocaleString('en-AU')} km` : '', w.minGrade ? `grade ${w.minGrade}` : ''].filter(Boolean).join(', '),
+    },
+    money: { lines: [], payments: [], quotedDeposit: 0, depositPaid: 0, total: 0, paid: 0, due: 0 },
+    lot: w.lotId ? { id: w.lotId } : null, car: null, watch: null, note: null, marks: {}, followUpDue: false,
+    customer: { firstName: item.lead?.first_name || '', lastName: item.lead?.last_name || '', phone: item.phone || '', email: item.lead?.email || '' },
+    createdAt: now,
+  };
+}
+
 /** Blanks in a finished message, such as [SOLD PRICE?]. Each kind once. */
 export const blanksIn = (text) => [...new Set(String(text || '').match(/\[[A-Z][A-Z0-9 &'/-]{1,30}\?\]/g) || [])];
 
@@ -435,10 +473,11 @@ export const blanksIn = (text) => [...new Set(String(text || '').match(/\[[A-Z][
  * AI's hands (src/fitter.js); written again with new facts and the same wording, the earlier
  * fitting is used again with no request. Without it, no AI request is made.
  */
-export async function draftOrderMessage(item, { type, facts = '', now = Date.now(), save = true, fitWith = null, fitLater = false } = {}) {
-  const o = item.order;
+export async function draftOrderMessage(item, { type, facts = '', now = Date.now(), save = true, fitWith = null, fitLater = false, order = null } = {}) {
+  // `order`: for an enquiry in Auction with no order yet, the stand-in built from what it says (enquiryOrder).
+  const o = order || item.order;
   // `fitLater`: written word for word only because the AI is paused just now; a later check fits it.
-  const base = { itemKey: item.itemKey, anchorKey: item.anchorKey, situation: type, instruction: facts, template: type, context: { channel: 'auction', message: type, template: type, stage: stageOf(o).code, ...(fitLater ? { fitLater: true } : {}) } };
+  const base = { itemKey: item.itemKey, anchorKey: item.anchorKey, situation: type, instruction: facts, template: type, context: { channel: item.order ? 'auction' : item.channel, message: type, template: type, stage: stageOf(o).code, ...(fitLater ? { fitLater: true } : {}) } };
   try {
     if (!MESSAGES[type]) throw new NotNow('Choose which message to write first.');
     const composed = await composeMessage(o, type, { told: factsIn(facts), now });

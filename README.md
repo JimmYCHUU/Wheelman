@@ -946,7 +946,13 @@ It lists the auction customers who have no order yet too: every lead on the dash
 Imports list, and any conversation you moved here. Their rows say where the enquiry has got to
 (Enquiry: asking for details · ready to search · car offered · compliance only), and they are
 answered the import way: what they are looking for is asked first, then the Japan auctions are
-searched and the best car is offered. **One row per customer:** once a customer has an order
+searched and the best car is offered. They have the same **Which message?** list as an order,
+with the messages that fit before there is one: Thanks, with estimate and deposit · Car found,
+full or short · Cars coming up · Still searching · Deposit reminder. The one that suits where the
+enquiry has got to is marked "due now"; the first choice is the reply to what they wrote. Each is
+written from your wording with what the enquiry says (the car, years, kilometres, budget), the
+deposit amount a blank since there is no order yet, and fitted to the customer as an order's is.
+**One row per customer:** once a customer has an order
 under way, the order stands for them and the conversation it reads (the one on the order's
 number, else its lead's) is no longer a row of its own. A text or website enquiry from them
 since the order opened (within the last week) puts the order in To do as a reply to what they

@@ -6,6 +6,14 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- **Enquiries in Auction have "Which message?" too.** Since the Imports AU leads joined Auction,
+  most of its rows were enquiries, and only orders had the list: it looked as if it had gone. An
+  enquiry now has the same list, with the messages that fit before there is an order (Thanks, with
+  estimate and deposit; Car found, full or short; Cars coming up; Still searching; Deposit
+  reminder), the one that suits where it has got to marked, and the reply to what they wrote as
+  the first choice. Each is written from your wording with what the enquiry says, and fitted to the
+  customer. (The owner, 17 Oct 2026: "Where are those drop down templates ... you removed from
+  the only place I had".)
 - **Auction messages are fitted to the customer.** The owner's wording is filled in by code as
   before, then one AI request fits it to this customer and what they last wrote. Before the AI
   sees it, every fact, figure, link, phone number and blank becomes a marker, and code puts each

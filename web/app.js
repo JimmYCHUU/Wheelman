@@ -28,7 +28,8 @@ const state = {
   section: 'dashboard',  // 'dashboard', 'marketplace', 'auction', or 'importquery'
   sections: { dashboard: 0, marketplace: null, auction: null, importquery: null }, // waiting in each; null means the section is switched off
   unread: { dashboard: 0, marketplace: null, auction: null, importquery: null },   // waiting conversations with messages not looked at yet
-  message: '',           // Auction: the kind of message picked from "Which message?" for the open order
+  message: '',           // the message picked from "Which message?": an order's kind, or an enquiry's template
+  picked: false,         // whether one was picked for the open conversation ('' then means the reply to what they wrote)
   pasteOpen: false,      // Auction: the box for pasting what the customer wrote is open
   listSeq: 0,            // guards against a slow list response landing in the wrong section
   tab: 'all',            // the list on screen: 'all' (every conversation, newest first) or 'waiting'; Auction has its own three
@@ -698,6 +699,14 @@ function renderComposer(item, els, { arriving = false } = {}) {
 
   if (item.order) { renderOrderComposer(box, item, d, { arriving, writeBtn }); return; }
 
+  // "Which message?" for a conversation with templates of its own (an enquiry in Auction): the same
+  // picker as an order's, its first choice the reply to what they wrote. A message picked from it is
+  // shown whatever the conversation's state: the owner chose to send it.
+  if (item.templates?.length) {
+    box.append(h('div', { class: 'order-bar' }, TemplatePicker({ templates: item.templates, value: item.template || '', first: 'A reply to what they wrote', onPick: (id) => pickMessage(item, id) })));
+    if (item.template && d && d.status === 'ready' && d.template === item.template) { mountEditor(box, item, d, { arriving }); return; }
+  }
+
   if (item.state === 'optout') {
     box.append(h('div', { class: 'quiet bad' }, icon('stop'), h('p', { text: 'This customer asked not to be contacted. Do not reply.' })));
     return;
@@ -801,7 +810,10 @@ function renderOrderComposer(box, item, d, { arriving = false, writeBtn }) {
 function mountEditor(box, item, d, { arriving = false } = {}) {
   // An auction order: a message written from the wording file, or a reply to what the customer wrote.
   const order = item.order || null;
-  const outbound = !!order && !order.replying;
+  // One of our messages from "Which message?": an order's, or a template picked for an enquiry.
+  const picked = !order && !!d.template && (item.templates || []).find((t) => t.id === d.template);
+  const outbound = (!!order && !order.replying) || !!picked;
+  const kind = order ? order.message : d.template;
   const what = outbound ? 'message' : 'reply';
   // A Marketplace chat is the one place a reply can be sent from here. Everywhere else, copy and paste.
   const sends = item.channel === 'marketplace';
@@ -822,7 +834,7 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
   const backToSuggestion = () => h('button', { class: 'blank-btn', type: 'button', onclick: () => replaceText(ta, d.reply) }, 'Bring back the suggestion');
 
   function paintHead() {
-    const named = outbound ? (order.messages.find((m) => m.type === order.message)?.label || 'Message') : 'Suggested reply';
+    const named = outbound ? ((order ? order.messages.find((m) => m.type === order.message)?.label : picked?.label) || 'Message') : 'Suggested reply';
     tag.replaceChildren(isEmpty() ? `Your ${what} ` : isEdited() ? `${named}, changed by you ` : `${named} `,
       h('span', { text: isEdited() ? '· not sent' : '· not sent · click in the text to change it' }));
     meta.dataset.edited = isEdited() ? 'yes' : 'no';
@@ -1090,7 +1102,7 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
       h('div', { class: 'sheet-foot' },
         rewriteBtn,
         // A message with live figures (an auction car, a landed estimate) can be read again.
-        outbound && ['lot_offer', 'lot_short', 'lots_coming', 'first_estimate'].includes(order.message)
+        outbound && ['lot_offer', 'lot_short', 'lots_coming', 'first_estimate'].includes(kind)
           ? h('button', { class: 'btn', type: 'button', title: 'Read the live auction again and write this message with the figures as they are now.', onclick: () => write(item, d.instruction || '') }, icon('refresh'), 'Refresh figures') : null,
         approveBtn,
         betterBtn,
@@ -1726,6 +1738,7 @@ async function open(key) {
   state.betterOpen = false;
   state.copied = null;
   state.message = '';
+  state.picked = false;
   state.pasteOpen = false;
   state.older = null;
   state.carView = null;
@@ -1759,7 +1772,9 @@ async function write(item, instruction) {
   state.heldAt.delete(item.key);
   if (state.selected === item.key) { renderHead(state.detail, chatFrame()); renderComposer(state.detail, chatFrame()); }
   try {
-    const out = await api(`/api/items/${item.key}/draft`, { body: { instruction, message: item.order ? state.message || item.order.message || '' : '' } });
+    // The message in hand: an order's, or the template picked or shown for an enquiry ('' a reply to what they wrote).
+    const message = item.order ? state.message || item.order.message || '' : item.templates?.length ? (state.picked ? state.message : item.template || '') : '';
+    const out = await api(`/api/items/${item.key}/draft`, { body: { instruction, message } });
     state.busy.delete(item.key);
     // The prompt did its work. A failed try keeps it, for Try again.
     if (out.ok) state.prompts.delete(item.key);
@@ -1783,9 +1798,12 @@ async function write(item, instruction) {
 /** Auction: another kind of message was picked. One already written for it is shown; otherwise it is written now. */
 async function pickMessage(item, type) {
   state.message = type;
+  state.picked = true;
   state.rewriteOpen = false;
   try {
-    const { item: fresh } = await api(`/api/items/${item.key}${type ? `?message=${encodeURIComponent(type)}` : ''}`);
+    // An order's first choice is its due message; any other conversation's is the reply to what they wrote.
+    const query = item.order ? (type ? `?message=${encodeURIComponent(type)}` : '') : `?message=${encodeURIComponent(type)}`;
+    const { item: fresh } = await api(`/api/items/${item.key}${query}`);
     if (state.selected !== item.key) return;
     state.detail = fresh;
     if (type && !(fresh.draft && fresh.draft.status === 'ready')) { await write(fresh, ''); return; }
@@ -1962,7 +1980,7 @@ async function refreshDetail() {
   if (!key || state.busy.has(key)) return;
   try {
     // For an auction order, the message that was picked stays picked.
-    const { item } = await api(`/api/items/${key}${state.message && key.startsWith('ao:') ? `?message=${encodeURIComponent(state.message)}` : ''}`);
+    const { item } = await api(`/api/items/${key}${state.message && key.startsWith('ao:') ? `?message=${encodeURIComponent(state.message)}` : state.picked && !key.startsWith('ao:') ? `?message=${encodeURIComponent(state.message)}` : ''}`);
     if (state.selected !== key) return;
     const previous = state.detail;
     state.detail = item;
@@ -1997,7 +2015,7 @@ async function showSection(section) {
   state.section = section;
   state.tab = REGISTRY[section].tabs[0].id;
   state.q = '';
-  state.selected = null; state.detail = null; state.rewriteOpen = false; state.betterOpen = false; state.copied = null; state.message = ''; state.pasteOpen = false;
+  state.selected = null; state.detail = null; state.rewriteOpen = false; state.betterOpen = false; state.copied = null; state.message = ''; state.picked = false; state.pasteOpen = false;
   state.list = [];
   state.listSize = 20;
   state.listTotal = 0;
