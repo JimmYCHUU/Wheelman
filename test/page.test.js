@@ -186,4 +186,7 @@ test('the template picker lists the templates in the order given, the one due ma
     { value: 'lot_offer', text: 'Car found, full' },
   ]);
   assert.equal(pickerOptions(templates, { first: 'A reply to what they wrote' })[0].text, 'A reply to what they wrote');
+  // Dashboard, Marketplace and Import Query: the template that fits best is marked.
+  assert.deepEqual(pickerOptions([{ id: 'price_question', label: 'Price question', best: true }, { id: 'where_and_when', label: 'Where and when we are open' }]).slice(1).map((o) => o.text),
+    ['Price question (best fit)', 'Where and when we are open']);
 });

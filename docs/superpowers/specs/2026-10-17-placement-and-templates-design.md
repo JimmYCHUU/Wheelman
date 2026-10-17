@@ -67,8 +67,9 @@ Moving changes only the section.
 5. Nothing is learned while a conversation is in Auction, and nothing written while it was
    there teaches after it leaves. Facebook chats never teach, wherever they are listed. The
    team's real sent replies are still read as examples.
-6. The template picker shows only templates that fit, plus "Wheelman's own words". A missing fit
-   is fixed in the template's `@fits` line, not by showing every template.
+6. The template picker shows only templates that fit, plus "A reply to what they wrote"
+   (Wheelman's own words) as its first choice. A missing fit is fixed in the template's `@fits`
+   line, not by showing every template.
 7. A Prompt before writing uses Wheelman's own words unless a template is picked. Rewrite keeps
    the template.
 8. Auction messages are personalised in the background too, with an off switch
@@ -134,6 +135,57 @@ Files: `voice/dashboard-messages.md`, `voice/marketplace-messages.md`,
    (style checks off, as for a Prompt). On failure it tries once more, then gives the code-filled
    template word for word with a note. A reply is always given.
 4. Each template has its own saved draft (`drafts.template`), so switching back costs nothing.
+
+### Step 3 as built (every section, and the Prompt changes the message picked)
+
+The owner, 17 Oct 2026: "I want that in every section not just in auction. But the others
+should have their relevant dropdown options. I still should be able to prompt and the dropdown
+should be edited according to that."
+
+- `src/sectiontemplates.js`: `fitSignals(item)` reads what the conversation shows with no AI
+  (the topics from `classify`, first or later reply, buyer, far away from `farAway`, their offer
+  from `priceFigures`, parting from `PARTING`/`DECLINED`, the car's state from `availability` and
+  `reservedByAnother`, and for an email the topics from `topicsIn` and whether the model is on the
+  eligible list). `templatesFor(item)` offers each part whose `@fits` matches one signal, whose
+  `@needs` all hold and whose `@not` none do, ranked by the number of `@fits` signals matched, the
+  customer's main topic counting once more; ties keep the file's order. The first is marked
+  **(best fit)** when it matched more than `any`.
+- `composeSectionTemplate` fills a part with the conversation's facts: the greeting by the hour
+  and the sign-off only on the first message of the day (Marketplace: `{thanks}`, neither), the
+  car, its link, price, kilometres and where it is, `{price_reply}` (`priceBlock`),
+  `{invitation}` (`inviteBlock`, the online link when far away), `{first_reply_block}` and
+  `{address_block}` (`standardBlock`); for an email, the model, build range, landed cost and
+  deposit from `researchFor`, or blanks.
+- `src/templatedraft.js` is shared with the Auction messages: it saves the draft under the
+  template's name, fits it with `draftFor` (every fact hidden, `src/fitter.js`), and writes it word
+  for word when fitting gives nothing usable.
+- A Prompt or Rewrite with a template shown goes to the AI as the staff instruction for that
+  template ("=== INSTRUCTION FROM OUR STAFF FOR THIS DRAFT ==="); markers may then be left out but
+  never changed or made up. The same instruction and wording again reuses the earlier fitting
+  (`context.asked`).
+- `checkTemplates()` lists slips in the three files (no label, no `@fits`, a signal nothing
+  shows, a fact Wheelman does not fill in); a test keeps it empty.
+
+Calls made in step 3, for the owner to check:
+
+10. Section templates are always fitted by the AI when one is available; there is no switch like
+    `AUCTION_FIT`. With no AI to ask they are written word for word.
+11. In Auction, what is typed into **Add what you know** also goes to the AI as what to change
+    (before, it only filled in facts).
+12. A template picked earlier can still be written after the customer writes again, even when it
+    no longer fits; only the list offered follows the conversation.
+13. Hours, days, weeks, years and kilometres in the owner's own wording ("open 7 days from 8 AM
+    to 5 PM", "6 to 10 weeks") are hidden from the AI like other figures.
+14. "Can you do any better?" and "is that the best you can do" are read as price questions, in
+    every section (they were "general").
+15. First sets are smaller than the plan's table: Import Query has three (Eligible: landed cost
+    and deposit, which also covers a model not on the list; How it works and how long it takes,
+    which covers timeline, payment and compliance only; Ready to search). Dashboard has no
+    "After the sale" message: every Dashboard message is `@not: buyer` except Polite close,
+    because what a buyer needs is in the conversation, not a template. More can be added in the
+    files.
+16. Picking an Import Query message looks the model up on the website (counted against the
+    day's allowance of website requests), as writing a reply does.
 
 ### The PRs
 

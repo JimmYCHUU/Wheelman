@@ -454,7 +454,7 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
       ? `Written word for word from your template "${plan.label}": the AI was not available just now. While you leave it unchanged it is fitted to the customer on a later check.`
       : `Written word for word from your template "${plan.label}": the AI could not fit it to this customer without changing a fact.` }];
     // What the AI made of the template, with its markers: written again with new facts, it is used again.
-    if (fit) { context.masked = plan.masked; context.fitted = result.wordForWord ? null : String(result.json.reply || ''); context.fitLater = result.wordForWord === 'unavailable'; }
+    if (fit) { context.masked = plan.masked; context.fitted = result.wordForWord ? null : String(result.json.reply || ''); context.fitLater = result.wordForWord === 'unavailable'; context.asked = tpl.asked || ''; }
 
     // The AI's own reading of an ordinary enquiry: it may think the customer wants a car found in
     // Japan. The page then offers to treat it as an import enquiry; nothing changes by itself.

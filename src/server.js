@@ -8,6 +8,7 @@ import { listItems, itemFromKey, orderRows } from './items.js';
 import { latestDraft, getDraft, dismiss, undismiss, isDismissed, setDraftRating, markSeen, isSeen, dataStamp, uncopy, addOrderMessage, removeOrderMessage, setItemRuling, clearItemRuling, setItemMove, clearItemMove } from './db.js';
 import { MESSAGES, messagesFor, wantedText, carTitle, lotName, lotPageUrl, cleanPaste } from './orders.js';
 import { draftOrderMessage, enquiryTemplates, enquiryOrder } from './ordermessages.js';
+import { templatesFor, hasSectionTemplate, draftSectionTemplate } from './sectiontemplates.js';
 import { draftFor, writingNow } from './drafter.js';
 import { availability } from './normalize.js';
 import { firstNameOf, isPlaceholderName } from './redact.js';
@@ -304,6 +305,8 @@ function presentOrder(item) {
     firstName: firstNameOf(item.lead), source: 'Auction order', leadStatus: '', location: '', email: item.lead.email || '',
     noLead: false, autoDraft: false, autoReason: '', firstReply: item.isFirstReply, looking: null, vehicle: null,
     order: orderOf(item),
+    // Its messages are in order.messages, gated by where the order stands.
+    templates: [],
     thread: threadOf(item, shown),
     earlier: item.timeline.length - shown.length,
     draft: draftOf(item),
@@ -347,7 +350,7 @@ function present(item) {
     moves: movesFor(item),
     canMove: movesFor(item).includes('importquery'),
     // "Which message?": the templates that fit this conversation, and the one in the box ('' the reply to what they wrote).
-    templates: enquiryTemplates(item),
+    templates: item.section === 'auction' ? enquiryTemplates(item) : templatesFor(item),
     template: item.templatePick ?? (draft?.template || ''),
     // Why it is listed where it is, when it is not where it came in: 'moved' (the owner), 'imports'
     // (the dashboard's Imports list), 'order' (an auction order under way), or ''.
@@ -711,6 +714,9 @@ async function api(req, res, url) {
     } else if (picked.message && enquiryTemplates(item).some((t) => t.id === picked.message)) {
       // An enquiry in Auction: the same messages, written from what the enquiry says.
       draft = await draftOrderMessage(item, { type: picked.message, facts: instruction, order: enquiryOrder(item), fitWith: config.auction.fit ? draftFor : null });
+    } else if (picked.message && hasSectionTemplate(item, picked.message)) {
+      // Any other section: the owner's template, fitted to this customer, changed as the Prompt says.
+      draft = await draftSectionTemplate(item, { id: picked.message, instruction, fitWith: draftFor });
     } else {
       draft = await draftFor(item, { instruction });
     }

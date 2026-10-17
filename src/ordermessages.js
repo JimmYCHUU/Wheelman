@@ -12,7 +12,7 @@ import { searchLots, getLot, estimateFor, soldComparables, lotIdFromUrl, tidyNam
 import { chooseLot, suggestedBid, bidBasisLine, offerBlock, costLines, specificsIn, money, yen, wantedFrom, enquiryStage } from './imports.js';
 import { MESSAGES, carTitle, lotName, wantedCar, lotPageUrl, modelPageUrl, stageOf } from './orders.js';
 import { restore, redact } from './redact.js';
-import { maskTemplate } from './fitter.js';
+import { draftFromTemplate } from './templatedraft.js';
 import { availability } from './normalize.js';
 import { sydneyDay, formatSydney } from './time.js';
 import { logLine } from './log.js';
@@ -473,45 +473,28 @@ export const blanksIn = (text) => [...new Set(String(text || '').match(/\[[A-Z][
  * AI's hands (src/fitter.js); written again with new facts and the same wording, the earlier
  * fitting is used again with no request. Without it, no AI request is made.
  */
-export async function draftOrderMessage(item, { type, facts = '', now = Date.now(), save = true, fitWith = null, fitLater = false, order = null } = {}) {
+export async function draftOrderMessage(item, { type, facts = '', instruction = facts, now = Date.now(), save = true, fitWith = null, fitLater = false, order = null } = {}) {
   // `order`: for an enquiry in Auction with no order yet, the stand-in built from what it says (enquiryOrder).
   const o = order || item.order;
   // `fitLater`: written word for word only because the AI is paused just now; a later check fits it.
-  const base = { itemKey: item.itemKey, anchorKey: item.anchorKey, situation: type, instruction: facts, template: type, context: { channel: item.order ? 'auction' : item.channel, message: type, template: type, stage: stageOf(o).code, ...(fitLater ? { fitLater: true } : {}) } };
+  const context = { message: type, stage: stageOf(o).code };
   try {
     if (!MESSAGES[type]) throw new NotNow('Choose which message to write first.');
+    // What the owner typed fills in the facts it names, and goes to the AI as what to change.
     const composed = await composeMessage(o, type, { told: factsIn(facts), now });
-    const { text, facts: used, notes, review } = composed;
-    const reply = restore(text, item.lead);
-    const blanks = blanksIn(reply);
-    const left = unfilled(reply);
     const checks = [
-      ...(left.length ? [{ level: 'fail', code: 'template', tokens: left, message: `The wording file has ${left.length === 1 ? 'a word' : 'words'} in curly brackets that Wheelman cannot fill in: ${left.join(', ')}. Check voice/${FILE}.` }] : []),
-      ...(blanks.length ? [{ level: 'input', code: 'marker', tokens: blanks, message: 'Fill in the highlighted parts before sending.' }] : []),
-      ...(review ? [{ level: 'input', code: 'auction-review', tokens: [], message: 'The cost calculator marks this car for a manual check (tax or import limits). Confirm the figures before sending.' }] : []),
-      ...notes.map((n) => ({ level: 'warn', code: 'auction', tokens: [], message: n })),
+      ...(composed.review ? [{ level: 'input', code: 'auction-review', tokens: [], message: 'The cost calculator marks this car for a manual check (tax or import limits). Confirm the figures before sending.' }] : []),
+      ...composed.notes.map((n) => ({ level: 'warn', code: 'auction', tokens: [], message: n })),
     ];
-    if (fitWith && save && !left.length) {
-      const masked = maskTemplate(composed);
-      const before = latestDraft(item.itemKey, item.anchorKey, type);
-      const again = before?.status === 'ready' && before.context?.fitted && before.context.masked === masked.masked;
-      const fitted = await fitWith(item, { template: {
-        id: type, label: MESSAGES[type], masked, wordChecks: checks, factsUsed: used, typed: facts,
-        fitted: again ? before.context.fitted : null, fittedBy: again ? { provider: before.provider, model: before.model } : null,
-      } });
-      if (fitted?.status === 'ready') return fitted;
-      // Never a refusal: whatever went wrong in fitting, the owner's wording is written as it stands.
-      logLine('auction', `${item.itemKey} ${type}: the message could not be fitted (${fitted?.error || 'no answer'}); written word for word`);
-    }
-    if (!checks.length) checks.push({ level: 'ok', code: 'ok', tokens: [], message: 'Written from your wording, with the figures from your records.' });
-    const d = { ...base, status: 'ready', reply, needsHuman: [], factsUsed: used, checks, provider: 'none', model: 'your wording', exampleIds: [] };
-    if (save) d.id = insertDraft(d);
-    return d;
+    return await draftFromTemplate(item, {
+      id: type, label: MESSAGES[type], composed, checks, used: composed.facts, typed: facts, instruction, fitWith, save, fitLater, context, file: FILE,
+      okWords: 'Written from your wording, with the figures from your records.',
+    });
   } catch (e) {
     const expected = e instanceof NotNow;
     const error = expected ? e.message : `This message could not be written: ${e.message}`;
     if (!expected) logLine('auction', `${item.itemKey} ${type}: ${e.message}`);
-    const d = { ...base, status: 'failed', reply: '', error, checks: [{ level: 'fail', code: 'error', message: error }] };
+    const d = { itemKey: item.itemKey, anchorKey: item.anchorKey, situation: type, instruction: facts, template: type, context: { channel: item.order ? 'auction' : item.channel, template: type, ...context }, status: 'failed', reply: '', error, checks: [{ level: 'fail', code: 'error', message: error }] };
     if (save) d.id = insertDraft(d);
     return d;
   }

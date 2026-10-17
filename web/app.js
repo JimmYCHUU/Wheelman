@@ -699,9 +699,10 @@ function renderComposer(item, els, { arriving = false } = {}) {
 
   if (item.order) { renderOrderComposer(box, item, d, { arriving, writeBtn }); return; }
 
-  // "Which message?" for a conversation with templates of its own (an enquiry in Auction): the same
-  // picker as an order's, its first choice the reply to what they wrote. A message picked from it is
-  // shown whatever the conversation's state: the owner chose to send it.
+  // "Which message?" for any other conversation: the templates that fit it (an enquiry in Auction,
+  // or a Dashboard, Marketplace or Import Query conversation), in the same picker as an order's,
+  // its first choice the reply to what they wrote. A message picked from it is shown whatever the
+  // conversation's state: the owner chose to send it. Prompt and Rewrite change the one shown.
   if (item.templates?.length) {
     box.append(h('div', { class: 'order-bar' }, TemplatePicker({ templates: item.templates, value: item.template || '', first: 'A reply to what they wrote', onPick: (id) => pickMessage(item, id) })));
     if (item.template && d && d.status === 'ready' && d.template === item.template) { mountEditor(box, item, d, { arriving }); return; }

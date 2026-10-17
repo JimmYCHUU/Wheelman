@@ -15,7 +15,8 @@ import { BLANK_PATTERN } from '../web/lib/blank.js';
 
 const MARKER = /\{\{(K\d+)\}\}/g;
 // What may stand in the owner's own wording that the AI must not rewrite: links, phone numbers,
-// figures (money, yen, numbers of four digits or with thousands separators) and blanks.
+// figures (money, yen, numbers of four digits or with thousands separators, times of day, and a
+// number of days, weeks, months, years or kilometres: "7 days", "8 AM", "6 to 10 weeks") and blanks.
 const LITERAL = new RegExp([
   String.raw`https?:\/\/[^\s<>"')\]]+[^\s<>"')\].,;:!?]`,
   BLANK_PATTERN,
@@ -24,6 +25,8 @@ const LITERAL = new RegExp([
   String.raw`(?:AUD\s?)?[$¥]\s?\d[\d,]*(?:\.\d+)?(?:\s?(?:JPY|AUD))?`,
   String.raw`\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b`,
   String.raw`\b\d{4,}\b`,
+  String.raw`\b\d{1,2}(?:[:.]\d{2})?\s?[AaPp]\.?[Mm]\.?(?![A-Za-z])`,
+  String.raw`\b\d+(?:\.\d+)?(?:\s?(?:to|-|–)\s?\d+(?:\.\d+)?)?[\s-]?(?:days?|weeks?|months?|years?|hours?|kms?|kilometres?)\b`,
 ].join('|'), 'g');
 
 /**

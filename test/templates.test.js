@@ -120,6 +120,10 @@ test('every fact, figure, link, phone number and blank becomes a marker, and com
   }
   assert.match(m.masked, /^Hello \{\{NAME\}\},\n\nThank you for your \{\{K1\}\} enquiry\./, 'the wording around the facts is kept, the name marker too');
   assert.equal(fitter.unmask(m.masked, m.markers), m.text, 'unmasked, it is the filled template exactly');
+  // Small figures in the owner's own wording too: opening hours, days, weeks, years.
+  const hours = fitter.maskTemplate({ part: 'We are open 7 days from 8 AM to 5:30 pm.\n\nIt takes about 6 to 10 weeks, with a 5-year warranty and 1 year roadside assistance.', values: {} });
+  for (const figure of ['7 days', '8 AM', '5:30 pm', '6 to 10 weeks', '5-year', '1 year']) assert.ok(!hours.masked.includes(figure), `"${figure}" reaches the AI: ${hours.masked}`);
+  assert.equal(fitter.unmask(hours.masked, hours.markers), hours.text);
 });
 
 test('a marker lost, written twice or made up is caught; with an instruction a marker may be left out, never changed', () => {
@@ -192,18 +196,22 @@ test('each template keeps its own suggestion: going back to one already written 
   assert.equal(asked(), before, 'no request for any of that');
 });
 
-test('what you add is put into the same fitting with no new request, as long as the wording around it is the same', async () => {
+test('what you add fills in the facts and goes to the AI as what to change; written again with the same words, the fitting is used again', async () => {
   config.auction.fit = true;
   fitting = 'keep';
   let out = await post('/api/items/ao:503/draft', { message: 'bid_lost' });
   assert.match(out.json.item.draft.reply, /\[SOLD PRICE\?\]/);
-  const before = asked();
+  assert.ok(out.json.item.draft.checks.some((c) => c.code === 'marker' && c.tokens.includes('[SOLD PRICE?]')), 'its blank is highlighted');
+  let before = asked();
   out = await post('/api/items/ao:503/draft', { message: 'bid_lost', instruction: 'we bid 300000, sold for 1.31m' });
-  assert.equal(asked(), before, 'no new request');
+  assert.equal(asked() - before, 1, 'one request, with what you typed');
   const d = out.json.item.draft;
   assert.ok(d.reply.includes('¥300,000') && d.reply.includes('¥1,310,000'), d.reply);
   assert.ok(!d.reply.includes('[SOLD PRICE?]'));
   assert.equal(d.instruction, 'we bid 300000, sold for 1.31m', 'what you added is kept with it');
+  before = asked();
+  await post('/api/items/ao:503/draft', { message: 'bid_lost', instruction: 'we bid 300000, sold for 1.31m' });
+  assert.equal(asked(), before, 'Refresh figures: no new request');
 });
 
 test('with no AI to ask, the message is still written, word for word', async () => {
