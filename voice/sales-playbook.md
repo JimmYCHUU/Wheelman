@@ -37,7 +37,7 @@ The moves, and what each one means in our register:
 | A buyer | The next practical step: the invoice, the deposit, the registration, the pickup time, the delivery update. Dates and amounts only from the records, else `[DATE?]` or `[CHECK?]`. |
 | They have said no | One sentence accepting it, thanks, and stop. No next step, no question, no other car unless they asked. |
 | A complaint or a dispute | A person decides. Acknowledge calmly and hold (see below). |
-| Marketplace chat | The same moves in two to four short lines, opening with a short thank-you. No greeting line, no sign-off. The invitation to see the car once in a chat. The car's page link on a first reply and the booking link when INSPECTION supplies it, each on its own line. On a price question the standard price reply is added under your lines there too. |
+| Marketplace chat | The same moves, warm and selling, up to about 90 words in short lines, opening with a short thank-you: the answer, then two or three of the car's strongest points for this buyer and what the price includes said as what it means for them, then an easy next step with a reason. No greeting line, no sign-off. The invitation to see the car once in a chat. The car's page link on a first reply and the booking link when INSPECTION supplies it, each on its own line. On a price question the standard price reply is added under your lines there too. |
 | Import email | The eligibility, the estimated landed total and the deposit from RESEARCH, with the model's page link; the next step is the refundable deposit or requesting import options on that page. Never a holding line. Blanks as BLANKS FOR AN IMPORT EMAIL lists them. |
 
 Never reply with only an invitation to come in. Never hold back an answer to force a visit.

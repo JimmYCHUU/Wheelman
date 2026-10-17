@@ -18,15 +18,20 @@ import { BLANK_PATTERN } from '../web/lib/blank.js';
 const MARKER_RE = new RegExp(BLANK_PATTERN, 'g');
 
 // Filler, pressure, slang and unbacked claims have their own checks (filler, urgency, register, claim); these are the rest.
+// The fourth field marks a rule of our voice rather than a fact or the law: a Prompt sets it aside.
 const BANNED = [
-  [/\b(amazing|stunning|incredible|unbeatable|fantastic|awesome|perfect choice|great choice|excellent choice)\b/i, 'uses marketing wording', 'warn'],
+  [/\b(amazing|stunning|incredible|unbeatable|fantastic|awesome|perfect choice|great choice|excellent choice)\b/i, 'uses marketing wording', 'warn', 'voice'],
   [/\b(as an ai|language model|i am an ai|i'?m an ai)\b/i, 'mentions being an AI', 'fail'],
   [/\b\d+(\.\d+)?\s?% ?(p\.?a\.?|per annum|interest|comparison)/i, 'quotes an interest rate', 'fail'],
   // The law wants one price with what it includes; "plus on-roads" is the wording it forbids.
   [/\bplus on[- ]?road(s| costs?)?\b/i, 'says "plus on-roads": say what the price includes and that government charges are extra', 'fail'],
   // An offer is thanked and left to a person ([PRICE?]); turning it down reads as rude, and it is not the AI's call.
-  [/\b(cannot|can ?not|can'?t|unable to|not able to) (match|accept|meet|do|offer|consider|go (that|so) low on) ((that|this|your|the|such an?) )?(figure|offer|price|amount|discount|number)\b|\bbelow what we (can |could |are able to )?accept\b|\b(that|your|the) (offer|figure|price) is (too|far too|way too|much too) low\b|\btoo far below (our|the) (asking|advertised|listed)/i, 'turns down or runs down the customer\'s offer: thank them for it, and leave the figure to a person with [PRICE?]', 'fail'],
+  [/\b(cannot|can ?not|can'?t|unable to|not able to) (match|accept|meet|do|offer|consider|go (that|so) low on) ((that|this|your|the|such an?) )?(figure|offer|price|amount|discount|number)\b|\bbelow what we (can |could |are able to )?accept\b|\b(that|your|the) (offer|figure|price) is (too|far too|way too|much too) low\b|\btoo far below (our|the) (asking|advertised|listed)/i, 'turns down or runs down the customer\'s offer: thank them for it, and leave the figure to a person with [PRICE?]', 'fail', 'voice'],
 ];
+
+// The checks that hold a reply to the section's own rules on length, tone and layout, rather than
+// to the facts. A reply written from the owner's Prompt is not held to them.
+const SECTION_RULES = new Set(['emoji', 'exclaim', 'long', 'questions', 'filler', 'register', 'next-step', 'price']);
 
 // What our records say about a customer, said to them. Shape the reply by it; never state it.
 const INSIDER_LEAK = /\b(lead score|your (engagement )?score|scored (as|at)|(hot|warm|cold) lead|our (dashboard|system|records?) (shows?|says?|notes?|records?|tells? us)|came to us (from|via|through)|found us (on|through|via)|(enquir|inquir|look|shopp)\w* (at|with|about|around) other (dealers?|cars|vehicles)|other dealers?|your (finance )?application (was|has been|got|is) (declined|rejected|knocked back|approved|unsuccessful)|finance (was|has been|is|got) (declined|rejected|knocked back|approved)|you (have |'ve )?(watched|viewed|seen) (the|our) (video|walkaround))\b/i;
@@ -231,7 +236,7 @@ function figureProblems(replyBody, trustedText, customerText = '', policyText = 
  *   nextStep     what the model said its next step was
  *   now          when the reply would be sent
  */
-export function checkDraft({ reply, body, needsHuman = [], allowedText = '', policyText = '', customerText = '', instruction = '', situation = null, hold = false, examples = [], inConversation = false, channel = 'sms', said = null, stage = null, nextStep = '', now = Date.now(), advertisedPrice = 0, blockNextStep = false }) {
+export function checkDraft({ reply, body, needsHuman = [], allowedText = '', policyText = '', customerText = '', instruction = '', situation = null, hold = false, examples = [], inConversation = false, channel = 'sms', said = null, stage = null, nextStep = '', now = Date.now(), advertisedPrice = 0, blockNextStep = false, instructed = false }) {
   const results = [];
   const add = (level, code, message, tokens = []) => results.push({ level, code, message, tokens });
   const allowed = `${allowedText}\n${instruction}\n${config.site.phone}\n${config.signOff}`;
@@ -272,7 +277,7 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   if (bangs > 1) add('warn', 'exclaim', `Contains ${bangs} exclamation marks.`);
 
   const words = wordCount(String(body).replace(/https?:\/\/\S+/g, ''));
-  if (channel === 'marketplace') { if (words > 60) add('warn', 'long', `Long for a Marketplace chat (${words} words). Two to four short lines, up to 60 words.`); }
+  if (channel === 'marketplace') { if (words > 90) add('warn', 'long', `Long for a Marketplace chat (${words} words). Up to about 90 words, in short lines.`); }
   else if (channel === 'email') {
     // An email has room, and a cost breakdown (one line per part) may run longer still.
     const breakdown = (String(body).match(/^.*\$\d[\d,]*/gm) || []).length >= 4;
@@ -323,7 +328,7 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
     add('warn', 'next-step', `No next step offered${String(nextStep || '').trim() ? ` (the model called its next step "${String(nextStep).trim().slice(0, 60)}")` : ''}. Aim for: ${stage.aim}.`);
   }
 
-  for (const [re, what, level] of BANNED) if (re.test(body)) add(level, 'wording', `Off-voice or risky wording: ${what}.`);
+  for (const [re, what, level, kind] of BANNED) if (re.test(body) && !(instructed && kind === 'voice')) add(level, 'wording', `Off-voice or risky wording: ${what}.`);
 
   if (situation?.all?.includes('price_negotiation') && !markers.includes('[PRICE?]') && /(lowest|best price|we can do|discount|negotiab)/i.test(body)) {
     add('input', 'price', 'This talks about price. Confirm the figure before sending.');
@@ -331,6 +336,13 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
 
   if (said) results.push(...promiseChecks({ body, now, said, instruction, knownText: `${allowedText}\n${policyText}` }));
 
+  // Written from the owner's Prompt: only the facts are held to account. The deposit line is the
+  // owner's call then too; a claim about other buyers is still refused.
+  if (instructed) {
+    const kept = results.filter((c) => !SECTION_RULES.has(c.code) && !(c.code === 'urgency' && c.level === 'warn'));
+    results.length = 0;
+    results.push(...kept);
+  }
   if (!results.length) add('ok', 'ok', 'Figures and links match your records.');
   return results;
 }
@@ -376,8 +388,10 @@ const sentencesOf = (t) => String(t || '').split(/(?<=[.!?])\s+|\n+/).map((s) =>
  * model-unanswered: a model code the customer named with no eligibility statement, figure, blank or page link near it. A fail.
  * research-link: a costed model given with no link to its page. A warn.
  * research-stale: the figures came from a saved page, or the website could not be read. A warn.
+ * instructed: written from the owner's Prompt, which decides what the email says: the fails are
+ * pointed out as warnings and never force a rewrite.
  */
-export function emailChecks({ body, research = null, hold = false }) {
+export function emailChecks({ body, research = null, hold = false, instructed = false }) {
   const out = [];
   const text = String(body || '');
   const sentences = sentencesOf(text);
@@ -400,7 +414,7 @@ export function emailChecks({ body, research = null, hold = false }) {
   if (research && (research.stale || research.notes?.length)) {
     out.push({ level: 'warn', code: 'research-stale', tokens: [], message: research.fetchedAt ? `The website's eligible-models list could not be read today; the figures come from the list read earlier${research.notes?.length ? ` (${research.notes[0]})` : ''}. Open the page link before sending.` : `The website's eligible-models list could not be read; the figures come from the pages saved on this computer. Open the page link before sending.` });
   }
-  return out;
+  return instructed ? out.map((c) => (c.level === 'fail' ? { ...c, level: 'warn' } : c)) : out;
 }
 
 export { NAME_TOKEN };

@@ -750,6 +750,15 @@ The suggestion waits in the message box, marked **not sent**. The box is an edit
   Carbarn's voice, in one request, instead of writing its own version first for you to redo.
   While the line is open the automatic suggestion for that conversation waits a minute and a
   half, so there is only ever the one request; close the line and it carries on as before.
+  Your Prompt comes first, in every section: it decides what the reply says, how long it is, its
+  tone, its layout and its greeting, over the section's own rules (Marketplace's length, the
+  greeting once a day, the sales move, the examples). Only the facts still bind: every figure,
+  link, date and promise comes from the records or from your Prompt, and nothing the records
+  cannot back is claimed. With a Prompt your price reply and the inspection invitation are not
+  added under the text (the AI gives the booking link itself if it invites them), unless the
+  Prompt asks for the booking link; the first-reply block, the links the customer asked for, and
+  the auction and import closing lines are still added. The same goes for **Rewrite**. (The
+  owner's decision, 16 Oct 2026.)
   **Write it now** writes without a prompt. A try that failed is tried again with the prompt it
   had. The sentence above the buttons says when Wheelman will try again by itself if the free
   models are busy or used up. The three shimmering lines show whenever a suggestion is being
@@ -867,11 +876,15 @@ Wheelman reads the Facebook Marketplace chats from the content engine and sugges
 every chat where the buyer wrote last. It works like the Dashboard section, with these
 differences:
 
-- **Courteous and short.** Two to four short lines, up to 60 words, in the same register as a
-  text. Every reply opens with a short thank-you ("Thank you for your message, Priya." on the
-  first reply, then "Thank you for your offer." or "Thank you for letting us know."), with no
-  greeting line and no "Regards, Team Carbarn". (The owner's choice, 16 Oct 2026: the replies had
-  read as rude and too brief.)
+- **Warm and selling.** Up to about 90 words in short lines. Every reply opens with a short
+  thank-you ("Thank you for your message, Priya." on the first reply, then "Thank you for your
+  offer." or "Thank you for letting us know."), answers, then sells the car to this buyer: two or
+  three of its strongest points for them (the seats, the kilometres verified on the export
+  certificate, the grade, the economy), what the price includes said as what it means for them
+  ("so it is ready to drive away"), and an easy next step with a reason. True selling words are
+  fine; hype, pressure, emoji and slang are not. No greeting line and no "Regards, Team Carbarn".
+  (The owner's choices, 16 Oct 2026: first that the replies read as rude and too brief, then that
+  they were still too short and "just being professional doesn't mean it can generate sales".)
 - **Never pushy.** The invitation to see the car is given once in a chat. An offer is thanked and
   left to a person, never called too low; a buyer leaving over the price gets a polite close; and
   the deposit comes up only once the price is agreed (see [The price reply](#the-price-reply)).
@@ -1340,7 +1353,8 @@ often you asked for a rewrite. Counts only; no customer text.
 | "Below" | A reply never points at the address block. It answers in the sentence itself |
 | The message box | An editor: change the text or clear it, and it is saved as you type. A changed reply teaches Wheelman when it is copied or approved |
 | AI models | The better models are kept for dashboard customers. Marketplace chats use the small one |
-| Marketplace | A suggestion for every chat where the buyer wrote last; courteous and short (two to four lines, up to 60 words, opening with a thank-you), with the car's page link and the booking link when asked, and the invitation once in a chat |
+| Marketplace | A suggestion for every chat where the buyer wrote last; warm and selling (up to about 90 words, opening with a thank-you, the car's strongest points and what is included, an easy next step), with the car's page link and the booking link when asked, and the invitation once in a chat |
+| Your Prompt | Comes first in every section: it decides the length, tone, layout and greeting; only the facts still bind. No price reply or invitation is added under a prompted reply unless the Prompt asks for the booking link |
 | The deposit | Proposed only once the price is agreed: booked or seen, asked to hold it, or accepted our figure. Never while the customer is making an offer, says it is too dear, or is leaving |
 | Offers | Thanked and left to a person (`[PRICE?]`), never turned down or called too low; the price reply goes once |
 | Sending | Marketplace only, by the **Send reply** button. Dashboard and auction replies are copied and pasted |

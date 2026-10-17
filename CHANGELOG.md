@@ -25,6 +25,29 @@ and versions follow `MAJOR.MINOR.PATCH`.
   writes for these, and for the enquiries listed in Auction.
 
 ### Changed
+- **Your Prompt comes first, in every section.** The owner, 16 Oct 2026: "When I'm prompting in
+  any section this should rule out the constraint of that section... The constraints are just the
+  facts and business information." A reply written from the Prompt line or Rewrite now follows it
+  on length, tone, layout and greeting, over the section's own rules (Marketplace's length, the
+  greeting once a day, the sales move, the examples). The AI is told so in every section, and the
+  code no longer undoes it: a greeting it was asked for is kept (Marketplace, or a second text the
+  same day), the layout is kept, and the length, two-questions, style and next-step warnings are
+  not raised. An import email's "we will check" and an auction opening that states a figure are
+  pointed out, not forced out. Only the facts still bind: figures, links, dates, promises, claims
+  about other buyers, accidents or approval. With a Prompt, the price reply and the inspection
+  invitation are not added under the text (the AI is given the booking link to use itself),
+  unless the Prompt asks for the booking link; the first-reply block, the links the customer asked
+  for, and the auction and import closing lines are still added. A Could be better note stays a
+  lesson, as before.
+- **Marketplace replies are warm and sell.** The owner found them "way too much shorter" and
+  flat: "Just being professional doesn't mean it can generate sales." They now run to about 90
+  words in short lines (was 60): the thank-you, the answer, two or three of the car's strongest
+  points for this buyer, what the price includes said as what it means for them ("so it is ready
+  to drive away"), and an easy next step with a reason. True selling words are allowed; hype,
+  pressure, emoji and slang are not. The deposit rule, the polite close, offers left to a person
+  and the invitation once in a chat stay as they were. Dashboard texts are unchanged. Checked on
+  the same 13 real chats as before plus two with a Prompt, written by today's Wheelman and the new
+  one on copies of the database; nothing was sent.
 - **Moves have their own record.** "Moved to Import Query" used to ride on the import ruling;
   existing moves are copied across once, so taking a ruling away no longer moves a conversation
   back. Nothing is learned while a conversation is in Auction (Imports leads used to teach the

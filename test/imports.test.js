@@ -401,6 +401,12 @@ test('an opening that states a price is replaced by the standard one, and an off
   assert.ok(d.reply.startsWith('Hello Nina,\n\nWe’ve found a 2015 Subaru XV Hybrid that may be worth considering.\n\nVehicle details:'), d.reply.slice(0, 120));
   assert.deepEqual(fails(d), []);
 
+  // With the owner's Prompt the layout rule steps aside: an opening that states the landed cost they asked for is kept.
+  aiScript = [{ reply: priced, needs_human: [], facts_used: [], hold: false }];
+  const prompted = await drafter.draftFor(it, { save: false, now, instruction: 'mention the landed cost in the opening' });
+  assert.ok(prompted.reply.startsWith('Hello Nina,\n\nWe’ve found a 2015 Subaru XV Hybrid for about $11,019 landed.'), prompted.reply.slice(0, 120));
+  assert.deepEqual(fails(prompted), []);
+
   calls.length = 0;
   aiDown = true;
   const without = await quickly(() => drafter.draftFor(it, { save: false, now }));
