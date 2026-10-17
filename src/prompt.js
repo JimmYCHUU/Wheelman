@@ -506,7 +506,11 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   const part = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
   P.push(`NOW: ${sydneyWeekday(now)} ${part} (${formatSydney(now)}), Sydney time. The greeting line for this hour, when one is due, is "${greetingFor(hour)} {{NAME}}," (or "${greetingFor(hour)}," when the name is not known); never "Hi".`);
   P.push(`SITUATION: ${item.situation.label}${item.situation.all.length > 1 ? `. Also touches: ${item.situation.all.slice(1).map(labelFor).join('; ')}` : ''}.`);
-  P.push(item.order
+  // Fitting one of our own messages is not writing a reply: the message settles what it says.
+  const fitting = importPlan?.stage === 'template';
+  P.push(fitting
+    ? `THIS IS: one of our own messages to this customer, to be fitted to them (see ${importPlan.heading}).${item.order ? ' They have an auction order with us; much of the earlier contact was by phone or on WhatsApp and is not shown here.' : ''}`
+    : item.order
     ? 'THIS IS: a reply to an existing customer who has an auction order with us. Much of the earlier contact was by phone or on WhatsApp and is not shown here. Do not thank them for an enquiry.'
     : item.isFirstReply && deal
     ? 'THIS IS: our first text in this conversation, but the customer is an existing buyer. Earlier contact was by phone, email or in person. Do not thank them for an enquiry.'
@@ -524,8 +528,11 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     P.push(`CHANNEL: Email, an enquiry about importing a car from Japan.${subject ? ` Subject: "${subject}".` : ''} Write the body of the reply email; every email is greeted.`);
     P.push(`CUSTOMER NAME: ${item.hasName ? 'known. Open with "Hello {{NAME}}," on its own line.' : 'not known. Open with "Hello," on its own line and do not use {{NAME}}.'}`);
   } else {
-    // An auction offer is a quote in its own right: it is greeted even when we wrote earlier today.
-    P.push(writtenToday(item, now) && importPlan?.stage !== 'offer'
+    // A message of ours being fitted keeps its own greeting. An auction offer is a quote in its own
+    // right: it is greeted even when we wrote earlier today.
+    P.push(fitting
+      ? 'CUSTOMER NAME: the message has {{NAME}} where the name goes; keep it there.'
+      : writtenToday(item, now) && importPlan?.stage !== 'offer'
       ? `CUSTOMER NAME: ${item.hasName ? 'known.' : 'not known. Do not use {{NAME}}.'} We have already written to this customer today, so do not greet them again: no "Hi" line and no opening with their name. Start with the answer.`
       : `CUSTOMER NAME: ${item.hasName ? 'known. Open with the greeting for this hour (see NOW) and {{NAME}}, on its own line.' : 'not known. Open with the greeting for this hour (see NOW) without a name, and do not use {{NAME}}.'}`);
     // Whether the record is complete, never what it holds. Some of the owner's lessons depend on it.
@@ -650,7 +657,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   }
 
   if (importPlan?.lines?.length) {
-    P.push(`\n=== ${importPlan.stage === 'offer' ? 'AUCTION CAR FOR THIS CUSTOMER' : importPlan.stage === 'order' ? "THIS CUSTOMER'S AUCTION ORDER" : 'IMPORT ENQUIRY'} ===`);
+    P.push(`\n=== ${importPlan.heading || (importPlan.stage === 'offer' ? 'AUCTION CAR FOR THIS CUSTOMER' : importPlan.stage === 'order' ? "THIS CUSTOMER'S AUCTION ORDER" : 'IMPORT ENQUIRY')} ===`);
     P.push(importPlan.lines.join('\n'));
   }
 
@@ -723,8 +730,11 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     P.push(told);
   }
 
-  P.push('\n=== THE CUSTOMER IS WAITING FOR A REPLY TO ===');
-  P.push(pendingRedacted.map((t) => `<customer_message>\n${t}\n</customer_message>`).join('\n'));
+  // A message of ours fitted when nobody is waiting has nothing to answer.
+  if (!fitting || pendingRedacted.length) {
+    P.push('\n=== THE CUSTOMER IS WAITING FOR A REPLY TO ===');
+    P.push(pendingRedacted.map((t) => `<customer_message>\n${t}\n</customer_message>`).join('\n'));
+  }
   // An old message: "today" and "tomorrow" in it are counted from when it was written.
   const waited = item.lastInboundAt ? now - item.lastInboundAt : 0;
   if (waited > 3 * 3600 * 1000) {

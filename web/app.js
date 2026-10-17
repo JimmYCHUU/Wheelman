@@ -19,6 +19,7 @@ import { mountListColumn, visibleRows } from './views/ListColumn.js';
 import { CarTab, viewerGroups, replyLabel, pictureSrc } from './views/CarPanel.js';
 import { openViewer } from './views/Viewer.js';
 import { MoveMenu } from './views/MoveMenu.js';
+import { TemplatePicker } from './views/TemplatePicker.js';
 import { linkLine, placeLine } from './lib/insert.js';
 
 // ---- state -------------------------------------------------------------------
@@ -750,15 +751,16 @@ function renderComposer(item, els, { arriving = false } = {}) {
  */
 function renderOrderComposer(box, item, d, { arriving = false, writeBtn }) {
   const o = item.order;
-  const picker = h('select', { class: 'pick', 'aria-label': 'Which message to write' },
-    h('option', { value: '', text: o.replying ? 'A reply to what they wrote' : 'Choose a message' }),
-    o.messages.map((m) => h('option', { value: m.type, text: m.due ? `${m.label} (due now)` : m.label })));
-  picker.value = o.replying && !state.message ? '' : o.message || '';
-  picker.addEventListener('change', () => pickMessage(item, picker.value));
+  const picker = TemplatePicker({
+    templates: o.messages.map((m) => ({ id: m.type, label: m.label, due: m.due })),
+    value: o.replying && !state.message ? '' : o.message || '',
+    first: o.replying ? 'A reply to what they wrote' : 'Choose a message',
+    onPick: (id) => pickMessage(item, id),
+  });
   const pasteBtn = h('button', { class: `btn ${state.pasteOpen ? 'is-on' : ''}`.trim(), type: 'button', 'aria-expanded': state.pasteOpen ? 'true' : 'false',
     title: 'Paste what the customer wrote on WhatsApp, or type what they said on the phone. Wheelman then suggests a reply.',
     onclick: () => { state.pasteOpen = !state.pasteOpen; renderComposer(item, chatFrame()); if (state.pasteOpen) $('#chat .paste textarea')?.focus(); } }, icon('chat'), 'Paste their message');
-  box.append(h('div', { class: 'order-bar' }, h('label', { class: 'pick-label' }, h('span', { text: 'Which message?' }), picker), h('span', { class: 'grow' }), pasteBtn));
+  box.append(h('div', { class: 'order-bar' }, picker, h('span', { class: 'grow' }), pasteBtn));
 
   if (state.pasteOpen) {
     const ta = h('textarea', { rows: '3', placeholder: 'Paste what the customer wrote on WhatsApp, or type what they said', 'aria-label': 'What the customer wrote' });

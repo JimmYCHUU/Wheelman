@@ -299,6 +299,8 @@ export function openDb(file = config.dbPath) {
   ensureColumn(db, 'drafts', 'sent_here_at', 'INTEGER');
   // What was looked up on the website for an import email: the page's research notes.
   ensureColumn(db, 'drafts', 'research_json', 'TEXT');
+  // The template a suggestion was written from (voice/*-messages.md); each has its own suggestion.
+  ensureColumn(db, 'drafts', 'template', 'TEXT');
   // Which kind of reply a lesson came from: 'sms' (the dashboard) or 'email' (Import Query). What an
   // email taught is used only for emails, and what a text taught only for texts and chats.
   ensureColumn(db, 'learned', 'channel', "TEXT NOT NULL DEFAULT 'sms'");
@@ -349,6 +351,17 @@ function migrate(d) {
       UPDATE item_rulings SET section = 'dashboard' WHERE section != 'dashboard';
     `);
     mark('moves_from_rulings_v1');
+  }
+
+  // Auction messages are now kept under their kind, each its own suggestion. Those written before
+  // had their kind only in their context: it is copied across once, so they still show.
+  if (!done('draft_templates_v1')) {
+    d.exec(`
+      UPDATE drafts SET template = json_extract(context_json, '$.message')
+       WHERE template IS NULL AND item_key LIKE 'ao:%' AND context_json IS NOT NULL
+         AND IFNULL(json_extract(context_json, '$.message'), '') != '';
+    `);
+    mark('draft_templates_v1');
   }
 }
 
@@ -809,12 +822,12 @@ export function countRows(table) {
 
 export function insertDraft(d) {
   const info = stmt(`
-    INSERT INTO drafts(item_key, anchor_key, situation, reply, needs_human_json, facts_used_json, checks_json, provider, model, status, instruction, error, created_at, context_json, next_step, rung, research_json)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO drafts(item_key, anchor_key, situation, reply, needs_human_json, facts_used_json, checks_json, provider, model, status, instruction, error, created_at, context_json, next_step, rung, research_json, template)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(d.itemKey, d.anchorKey, d.situation || null, d.reply || null, JSON.stringify(d.needsHuman || []),
     JSON.stringify(d.factsUsed || []), JSON.stringify(d.checks || []), d.provider || null, d.model || null,
     d.status, d.instruction || null, d.error || null, Date.now(), d.context ? JSON.stringify(d.context) : null,
-    d.nextStep || null, d.rung || null, d.research ? JSON.stringify(d.research) : null);
+    d.nextStep || null, d.rung || null, d.research ? JSON.stringify(d.research) : null, d.template || null);
   return Number(info.lastInsertRowid);
 }
 
@@ -829,8 +842,14 @@ const parseDraft = (r) => r && ({
   research: r.research_json ? JSON.parse(r.research_json) : null,
 });
 
-export function latestDraft(itemKey, anchorKey) {
-  return parseDraft(stmt('SELECT * FROM drafts WHERE item_key = ? AND anchor_key = ? ORDER BY id DESC LIMIT 1').get(itemKey, anchorKey));
+/**
+ * The newest suggestion for a message. `template`, when given, is which template it was written
+ * from: each template has its own, so going back to one already written shows it again. An empty
+ * template is a suggestion written from no template. Left out: the newest, whatever it came from.
+ */
+export function latestDraft(itemKey, anchorKey, template = undefined) {
+  if (template === undefined) return parseDraft(stmt('SELECT * FROM drafts WHERE item_key = ? AND anchor_key = ? ORDER BY id DESC LIMIT 1').get(itemKey, anchorKey));
+  return parseDraft(stmt("SELECT * FROM drafts WHERE item_key = ? AND anchor_key = ? AND IFNULL(template, '') = ? ORDER BY id DESC LIMIT 1").get(itemKey, anchorKey, template || ''));
 }
 
 export function getDraft(id) {

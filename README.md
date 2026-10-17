@@ -448,6 +448,8 @@ has moved past its first stage, Wheelman stops offering cars and answers as usua
 |---|---|---|
 | `AUCTION_BID_STEP_YEN` | The average of the sold prices is rounded up to the next step of this size | `50000` |
 | `AUCTION_BUDGET_SLACK` | How far over the budget still counts as "a little above": `0.15` is 15% | `0.15` |
+| `AUCTION_FIT` | Whether an auction message is fitted to the customer by the AI (one request each); `0` writes it word for word | `1` |
+| `AUCTION_FIT_BACKGROUND` | Whether the message that is due is fitted in the background too, or only when you pick or write one | `1` |
 | `AUCTION_API_URL` | Where the live auction is read from | The dashboard's address |
 
 ## Non-negotiable rules
@@ -974,9 +976,22 @@ compliance · On the way to Australia · Arrived, compliance under way · Comple
 ### The message that is due
 
 The message box holds the message for the order's stage, written from your own wording in
-`voice/auction-messages.md` with the facts filled in. **No AI is asked.** Figures and links
-come from the order, the website's live auction and its cost calculator, and our stock list.
-What only a person knows is a highlighted blank.
+`voice/auction-messages.md` with the facts filled in. Figures and links come from the order,
+the website's live auction and its cost calculator, and our stock list. What only a person
+knows is a highlighted blank.
+
+**Fitted to the customer.** One AI request then fits your wording to this customer and what
+they last wrote, without touching a fact: before the AI sees the message, every fact, figure,
+link, phone number and blank in it is replaced by a marker such as `{{K1}}`, and code puts each
+one back exactly. If the AI loses, repeats or makes up a marker, or adds a figure of its own, it
+is asked once more; then your wording is used word for word, and the page says so. With no AI
+to ask, it is word for word too, and while you leave it unchanged it is fitted on a later check:
+there is always a message. Nothing the AI is not shown in the first request (an amount, a name)
+reaches it in a second one either. Each kind of message keeps its own
+suggestion, so going back to one already written asks nothing. What you type into **Add what you
+know** is put into the same fitting with no new request, as long as the wording around it stays
+the same. `AUCTION_FIT=0` in the `.env` file writes every message word for word with no AI, and
+`AUCTION_FIT_BACKGROUND=0` fits only the messages you pick or write on the page.
 
 | Message | Due when | Blank for a person |
 |---|---|---|
@@ -1346,7 +1361,7 @@ often you asked for a rewrite. Counts only; no customer text.
 | Import or auction enquiry, nothing known yet | The asking reply: year range, maximum odometer, grade, landed budget, colour or features; then address, phone, hours |
 | Import or auction enquiry, once they say what they want | One car from the live auction: its details and link, a bid rounded up from Carbarn's suggested bid, the landed cost from the website's calculator part by part, and a blank for the deposit link |
 | Suggested auction bid | The average of the three closest sold cars on the website's "Japan auction sold prices" list, rounded up to the next ¥50,000. Never below the website's own suggested bid |
-| Auction orders | Their own section. The next message for each stage is written from the team's wording with no AI, signed Team Carbarn. Copy and paste into WhatsApp |
+| Auction orders | Their own section. The next message for each stage is written from the team's wording, fitted to the customer by the AI with every figure kept as code put it in, signed Team Carbarn. Copy and paste into WhatsApp |
 | The deposit link | Always left as a blank and pasted in by hand. It is never stored |
 | Amounts on an auction order | What the customer was charged and paid may be kept and stated. Never our costs, and never to the AI |
 | Finance and complaints | Answered the way the team answered similar ones. Never a rate, a repayment or a promise of approval; a complaint is always marked for a person |

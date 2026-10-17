@@ -10,6 +10,8 @@ import { redact, restore } from './redact.js';
 import { planImport, auctionNote, bidBasisLine } from './imports.js';
 import { planOrderReply, restoreAmounts } from './ordermessages.js';
 import { insertDraft, latestDraft } from './db.js';
+import { templatePlan, checkMarkers, markerTrouble, unmask, finishTemplate } from './fitter.js';
+import { BLANK_PATTERN } from '../web/lib/blank.js';
 import { sydneyHour } from './time.js';
 import { standardBlock, inviteBlock, repeatsBlock, tidyOpening } from './firstreply.js';
 import { priceBlock } from './pricereply.js';
@@ -136,6 +138,32 @@ function coachingCopied(body, note) {
 }
 
 /**
+ * A fitted template: every marker must come back exactly once (with the owner's Prompt one may be
+ * left out); the facts are then put back and the template's own greeting and closing kept. The
+ * facts are checked as for any reply, the style is not (it is the owner's wording), and the checks
+ * the template carries itself (blanks to fill, a car to confirm) are added.
+ */
+function assessTemplate(item, text, json, { plan, allowed, said, staffSaid, instructed, now }) {
+  const marks = checkMarkers(text, plan.markers, { optional: instructed });
+  // Every blank the message needs is already one of its markers: one written out is the AI's own.
+  const ownBlanks = [...new Set(String(text).match(new RegExp(BLANK_PATTERN, 'g')) || [])];
+  const reply = finishTemplate(unmask(text, plan.markers), item.lead);
+  const checks = checkDraft({
+    channel: item.channel, reply, body: reply, advertisedPrice: 0, blockNextStep: true,
+    needsHuman: json.needs_human, allowedText: allowed.trusted, policyText: allowed.policy, customerText: allowed.customer,
+    // The template is the owner's own wording: what it promises, our staff have said.
+    instruction: [staffSaid, plan.text].filter(Boolean).join('\n'), situation: item.situation, hold: false, examples: [], inConversation: !item.isFirstReply,
+    said, stage: null, nextStep: '', now, instructed: true,
+  // The template's own blanks are its own checks (below), said once, in its words.
+  }).filter((c) => c.level !== 'ok' && c.code !== 'marker' && c.code !== 'bare-marker');
+  if (!marks.ok) checks.push({ level: 'fail', code: 'template-markers', tokens: [], message: `The template's facts did not all come back as they were: ${markerTrouble(marks)}. Keep every marker exactly once, as written.` });
+  if (ownBlanks.length) checks.push({ level: 'fail', code: 'template-blank', tokens: [], message: `The reply adds a blank of its own (${ownBlanks.join(', ')}). The message already has every blank it needs, as markers: write no other.` });
+  checks.push(...plan.wordChecks.filter((c) => c.level !== 'ok'));
+  if (!checks.length) checks.push({ level: 'ok', code: 'ok', tokens: [], message: 'Fitted to this customer from your wording, with the figures from your records.' });
+  return { body: reply, reply, checks };
+}
+
+/**
  * Turns what the model answered (or a reply written by hand) into the finished suggestion and
  * runs every check on it. plan: an import or auction-order plan, when there is one.
  * instructed: written from the owner's Prompt (or Rewrite). The section's own rules on length,
@@ -163,6 +191,7 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   // An import reply has its own lines underneath: the whole offer, or the short contact block.
   const block = plan ? (hold ? '' : plan.tail || '') : prompt.standard.on && !hold ? standardBlock({ vehicleUrl, inspectionUrl, online: !!prompt.standard.online }) : '';
   if (plan?.tokens) text = restoreAmounts(text, plan.tokens);
+  if (plan?.stage === 'template') return assessTemplate(item, text, json, { plan, allowed, said, staffSaid, instructed, now });
   if (block || owned || asked) text = tidyOpening(text, vehicleUrl, inspectionUrl, prompt.price?.inspectionUrl || '', invite ? prompt.inspection.url : '', ...(asked ? asked.links.map((l) => l.url) : []));
   // A link the AI wrote out with its own words around it stays there, once.
   const links = asked ? asked.links.filter((l) => !text.includes(l.url)).map((l) => `${l.label}: ${l.url}`).join('\n') : '';
@@ -235,21 +264,27 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
 // page's Write it now during a background write, or the other way round) joins it instead of asking
 // the AI again. A write from the owner's own words (the Prompt line, Rewrite, Could be better)
 // starts its own, and a plain write that finishes after it is not kept: the owner's stands.
-const inFlight = new Map(); // 'itemKey|anchorKey' -> { promise, instruction, directed, startedAt }
-const flightKey = (item) => `${item.itemKey}|${item.anchorKey}`;
-/** Is a suggestion being written for this message right now? The page shows the shimmering lines. */
-export const writingNow = (itemKey, anchorKey) => inFlight.has(`${itemKey}|${anchorKey}`);
+// A template has its own: writing one template does not hold up another for the same message.
+const inFlight = new Map(); // 'itemKey|anchorKey|template' -> { promise, instruction, directed, startedAt }
+const flightKey = (item, template = '') => `${item.itemKey}|${item.anchorKey}|${template}`;
+/** Is a suggestion being written for this message right now (from this template, when one is named)? The page shows the shimmering lines. */
+export const writingNow = (itemKey, anchorKey, template = undefined) => (template === undefined
+  ? [...inFlight.keys()].some((k) => k.startsWith(`${itemKey}|${anchorKey}|`))
+  : inFlight.has(`${itemKey}|${anchorKey}|${template || ''}`));
 
 /**
  * @param instruction what our staff typed for this one reply: the Prompt line before it is written,
  *                    or Rewrite after. Its figures and promises count as staff-given.
  * @param coaching  { note, draft } given under Could be better: what the owner said about the last
  *                  draft, and that draft. It guides the rewrite; it is not wording to send.
+ * @param template  one of the owner's templates to fit to this customer (src/fitter.js):
+ *                  { id, label, masked: maskTemplate(...), wordChecks, factsUsed, typed, fitted, fittedBy }.
+ *                  `fitted`: the AI's earlier fitting of the same wording, used again with no request.
  */
 export function draftFor(item, opts = {}) {
   const { instruction = '', coaching = null, save = true } = opts;
   if (!save) return writeDraft(item, opts, null);
-  const key = flightKey(item);
+  const key = flightKey(item, opts.template?.id || '');
   const directed = !!instruction || !!coaching;
   const current = inFlight.get(key);
   if (current && (!directed || (!coaching && current.instruction === instruction))) {
@@ -262,7 +297,7 @@ export function draftFor(item, opts = {}) {
   return flight.promise;
 }
 
-async function writeDraft(item, { instruction = '', coaching = null, save = true, holdOutConversation = true, now = Date.now(), pin = null } = {}, flight) {
+async function writeDraft(item, { instruction = '', coaching = null, template: tpl = null, save = true, holdOutConversation = true, now = Date.now(), pin = null } = {}, flight) {
   // Keeps the finished draft, unless it is a plain write that finished after a reply from the
   // owner's own words was written for the same message: then the owner's stands and this one goes,
   // whether it came out ready or failed.
@@ -295,8 +330,12 @@ async function writeDraft(item, { instruction = '', coaching = null, save = true
     coached: !!coaching,
     // An ordinary enquiry read as an import enquiry: why (src/importjudge.js), or the owner's ruling.
     judged: item.judged ? item.judged.why : null,
+    // The template it was written from, and for an auction message its kind (as before templates).
+    template: tpl ? tpl.id : null,
+    ...(tpl && item.order ? { message: tpl.id } : {}),
   };
-  const base = { itemKey: item.itemKey, anchorKey: item.anchorKey, situation: item.situation.primary, instruction, context };
+  // What the owner typed into "Add what you know" is kept with a template's suggestion as its instruction was.
+  const base = { itemKey: item.itemKey, anchorKey: item.anchorKey, situation: tpl && item.order ? tpl.id : item.situation.primary, instruction: instruction || tpl?.typed || '', context, template: tpl?.id || null };
 
   if (item.state === 'optout') {
     const d = { ...base, status: 'blocked', reply: '', checks: [{ level: 'fail', code: 'optout', message: 'Customer asked not to be contacted. No reply suggested.' }] };
@@ -314,8 +353,10 @@ async function writeDraft(item, { instruction = '', coaching = null, save = true
 
     // An import or auction enquiry: what to ask, or which auction car to offer, is worked out first.
     let plan = null;
+    // One of the owner's templates, fitted to this customer: its facts go to the AI only as markers.
+    if (tpl) plan = templatePlan(tpl, { orderPlan: item.order ? planOrderReply(item, { forTemplate: true }) : null });
     // A reply to an auction customer: the order's facts go to the AI, its amounts only as markers.
-    if (item.order) plan = planOrderReply(item);
+    else if (item.order) plan = planOrderReply(item);
     else if (!chat && !email && item.imports) {
       try { plan = await planImport(item, { instruction: staffSaid, now }); }
       catch (e) {
@@ -352,7 +393,8 @@ async function writeDraft(item, { instruction = '', coaching = null, save = true
     // The auction car, its link and its figures are ours to state: they came from the live auction.
     if (plan?.stage === 'offer') allowed.trusted += `\n${plan.tail}\n${plan.lines.join('\n')}`;
     // The order's own amounts are ours to state: code puts them where the AI left their markers.
-    if (plan?.stage === 'order') allowed.trusted += `\n${plan.trustedText}`;
+    // So is everything a template says: it is the owner's own wording with our records' facts.
+    if (plan?.stage === 'order' || plan?.stage === 'template') allowed.trusted += `\n${plan.trustedText}`;
     const said = saidIn(item);
     // What the website says about the process (we inspect before bidding, VIA before shipping) is
     // ours to promise, and an auction date in the research is a known day.
@@ -365,24 +407,54 @@ async function writeDraft(item, { instruction = '', coaching = null, save = true
     // An offer does not depend on the AI: its figures come from the auction. If no model can
     // answer, or it will not keep figures out of its lines, the opening is the standard one.
     const standardOpening = () => ({ json: { reply: plan.opening, needs_human: [], facts_used: [], hold: false }, provider: 'none', model: 'standard wording' });
-    const usable = (e) => plan?.stage === 'offer' && e instanceof LlmError && e.status !== 401 && e.status !== 403;
+    // A template never depends on the AI either: if no model can answer, or what it wrote loses a
+    // fact, the template is used word for word (always a reply, never a refusal).
+    const fit = plan?.stage === 'template';
+    // Why: 'unavailable' (no AI could be asked: fitted again later, while untouched) or 'facts' (the fitting lost a fact).
+    const wordForWord = (why) => ({ json: { reply: plan.masked, needs_human: [], facts_used: [], hold: false }, provider: 'none', model: 'your wording', wordForWord: why });
+    const usable = (e) => (plan?.stage === 'offer' && e instanceof LlmError && e.status !== 401 && e.status !== 403) || (fit && e instanceof LlmError);
     // Marketplace chats are the Marketplace job: the small model, so the better ones stay with dashboard customers.
     // A script (the review) may pin one model; otherwise the job's own list.
     const which = { role: chat ? 'marketplace' : 'write', pin };
     let result;
-    try { result = await complete(prompt.system, prompt.user, which); }
-    catch (e) { if (!usable(e)) throw e; logLine('suggestion', `${item.itemKey}: no AI model for the opening of an auction offer, standard opening used. ${e.detail || e.message}`); result = standardOpening(); }
+    // The same wording fitted before, with only its facts changed since: that fitting is used again.
+    if (fit && tpl.fitted) result = { json: { reply: tpl.fitted, needs_human: [], facts_used: [], hold: false }, provider: tpl.fittedBy?.provider || 'none', model: tpl.fittedBy?.model || 'your wording', reused: true };
+    else {
+      try { result = await complete(prompt.system, prompt.user, which); }
+      catch (e) {
+        if (!usable(e)) throw e;
+        logLine('suggestion', `${item.itemKey}: no AI model for ${fit ? `the template "${plan.label}", used word for word` : 'the opening of an auction offer, standard opening used'}. ${e.detail || e.message}`);
+        result = fit ? wordForWord('unavailable') : standardOpening();
+      }
+    }
     let best = assess(result.json);
 
+    // What goes back to the AI with a second request hides what the first one hid: the customer's
+    // details, a template's facts (as their markers again) and an order's amounts (as theirs). The
+    // reasons for the rejection quote the reply, so they are hidden the same way.
+    const forAi = (text) => {
+      let t = String(text || '');
+      if (fit) for (const m of [...plan.markers].sort((a, b) => b.value.length - a.value.length)) if (m.value.trim().length >= 3) t = t.split(m.value).join(`{{${m.name}}}`);
+      t = redact(t, item.lead);
+      return plan?.mask ? plan.mask(t) : t;
+    };
     // One second attempt when a hard check fails.
     if (worst(best.checks) === 'fail' && result.provider !== 'none') {
       try {
-        const again = await complete(prompt.system, `${prompt.user}\n\n${retryNote(best.checks, { channel: item.channel })}\n\nYour rejected draft was:\n${redact(best.body, item.lead)}`, which);
+        // A template's rejected draft goes back as the AI wrote it, with its markers: never with the facts put in.
+        const rejected = fit ? String(result.json.reply || '') : forAi(best.body);
+        const again = await complete(prompt.system, `${prompt.user}\n\n${forAi(retryNote(best.checks, { channel: item.channel }))}\n\nYour rejected draft was:\n${rejected}`, which);
         const second = assess(again.json);
         if (failures(second.checks) < failures(best.checks)) { result = again; best = second; }
       } catch (e) { if (!usable(e)) throw e; }
       if (plan?.stage === 'offer' && worst(best.checks) === 'fail') { result = standardOpening(); best = assess(result.json); }
+      if (fit && worst(best.checks) === 'fail') { result = wordForWord('facts'); best = assess(result.json); }
     }
+    if (fit && result.wordForWord) best.checks = [...best.checks.filter((c) => c.level !== 'ok'), { level: 'warn', code: 'template-word-for-word', tokens: [], message: result.wordForWord === 'unavailable'
+      ? `Written word for word from your template "${plan.label}": the AI was not available just now. While you leave it unchanged it is fitted to the customer on a later check.`
+      : `Written word for word from your template "${plan.label}": the AI could not fit it to this customer without changing a fact.` }];
+    // What the AI made of the template, with its markers: written again with new facts, it is used again.
+    if (fit) { context.masked = plan.masked; context.fitted = result.wordForWord ? null : String(result.json.reply || ''); context.fitLater = result.wordForWord === 'unavailable'; }
 
     // The AI's own reading of an ordinary enquiry: it may think the customer wants a car found in
     // Japan. The page then offers to treat it as an import enquiry; nothing changes by itself.
@@ -399,6 +471,7 @@ async function writeDraft(item, { instruction = '', coaching = null, save = true
       factsUsed: [
         ...(rendered ? rendered.panel.found.slice(0, 6) : []),
         ...(plan?.stage === 'offer' ? [`Auction car ${plan.lot.id}: ${plan.lot.title}, ${plan.lot.km.toLocaleString('en-AU')} km, grade ${plan.lot.grade}`, `The website's suggested bid ¥${plan.lot.benchmarkYen.toLocaleString('en-AU')}; bid used ¥${plan.bidYen.toLocaleString('en-AU')} (${plan.bidBy === 'suggested' ? 'ours' : plan.bidBy === 'staff' ? 'yours' : "the customer's"})`, ...(plan.pick ? [bidBasisLine(plan.pick)] : []), `Estimated landed and complied $${plan.estimate.totalAud.toLocaleString('en-AU')} from the website's calculator`] : []),
+        ...(plan?.stage === 'template' ? plan.factsUsed : []),
         ...(Array.isArray(result.json.facts_used) ? result.json.facts_used.map(String).slice(0, 12) : []),
       ],
       nextStep: String(result.json.next_step || ''),
