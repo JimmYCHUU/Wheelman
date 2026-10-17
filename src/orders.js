@@ -5,7 +5,9 @@
 // AI: the messages themselves are written from templates (see composeMessage in ordermessages.js).
 //
 // Wheelman cannot see WhatsApp, where most of these customers are written to. So "done" means
-// the owner copied the message (or dismissed it), not that it was seen to be sent.
+// the owner copied the message (or dismissed it), not that it was seen to be sent. Their texts on
+// the dashboard it can see: the order is the customer's one row in the Auction section, so a text
+// from them after the order opened is waiting on the order, until we text back.
 
 import { openDb, listOrders } from './db.js';
 import { config } from './config.js';
@@ -210,22 +212,36 @@ export function occasionFor(o, type, next = null) {
 
 /**
  * Whether an order needs the owner, from what is known without building its whole timeline.
- * ctx: { copied: Map(anchor -> time), dismissed: Set(anchor), pastes: [{ id, direction, at }], lastCopyAt }
+ * ctx: { copied: Map(anchor -> time), dismissed: Set(anchor), pastes: [{ id, direction, at }], lastCopyAt,
+ *        texts: what the customer's conversation holds since the order opened (orderTexts in items.js),
+ *        each { anchor, direction 'IN'|'OUT', text, at } }
+ * A message waiting on us is one pasted from WhatsApp (anchor in:<id>), or one of their messages
+ * on the dashboard from the last week: a text, a website enquiry (anchor m:<id>, i:<id>, pm:<id>).
+ * An older one shows in the thread without putting the order in To do. Dismiss sets aside the
+ * message it was pressed on and every one before it. `replyVia` says how the reply goes: 'sms'
+ * for a message on the dashboard, 'whatsapp' for a pasted one.
  */
 export function orderStatus(o, ctx, { now = Date.now() } = {}) {
   const stage = stageOf(o);
-  const lastOut = Math.max(ctx.lastCopyAt || 0, ...ctx.pastes.filter((p) => p.direction === 'out').map((p) => p.at));
-  const waiting = ctx.pastes.filter((p) => p.direction === 'in' && p.at > lastOut && !ctx.dismissed.has(`in:${p.id}`));
+  const texts = ctx.texts || [];
+  const lastOut = Math.max(ctx.lastCopyAt || 0, ...ctx.pastes.filter((p) => p.direction === 'out').map((p) => p.at), ...texts.filter((t) => t.direction === 'OUT').map((t) => t.at || 0));
+  const unanswered = [
+    ...ctx.pastes.filter((p) => p.direction === 'in' && p.at > lastOut).map((p) => ({ ...p, anchor: `in:${p.id}`, via: 'whatsapp' })),
+    ...texts.filter((t) => t.direction === 'IN' && t.at > lastOut && now - t.at < RECENT).map((t) => ({ id: t.anchor, direction: 'in', text: t.text, at: t.at, anchor: t.anchor, via: 'sms' })),
+  ].sort((a, b) => a.at - b.at);
+  const setAsideUntil = Math.max(0, ...unanswered.filter((m) => ctx.dismissed.has(m.anchor)).map((m) => m.at));
+  const waiting = unanswered.filter((m) => m.at > setAsideUntil);
   if (waiting.length) {
-    return { state: 'awaiting', anchorKey: `in:${waiting[waiting.length - 1].id}`, due: 'Reply to their message', kind: 'reply', next: null, stage, waiting };
+    const last = waiting[waiting.length - 1];
+    return { state: 'awaiting', anchorKey: last.anchor, due: 'Reply to their message', kind: 'reply', next: null, stage, waiting, replyVia: last.via };
   }
   const due = dueMessages(o, { now });
   const handled = (m) => ctx.copied.has(`out:${m.occasion}`) || ctx.dismissed.has(`out:${m.occasion}`);
   const next = due.find((m) => !handled(m));
-  if (next) return { state: 'awaiting', anchorKey: `out:${next.occasion}`, due: `Send: ${MESSAGES[next.type].toLowerCase()}`, kind: 'send', next, stage, waiting: [] };
+  if (next) return { state: 'awaiting', anchorKey: `out:${next.occasion}`, due: `Send: ${MESSAGES[next.type].toLowerCase()}`, kind: 'send', next, stage, waiting: [], replyVia: '' };
   // Nothing is due. The last message that was dealt with is remembered, so it can be put back.
   const last = due[due.length - 1] || null;
-  return { state: stage.finished ? 'closed' : 'answered', anchorKey: last ? `out:${last.occasion}` : 'out:none', due: '', kind: '', next: last, stage, waiting: [] };
+  return { state: stage.finished ? 'closed' : 'answered', anchorKey: last ? `out:${last.occasion}` : 'out:none', due: '', kind: '', next: last, stage, waiting: [], replyVia: '' };
 }
 
 /** What Wheelman itself has recorded against each order: what was copied, dismissed, opened and pasted. */
@@ -261,7 +277,8 @@ export function orderRow(o, m, { now = Date.now() } = {}) {
   const s = orderStatus(o, m, { now });
   const lastPaste = m.pastes[m.pastes.length - 1] || null;
   // The time on the row: the newest thing that happened, whoever did it.
-  const lastAt = Math.max(o.note?.at || 0, m.lastCopyAt || 0, lastPaste?.at || 0, ...Object.values(o.marks || {})) || o.createdAt || o.firstSeenAt || 0;
+  const lastText = (m.texts || [])[(m.texts || []).length - 1] || null;
+  const lastAt = Math.max(o.note?.at || 0, m.lastCopyAt || 0, lastPaste?.at || 0, lastText?.at || 0, ...Object.values(o.marks || {})) || o.createdAt || o.firstSeenAt || 0;
   // What the row says under the name: their newest message, else what we last copied, else the staff note.
   const preview = s.waiting.length ? { who: 'customer', text: short(s.waiting[s.waiting.length - 1].text) }
     : m.lastCopy && m.lastCopyAt >= (o.note?.at || 0) ? { who: 'us', text: short(m.lastCopy.text) }
@@ -286,12 +303,13 @@ export function orderRow(o, m, { now = Date.now() } = {}) {
 }
 
 /**
- * One row per order for the list, without building any timeline: a handful of queries for the
- * whole section. Rows that need the owner come first.
+ * One row per order for the list: a handful of queries for the whole section, and for each order
+ * still going, what its customer's conversation holds since it opened (`textsFor`, orderTexts in
+ * items.js, which knows how to read a conversation). Rows that need the owner come first.
  */
-export function listOrderRows({ now = Date.now() } = {}) {
+export function listOrderRows({ now = Date.now(), textsFor = () => [] } = {}) {
   const marks = orderMarks();
-  const rows = listOrders({ now }).map((o) => orderRow(o, marks.of(orderKey(o.id)), { now }));
+  const rows = listOrders({ now }).map((o) => orderRow(o, { ...marks.of(orderKey(o.id)), texts: textsFor(o) }, { now }));
   const rank = (r) => (r.dueKind === 'reply' ? 0 : r.state === 'awaiting' ? 1 : 2);
   return rows.sort((a, b) => rank(a) - rank(b) || (b.lastAt || 0) - (a.lastAt || 0));
 }

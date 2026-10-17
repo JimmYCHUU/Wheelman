@@ -169,7 +169,34 @@
   .who-name { font-size: var(--fs-title); font-weight: var(--fw-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .who-sub { font-size: var(--fs-label); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .who-sub.is-writing { color: var(--accent-text); font-style: italic; }
-  .head-actions { display: flex; flex: none; }
+  .head-actions { display: flex; flex: none; align-items: center; gap: var(--sp-1); }
+
+  /* Move: a quiet pill of words in the head, and the menu it opens with where it can go. */
+  .move-btn {
+    height: var(--ctl-md); padding: 0 var(--sp-2) 0 var(--sp-3);
+    display: inline-flex; align-items: center; gap: var(--sp-1);
+    border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--side);
+    color: var(--muted); font-size: var(--fs-label); font-weight: var(--fw-semibold); white-space: nowrap;
+    transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+  }
+  .move-btn svg.icon { width: var(--icon-xs); height: var(--icon-xs); }
+  .move-btn[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent-text); border-color: transparent; }
+  .move-menu {
+    position: fixed; inset: auto; margin: 0;
+    width: min(var(--pop-w), calc(100vw - var(--sp-4))); max-height: var(--pop-max-h); overflow-y: auto;
+    padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-lg);
+    background: var(--sheet); color: var(--text); box-shadow: var(--shadow-2);
+    font-size: var(--fs-label); line-height: var(--lh-body);
+  }
+  .move-head { padding: var(--sp-1) var(--sp-2) var(--sp-2); font-weight: var(--fw-semibold); }
+  .move-choice {
+    width: 100%; display: grid; gap: var(--sp-05); padding: var(--sp-2); border: 0; border-radius: var(--r-md);
+    background: transparent; text-align: left; color: var(--text);
+  }
+  .move-choice:focus-visible { outline: 2px solid var(--accent); outline-offset: calc(-1 * var(--sp-05)); }
+  .move-label { font-weight: var(--fw-semibold); }
+  .move-hint { color: var(--muted); }
+  .move-foot { padding: var(--sp-2) var(--sp-2) var(--sp-1); color: var(--faint); font-size: var(--fs-caption); }
 
   /* The car the conversation is about: its first photo, its name, price, km and where it is, and
      the way to its photos, videos and documents. An order or an unmatched listing is one line of words. */
@@ -451,6 +478,8 @@
     .viewer .section:hover:not(.is-on) { color: var(--viewer-ink); }
     .topnav-tab:hover:not(.is-on) { color: var(--text); background: color-mix(in srgb, var(--text) 5%, transparent); }
     .status-btn:hover { background: var(--side-hover); color: var(--text); }
+    .move-btn:hover:not([aria-expanded="true"]) { background: var(--side-hover); color: var(--text); }
+    .move-choice:hover { background: var(--side-hover); }
     .find-row:hover:not(.is-on) { background: var(--side-hover); }
     .who:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
     .back:hover { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); }

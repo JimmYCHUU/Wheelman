@@ -5,6 +5,25 @@ and versions follow `MAJOR.MINOR.PATCH`.
 
 ## [Unreleased]
 
+### Added
+- **Imports AU leads are in Auction, and any conversation can be moved.** A lead on the
+  dashboard's Imports list is an auction customer: it is listed in Auction with a stage in plain
+  words (Enquiry: asking for details, ready to search, car offered, compliance only), not in
+  Dashboard. A **Move** button in the conversation's header moves it between Dashboard, Auction and
+  Import Query in every direction, with Undo; a Facebook chat can leave Marketplace and come back,
+  nothing else moves into it, and an auction order never moves. A moved conversation keeps its
+  messages and is still answered the way it came in. Moved into Auction, a customer who already
+  gave the car and what they want is searched for and offered a car, not asked again. (The owner,
+  17 Oct 2026: "The Imports AU leads shows on the dashboard, they don't come up in the Auction
+  section which it is supposed to do", and a lead who asked us to import a car with the full
+  specification should be moved to Auction: "there's nothing to ask him about".)
+- **One row per auction customer.** Once a customer has an order under way, the order stands for
+  them in Auction. A text or website enquiry from them since the order opened puts the order in To
+  do as a reply to what they wrote, written for a text; our text back answers it, and Dismiss sets
+  aside everything that was waiting. Anything else from that customer is a row of its own in
+  Auction. The order's panel can send their texts to Dashboard and back. The background writer
+  writes for these, and for the enquiries listed in Auction.
+
 ### Changed
 - **Your Prompt comes first, in every section.** The owner, 16 Oct 2026: "When I'm prompting in
   any section this should rule out the constraint of that section... The constraints are just the
@@ -29,6 +48,11 @@ and versions follow `MAJOR.MINOR.PATCH`.
   and the invitation once in a chat stay as they were. Dashboard texts are unchanged. Checked on
   the same 13 real chats as before plus two with a Prompt, written by today's Wheelman and the new
   one on copies of the database; nothing was sent.
+- **Moves have their own record.** "Moved to Import Query" used to ride on the import ruling;
+  existing moves are copied across once, so taking a ruling away no longer moves a conversation
+  back. Nothing is learned while a conversation is in Auction (Imports leads used to teach the
+  dashboard). An Imports lead's Customer tab now reads "An import enquiry", not "An ordinary
+  enquiry".
 
 ### Fixed
 - **The top bar is one bar, with the sections in its middle.** The section tabs no longer look

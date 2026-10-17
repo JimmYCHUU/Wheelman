@@ -156,7 +156,8 @@ test('an order is matched to the customer\'s lead and text conversation by phone
   const imports = await import('../src/imports.js');
   db.upsertLead({ id: 7501, conversationId: 8501, firstName: 'Nina', lastName: 'Halvorsen', phone: '+61 491 570 501', email: '', source: 'Auction', status: 'NEW', platform: 'IMPORTS', state: '', leadAt: now - DAY, updatedAt: now - DAY, stocks: [], inquiries: [], statusHistory: [] });
   db.upsertConversation({ id: 8501, phone: '+61491570501', channel: 'SMS', status: 'OPEN', leadId: 7501, customerName: 'Nina Halvorsen', latestDirection: 'IN', latestAt: now - DAY, latestBody: 'x' });
-  db.upsertMessage({ id: 1, conversationId: 8501, direction: 'IN', body: 'Hi, I asked about an XV on your website', sentBy: null, status: 'SENT', mediaType: null, at: now - DAY, importedAt: now - DAY });
+  // Before the order opened: dealt with when it was opened, so not waiting on the order.
+  db.upsertMessage({ id: 1, conversationId: 8501, direction: 'IN', body: 'Hi, I asked about an XV on your website', sentBy: null, status: 'SENT', mediaType: null, at: now - 3 * DAY, importedAt: now - 3 * DAY });
   await sync.syncAuctionOrders({ now: now + 6 * MIN });
   const o = db.getOrder(501);
   assert.deepEqual([o.leadId, o.conversationId], [7501, 8501], '"0491 570 501" on the order is the same number as "+61 491 570 501" on the lead');

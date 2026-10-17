@@ -9,11 +9,12 @@
 // from the auction feed, never written by the AI. The deposit link is left as a blank for a person.
 
 import { config } from './config.js';
-import { getAuctionOrder } from './db.js';
+import { getAuctionOrder, firstDraftSince } from './db.js';
 import { readImportForm } from './text.js';
 import { searchLots, getLot, estimateFor, soldComparables, lotIdFromUrl } from './auction.js';
 import { formatSydney, formatDay } from './time.js';
 import { template, fill, fillParts } from './templates.js';
+import { carIn } from './importjudge.js';
 
 export const money = (n) => `$${Math.round(n).toLocaleString('en-AU')}`;
 export const yen = (n) => `¥${Math.round(n).toLocaleString('en-AU')}`;
@@ -115,9 +116,12 @@ export function wantedFrom(item, instruction = '') {
   let make = o.make || fromForms('make');
   let model = o.model || fromForms('model');
   if (!make) { const [first, ...rest] = String(fromForms('car')).split(/\s+/); make = first || ''; model = model || rest.join(' '); }
+  // Nothing names the car: the one their own words name from the import list, if any.
+  const named = make ? null : carIn(theirWords);
+  if (named) { make = named.make; model = named.model; }
   const w = {
     make, model,
-    modelCode: o.modelCode || fromForms('modelCode'),
+    modelCode: o.modelCode || fromForms('modelCode') || named?.modelCode || '',
     car: [make, model].filter(Boolean).join(' '),
     yearFrom: o.yearFrom || said.yearFrom, yearTo: o.yearTo || said.yearTo,
     maxKm: said.maxKm || fromForms('maxKm') || 0,
@@ -283,7 +287,13 @@ function named(text, { looseBid = false } = {}) {
 }
 
 /** The auction car we last sent this customer a link to. */
-const lastOfferedLot = (item) => { for (let i = item.timeline.length - 1; i >= 0; i--) { const e = item.timeline[i]; if (e.who === 'us' && !e.internal) { const id = lotIdFromUrl(e.text); if (id) return id; } } return ''; };
+export const lastOfferedLot = (item) => { for (let i = item.timeline.length - 1; i >= 0; i--) { const e = item.timeline[i]; if (e.who === 'us' && !e.internal) { const id = lotIdFromUrl(e.text); if (id) return id; } } return ''; };
+
+/** True when no suggestion has been written for this conversation since `at`, or the first one since was for the message waiting now. */
+function firstReplySince(item, at) {
+  const first = firstDraftSince(item.itemKey, at);
+  return !first || first.anchorKey === item.anchorKey;
+}
 
 /** True once a deposit is paid or the request has moved past its first stage: no longer an enquiry to quote. */
 const underWay = (order) => !!order && ((order.depositState && order.depositState !== 'NONE') || (order.stage && order.stage !== 'INITIAL_DEPOSIT'));
@@ -309,12 +319,16 @@ export async function planImport(item, { instruction = '', now = Date.now() } = 
   const wantsSearch = /\b(find|search|look for|auction|another (car|one|option)|other options?)\b/i.test(instruction) || Object.values(toldBy(instruction)).some(Boolean);
   const newDetails = Object.values(specificsIn(item.pendingText)).some(Boolean);
   const pointed = staff.lotId || theirs.lotId || staff.bidYen || theirs.bidYen;
+  // Moved into Auction by the owner and not offered a car yet: the first reply since the move (or
+  // that same reply written again) searches with what they asked for, however far the conversation
+  // has gone. After that, as for any import enquiry, only something new sets off a search.
+  const unoffered = item.move?.section === 'auction' && !lastOfferedLot(item) && firstReplySince(item, item.move.at);
 
   if (!pointed) {
-    // Nothing to go on yet, and we have not written: ask what they are looking for.
-    if (item.isFirstReply && !w.given.length && !w.lotId) return askPlan(item, w, instruction);
+    // Nothing to go on yet: ask what they are looking for.
+    if ((item.isFirstReply || unoffered) && !w.given.length && !w.lotId) return askPlan(item, w, instruction);
     // An ordinary turn later in the conversation: no new search unless they told us something new.
-    if (!item.isFirstReply && !newDetails && !wantsSearch) return null;
+    if (!item.isFirstReply && !newDetails && !wantsSearch && !unoffered) return null;
   }
 
   let lotId = staff.lotId || theirs.lotId || ((staff.bidYen || theirs.bidYen) ? lastOfferedLot(item) : '') || (!wantsSearch ? w.lotId : '');
@@ -362,10 +376,12 @@ export async function planImport(item, { instruction = '', now = Date.now() } = 
 function askPlan(item, w, instruction) {
   const { message, closing } = askParts(w);
   const wroteSomething = item.timeline.some((e) => e.who === 'customer' && String(e.text || '').trim());
+  // The address, phone, hours and sign-off close the first reply only.
+  const first = item.isFirstReply;
   return {
-    stage: 'ask', w, tail: closing,
+    stage: 'ask', w, tail: first ? closing : '',
     // When the customer only filled in the form, the message is sent as it stands: no AI is needed.
-    ready: !wroteSomething && !instruction && message ? message : '',
+    ready: first && !wroteSomething && !instruction && message ? message : '',
     lines: [
       `This customer asked us to find a ${w.car || 'vehicle'} from Japan. Before we search the auctions we need to know: ${listOf(w.missing)}.`,
       'Write the reply this way:',
@@ -374,8 +390,8 @@ function askPlan(item, w, instruction) {
       '- ask for the details listed above, in one sentence;',
       '- say that if a particular one interests them they can send a target bid or overall budget, and we will work out an estimated landed cost before placing anything;',
       '- say that once we have those details we will keep the search focused and let them know when a suitable one comes up.',
-      'Our address, phone number, opening hours and sign-off are added below your text automatically. Do not write them, and do not point to them.',
-    ],
+      first ? 'Our address, phone number, opening hours and sign-off are added below your text automatically. Do not write them, and do not point to them.' : '',
+    ].filter(Boolean),
   };
 }
 
@@ -390,6 +406,18 @@ function nonePlan(item, w, searched, why = '') {
       item.isFirstReply ? 'Our address, phone number, opening hours and sign-off are added below your text automatically. Do not write them.' : '',
     ].filter(Boolean),
   };
+}
+
+/**
+ * Where an import enquiry has got to, for its row in the Auction section: still to tell us what
+ * they want, told us enough to search, offered a car, or only asking about compliance.
+ */
+export function enquiryStage(item) {
+  if (item.imports?.kind === 'compliance') return { code: 'enquiry_compliance', label: 'Enquiry: compliance only' };
+  if (lastOfferedLot(item)) return { code: 'enquiry_offered', label: 'Enquiry: car offered' };
+  const w = wantedFrom(item);
+  if (w.given.length || w.lotId) return { code: 'enquiry_ready', label: 'Enquiry: ready to search' };
+  return { code: 'enquiry_ask', label: 'Enquiry: asking for details' };
 }
 
 /** A quiet line for the page: when the figures were read and when the auction is. */

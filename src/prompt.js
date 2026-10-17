@@ -62,13 +62,15 @@ A blank stands inside a full sentence that says what it is for, and is listed un
 - [TIMELINE?]: a timeframe that is not on our pages.
 - [CHECK?]: anything else a person must confirm.`;
 
-export function systemPrompt(channel = 'sms') {
+export function systemPrompt(channel = 'sms', { replyVia = '' } = {}) {
   const chat = channel === 'marketplace';
   const order = channel === 'auction';
   const email = channel === 'email';
+  // An auction customer who texted is answered by text; one who wrote on WhatsApp, there.
+  const orderBy = replyVia === 'sms' ? { where: 'by text message (SMS)', what: 'SMS text' } : { where: 'on WhatsApp', what: 'WhatsApp message' };
   return `You are Wheelman, the customer representative for Carbarn, a used-car dealer in Lidcombe, Sydney, that mostly sells vehicles imported from Japan. You know how the business runs and you write in Carbarn's own voice, described under VOICE. The replies our team sent show what to say, never how to say it.
 
-You write suggested ${chat ? 'replies to buyers on Facebook Marketplace chat' : order ? 'replies on WhatsApp to customers who have an auction order with us' : email ? 'replies by email to customers asking about importing a car from Japan' : 'SMS replies'}. A staff member reads your suggestion, edits it if needed, and sends it from their own system. You never speak to the customer directly, and nothing you write is sent automatically. Never mention Wheelman, an assistant, or AI in a reply: the reply is from Carbarn.
+You write suggested ${chat ? 'replies to buyers on Facebook Marketplace chat' : order ? `replies ${orderBy.where} to customers who have an auction order with us` : email ? 'replies by email to customers asking about importing a car from Japan' : 'SMS replies'}. A staff member reads your suggestion, edits it if needed, and sends it from their own system. You never speak to the customer directly, and nothing you write is sent automatically. Never mention Wheelman, an assistant, or AI in a reply: the reply is from Carbarn.
 
 === VOICE ===
 ${read('house-voice.md')}
@@ -104,7 +106,7 @@ When the request carries INSTRUCTION FROM OUR STAFF FOR THIS DRAFT, it outranks 
 === OUTPUT ===
 Return one JSON object and nothing else:
 {
-  "reply": "the ${chat ? 'chat message' : order ? 'WhatsApp message' : email ? 'body of the email' : 'SMS text'}. Use {{NAME}} where the customer's first name belongs. Use \\n for line breaks. No sign-off and no sender name.",
+  "reply": "the ${chat ? 'chat message' : order ? orderBy.what : email ? 'body of the email' : 'SMS text'}. Use {{NAME}} where the customer's first name belongs. Use \\n for line breaks. No sign-off and no sender name.",
   "next_step": "the one next step you offered, in a few words, or empty",
   "rung": "where this customer is, exactly as given under THIS CUSTOMER'S NEXT STEP: interest, proof, fit, commit or buyer; empty when that section is absent",
   "facts_used": ["each fact you relied on, as a short statement including the figure"],
@@ -767,7 +769,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
 
   P.push(`\nWrite the reply now as the JSON object described.${owner.lessons.length ? ' Before you answer, check it against each of the owner\'s lessons above.' : ''}`);
   return {
-    system: systemPrompt(item.channel),
+    system: systemPrompt(item.channel, { replyVia: item.orderStatus?.replyVia }),
     // Which of our records' notes on the customer shaped the request: labels only, for the details panel.
     insider: insider.labels,
     unconfirmedText,

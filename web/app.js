@@ -18,6 +18,7 @@ import { mountTopBar } from './views/TopBar.js';
 import { mountListColumn, visibleRows } from './views/ListColumn.js';
 import { CarTab, viewerGroups, replyLabel, pictureSrc } from './views/CarPanel.js';
 import { openViewer } from './views/Viewer.js';
+import { MoveMenu } from './views/MoveMenu.js';
 import { linkLine, placeLine } from './lib/insert.js';
 
 // ---- state -------------------------------------------------------------------
@@ -328,6 +329,7 @@ function renderHead(item, els) {
       avatar(item.name, 'small'),
       h('span', { class: 'who-text' }, h('span', { class: 'who-name', text: title }), sub ? h('span', { class: `who-sub ${writing ? 'is-writing' : ''}`.trim(), text: sub }) : null)),
     h('div', { class: 'head-actions' },
+      ...(MoveMenu(item, { onMove: (section) => move(item, section) }) || []),
       item.phone ? h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Copy phone number', title: 'Copy phone number', onclick: async () => { await copyText(item.phone); toast('Phone number copied'); } }, icon('copy'))
         : item.email ? h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Copy email address', title: 'Copy email address', onclick: async () => { await copyText(item.email); toast(t('toast.emailCopied')); } }, icon('copy')) : null,
       h('button', { class: `icon-btn panel-btn ${state.infoOpen ? 'is-on' : ''}`.trim(), type: 'button', 'aria-pressed': state.infoOpen ? 'true' : 'false', 'aria-label': t('panel.label'), title: state.infoOpen ? t('panel.close') : t('panel.open'), onclick: toggleInfo }, icon('panel'))));
@@ -590,67 +592,79 @@ function promptControls(item, { instruction = '' } = {}) {
  * AI thought it might be one: what was read, and the owner's answers to it.
  */
 function importNotice(item) {
-  if (!item.canRule || item.moved || item.ruling?.kind === 'general') return null;
-  const link = (label, kind, section) => h('button', { class: 'link-btn', type: 'button', onclick: () => rule(item, kind, section) }, label);
+  if (!item.canRule || item.moved || item.ruling?.kind === 'general' || item.section !== 'dashboard') return null;
+  const link = (label, kind) => h('button', { class: 'link-btn', type: 'button', onclick: () => rule(item, kind) }, label);
+  // An import enquiry can go to Auction (they said what they want: it is searched for) or to Import Query.
+  const moves = ['auction', 'importquery'].filter((s) => (item.moves || []).includes(s))
+    .map((s) => h('button', { class: 'link-btn', type: 'button', onclick: () => move(item, s) }, t('move.to', { section: REGISTRY[s].label })));
   if (item.judged && item.judged.sign !== 'owner') {
     return h('div', { class: 'judged' },
       h('p', { text: t('judged.read', { why: item.judged.why }) }),
-      item.canMove ? link(t('judged.move'), 'import', 'importquery') : null,
+      ...moves,
       link(t('judged.not'), 'general'));
   }
   if (!item.judged && item.draft?.aiImport) {
     return h('div', { class: 'judged' },
       h('p', { text: t('judged.ai') }),
       link(t('judged.treat'), 'import'),
-      item.canMove ? link(t('judged.move'), 'import', 'importquery') : null);
+      ...moves);
   }
   return null;
 }
 
 /** The sentence in the details panel about an import reading or ruling. */
 function rulingWords(item) {
-  if (item.moved) return t('judged.info.moved');
+  if (item.moved) return t('move.info.moved', { section: REGISTRY[item.moved]?.label || item.moved, home: REGISTRY[item.home]?.label || item.home });
   if (item.ruling?.kind === 'general') return t('judged.info.general');
   if (item.ruling?.kind === 'import') return t('judged.info.owner');
   if (item.judged) return t('judged.info.read', { why: item.judged.why });
+  if (item.isImport) return t('judged.info.import');
   if (item.draft?.aiImport) return t('judged.ai');
   return t('judged.info.none');
 }
 
 /** The buttons under that sentence: each one the owner's answer to where things stand. */
 function rulingButtons(item) {
-  const btn = (label, kind, section) => h('button', { class: 'btn outline', type: 'button', onclick: () => rule(item, kind, section) }, label);
-  if (item.moved) return [btn(t('judged.back'), 'import', 'dashboard'), btn(t('judged.not'), 'general')];
+  const btn = (label, kind) => h('button', { class: 'btn outline', type: 'button', onclick: () => rule(item, kind) }, label);
+  const moveBtn = (section) => ((item.moves || []).includes(section)
+    ? h('button', { class: 'btn outline', type: 'button', onclick: () => move(item, section) }, t(section === item.home ? 'move.back' : 'move.to', { section: REGISTRY[section].label })) : null);
+  if (item.moved) return [moveBtn(item.home), item.ruling?.kind !== 'general' ? btn(t('judged.not'), 'general') : btn(t('judged.treat'), 'import')];
   if (item.ruling?.kind === 'general') return [btn(t('judged.treat'), 'import')];
-  if (item.ruling?.kind === 'import' || item.judged) return [item.canMove ? btn(t('judged.move'), 'import', 'importquery') : null, btn(t('judged.not'), 'general')];
-  return [btn(t('judged.treat'), 'import'), item.canMove && item.draft?.aiImport ? btn(t('judged.move'), 'import', 'importquery') : null];
+  if (item.ruling?.kind === 'import' || item.judged || item.isImport) return [moveBtn('auction'), moveBtn('importquery'), btn(t('judged.not'), 'general')];
+  return [btn(t('judged.treat'), 'import'), item.draft?.aiImport ? moveBtn('auction') : null];
 }
 
 /**
- * The owner's ruling on a dashboard conversation: an import enquiry or not, and whether it sits
- * in Import Query. The suggestion is written again the new way when it was not yet touched. A
- * conversation that now belongs to another section leaves this list, with Undo on the toast.
+ * The owner's ruling on a dashboard conversation: an import enquiry or not. The suggestion is
+ * written again the new way when it was not yet touched.
  */
-async function rule(item, kind, section = 'dashboard') {
+async function rule(item, kind) {
   try {
-    const out = await api(`/api/items/${item.key}/ruling`, { body: { kind, section } });
+    const out = await api(`/api/items/${item.key}/ruling`, { body: { kind } });
     if (state.selected === item.key) state.detail = out.item;
-    if (out.item.section === state.section) {
-      renderChat();
-      toast((kind === 'general' ? t('toast.ruledGeneral') : t('toast.ruledImport')) + (out.writing ? t('toast.rewriting') : ''));
-      refreshList();
-      refreshStatus();
-      return;
-    }
+    renderChat();
+    toast((kind === 'general' ? t('toast.ruledGeneral') : t('toast.ruledImport')) + (out.writing ? t('toast.rewriting') : ''));
+    refreshList();
+    refreshStatus();
+  } catch (e) { toast(e.message); }
+}
+
+/**
+ * Moves a conversation to another section. It leaves the list on screen, the next one opens, and
+ * the toast says where it went, with Undo: a move back to where it was.
+ */
+async function move(item, section) {
+  try {
+    const out = await api(`/api/items/${item.key}/move`, { body: { section } });
+    if (state.selected === item.key) state.detail = out.item;
     const rows = visibleRows(state);
     const i = rows.findIndex((r) => r.key === item.key);
     const next = rows[i + 1] || rows[i - 1] || null;
     state.list = state.list.filter((r) => r.key !== item.key);
     state.listTotal = Math.max(0, state.listTotal - 1);
     repaint();
-    const toImport = out.item.section === 'importquery';
-    toast(toImport ? t('toast.movedToImport') : t('toast.movedToDashboard'), { label: 'Undo', run: async () => {
-      try { await api(`/api/items/${item.key}/ruling`, { body: { kind: 'import', section: toImport ? 'dashboard' : 'importquery' } }); } catch (e) { toast(e.message); return; }
+    toast(t('toast.movedTo', { section: REGISTRY[out.item.section]?.label || out.item.section }) + (out.writing ? t('toast.rewriting') : ''), { label: 'Undo', run: async () => {
+      try { await api(`/api/items/${item.key}/move`, { body: { section: out.from } }); } catch (e) { toast(e.message); return; }
       await refreshList();
       if (!narrow()) { state.selected = null; state.detail = null; await open(item.key); }
     } });
@@ -964,7 +978,7 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
     if (!ok) { toast('Copying is blocked by the browser. Select the text and press Ctrl + C.'); return; }
     const left = blanksIn(ta.value).length;
     const chat = item.channel === 'marketplace';
-    toast(left ? `Copied, with ${plural(left, 'blank')} still to fill` : chat ? 'Copied. Paste it into the Marketplace chat to send.' : item.channel === 'email' ? t('composer.copyEmail') : order ? `Copied. Paste it into ${order.prefers === 'WhatsApp' || !order.prefers ? 'WhatsApp' : 'your message to them'} to send.` : 'Copied. Paste it into the dashboard to send.');
+    toast(left ? `Copied, with ${plural(left, 'blank')} still to fill` : chat ? 'Copied. Paste it into the Marketplace chat to send.' : item.channel === 'email' ? t('composer.copyEmail') : order ? (order.replying && order.replyVia === 'sms' ? 'Copied. Paste it into the dashboard to send.' : `Copied. Paste it into ${order.prefers === 'WhatsApp' || !order.prefers ? 'WhatsApp' : 'your message to them'} to send.`) : 'Copied. Paste it into the dashboard to send.');
     noteCopied();
   }
 
@@ -1284,6 +1298,12 @@ function customerSections(item) {
       // What our own records say about the customer that shaped the reply and is never said to them.
       d.insiderUsed?.length ? h('p', { class: 'fine', text: `Shaped by what our records show, never stated: ${d.insiderUsed.join(', ')}.` }) : null,
       h('p', { class: 'fine', text: d.provider === 'none' ? `Written from ${d.model || 'your wording'} at ${clock(d.createdAt)}, with no AI.${d.instruction ? ` What you added: “${d.instruction}”.` : ''}` : `Written by ${d.model || 'the AI model'} at ${clock(d.createdAt)}.${d.instruction ? ` Your instruction: “${d.instruction}”.` : ''}` })) : null,
+    // Where it is listed, when that is not where it came in or not where it seems to belong.
+    item.listed && !(item.listed === 'moved' && item.canRule) ? h('section', {},
+      h('h4', { text: t('move.info.title') }),
+      h('p', { class: 'fine', text: item.listed === 'moved'
+        ? t('move.info.moved', { section: REGISTRY[item.section]?.label || item.section, home: REGISTRY[item.home]?.label || item.home })
+        : t(`move.info.${item.listed}`) })) : null,
     // An ordinary enquiry read as an import enquiry, or not: what Wheelman read, and the owner's say.
     item.canRule ? h('section', {},
       h('h4', { text: t('judged.title') }),
@@ -1387,7 +1407,26 @@ function orderInfo(o, row) {
         row('Paid', m.paid ? money(m.paid) : ''),
         row('Still due', m.due > 0 ? money(m.due) : m.total ? 'Nothing' : '')),
       m.payments.length ? h('p', { class: 'fine', text: `Payments: ${m.payments.map((p) => `${money(p.amount)} on ${day(p.at)}`).join(', ')}.` }) : null) : null,
+    // Their own conversation on the dashboard: answered on this order, or in Dashboard.
+    o.texts ? h('section', {},
+      h('h4', { text: t('order.texts.title') }),
+      h('p', { class: 'fine', text: t(o.texts.here ? 'order.texts.here' : 'order.texts.elsewhere') }),
+      h('div', { class: 'rulings' },
+        h('button', { class: 'btn outline', type: 'button', onclick: () => moveTexts(o.texts, o.texts.here ? 'dashboard' : 'auction') }, t(o.texts.here ? 'order.texts.toDashboard' : 'order.texts.toOrder')))) : null,
   ];
+}
+
+/** Where an auction customer's texts are answered: on their order, or in Dashboard. Undo puts them back. */
+async function moveTexts(texts, section) {
+  const again = async () => { document.activeElement?.blur?.(); await refreshDetail(); refreshList(); };
+  try {
+    const out = await api(`/api/items/${texts.key}/move`, { body: { section } });
+    toast(t(section === 'dashboard' ? 'toast.textsToDashboard' : 'toast.textsToOrder'), { label: 'Undo', run: async () => {
+      try { await api(`/api/items/${texts.key}/move`, { body: { section: out.from } }); } catch (e) { toast(e.message); return; }
+      await again();
+    } });
+    await again();
+  } catch (e) { toast(e.message); }
 }
 
 /** The Marketplace part of the details panel: the seller account, the listing, and what the auto-reply noted. */

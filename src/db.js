@@ -69,11 +69,18 @@ CREATE TABLE IF NOT EXISTS seen (
   PRIMARY KEY (item_key, anchor_key)
 );
 
--- The owner's ruling on an ordinary dashboard conversation: that it is an import enquiry (or is
--- not), and whether it sits in the Import Query section. Kept by the lead too, so the ruling
--- follows a lead into the text conversation that starts later.
+-- The owner's ruling on an ordinary dashboard conversation: that it is an import enquiry, or is
+-- not. Kept by the lead too, so the ruling follows a lead into the text conversation that starts
+-- later. (Its section column is no longer read: where a conversation is listed is item_moves.)
 CREATE TABLE IF NOT EXISTS item_rulings (
   item_key TEXT PRIMARY KEY, lead_id INTEGER, kind TEXT NOT NULL, section TEXT NOT NULL DEFAULT 'dashboard', at INTEGER
+);
+
+-- Where the owner moved a conversation: the section it is listed in instead of its own
+-- (dashboard, importquery or auction). Kept by the lead too, so the move follows a lead into the
+-- text conversation that starts later.
+CREATE TABLE IF NOT EXISTS item_moves (
+  item_key TEXT PRIMARY KEY, lead_id INTEGER, section TEXT NOT NULL, at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS llm_usage (
@@ -332,6 +339,17 @@ function migrate(d) {
     `);
     mark('media_urls_backfill_v1');
   }
+
+  // A conversation moved into Import Query used to be recorded on the owner's ruling. Moves have a
+  // table of their own now, so taking a ruling away no longer moves the conversation back.
+  if (!done('moves_from_rulings_v1')) {
+    d.exec(`
+      INSERT OR IGNORE INTO item_moves(item_key, lead_id, section, at)
+        SELECT item_key, lead_id, section, at FROM item_rulings WHERE section != 'dashboard';
+      UPDATE item_rulings SET section = 'dashboard' WHERE section != 'dashboard';
+    `);
+    mark('moves_from_rulings_v1');
+  }
 }
 
 export function closeDb() {
@@ -363,6 +381,8 @@ export function oldRowsStamp() {
       (SELECT COUNT(*) || ':' || IFNULL(MAX(rowid), 0) || ':' || IFNULL(MAX(at), 0) FROM dismissed) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(at), 0) FROM seen) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(at), 0) FROM item_rulings) || '/' ||
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(at), 0) FROM item_moves) || '/' ||
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(changed_at), 0) || ':' || IFNULL(SUM(gone_at IS NULL), 0) FROM auction_orders) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(changed_at), 0) || ':' || IFNULL(SUM(conversation_id), 0) FROM phone_threads) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(last_message_at), 0) FROM mp_conversations) || '/' ||
       (SELECT COUNT(*) FROM mp_messages) || '/' ||
@@ -537,14 +557,22 @@ export function setOrderWatch(id, watch, now = Date.now()) {
  * Matched by the lead the dashboard names on the order, or else by the customer's phone number.
  */
 export function getAuctionOrder(leadId, phone = '') {
-  const d = openDb();
   const live = "gone_at IS NULL AND (closed IS NULL OR closed = '')";
-  let r = leadId ? d.prepare(`SELECT * FROM auction_orders WHERE lead_id = ? AND ${live} ORDER BY created_at DESC LIMIT 1`).get(leadId) : null;
+  let r = leadId ? stmt(`SELECT * FROM auction_orders WHERE lead_id = ? AND ${live} ORDER BY created_at DESC LIMIT 1`).get(leadId) : null;
   const key = String(phone || '').replace(/\D/g, '').slice(-9);
-  if (!r && key.length === 9) r = d.prepare(`SELECT * FROM auction_orders WHERE phone_key = ? AND ${live} ORDER BY created_at DESC LIMIT 1`).get(key);
+  if (!r && key.length === 9) r = stmt(`SELECT * FROM auction_orders WHERE phone_key = ? AND ${live} ORDER BY created_at DESC LIMIT 1`).get(key);
   const o = parseOrder(r);
   if (!o || !o.orderNo) return null;
-  return { id: o.id, leadId: o.leadId, orderNo: o.orderNo, stage: o.stage || '', lotPhase: o.lotPhase || '', source: o.source || '', lotId: o.lot?.id || '', depositState: o.depositState || '', wanted: o.wanted || {}, createdAt: o.createdAt };
+  return {
+    id: o.id, leadId: o.leadId, orderNo: o.orderNo, stage: o.stage || '', lotPhase: o.lotPhase || '', source: o.source || '', lotId: o.lot?.id || '', depositState: o.depositState || '', wanted: o.wanted || {}, createdAt: o.createdAt,
+    // The text conversation the order reads its customer's messages from (see orderConversation in items.js).
+    conversationId: o.conversationId ?? leadConversationId(o.leadId),
+  };
+}
+
+/** The text conversation a lead has, if any. */
+export function leadConversationId(leadId) {
+  return leadId ? stmt('SELECT conversation_id AS c FROM leads WHERE id = ?').get(Number(leadId))?.c ?? null : null;
 }
 
 /** A message the owner pasted into an order. Returns its id. */
@@ -634,6 +662,7 @@ export function rekeyLeadItems() {
       FROM (SELECT item_key FROM drafts WHERE item_key LIKE 'l:%'
             UNION SELECT item_key FROM dismissed WHERE item_key LIKE 'l:%'
             UNION SELECT item_key FROM seen WHERE item_key LIKE 'l:%'
+            UNION SELECT item_key FROM item_moves WHERE item_key LIKE 'l:%'
             UNION SELECT item_key FROM learned WHERE item_key LIKE 'l:%') k
       JOIN leads l ON l.id = CAST(substr(k.item_key, 3) AS INTEGER)
      WHERE l.conversation_id IS NOT NULL`).all();
@@ -642,6 +671,7 @@ export function rekeyLeadItems() {
     d.prepare('UPDATE learned SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
     d.prepare('UPDATE OR REPLACE dismissed SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
     d.prepare('UPDATE OR REPLACE seen SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
+    d.prepare('UPDATE OR REPLACE item_moves SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
   }
   return rows.length;
 }
@@ -859,23 +889,68 @@ export function itemRuling(itemKey, leadId = null) {
   return stmt('SELECT item_key AS itemKey, lead_id AS leadId, kind, section, at FROM item_rulings WHERE item_key = ? OR (lead_id IS NOT NULL AND lead_id = ?) ORDER BY at DESC LIMIT 1').get(itemKey, leadId ?? null) || null;
 }
 
-/** Keeps the owner's ruling: kind 'import' or 'general', section 'dashboard' or 'importquery'. One per lead. */
-export function setItemRuling(itemKey, leadId, { kind, section = 'dashboard' }) {
+/** Keeps the owner's ruling: kind 'import' or 'general'. One per lead. */
+export function setItemRuling(itemKey, leadId, { kind }) {
   if (leadId) stmt('DELETE FROM item_rulings WHERE lead_id = ? AND item_key != ?').run(leadId, itemKey);
   stmt(`
-    INSERT INTO item_rulings(item_key, lead_id, kind, section, at) VALUES(?, ?, ?, ?, ?)
-    ON CONFLICT(item_key) DO UPDATE SET lead_id = excluded.lead_id, kind = excluded.kind, section = excluded.section, at = excluded.at
-  `).run(itemKey, leadId ?? null, kind, section, Date.now());
+    INSERT INTO item_rulings(item_key, lead_id, kind, section, at) VALUES(?, ?, ?, 'dashboard', ?)
+    ON CONFLICT(item_key) DO UPDATE SET lead_id = excluded.lead_id, kind = excluded.kind, at = excluded.at
+  `).run(itemKey, leadId ?? null, kind, Date.now());
 }
 
-/** Takes the ruling away: Wheelman's own reading applies again, and the conversation lists where it did before. */
+/** Takes the ruling away: Wheelman's own reading applies again. Where the conversation is listed does not change. */
 export function clearItemRuling(itemKey, leadId = null) {
   stmt('DELETE FROM item_rulings WHERE item_key = ? OR (lead_id IS NOT NULL AND lead_id = ?)').run(itemKey, leadId ?? null);
 }
 
-/** The keys of the conversations the owner moved into a section, latest ruling first. */
-export function movedItemKeys(section) {
-  return stmt('SELECT item_key AS itemKey FROM item_rulings WHERE section = ? ORDER BY at DESC').all(section).map((r) => r.itemKey);
+// ---- where the owner moved a conversation ---------------------------------------------------
+
+/** The owner's move of a conversation, by its key or by its lead: { itemKey, leadId, section, at }, or null. */
+export function itemMove(itemKey, leadId = null) {
+  return stmt('SELECT item_key AS itemKey, lead_id AS leadId, section, at FROM item_moves WHERE item_key = ? OR (lead_id IS NOT NULL AND lead_id = ?) ORDER BY at DESC LIMIT 1').get(itemKey, leadId ?? null) || null;
+}
+
+/** Lists a conversation in another section than its own. One per lead. */
+export function setItemMove(itemKey, leadId, section, now = Date.now()) {
+  if (leadId) stmt('DELETE FROM item_moves WHERE lead_id = ? AND item_key != ?').run(leadId, itemKey);
+  stmt(`
+    INSERT INTO item_moves(item_key, lead_id, section, at) VALUES(?, ?, ?, ?)
+    ON CONFLICT(item_key) DO UPDATE SET lead_id = excluded.lead_id, section = excluded.section, at = excluded.at
+  `).run(itemKey, leadId ?? null, section, now);
+}
+
+/** Takes the move away: the conversation is listed in its own section again. */
+export function clearItemMove(itemKey, leadId = null) {
+  stmt('DELETE FROM item_moves WHERE item_key = ? OR (lead_id IS NOT NULL AND lead_id = ?)').run(itemKey, leadId ?? null);
+}
+
+/**
+ * The leads and text conversations of customers with an auction order still going, matched the
+ * way getAuctionOrder matches them: by the order's lead, its conversation, or its number. They
+ * are auction customers, listed in Auction (under the order when it reads that conversation).
+ * { leads: [{ id, conversation_id, lead_at, updated_at }], conversations: [{ id, latest_at }] }
+ */
+export function liveOrderCustomers() {
+  const live = stmt("SELECT lead_id, conversation_id, phone_key FROM auction_orders WHERE gone_at IS NULL AND (closed IS NULL OR closed = '')").all();
+  if (!live.length) return { leads: [], conversations: [] };
+  const leadIds = new Set(live.map((r) => r.lead_id).filter(Boolean));
+  const convIds = new Set(live.map((r) => r.conversation_id).filter(Boolean));
+  const keys = new Set(live.map((r) => r.phone_key).filter(Boolean));
+  const onNumber = (phone) => String(phone || '').split(/[|,/]/).some((p) => keys.has(p.replace(/\D/g, '').slice(-9)));
+  return {
+    leads: stmt('SELECT id, conversation_id, phone, lead_at, updated_at FROM leads').all().filter((l) => leadIds.has(l.id) || onNumber(l.phone)),
+    conversations: stmt('SELECT id, phone, latest_at FROM conversations').all().filter((c) => convIds.has(c.id) || onNumber(c.phone)),
+  };
+}
+
+/** The first suggestion written for a conversation since a time: { anchorKey }, or null. */
+export function firstDraftSince(itemKey, at) {
+  return stmt('SELECT anchor_key AS anchorKey FROM drafts WHERE item_key = ? AND created_at >= ? ORDER BY created_at, id LIMIT 1').get(itemKey, at || 0) || null;
+}
+
+/** The keys of the conversations the owner moved into a section, latest first. */
+export function movedKeys(section) {
+  return stmt('SELECT item_key AS itemKey FROM item_moves WHERE section = ? ORDER BY at DESC').all(section).map((r) => r.itemKey);
 }
 
 /** Cars of this make and model that are not sold: on the yard, arrived, or on their way. The model's first word is enough ("Alphard" for "Alphard Welcab"). */
@@ -1215,13 +1290,15 @@ export function rekeyPhoneThreads() {
     SELECT DISTINCT k.item_key AS old, COALESCE('c:' || t.conversation_id, 'l:' || t.lead_id) AS new
       FROM (SELECT item_key FROM drafts WHERE item_key LIKE 'ph:%'
             UNION SELECT item_key FROM dismissed WHERE item_key LIKE 'ph:%'
-            UNION SELECT item_key FROM seen WHERE item_key LIKE 'ph:%') k
+            UNION SELECT item_key FROM seen WHERE item_key LIKE 'ph:%'
+            UNION SELECT item_key FROM item_moves WHERE item_key LIKE 'ph:%') k
       JOIN phone_threads t ON t.id = CAST(substr(k.item_key, 4) AS INTEGER)
      WHERE t.conversation_id IS NOT NULL OR t.lead_id IS NOT NULL`).all();
   for (const r of rows) {
     d.prepare('UPDATE drafts SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
     d.prepare('UPDATE OR REPLACE dismissed SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
     d.prepare('UPDATE OR REPLACE seen SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
+    d.prepare('UPDATE OR REPLACE item_moves SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
   }
   return rows.length;
 }

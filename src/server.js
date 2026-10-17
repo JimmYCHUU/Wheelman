@@ -4,9 +4,9 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
-import { listItems, itemFromKey } from './items.js';
-import { latestDraft, getDraft, dismiss, undismiss, isDismissed, setDraftRating, markSeen, isSeen, dataStamp, uncopy, addOrderMessage, removeOrderMessage, setItemRuling, clearItemRuling } from './db.js';
-import { listOrderRows, MESSAGES, messagesFor, wantedText, carTitle, lotName, lotPageUrl, cleanPaste } from './orders.js';
+import { listItems, itemFromKey, orderRows } from './items.js';
+import { latestDraft, getDraft, dismiss, undismiss, isDismissed, setDraftRating, markSeen, isSeen, dataStamp, uncopy, addOrderMessage, removeOrderMessage, setItemRuling, clearItemRuling, setItemMove, clearItemMove } from './db.js';
+import { MESSAGES, messagesFor, wantedText, carTitle, lotName, lotPageUrl, cleanPaste } from './orders.js';
 import { draftOrderMessage } from './ordermessages.js';
 import { draftFor, writingNow } from './drafter.js';
 import { availability } from './normalize.js';
@@ -14,7 +14,7 @@ import { firstNameOf, isPlaceholderName } from './redact.js';
 import { signedName } from './signature.js';
 import { rowMatches } from '../web/lib/search.js';
 import { RUNG_LABELS } from './selling.js';
-import { canLearnFrom } from './learn.js';
+import { teachesHere } from './learn.js';
 import { validateMailReport, storeMailThread } from './mail.js';
 import { recentPractice, PRACTICE_DAYS } from './practice.js';
 import { recentMailPractice } from './mailpractice.js';
@@ -28,7 +28,8 @@ import * as worker from './worker.js';
 import { onCopied, onRated, onApproved, onAdvice, onEdited } from './learn.js';
 import { displayNameFor } from './people.js';
 import { reservedByAnother } from './deal.js';
-import { wantedFrom } from './imports.js';
+import { wantedFrom, enquiryStage } from './imports.js';
+import { SECTIONS, sectionOn, movesFor, onImportsList } from './placement.js';
 import { learnedStats } from './db.js';
 import { validateReport, storePhoneReport } from './phone.js';
 import { sendReply, fetchConversation, normalizeMpMessage, tagMarketplaceLinks } from './marketplace.js';
@@ -161,7 +162,7 @@ function summary(item) {
   const lastShown = [...item.timeline].reverse().find((e) => !e.internal) || last;
   return {
     key: item.itemKey,
-    section: item.channel === 'marketplace' ? 'marketplace' : item.channel === 'email' || item.moved === 'importquery' ? 'importquery' : 'dashboard',
+    section: item.section,
     account: item.marketplace?.account || '',
     // An email thread: the customer's address, and how many of its messages Gmail had folded.
     email: item.mail?.customerEmail || '',
@@ -266,6 +267,10 @@ function orderOf(item) {
     messages: messagesFor(o).map((type) => ({ type, label: MESSAGES[type], due: s.kind === 'send' && s.next.type === type })).sort((a, b) => Number(b.due) - Number(a.due)),
     message: item.message,
     replying: s.kind === 'reply' && item.anchorKey === s.anchorKey,
+    // How the customer wrote, so how the reply goes: 'sms' (pasted into the dashboard) or 'whatsapp'.
+    replyVia: s.replyVia || '',
+    // The customer's own conversation: answered on this order (here), or where it is listed.
+    texts: item.orderTexts,
   };
 }
 
@@ -312,7 +317,7 @@ function present(item) {
     marketplace: marketplaceOf(item),
     mail: mailOf(item),
     // Whether the teaching buttons (Good reply, Could be better) belong here: the one gate in learn.js decides.
-    teaches: canLearnFrom(item.itemKey),
+    teaches: teachesHere(item),
     firstName: firstNameOf(item.lead || {}),
     source: item.lead?.source || '',
     leadStatus: item.lead?.status || '',
@@ -323,13 +328,20 @@ function present(item) {
     autoReason: item.autoReason,
     firstReply: item.isFirstReply,
     looking: lookingFor(item),
-    // An ordinary enquiry read as an import enquiry (why, and the car), the owner's ruling on it,
-    // whether it was moved to Import Query, and which of those this conversation allows.
+    // An ordinary enquiry read as an import enquiry (why, and the car), and the owner's ruling on it.
     judged: item.judged ? { sign: item.judged.sign, why: item.judged.why, car: item.judged.car?.title || '' } : null,
-    ruling: item.ruling ? { kind: item.ruling.kind, section: item.ruling.section } : null,
-    moved: item.moved || null,
+    ruling: item.ruling ? { kind: item.ruling.kind } : null,
+    // Answered the import way: from the Imports list or the website's import form, read so, ruled so, or listed with the auction customers.
+    isImport: !!item.imports,
     canRule: /^[cl]:/.test(item.itemKey),
-    canMove: config.mail.switchedOn && /^[cl]:/.test(item.itemKey),
+    // Where it belongs, where it is listed when the owner moved it (else null), and where it may go.
+    home: item.home,
+    moved: item.section !== item.home ? item.section : null,
+    moves: movesFor(item),
+    canMove: movesFor(item).includes('importquery'),
+    // Why it is listed where it is, when it is not where it came in: 'moved' (the owner), 'imports'
+    // (the dashboard's Imports list), 'order' (an auction order under way), or ''.
+    listed: item.move ? 'moved' : item.section === 'auction' && item.home === 'auction' ? (onImportsList(item) ? 'imports' : 'order') : '',
     vehicle: v ? { title: v.title, stockNo: v.stockNo, price: v.price, odometer: v.odometer, availability: shownAvailability(item, v), url: v.url, year: v.year, fuel: v.fuel, transmission: v.transmission, seats: v.seats, colour: v.color, included: v.outline || [] } : null,
     thread: threadOf(item, shown),
     earlier: item.timeline.length - shown.length,
@@ -339,9 +351,6 @@ function present(item) {
   };
 }
 
-const SECTIONS = ['dashboard', 'marketplace', 'auction', 'importquery'];
-// Import Query: email threads sent from Gmail; off when the intake is switched off.
-const sectionOn = (s) => (s === 'marketplace' ? config.marketplace.enabled : s === 'importquery' ? config.mail.switchedOn : true);
 const KEY = '((?:c|l|mp|ao|ph|em):\\d+)';
 const itemRoute = (tail = '') => new RegExp(`^/api/items/${KEY}${tail}$`);
 
@@ -371,6 +380,30 @@ function olderRows(section, hours) {
 }
 
 /**
+ * The import and auction enquiries listed in Auction that have no order yet, as rows like an
+ * order's: To do while the customer waits on us, In progress once we have answered, Finished when
+ * there is nothing more to do. Rebuilt only when something in the database changes, not with the
+ * orders' minute.
+ */
+let enquiryCache = null;
+function enquiryRows() {
+  const stamp = dataStamp();
+  if (enquiryCache?.stamp === stamp) return enquiryCache.value;
+  const value = { waiting: [], quiet: [], other: [] };
+  for (const item of listItems({ states: ALL_STATES, maxAgeHours: Infinity, source: 'auction', limit: Infinity })) {
+    if (item.state === 'other') continue;
+    const stage = enquiryStage(item);
+    const waiting = item.state === 'awaiting';
+    const row = { ...summary(item), stage: stage.label, stageCode: stage.code, situation: stage.label, due: waiting ? 'Reply to their message' : '', dueKind: waiting ? 'reply' : '' };
+    if (waiting && !row.dismissed) value.waiting.push(row);
+    else if (['closed', 'optout'].includes(item.state)) value.other.push(row);
+    else value.quiet.push(row);
+  }
+  enquiryCache = { stamp: dataStamp(), value };
+  return value;
+}
+
+/**
  * The rows of one section, by tab. Every conversation ever stored is listed (hours = Infinity),
  * newest first, so an old thread with a new message comes to the top, as in any messaging app.
  * Built once and reused until something in the database is written; the auction lists also
@@ -388,9 +421,16 @@ function sectionRows(section, hours = Infinity) {
 
   let value;
   if (section === 'auction') {
-    // To do, In progress, Finished.
-    const rows = listOrderRows();
-    value = { waiting: rows.filter((r) => r.state === 'awaiting'), quiet: rows.filter((r) => r.state === 'answered'), other: rows.filter((r) => r.state === 'closed') };
+    // To do, In progress, Finished: the orders, and the enquiries that have no order yet.
+    const rows = orderRows();
+    const asks = enquiryRows();
+    const rank = (r) => (r.dueKind === 'reply' ? 0 : r.state === 'awaiting' ? 1 : 2);
+    const order = (a, b) => rank(a) - rank(b) || (b.lastAt || 0) - (a.lastAt || 0);
+    value = {
+      waiting: [...rows.filter((r) => r.state === 'awaiting'), ...asks.waiting].sort(order),
+      quiet: [...rows.filter((r) => r.state === 'answered'), ...asks.quiet].sort(order),
+      other: [...rows.filter((r) => r.state === 'closed'), ...asks.other].sort(order),
+    };
   } else {
     let all;
     if (hours <= RECENT_HOURS) {
@@ -421,6 +461,36 @@ function sectionRows(section, hours = Infinity) {
   listCache.set(key, { stamp: `${dataStamp()}${minute}`, value });
   while (listCache.size > 12) listCache.delete(listCache.keys().next().value);
   return value;
+}
+
+/** Lists a conversation in a section: its own one forgets the move. */
+function moveTo(item, section) {
+  if (section === item.home) clearItemMove(item.itemKey, item.lead?.id || null);
+  else setItemMove(item.itemKey, item.lead?.id || null, section);
+}
+
+/** Why a conversation cannot go to that section, in words for the page. */
+function whyNotMoved(item, section) {
+  if (item.order) return 'An auction order stays in Auction.';
+  if (!SECTIONS.includes(section)) return 'That is not one of the sections.';
+  if (section === 'marketplace') return 'Only a Facebook chat can be in Marketplace.';
+  if (!sectionOn(section)) return 'That section is switched off.';
+  if (section === item.section) return 'It is already there.';
+  return 'It cannot be moved there.';
+}
+
+/**
+ * After a ruling or a move, the suggestion is written again the new way: unless the owner has
+ * already changed, copied or sent it, the customer is not waiting, or it is set aside. A
+ * conversation now listed under an auction order is answered there instead.
+ */
+function writeAgainIfUntouched(key, item) {
+  const fresh = itemFromKey(key) || item;
+  const d = latestDraft(fresh.itemKey, fresh.anchorKey);
+  const untouched = !d || (['ready', 'failed'].includes(d.status) && typeof d.edited_text !== 'string' && !d.copied_at && !d.sent_here_at);
+  const writing = fresh.state === 'awaiting' && untouched && !fresh.underOrder && !isDismissed(fresh.itemKey, fresh.anchorKey);
+  if (writing) draftFor(fresh, { instruction: '' }).catch(() => {});
+  return { fresh, writing };
 }
 
 async function api(req, res, url) {
@@ -679,30 +749,46 @@ async function api(req, res, url) {
     return send(res, 200, { ok: true });
   }
 
-  // The owner's ruling on a dashboard conversation: an import enquiry or not, and whether it sits
-  // in the Import Query section. { kind: 'import' | 'general' | '', section: 'importquery' | 'dashboard' }.
-  // An empty kind takes the ruling away, so Wheelman's own reading applies again. The suggestion
-  // is written again the new way, unless the owner has already changed its text.
+  // The owner's ruling on a dashboard conversation: an import enquiry or not.
+  // { kind: 'import' | 'general' | '' }. An empty kind takes the ruling away, so Wheelman's own
+  // reading applies again. A `section` sent with it moves the conversation as /move does (the page
+  // once moved conversations this way). The suggestion is written again the new way, unless the
+  // owner has already changed its text.
   m = p.match(itemRoute('/ruling'));
   if (req.method === 'POST' && m) {
     const body = await readBody(req);
     const item = itemFromKey(m[1]);
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
-    if (!/^[cl]:/.test(item.itemKey)) return send(res, 400, { error: 'Only a dashboard conversation can be ruled on or moved.' });
+    if (!/^[cl]:/.test(item.itemKey)) return send(res, 400, { error: 'Only a dashboard conversation can be ruled on.' });
     const kind = ['import', 'general', ''].includes(body.kind) ? body.kind : null;
-    const section = body.section === 'importquery' ? 'importquery' : 'dashboard';
     if (kind === null) return send(res, 400, { error: 'Say whether it is an import enquiry.' });
-    if (section === 'importquery' && kind !== 'import') return send(res, 400, { error: 'Only an import enquiry can be moved to Import Query.' });
-    if (section === 'importquery' && !config.mail.switchedOn) return send(res, 400, { error: 'The Import Query section is switched off.' });
-    if (kind) setItemRuling(item.itemKey, item.lead?.id || null, { kind, section });
+    const section = body.section ? String(body.section) : '';
+    if (section && section !== item.section && !movesFor(item).includes(section)) return send(res, 400, { error: whyNotMoved(item, section) });
+    if (kind) setItemRuling(item.itemKey, item.lead?.id || null, { kind });
     else clearItemRuling(item.itemKey, item.lead?.id || null);
-    const fresh = itemFromKey(m[1]) || item;
-    const d = latestDraft(fresh.itemKey, fresh.anchorKey);
-    const untouched = !d || (['ready', 'failed'].includes(d.status) && typeof d.edited_text !== 'string' && !d.copied_at && !d.sent_here_at);
-    const writing = fresh.state === 'awaiting' && untouched && !fresh.dismissed;
-    if (writing) draftFor(fresh, { instruction: '' }).catch(() => {});
-    logLine('rulings', `${fresh.itemKey}: ${kind ? `${kind === 'import' ? 'an import enquiry' : 'not an import enquiry'}${section === 'importquery' ? ', moved to Import Query' : ''}` : 'the ruling was taken away'}${writing ? '; the suggestion is written again' : ''}`);
-    return send(res, 200, { ok: true, item: present(itemFromKey(m[1]) || fresh), writing });
+    if (section && section !== item.section) moveTo(item, section);
+    const { fresh, writing } = writeAgainIfUntouched(m[1], item);
+    logLine('rulings', `${fresh.itemKey}: ${kind ? (kind === 'import' ? 'an import enquiry' : 'not an import enquiry') : 'the ruling was taken away'}${section && section !== item.section ? `, moved to ${section}` : ''}${writing ? '; the suggestion is written again' : ''}`);
+    return send(res, 200, { ok: true, item: present(fresh), writing });
+  }
+
+  // Moving a conversation to another section: Dashboard, Import Query or Auction, or a Facebook chat
+  // back to Marketplace. { section }. It keeps its key, and its replies still go out the way they
+  // came in; only the list it sits on, and how the customer is answered, change. Back in its own
+  // section, the move is forgotten. The suggestion is written again the new way, unless the owner
+  // has already changed its text. Undo is a move back to `from`.
+  m = p.match(itemRoute('/move'));
+  if (req.method === 'POST' && m) {
+    const body = await readBody(req);
+    const item = itemFromKey(m[1]);
+    if (!item) return send(res, 404, { error: 'That conversation was not found.' });
+    const section = String(body.section || '');
+    if (!movesFor(item).includes(section)) return send(res, 400, { error: whyNotMoved(item, section) });
+    const from = item.section;
+    moveTo(item, section);
+    const { fresh, writing } = writeAgainIfUntouched(m[1], item);
+    logLine('moves', `${fresh.itemKey}: moved from ${from} to ${fresh.section}${writing ? '; the suggestion is written again' : ''}`);
+    return send(res, 200, { ok: true, from, item: present(fresh), writing });
   }
 
   // The conversation was opened on the page: its number badge goes away until a new message arrives.

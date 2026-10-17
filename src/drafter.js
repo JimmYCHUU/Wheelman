@@ -285,6 +285,8 @@ async function writeDraft(item, { instruction = '', coaching = null, save = true
     situations: item.situation.all,
     firstReply: item.isFirstReply,
     channel: item.channel,
+    // The section it was listed in: nothing written while in Auction is learned from (learn.js).
+    section: item.section || null,
     anchorAgeHours: item.lastInboundAt ? Math.round((now - item.lastInboundAt) / 360000) / 10 : null,
     newEnquiry: !!item.isNewEnquiry,
     buyer: !!item.deal,

@@ -79,7 +79,7 @@ export const SECTIONS = {
     placeShort: 'Dashboard',
     phone: false,
     empty: {
-      waiting: ['Nothing to do', 'Auction orders that need a message appear here with the message ready to check.'],
+      waiting: ['Nothing to do', 'Auction orders that need a message, and import enquiries from the Imports list waiting on us, appear here with the message ready to check.'],
       quiet: ['Nothing here', 'Orders that are under way with no message due.'],
       other: ['Nothing here', 'Orders that are completed, cancelled or refunded.'],
       search: ['No order matches', 'Every order on the dashboard was searched: To do, In progress and Finished. Try a name, a car or an order number.'],
