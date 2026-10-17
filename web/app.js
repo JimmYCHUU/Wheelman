@@ -19,7 +19,7 @@ import { mountListColumn, visibleRows } from './views/ListColumn.js';
 import { CarTab, viewerGroups, replyLabel, pictureSrc } from './views/CarPanel.js';
 import { openViewer } from './views/Viewer.js';
 import { MoveMenu } from './views/MoveMenu.js';
-import { TemplatePicker } from './views/TemplatePicker.js';
+import { TemplatePicker, showsPicked, pickHolds, fillsIn } from './views/TemplatePicker.js';
 import { linkLine, placeLine } from './lib/insert.js';
 
 // ---- state -------------------------------------------------------------------
@@ -28,7 +28,9 @@ const state = {
   section: 'dashboard',  // 'dashboard', 'marketplace', 'auction', or 'importquery'
   sections: { dashboard: 0, marketplace: null, auction: null, importquery: null }, // waiting in each; null means the section is switched off
   unread: { dashboard: 0, marketplace: null, auction: null, importquery: null },   // waiting conversations with messages not looked at yet
-  message: '',           // Auction: the kind of message picked from "Which message?" for the open order
+  message: '',           // the message picked from "Which message?": an order's kind, or an enquiry's template
+  picked: false,         // whether one was picked for the open conversation ('' then means the reply to what they wrote)
+  pickedAnchor: '',      // the customer message it was picked for: once they write again, the pick is dropped
   pasteOpen: false,      // Auction: the box for pasting what the customer wrote is open
   listSeq: 0,            // guards against a slow list response landing in the wrong section
   tab: 'all',            // the list on screen: 'all' (every conversation, newest first) or 'waiting'; Auction has its own three
@@ -698,6 +700,15 @@ function renderComposer(item, els, { arriving = false } = {}) {
 
   if (item.order) { renderOrderComposer(box, item, d, { arriving, writeBtn }); return; }
 
+  // "Which message?" for any other conversation: the templates that fit it (an enquiry in Auction,
+  // or a Dashboard, Marketplace or Import Query conversation), in the same picker as an order's,
+  // its first choice the reply to what they wrote. A message picked from it is shown whatever the
+  // conversation's state: the owner chose to send it. Prompt and Rewrite change the one shown.
+  if (item.templates?.length) {
+    box.append(h('div', { class: 'order-bar' }, TemplatePicker({ templates: item.templates, value: item.template || '', first: 'A reply to what they wrote', onPick: (id) => pickMessage(item, id) })));
+    if (showsPicked(item, { picked: state.picked, anchor: state.pickedAnchor })) { mountEditor(box, item, d, { arriving }); return; }
+  }
+
   if (item.state === 'optout') {
     box.append(h('div', { class: 'quiet bad' }, icon('stop'), h('p', { text: 'This customer asked not to be contacted. Do not reply.' })));
     return;
@@ -801,7 +812,10 @@ function renderOrderComposer(box, item, d, { arriving = false, writeBtn }) {
 function mountEditor(box, item, d, { arriving = false } = {}) {
   // An auction order: a message written from the wording file, or a reply to what the customer wrote.
   const order = item.order || null;
-  const outbound = !!order && !order.replying;
+  // One of our messages from "Which message?": an order's, or a template picked for an enquiry.
+  const picked = !order && !!d.template && (item.templates || []).find((t) => t.id === d.template);
+  const outbound = (!!order && !order.replying) || !!picked;
+  const kind = order ? order.message : d.template;
   const what = outbound ? 'message' : 'reply';
   // A Marketplace chat is the one place a reply can be sent from here. Everywhere else, copy and paste.
   const sends = item.channel === 'marketplace';
@@ -822,7 +836,7 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
   const backToSuggestion = () => h('button', { class: 'blank-btn', type: 'button', onclick: () => replaceText(ta, d.reply) }, 'Bring back the suggestion');
 
   function paintHead() {
-    const named = outbound ? (order.messages.find((m) => m.type === order.message)?.label || 'Message') : 'Suggested reply';
+    const named = outbound ? ((order ? order.messages.find((m) => m.type === order.message)?.label : picked?.label) || 'Message') : 'Suggested reply';
     tag.replaceChildren(isEmpty() ? `Your ${what} ` : isEdited() ? `${named}, changed by you ` : `${named} `,
       h('span', { text: isEdited() ? '· not sent' : '· not sent · click in the text to change it' }));
     meta.dataset.edited = isEdited() ? 'yes' : 'no';
@@ -1027,7 +1041,8 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
   copyBtn.addEventListener('click', doCopy);
   if (sendBtn) sendBtn.addEventListener('click', doSend);
 
-  const rewriteInput = outbound
+  const filling = fillsIn(item, d);
+  const rewriteInput = filling
     ? h('input', { type: 'text', maxlength: '600', placeholder: 'For example: we bid 1.2m, sold for 1.31m. Or: ETA 14 Nov, ship Hoegh Trader', 'aria-label': 'What you know that the message needs' })
     : h('input', { type: 'text', maxlength: '600', placeholder: 'What should change? For example: offer $27,500, or make it shorter', 'aria-label': 'What should change in the reply' });
   // A prompt typed while a plain suggestion landed in the background is not lost: the Rewrite row
@@ -1037,7 +1052,7 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
   rewriteInput.value = pendingPrompt || d.instruction || '';
   const rewriteRow = h('div', { class: 'rewrite', hidden: !state.rewriteOpen },
     rewriteInput,
-    h('button', { class: 'btn outline', type: 'button', onclick: () => write(item, rewriteInput.value) }, outbound ? 'Fill it in' : 'Write it again'));
+    h('button', { class: 'btn outline', type: 'button', onclick: () => write(item, rewriteInput.value) }, filling ? 'Fill it in' : 'Write it again'));
   rewriteInput.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter') { ev.preventDefault(); write(item, rewriteInput.value); }
     if (ev.key === 'Escape') { state.rewriteOpen = false; rewriteRow.hidden = true; rewriteBtn.classList.remove('is-on'); rewriteBtn.setAttribute('aria-expanded', 'false'); rewriteBtn.focus(); }
@@ -1050,7 +1065,7 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
     rewriteBtn.setAttribute('aria-expanded', state.rewriteOpen ? 'true' : 'false');
     state.composerSig = composerSignature(item);
     if (state.rewriteOpen) rewriteInput.focus();
-  } }, icon('pencil'), outbound ? 'Add what you know' : 'Rewrite');
+  } }, icon('pencil'), filling ? 'Add what you know' : 'Rewrite');
 
   put(after, h('span', { class: 'said' }, icon('check'), 'Copied'));
 
@@ -1090,7 +1105,7 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
       h('div', { class: 'sheet-foot' },
         rewriteBtn,
         // A message with live figures (an auction car, a landed estimate) can be read again.
-        outbound && ['lot_offer', 'lot_short', 'lots_coming', 'first_estimate'].includes(order.message)
+        outbound && ['lot_offer', 'lot_short', 'lots_coming', 'first_estimate'].includes(kind)
           ? h('button', { class: 'btn', type: 'button', title: 'Read the live auction again and write this message with the figures as they are now.', onclick: () => write(item, d.instruction || '') }, icon('refresh'), 'Refresh figures') : null,
         approveBtn,
         betterBtn,
@@ -1726,6 +1741,8 @@ async function open(key) {
   state.betterOpen = false;
   state.copied = null;
   state.message = '';
+  state.picked = false;
+  state.pickedAnchor = '';
   state.pasteOpen = false;
   state.older = null;
   state.carView = null;
@@ -1759,7 +1776,9 @@ async function write(item, instruction) {
   state.heldAt.delete(item.key);
   if (state.selected === item.key) { renderHead(state.detail, chatFrame()); renderComposer(state.detail, chatFrame()); }
   try {
-    const out = await api(`/api/items/${item.key}/draft`, { body: { instruction, message: item.order ? state.message || item.order.message || '' : '' } });
+    // The message in hand: an order's, or the template picked or shown for an enquiry ('' a reply to what they wrote).
+    const message = item.order ? state.message || item.order.message || '' : item.templates?.length ? (state.picked ? state.message : item.template || '') : '';
+    const out = await api(`/api/items/${item.key}/draft`, { body: { instruction, message } });
     state.busy.delete(item.key);
     // The prompt did its work. A failed try keeps it, for Try again.
     if (out.ok) state.prompts.delete(item.key);
@@ -1783,10 +1802,14 @@ async function write(item, instruction) {
 /** Auction: another kind of message was picked. One already written for it is shown; otherwise it is written now. */
 async function pickMessage(item, type) {
   state.message = type;
+  state.picked = true;
   state.rewriteOpen = false;
   try {
-    const { item: fresh } = await api(`/api/items/${item.key}${type ? `?message=${encodeURIComponent(type)}` : ''}`);
+    // An order's first choice is its due message; any other conversation's is the reply to what they wrote.
+    const query = item.order ? (type ? `?message=${encodeURIComponent(type)}` : '') : `?message=${encodeURIComponent(type)}`;
+    const { item: fresh } = await api(`/api/items/${item.key}${query}`);
     if (state.selected !== item.key) return;
+    state.pickedAnchor = fresh.anchor || '';
     state.detail = fresh;
     if (type && !(fresh.draft && fresh.draft.status === 'ready')) { await write(fresh, ''); return; }
     renderHead(fresh, chatFrame()); renderComposer(fresh, chatFrame(), { arriving: true }); renderInfo();
@@ -1900,6 +1923,8 @@ async function improve(item, note) {
   try {
     const out = await api(`/api/drafts/${item.draft.id}/advice`, { body: { note: said } });
     state.busy.delete(item.key);
+    // It writes this reply again in Wheelman's own words: no longer the message picked.
+    if (!item.order) { state.picked = false; state.message = ''; state.pickedAnchor = ''; }
     if (out.item && state.selected === item.key) {
       state.detail = out.item;
       state.copied = null;
@@ -1962,8 +1987,15 @@ async function refreshDetail() {
   if (!key || state.busy.has(key)) return;
   try {
     // For an auction order, the message that was picked stays picked.
-    const { item } = await api(`/api/items/${key}${state.message && key.startsWith('ao:') ? `?message=${encodeURIComponent(state.message)}` : ''}`);
+    let { item } = await api(`/api/items/${key}${state.message && key.startsWith('ao:') ? `?message=${encodeURIComponent(state.message)}` : state.picked && !key.startsWith('ao:') ? `?message=${encodeURIComponent(state.message)}` : ''}`);
     if (state.selected !== key) return;
+    // The customer wrote again since a message was picked: the pick was for what they wrote before,
+    // so the box follows the conversation again (the reply written for their new message, if any).
+    if (state.picked && !key.startsWith('ao:') && !pickHolds(state.pickedAnchor, item)) {
+      state.picked = false; state.message = ''; state.pickedAnchor = '';
+      ({ item } = await api(`/api/items/${key}`));
+      if (state.selected !== key) return;
+    }
     const previous = state.detail;
     state.detail = item;
     // A suggestion being written in the background: look again in a few seconds, not at the next
@@ -1997,7 +2029,7 @@ async function showSection(section) {
   state.section = section;
   state.tab = REGISTRY[section].tabs[0].id;
   state.q = '';
-  state.selected = null; state.detail = null; state.rewriteOpen = false; state.betterOpen = false; state.copied = null; state.message = ''; state.pasteOpen = false;
+  state.selected = null; state.detail = null; state.rewriteOpen = false; state.betterOpen = false; state.copied = null; state.message = ''; state.picked = false; state.pickedAnchor = ''; state.pasteOpen = false;
   state.list = [];
   state.listSize = 20;
   state.listTotal = 0;

@@ -9,10 +9,10 @@ import { config } from './config.js';
 import { template, fill, fillParts, unfilled } from './templates.js';
 import { insertDraft, latestDraft, allVehicles, saleForVehicle, getVehicleByStock, setOrderWatch, listOrders } from './db.js';
 import { searchLots, getLot, estimateFor, soldComparables, lotIdFromUrl, tidyName } from './auction.js';
-import { chooseLot, suggestedBid, bidBasisLine, offerBlock, costLines, specificsIn, money, yen } from './imports.js';
+import { chooseLot, suggestedBid, bidBasisLine, offerBlock, costLines, specificsIn, money, yen, wantedFrom, enquiryStage } from './imports.js';
 import { MESSAGES, carTitle, lotName, wantedCar, lotPageUrl, modelPageUrl, stageOf } from './orders.js';
 import { restore, redact } from './redact.js';
-import { maskTemplate } from './fitter.js';
+import { draftFromTemplate } from './templatedraft.js';
 import { availability } from './normalize.js';
 import { sydneyDay, formatSydney } from './time.js';
 import { logLine } from './log.js';
@@ -424,6 +424,46 @@ export async function composeMessage(o, type, { told = factsIn(''), now = Date.n
   return { text, facts, notes, review, part, values: v, tail };
 }
 
+// ---- enquiries in Auction ----------------------------------------------------------------------
+
+/** The messages that fit an auction customer before there is an order: the "Which message?" list of an enquiry in Auction. */
+export const ENQUIRY_MESSAGES = ['first_estimate', 'lot_offer', 'lot_short', 'lots_coming', 'search_update', 'deposit_reminder'];
+
+/**
+ * The "Which message?" list of a conversation in Auction that has no order yet: an import enquiry
+ * answered by text. [{ id, label, due }]: the one that suits where it has got to is marked due
+ * (a car to offer once they said what they want; still searching once one was offered). Empty for
+ * anything else: an order has its own list, and the other sections get theirs with their templates.
+ */
+export function enquiryTemplates(item) {
+  // Any conversation listed in Auction with no order yet: a text, an email or a Facebook chat moved
+  // there. Nothing for a customer who asked not to be contacted.
+  if (item.order || item.section !== 'auction' || item.state === 'optout') return [];
+  const due = { enquiry_ready: 'lot_offer', enquiry_offered: 'search_update' }[enquiryStage(item).code] || '';
+  return ENQUIRY_MESSAGES.map((id) => ({ id, label: MESSAGES[id], due: id === due }));
+}
+
+/**
+ * A stand-in order for an enquiry, from what the customer asked for, so its messages are written
+ * from the same wording as an order's. Nothing on it is an order of ours: no deposit, no charge,
+ * no car; what only a person knows (the deposit amount) stays a blank.
+ */
+export function enquiryOrder(item, { now = Date.now() } = {}) {
+  const w = wantedFrom(item);
+  return {
+    id: 0, orderNo: '', leadId: item.lead?.id || null, stage: 'INITIAL_DEPOSIT', lotPhase: 'SOURCING', depositState: 'NONE', closed: '',
+    wanted: {
+      make: w.make, model: w.model, modelCode: w.modelCode, variant: '', yearFrom: w.yearFrom, yearTo: w.yearTo, budgetAud: w.budgetAud || 0, targetBidYen: w.bidYen || 0,
+      // Their kilometre limit and grade, in words the order's own reading understands.
+      notes: [w.maxKm ? `under ${w.maxKm.toLocaleString('en-AU')} km` : '', w.minGrade ? `grade ${w.minGrade}` : ''].filter(Boolean).join(', '),
+    },
+    money: { lines: [], payments: [], quotedDeposit: 0, depositPaid: 0, total: 0, paid: 0, due: 0 },
+    lot: w.lotId ? { id: w.lotId } : null, car: null, watch: null, note: null, marks: {}, followUpDue: false,
+    customer: { firstName: item.lead?.first_name || '', lastName: item.lead?.last_name || '', phone: item.phone || '', email: item.lead?.email || '' },
+    createdAt: now,
+  };
+}
+
 /** Blanks in a finished message, such as [SOLD PRICE?]. Each kind once. */
 export const blanksIn = (text) => [...new Set(String(text || '').match(/\[[A-Z][A-Z0-9 &'/-]{1,30}\?\]/g) || [])];
 
@@ -435,44 +475,28 @@ export const blanksIn = (text) => [...new Set(String(text || '').match(/\[[A-Z][
  * AI's hands (src/fitter.js); written again with new facts and the same wording, the earlier
  * fitting is used again with no request. Without it, no AI request is made.
  */
-export async function draftOrderMessage(item, { type, facts = '', now = Date.now(), save = true, fitWith = null, fitLater = false } = {}) {
-  const o = item.order;
+export async function draftOrderMessage(item, { type, facts = '', instruction = facts, now = Date.now(), save = true, fitWith = null, fitLater = false, order = null } = {}) {
+  // `order`: for an enquiry in Auction with no order yet, the stand-in built from what it says (enquiryOrder).
+  const o = order || item.order;
   // `fitLater`: written word for word only because the AI is paused just now; a later check fits it.
-  const base = { itemKey: item.itemKey, anchorKey: item.anchorKey, situation: type, instruction: facts, template: type, context: { channel: 'auction', message: type, template: type, stage: stageOf(o).code, ...(fitLater ? { fitLater: true } : {}) } };
+  const context = { message: type, stage: stageOf(o).code };
   try {
     if (!MESSAGES[type]) throw new NotNow('Choose which message to write first.');
+    // What the owner typed fills in the facts it names, and goes to the AI as what to change.
     const composed = await composeMessage(o, type, { told: factsIn(facts), now });
-    const { text, facts: used, notes, review } = composed;
-    const reply = restore(text, item.lead);
-    const blanks = blanksIn(reply);
-    const left = unfilled(reply);
     const checks = [
-      ...(left.length ? [{ level: 'fail', code: 'template', tokens: left, message: `The wording file has ${left.length === 1 ? 'a word' : 'words'} in curly brackets that Wheelman cannot fill in: ${left.join(', ')}. Check voice/${FILE}.` }] : []),
-      ...(blanks.length ? [{ level: 'input', code: 'marker', tokens: blanks, message: 'Fill in the highlighted parts before sending.' }] : []),
-      ...(review ? [{ level: 'input', code: 'auction-review', tokens: [], message: 'The cost calculator marks this car for a manual check (tax or import limits). Confirm the figures before sending.' }] : []),
-      ...notes.map((n) => ({ level: 'warn', code: 'auction', tokens: [], message: n })),
+      ...(composed.review ? [{ level: 'input', code: 'auction-review', tokens: [], message: 'The cost calculator marks this car for a manual check (tax or import limits). Confirm the figures before sending.' }] : []),
+      ...composed.notes.map((n) => ({ level: 'warn', code: 'auction', tokens: [], message: n })),
     ];
-    if (fitWith && save && !left.length) {
-      const masked = maskTemplate(composed);
-      const before = latestDraft(item.itemKey, item.anchorKey, type);
-      const again = before?.status === 'ready' && before.context?.fitted && before.context.masked === masked.masked;
-      const fitted = await fitWith(item, { template: {
-        id: type, label: MESSAGES[type], masked, wordChecks: checks, factsUsed: used, typed: facts,
-        fitted: again ? before.context.fitted : null, fittedBy: again ? { provider: before.provider, model: before.model } : null,
-      } });
-      if (fitted?.status === 'ready') return fitted;
-      // Never a refusal: whatever went wrong in fitting, the owner's wording is written as it stands.
-      logLine('auction', `${item.itemKey} ${type}: the message could not be fitted (${fitted?.error || 'no answer'}); written word for word`);
-    }
-    if (!checks.length) checks.push({ level: 'ok', code: 'ok', tokens: [], message: 'Written from your wording, with the figures from your records.' });
-    const d = { ...base, status: 'ready', reply, needsHuman: [], factsUsed: used, checks, provider: 'none', model: 'your wording', exampleIds: [] };
-    if (save) d.id = insertDraft(d);
-    return d;
+    return await draftFromTemplate(item, {
+      id: type, label: MESSAGES[type], composed, checks, used: composed.facts, typed: facts, instruction, fitWith, save, fitLater, context, file: FILE,
+      okWords: 'Written from your wording, with the figures from your records.',
+    });
   } catch (e) {
     const expected = e instanceof NotNow;
     const error = expected ? e.message : `This message could not be written: ${e.message}`;
     if (!expected) logLine('auction', `${item.itemKey} ${type}: ${e.message}`);
-    const d = { ...base, status: 'failed', reply: '', error, checks: [{ level: 'fail', code: 'error', message: error }] };
+    const d = { itemKey: item.itemKey, anchorKey: item.anchorKey, situation: type, instruction: facts, template: type, context: { channel: item.order ? 'auction' : item.channel, template: type, ...context }, status: 'failed', reply: '', error, checks: [{ level: 'fail', code: 'error', message: error }] };
     if (save) d.id = insertDraft(d);
     return d;
   }

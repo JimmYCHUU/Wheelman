@@ -803,11 +803,12 @@ export function itemFromKey(key, opts = {}) {
   const m = String(key || '').match(/^(c|l|mp|ao|ph|em):(\d+)$/);
   if (!m) return null;
   const id = Number(m[2]);
-  if (m[1] === 'mp') return buildMarketplaceItem(id);
   if (m[1] === 'ao') return buildOrderItem(id, opts);
-  if (m[1] === 'ph') return buildPhoneItem(id);
-  if (m[1] === 'em') return buildMailItem(id);
-  return buildItem(m[1] === 'c' ? { conversationId: id } : { leadId: id });
+  const item = m[1] === 'mp' ? buildMarketplaceItem(id) : m[1] === 'ph' ? buildPhoneItem(id) : m[1] === 'em' ? buildMailItem(id)
+    : buildItem(m[1] === 'c' ? { conversationId: id } : { leadId: id });
+  // The template picked from "Which message?" ('' is the reply to what they wrote); left out, none was picked.
+  if (item && typeof opts.message === 'string') item.templatePick = opts.message;
+  return item;
 }
 
 /**

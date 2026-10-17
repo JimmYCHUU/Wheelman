@@ -15,7 +15,8 @@ import { BLANK_PATTERN } from '../web/lib/blank.js';
 
 const MARKER = /\{\{(K\d+)\}\}/g;
 // What may stand in the owner's own wording that the AI must not rewrite: links, phone numbers,
-// figures (money, yen, numbers of four digits or with thousands separators) and blanks.
+// figures (money, yen, numbers of four digits or with thousands separators, times of day, and a
+// number of days, weeks, months, years or kilometres: "7 days", "8 AM", "6 to 10 weeks") and blanks.
 const LITERAL = new RegExp([
   String.raw`https?:\/\/[^\s<>"')\]]+[^\s<>"')\].,;:!?]`,
   BLANK_PATTERN,
@@ -24,6 +25,8 @@ const LITERAL = new RegExp([
   String.raw`(?:AUD\s?)?[$¥]\s?\d[\d,]*(?:\.\d+)?(?:\s?(?:JPY|AUD))?`,
   String.raw`\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b`,
   String.raw`\b\d{4,}\b`,
+  String.raw`\b\d{1,2}(?:[:.]\d{2})?\s?[AaPp]\.?[Mm]\.?(?![A-Za-z])`,
+  String.raw`\b\d+(?:\.\d+)?(?:\s?(?:to|-|–)\s?\d+(?:\.\d+)?)?[\s-]?(?:days?|weeks?|months?|years?|hours?|kms?|kilometres?)\b`,
 ].join('|'), 'g');
 
 /**
@@ -59,6 +62,29 @@ export function maskTemplate({ part, values = {}, tail = '' }) {
   return { text, masked, markers };
 }
 
+// Amounts as staff type them: "1.31m", "20k", "2.38 mil".
+const SHORTHAND = /\b\d+(?:\.\d+)?\s?(?:k|m|mil|million)\b/gi;
+
+/**
+ * What the owner typed (Prompt, Rewrite, "Add what you know"), as the AI may see it while it fits
+ * a template: a fact of the template it repeats becomes that fact's marker; any other figure, link,
+ * phone number or amount becomes a marker of its own, added to `markers` as optional (the AI may
+ * put it in where the message needs it, or leave it out). So nothing typed reaches the AI as a
+ * figure either (an auction order's amounts never go to it), and what it does use comes back
+ * exactly as typed.
+ */
+export function maskInstruction(text, markers) {
+  let t = String(text || '');
+  if (!t.trim()) return t;
+  for (const m of [...markers].sort((a, b) => b.value.length - a.value.length)) if (m.value.trim().length >= 3) t = t.split(m.value).join(`{{${m.name}}}`);
+  const extra = (value) => {
+    const name = `K${markers.length + 1}`;
+    markers.push({ name, value, count: 1, optional: true });
+    return `{{${name}}}`;
+  };
+  return t.split(/(\{\{K\d+\}\})/).map((piece, i) => (i % 2 ? piece : piece.replace(LITERAL, extra).replace(SHORTHAND, extra))).join('');
+}
+
 /** Puts every fact back where its marker is. */
 export function unmask(text, markers) {
   const byName = new Map(markers.map((m) => [m.name, m.value]));
@@ -68,7 +94,8 @@ export function unmask(text, markers) {
 /**
  * Whether the AI kept the markers: each as many times as the template has it (once, nearly
  * always), none made up. With `optional` (the owner's Prompt or Rewrite asked for something else)
- * a marker may be left out, never repeated more often or made up.
+ * a marker may be left out, never repeated more often or made up. A marker for a figure the owner
+ * typed (maskInstruction) may always be left out.
  */
 export function checkMarkers(text, markers, { optional = false } = {}) {
   const expected = new Map(markers.map((m) => [m.name, m.count || 1]));
@@ -76,7 +103,8 @@ export function checkMarkers(text, markers, { optional = false } = {}) {
   for (const m of String(text ?? '').matchAll(MARKER)) counts.set(m[1], (counts.get(m[1]) || 0) + 1);
   const unknown = [...counts.keys()].filter((n) => !expected.has(n));
   const doubled = [...counts.entries()].filter(([n, c]) => expected.has(n) && c > expected.get(n)).map(([n]) => n);
-  const missing = optional ? [] : [...expected.entries()].filter(([n, want]) => (counts.get(n) || 0) < want).map(([n]) => n);
+  const may = new Set(markers.filter((m) => m.optional).map((m) => m.name));
+  const missing = optional ? [] : [...expected.entries()].filter(([n, want]) => !may.has(n) && (counts.get(n) || 0) < want).map(([n]) => n);
   return { ok: !unknown.length && !doubled.length && !missing.length, missing, unknown, doubled };
 }
 

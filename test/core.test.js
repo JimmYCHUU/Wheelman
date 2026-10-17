@@ -235,6 +235,10 @@ test('common enquiries are classified', () => {
   assert.equal(classify('Is this still available?').primary, 'availability');
   assert.equal(classify('What is your best price?').primary, 'price_negotiation');
   assert.equal(classify('Would you take 20k for it').primary, 'price_negotiation');
+  // A buyer pushing back on a price already given, as Marketplace buyers often do.
+  assert.equal(classify('Can you do any better?').primary, 'price_negotiation');
+  assert.equal(classify('Is that the best you can do').primary, 'price_negotiation');
+  assert.notEqual(classify('Do you have any better photos?').primary, 'price_negotiation');
   assert.equal(classify('Do you take trade ins?').primary, 'trade_in');
   assert.equal(classify('Can I get finance on this one').primary, 'finance');
   assert.equal(classify('I am in Brisbane, can you deliver?').primary, 'delivery_interstate');

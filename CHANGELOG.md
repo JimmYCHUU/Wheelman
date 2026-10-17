@@ -6,13 +6,43 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- **"Which message?" in every section, and your Prompt changes the message picked.** Dashboard,
+  Marketplace and Import Query each have a list of your messages for that kind of conversation,
+  only the ones that fit it, the best fit first (a price question offers Price question, a
+  trade-in Trade-in, a sold car Car sold: our other cars, a buyer far away Online video
+  inspection). A message picked is written with the conversation's facts (the car, its price,
+  links, your price reply and invitation word for word) and fitted to the customer by the AI,
+  which cannot change a fact: each is hidden behind a marker and put back by code. With a
+  message picked, Prompt and Rewrite change it the way you say, its facts kept; in Auction, what
+  you type into the box goes to the AI too. Figures you type go to the AI only as markers as
+  well, so an auction order's amounts still never reach it, and one it uses comes back exactly as
+  typed. Hours, days, weeks and years in your own wording are now kept from the AI too. The list
+  follows the section: a text moved to Import Query gets Import Query's messages, an email or a
+  Facebook chat moved to Auction gets Auction's. A customer who asked not to be contacted is
+  offered none. The first messages are in
+  `voice/dashboard-messages.md`, `voice/marketplace-messages.md` and
+  `voice/importquery-messages.md`, written from the team's best replies, for you to edit; each
+  says on its `@fits:` line when it is offered. "Can you do any better?" is now read as a price
+  question. Step 3 of the templates plan (the owner, 17 Oct 2026: "I want that in every section
+  ... the others should have their relevant dropdown options. I still should be able to prompt and
+  the dropdown should be edited according to that.").
+- **Enquiries in Auction have "Which message?" too.** Since the Imports AU leads joined Auction,
+  most of its rows were enquiries, and only orders had the list: it looked as if it had gone. An
+  enquiry now has the same list, with the messages that fit before there is an order (Thanks, with
+  estimate and deposit; Car found, full or short; Cars coming up; Still searching; Deposit
+  reminder), the one that suits where it has got to marked, and the reply to what they wrote as
+  the first choice. Each is written from your wording with what the enquiry says, and fitted to the
+  customer. (The owner, 17 Oct 2026: "Where are those drop down templates ... you removed from
+  the only place I had".)
 - **Auction messages are fitted to the customer.** The owner's wording is filled in by code as
   before, then one AI request fits it to this customer and what they last wrote. Before the AI
   sees it, every fact, figure, link, phone number and blank becomes a marker, and code puts each
   back exactly; a lost, repeated or made-up marker, or a figure of the AI's own, means one more
   try and then the wording word for word, which the page says. Each kind of message keeps its own
   suggestion, so switching back asks nothing, and "Car found, short" no longer shows the text of
-  "Car found, full". "Add what you know" reuses the fitting with no new request. `AUCTION_FIT` and
+  "Car found, full". "Add what you know" fills in the facts it names and goes to the AI as what to
+  change; written again with the same words (Refresh figures), the fitting is reused with no new
+  request. `AUCTION_FIT` and
   `AUCTION_FIT_BACKGROUND` switch it off. Step 2 of the templates plan (the owner, 17 Oct 2026:
   templates "the system is going to polish ... and make it more structured and personalized").
 - **Imports AU leads are in Auction, and any conversation can be moved.** A lead on the

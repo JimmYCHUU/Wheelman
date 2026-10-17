@@ -44,6 +44,10 @@ before(async () => {
   db = await import('../src/db.js');
   items = await import('../src/items.js');
   sync = await import('../src/sync.js');
+  // The website's list of models we import, which names the car an enquiry is about.
+  const eligible = await import('../src/eligible.js');
+  try { fs.unlinkSync(config.importQuery.modelsPath); } catch { /* none yet */ }
+  await eligible.refreshEligibleModels({ now });
   await sync.syncVehicles({ force: true });
   await sync.syncAuctionOrders({ now });
   app = await (await import('../src/server.js')).startServer();
@@ -53,6 +57,7 @@ before(async () => {
 after(async () => {
   await new Promise((r) => { app.close(r); app.closeAllConnections?.(); });
   await standins.close();
+  try { fs.unlinkSync(config.importQuery.modelsPath); } catch { /* gone */ }
 });
 
 const get = async (p) => (await fetch(base + p)).json();
@@ -115,6 +120,10 @@ test('every fact, figure, link, phone number and blank becomes a marker, and com
   }
   assert.match(m.masked, /^Hello \{\{NAME\}\},\n\nThank you for your \{\{K1\}\} enquiry\./, 'the wording around the facts is kept, the name marker too');
   assert.equal(fitter.unmask(m.masked, m.markers), m.text, 'unmasked, it is the filled template exactly');
+  // Small figures in the owner's own wording too: opening hours, days, weeks, years.
+  const hours = fitter.maskTemplate({ part: 'We are open 7 days from 8 AM to 5:30 pm.\n\nIt takes about 6 to 10 weeks, with a 5-year warranty and 1 year roadside assistance.', values: {} });
+  for (const figure of ['7 days', '8 AM', '5:30 pm', '6 to 10 weeks', '5-year', '1 year']) assert.ok(!hours.masked.includes(figure), `"${figure}" reaches the AI: ${hours.masked}`);
+  assert.equal(fitter.unmask(hours.masked, hours.markers), hours.text);
 });
 
 test('a marker lost, written twice or made up is caught; with an instruction a marker may be left out, never changed', () => {
@@ -187,18 +196,22 @@ test('each template keeps its own suggestion: going back to one already written 
   assert.equal(asked(), before, 'no request for any of that');
 });
 
-test('what you add is put into the same fitting with no new request, as long as the wording around it is the same', async () => {
+test('what you add fills in the facts and goes to the AI as what to change; written again with the same words, the fitting is used again', async () => {
   config.auction.fit = true;
   fitting = 'keep';
   let out = await post('/api/items/ao:503/draft', { message: 'bid_lost' });
   assert.match(out.json.item.draft.reply, /\[SOLD PRICE\?\]/);
-  const before = asked();
+  assert.ok(out.json.item.draft.checks.some((c) => c.code === 'marker' && c.tokens.includes('[SOLD PRICE?]')), 'its blank is highlighted');
+  let before = asked();
   out = await post('/api/items/ao:503/draft', { message: 'bid_lost', instruction: 'we bid 300000, sold for 1.31m' });
-  assert.equal(asked(), before, 'no new request');
+  assert.equal(asked() - before, 1, 'one request, with what you typed');
   const d = out.json.item.draft;
   assert.ok(d.reply.includes('¥300,000') && d.reply.includes('¥1,310,000'), d.reply);
   assert.ok(!d.reply.includes('[SOLD PRICE?]'));
   assert.equal(d.instruction, 'we bid 300000, sold for 1.31m', 'what you added is kept with it');
+  before = asked();
+  await post('/api/items/ao:503/draft', { message: 'bid_lost', instruction: 'we bid 300000, sold for 1.31m' });
+  assert.equal(asked(), before, 'Refresh figures: no new request');
 });
 
 test('with no AI to ask, the message is still written, word for word', async () => {
@@ -335,4 +348,39 @@ test("a promise that is the owner's own wording is not flagged as one nobody mad
   const d = (await post('/api/items/ao:501/draft', { message: 'deposit_reminder' })).json.item.draft;
   assert.notEqual(d.provider, 'none');
   assert.ok(!d.checks.some((c) => /Make sure someone will do it/i.test(c.message)), JSON.stringify(d.checks));
+});
+
+// ---- enquiries in Auction have the same "Which message?" list ---------------------------------------
+
+test('an enquiry in Auction has "Which message?" too: the messages that fit before an order, the best for where it has got to marked', async () => {
+  config.auction.fit = false;
+  const HOUR = 3600e3, MIN = 60e3;
+  db.upsertLead({ id: 9301, conversationId: null, firstName: 'Ana', lastName: 'Invented', phone: '0491 570 931', email: 'ana@example.com', source: 'Import', status: 'NEW', platform: 'IMPORTS', state: '',
+    leadAt: now - HOUR, updatedAt: now - MIN, stocks: [], statusHistory: [],
+    inquiries: [{ id: 93010, type: 'Import', subject: 'Import enquiry', text: 'Hi, could you import a Honda N-Box for me? 2019 or newer, under 40,000 km, budget about $16,000.', stockNo: '', at: now - HOUR, status: 'NEW', url: '', leadType: '', staffNotes: [] }] });
+  let { item } = await get('/api/items/l:9301');
+  assert.equal(item.section, 'auction');
+  assert.deepEqual(item.templates.map((t) => t.id), ['first_estimate', 'lot_offer', 'lot_short', 'lots_coming', 'search_update', 'deposit_reminder']);
+  assert.deepEqual(item.templates.map((t) => t.label).slice(0, 2), ['Thanks, with estimate and deposit', 'Car found, full']);
+  assert.equal(item.templates.find((t) => t.due)?.id, 'lot_offer', 'they said what they want: a car to offer');
+
+  // Picked: written from what the enquiry says. No order yet, so the deposit is a blank, and nothing says they have one.
+  const out = await post('/api/items/l:9301/draft', { message: 'first_estimate' });
+  const d = out.json.item.draft;
+  assert.equal(d.template, 'first_estimate');
+  assert.equal(out.json.item.template, 'first_estimate');
+  assert.match(d.reply, /^Hello Ana,\n\nThank you for your Honda N-Box enquiry\./);
+  assert.ok(d.reply.includes('2019 model or newer'), d.reply);
+  assert.ok(d.reply.includes('[DEPOSIT AMOUNT?]'));
+
+  // Picked again: the one already written; the first choice is the reply to what they wrote.
+  item = (await get('/api/items/l:9301?message=first_estimate')).item;
+  assert.equal(item.draft.id, d.id);
+  item = (await get('/api/items/l:9301?message=')).item;
+  assert.equal(item.template, '');
+  assert.notEqual(item.draft?.id, d.id, 'the reply to what they wrote is its own');
+
+  // A conversation in Dashboard has no list yet.
+  const theo = await get('/api/items?section=dashboard&tab=waiting&limit=1');
+  if (theo.items[0]) assert.deepEqual((await get(`/api/items/${theo.items[0].key}`)).item.templates, []);
 });

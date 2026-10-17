@@ -745,6 +745,26 @@ Every row is one conversation, newest first.
 
 The suggestion waits in the message box, marked **not sent**. The box is an editor.
 
+- **Which message?**, in every section. Above the box is a list of your own messages for this
+  kind of conversation, only the ones that fit it, the best fit first and marked
+  **(best fit)**. A price question offers Price question; a trade-in offers Trade-in; a car that
+  has sold offers Car sold: our other cars; someone far away who wants to see the car offers
+  Online video inspection rather than Book an inspection. Pick one and it is written with this
+  conversation's facts (the car, its price, its links, your price reply and invitation word for
+  word), then fitted to the customer by the AI, which cannot change a fact: each one is hidden
+  behind a marker and put back by code. The first choice, **A reply to what they wrote**, is
+  Wheelman's own reply as before. Each message keeps its own suggestion, so switching back to one
+  asks nothing. With a message picked, **Prompt** and **Rewrite** change that message the way you
+  say (`also say we are open this Sunday`), its facts kept. A figure you type goes to the AI
+  only as a marker too, and comes back exactly as you typed it (`offer $27,500`). The list
+  follows the section a conversation is in: a text you moved to Import Query gets Import Query's
+  messages. A customer who asked not to be contacted is offered none. **Could be better** writes
+  Wheelman's own reply again, not the message picked. The messages are in `voice/dashboard-messages.md`,
+  `voice/marketplace-messages.md` and `voice/importquery-messages.md`; Auction's are in
+  `voice/auction-messages.md`. Each one says on its `@fits:` line when it is offered. Edit the
+  wording, or add a message of your own: it takes effect on the next message. (The owner, 17 Oct
+  2026: "I want that in every section ... the others should have their relevant dropdown options.
+  I still should be able to prompt and the dropdown should be edited according to that.")
 - **Prompt**, before a suggestion exists. When nothing has been written yet, the box shows two
   buttons: **Prompt** and **Write it now**. If you already know what the reply should say,
   press **Prompt**, type it in one line, for example `we have none of that model, we can source
@@ -946,7 +966,13 @@ It lists the auction customers who have no order yet too: every lead on the dash
 Imports list, and any conversation you moved here. Their rows say where the enquiry has got to
 (Enquiry: asking for details · ready to search · car offered · compliance only), and they are
 answered the import way: what they are looking for is asked first, then the Japan auctions are
-searched and the best car is offered. **One row per customer:** once a customer has an order
+searched and the best car is offered. They have the same **Which message?** list as an order,
+with the messages that fit before there is one: Thanks, with estimate and deposit · Car found,
+full or short · Cars coming up · Still searching · Deposit reminder. The one that suits where the
+enquiry has got to is marked "due now"; the first choice is the reply to what they wrote. Each is
+written from your wording with what the enquiry says (the car, years, kilometres, budget), the
+deposit amount a blank since there is no order yet, and fitted to the customer as an order's is.
+**One row per customer:** once a customer has an order
 under way, the order stands for them and the conversation it reads (the one on the order's
 number, else its lead's) is no longer a row of its own. A text or website enquiry from them
 since the order opened (within the last week) puts the order in To do as a reply to what they
@@ -989,8 +1015,9 @@ to ask, it is word for word too, and while you leave it unchanged it is fitted o
 there is always a message. Nothing the AI is not shown in the first request (an amount, a name)
 reaches it in a second one either. Each kind of message keeps its own
 suggestion, so going back to one already written asks nothing. What you type into **Add what you
-know** is put into the same fitting with no new request, as long as the wording around it stays
-the same. `AUCTION_FIT=0` in the `.env` file writes every message word for word with no AI, and
+know** fills in the facts it names and goes to the AI as what to change, the way a Prompt does
+elsewhere, its figures only as markers; written again with the same words and the same wording around them (Refresh
+figures), the fitting is reused with no new request. `AUCTION_FIT=0` in the `.env` file writes every message word for word with no AI, and
 `AUCTION_FIT_BACKGROUND=0` fits only the messages you pick or write on the page.
 
 | Message | Due when | Blank for a person |
@@ -1029,6 +1056,7 @@ the same. `AUCTION_FIT=0` in the `.env` file writes every message word for word 
 - **Add what you know** takes the place of Rewrite. Type `we bid 1.2m, sold for 1.31m`,
   `ETA 14 Nov, ship Hoegh Trader`, `stock T91, purchase 2.38m, landed 35900`, `bid 280000`
   or a live-auction link, and the blanks are filled in. Only what is plainly said is used.
+  It also goes to the AI as what to change, so `say we will try again next week` works too.
 - **Refresh figures** reads the live auction again for a message that quotes it.
 - **Copy** counts as done: Wheelman cannot see WhatsApp, so the copied message is shown in
   the conversation and the order leaves To do. **Put back in To do** undoes that when it was
@@ -1255,6 +1283,7 @@ Wheelman only states facts it has been given.
 | Cars in the coming Japan auctions, what similar cars sold for, and what one would cost landed | The website's live auction | Read at the moment an offer is written, and hourly for orders still searching |
 | Auction orders: the stage, what was asked for, the car, what is charged and paid | The dashboard | Read every few minutes |
 | The wording of messages to auction customers | `voice/auction-messages.md`, `voice/auction-offer.md` | You edit them |
+| The messages under **Which message?** in the other sections, and when each fits | `voice/dashboard-messages.md`, `voice/marketplace-messages.md`, `voice/importquery-messages.md` | You edit them |
 | Texts that reached the business phone but not the dashboard | The phone add-on, reading Google Messages for web in your browser | Every 30 seconds while the browser is open |
 | Import enquiries that came by email | The Send to Wheelman button in Gmail, pressed by you on an open email | When you press it |
 | Which models can be imported, and what they land for | The website's own list of import-eligible models, kept in `data\eligible-models.json` | Once a day, and when an email is researched |
@@ -1619,6 +1648,7 @@ computer. Git never sees any of it.
 | An import customer gets the asking reply although they told us what they want | What they want was said on the phone, not in writing | Press **Rewrite** and type it, for example "2015 or newer, under 100,000 km, budget 12k", or paste a live-auction link |
 | An auction message says "The wording for ... is missing" | A part was deleted or renamed in `voice/auction-messages.md` | Put the line `===== name =====` back as it was |
 | A word in curly brackets, such as `{due}`, is marked red in an auction message | A slip in the wording file: Wheelman does not know that word | Check the spelling against the list at the top of the file |
+| **Which message?** does not offer a message you expected | Its `@fits:` line does not name what this conversation shows, or its `@not:` line rules it out | Edit those lines in the section's `voice/*-messages.md` file; the list at the top of the file says what each word means |
 | An order shows no message although one should be due | The step happened more than a week ago, or the message was copied or dismissed | Pick it under **Which message?**, or press **Put back in To do** |
 | A note says "No ... is in the website's coming auctions right now" and the car is blanks | The website lists none of that model in the next few auction days | Fill the blanks in, or type the car into **Add what you know**. The auction is looked at again within the hour |
 | An order cannot be found in the Auction section | It is on another list: one with nothing due is under **In progress** | Type the name, car or order number into the search box. It looks through all three lists |
@@ -1752,6 +1782,9 @@ wheelman/
 │   ├── import-ask.md                  the first reply to an import or auction enquiry; edit freely
 │   ├── auction-offer.md               the layout of an auction offer; edit freely
 │   ├── auction-messages.md            every message to an auction customer, stage by stage; edit freely
+│   ├── dashboard-messages.md          "Which message?" for texts: price question, trade-in, inspection ...; edit freely
+│   ├── marketplace-messages.md        "Which message?" for Facebook chats, in the chat format; edit freely
+│   ├── importquery-messages.md        "Which message?" for import emails, with the website's figures; edit freely
 │   ├── people.example.json            whose writing sets the voice (invented names; the real file is local)
 │   └── exclusions.json                templates and conversations kept out of the example bank
 ├── src/
@@ -1764,6 +1797,9 @@ wheelman/
 │   ├── imports.js                     import enquiries: what they want, which auction car, the bid, the offer
 │   ├── orders.js                      auction orders: the stage in plain words, which message is due
 │   ├── ordermessages.js               the messages for an order, from the wording file; replies to pasted messages
+│   ├── sectiontemplates.js            "Which message?" in Dashboard, Marketplace and Import Query: which fit, filled in
+│   ├── templatedraft.js               writes a picked template, fitted by the AI, under its own name
+│   ├── fitter.js                      hides every fact from the AI while it fits a template, and puts them back
 │   ├── templates.js                   reads the wording files and fills them in
 │   ├── phone.js                       the phone add-on's reports: checked, kept, matched by number
 │   ├── mail.js                        email threads from the Gmail button: checked, kept, merged

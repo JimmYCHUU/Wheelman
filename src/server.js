@@ -7,7 +7,8 @@ import { config } from './config.js';
 import { listItems, itemFromKey, orderRows } from './items.js';
 import { latestDraft, getDraft, dismiss, undismiss, isDismissed, setDraftRating, markSeen, isSeen, dataStamp, uncopy, addOrderMessage, removeOrderMessage, setItemRuling, clearItemRuling, setItemMove, clearItemMove } from './db.js';
 import { MESSAGES, messagesFor, wantedText, carTitle, lotName, lotPageUrl, cleanPaste } from './orders.js';
-import { draftOrderMessage } from './ordermessages.js';
+import { draftOrderMessage, enquiryTemplates, enquiryOrder } from './ordermessages.js';
+import { templatesFor, hasSectionTemplate, draftSectionTemplate, sectionTemplateLabel } from './sectiontemplates.js';
 import { draftFor, writingNow } from './drafter.js';
 import { availability } from './normalize.js';
 import { firstNameOf, isPlaceholderName } from './redact.js';
@@ -123,7 +124,8 @@ const LIST_LIMIT = 1000;
 const LIST_PAGE = 20; // rows the list opens with; "Load older conversations" adds this many each time
 
 // An auction order's message is kept under its kind: each kind its own (a reply to what they wrote has none).
-const templateOf = (item) => (item.order ? item.message || '' : undefined);
+// Any other conversation: the template picked, '' for the reply to what they wrote; none picked, the newest.
+const templateOf = (item) => (item.order ? item.message || '' : item.templatePick);
 
 function draftOf(item) {
   const draft = latestDraft(item.itemKey, item.anchorKey, templateOf(item));
@@ -303,6 +305,8 @@ function presentOrder(item) {
     firstName: firstNameOf(item.lead), source: 'Auction order', leadStatus: '', location: '', email: item.lead.email || '',
     noLead: false, autoDraft: false, autoReason: '', firstReply: item.isFirstReply, looking: null, vehicle: null,
     order: orderOf(item),
+    // Its messages are in order.messages, gated by where the order stands.
+    templates: [],
     thread: threadOf(item, shown),
     earlier: item.timeline.length - shown.length,
     draft: draftOf(item),
@@ -310,11 +314,24 @@ function presentOrder(item) {
   };
 }
 
+/**
+ * "Which message?" for a conversation that is not an auction order: the templates that fit it, and
+ * the one in the box even when it no longer fits (picked before the customer wrote again, or the
+ * car sold since), so the list always says what the box holds.
+ */
+function offeredTemplates(item, shown) {
+  const list = item.section === 'auction' ? enquiryTemplates(item) : templatesFor(item);
+  if (!shown || item.state === 'optout' || list.some((t) => t.id === shown)) return list;
+  const label = item.section === 'auction' ? MESSAGES[shown] : sectionTemplateLabel(item, shown);
+  return label ? [...list, { id: shown, label, best: false }] : list;
+}
+
 /** Everything needed to show one open conversation. */
 function present(item) {
   if (item.order) return presentOrder(item);
   const v = item.vehicles[0];
   const shown = item.timeline.slice(-THREAD_LIMIT);
+  const draft = draftOf(item);
   return {
     ...summary(item),
     note: item.note,
@@ -344,13 +361,16 @@ function present(item) {
     moved: item.section !== item.home ? item.section : null,
     moves: movesFor(item),
     canMove: movesFor(item).includes('importquery'),
+    // "Which message?": the templates that fit this conversation, and the one in the box ('' the reply to what they wrote).
+    templates: offeredTemplates(item, item.templatePick ?? (draft?.template || '')),
+    template: item.templatePick ?? (draft?.template || ''),
     // Why it is listed where it is, when it is not where it came in: 'moved' (the owner), 'imports'
     // (the dashboard's Imports list), 'order' (an auction order under way), or ''.
     listed: item.move ? 'moved' : item.section === 'auction' && item.home === 'auction' ? (onImportsList(item) ? 'imports' : 'order') : '',
     vehicle: v ? { title: v.title, stockNo: v.stockNo, price: v.price, odometer: v.odometer, availability: shownAvailability(item, v), url: v.url, year: v.year, fuel: v.fuel, transmission: v.transmission, seats: v.seats, colour: v.color, included: v.outline || [] } : null,
     thread: threadOf(item, shown),
     earlier: item.timeline.length - shown.length,
-    draft: draftOf(item),
+    draft,
     // A suggestion is being written for this message right now, by the page or in the background.
     writing: writingNow(item.itemKey, item.anchorKey),
   };
@@ -633,7 +653,8 @@ async function api(req, res, url) {
   // For an auction order, `message` is the kind of message picked from the "Which message?" list.
   let m = p.match(itemRoute());
   if (req.method === 'GET' && m) {
-    const item = itemFromKey(m[1], { message: url.searchParams.get('message') || '' });
+    const asked = url.searchParams.has('message') ? url.searchParams.get('message') : undefined;
+    const item = itemFromKey(m[1], { message: m[1].startsWith('ao:') ? asked || '' : asked });
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
     return send(res, 200, { item: present(item) });
   }
@@ -699,9 +720,15 @@ async function api(req, res, url) {
     worker.releaseItem(item.itemKey);
     let draft;
     if (item.order && !(item.orderStatus.kind === 'reply' && !picked.message)) {
-      // A message to an auction customer is written from its template. No AI is asked.
+      // A message to an auction customer is written from its template, fitted to them when the settings say so.
       if (!item.message) return send(res, 400, { error: 'Choose which message to write first.' });
       draft = await draftOrderMessage(item, { type: item.message, facts: instruction, fitWith: config.auction.fit ? draftFor : null });
+    } else if (picked.message && enquiryTemplates(item).some((t) => t.id === picked.message)) {
+      // An enquiry in Auction: the same messages, written from what the enquiry says.
+      draft = await draftOrderMessage(item, { type: picked.message, facts: instruction, order: enquiryOrder(item), fitWith: config.auction.fit ? draftFor : null });
+    } else if (picked.message && hasSectionTemplate(item, picked.message)) {
+      // Any other section: the owner's template, fitted to this customer, changed as the Prompt says.
+      draft = await draftSectionTemplate(item, { id: picked.message, instruction, fitWith: draftFor });
     } else {
       draft = await draftFor(item, { instruction });
     }

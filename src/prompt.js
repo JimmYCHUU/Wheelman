@@ -771,6 +771,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   if (instruction) {
     P.push('\n=== INSTRUCTION FROM OUR STAFF FOR THIS DRAFT ===');
     P.push(redact(instruction, lead).slice(0, 600));
+    if (importPlan?.stage === 'template') P.push('Its figures and links are markers too, such as {{K9}}: the message may already have what they stand for. Put one in only where the message needs it, written exactly as shown.');
     // What code still adds under the text, so the AI writes the rest itself.
     const under = importPlan || email ? ''
       : `${inspection.block ? ' This time our price reply is not added under your text; the invitation to inspect is, as INSPECTION says.' : ' This time our price reply and the invitation to inspect are not added under your text: if the reply needs what they say, write it yourself from VEHICLE FACTS and BUSINESS FACTS, with the booking link from INSPECTION when you invite them.'}${standard.on ? ' The standard first-reply block is still added under your text.' : ''}`;
