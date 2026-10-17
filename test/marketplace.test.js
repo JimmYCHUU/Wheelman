@@ -191,18 +191,35 @@ test('the buyer\'s name and number never reach the AI service, and the reply is 
   assert.ok(!d.checks.some((c) => c.level === 'fail'), JSON.stringify(d.checks));
 });
 
-test('a Marketplace reply is courteous: it opens with a thank-you, has room for it, and never runs down an offer', async () => {
+test('a Marketplace reply is warm and sells: a thank-you, the car\'s strongest points, the value included, an easy next step, and never runs down an offer', async () => {
   const { items } = await load();
   const { systemPrompt, buildPrompt } = await import('../src/prompt.js');
   const rules = systemPrompt('marketplace');
   assert.match(rules, /Open with a short thank-you/);
-  assert.match(rules, /up to sixty words/);
+  assert.match(rules, /Warm, confident and selling/);
+  assert.match(rules, /up to about ninety words/);
+  assert.match(rules, /two or three of its strongest points/);
+  assert.match(rules, /ready to drive away/);
+  assert.match(rules, /an easy next step with a reason/);
   assert.match(rules, /No greeting line/, 'still no "Good morning" line');
   assert.match(rules, /Never tell a buyer that their offer is too low/);
   assert.match(rules, /Invite them to see the car once/);
-  assert.doesNotMatch(rules, /cut to the bone|forty-five|under 45 words/);
+  assert.doesNotMatch(rules, /cut to the bone|forty-five|under 45 words|up to sixty words|Courteous and short/);
   const asked = buildPrompt(items.itemFromKey('mp:501')).user;
-  assert.match(asked, /CHANNEL: Facebook Marketplace chat.*two to four short lines/);
+  assert.match(asked, /CHANNEL: Facebook Marketplace chat.*warm and selling/);
+});
+
+test('with a Prompt, a Marketplace reply keeps the greeting and the length it was asked for', async () => {
+  const { items, drafter } = await load();
+  const long = 'Hello {{NAME}},\n\nThank you for your message. Yes, the Noah is still available. ' + 'It is a comfortable family car with eight seats and two sliding doors, ready to drive away. '.repeat(5);
+  ai.script = [{ reply: long, needs_human: [], facts_used: [], hold: false }];
+  const d = await drafter.draftFor(items.itemFromKey('mp:501'), { instruction: 'Greet him by name and write a longer reply about why it suits a family', save: false });
+  assert.match(d.reply, /^Hello Liam,\n\nThank you for your message/, d.reply);
+  assert.ok(!d.checks.some((c) => c.code === 'long'), JSON.stringify(d.checks));
+  ai.script = [{ reply: long, needs_human: [], facts_used: [], hold: false }];
+  const plain = await drafter.draftFor(items.itemFromKey('mp:501'), { save: false });
+  assert.doesNotMatch(plain.reply, /^Hello/, 'without a Prompt there is no greeting line');
+  assert.ok(plain.checks.some((c) => c.code === 'long'), 'and the length band warns');
 });
 
 test('an SMS suggestion still gets its greeting and sign-off', async () => {
@@ -237,7 +254,7 @@ test('a long Marketplace reply is flagged, and a price difference with the Faceb
   chats.get(504).row.car.price = '$27,900';
   chats.get(504).row.last_message_at = iso(9);
   await sync.syncMarketplace();
-  ai.script = [{ reply: 'Yes it is available. ' + 'We are open every day and you are welcome to come and see it any time that suits you. '.repeat(4), needs_human: [], facts_used: [], hold: false }];
+  ai.script = [{ reply: 'Yes it is available. ' + 'We are open every day and you are welcome to come and see it any time that suits you. '.repeat(6), needs_human: [], facts_used: [], hold: false }];
   const d = await drafter.draftFor(items.itemFromKey('mp:504'), { save: false });
   assert.ok(d.checks.some((c) => c.code === 'long' && /Marketplace chat/.test(c.message)), JSON.stringify(d.checks));
   const note = d.checks.find((c) => c.code === 'listing-price');

@@ -222,6 +222,9 @@ test('"we will check and come back to you" is refused and written again; an unan
   const vague = checks.emailChecks({ body: 'Hi {{NAME}},\n\nI will confirm the exact deposit and update you shortly.', research });
   assert.equal(vague[0].code, 'vague-answer');
   assert.equal(vague[0].level, 'fail');
+  // With the owner's Prompt the section's rules step aside: the same line is pointed out, never forced out.
+  const prompted = checks.emailChecks({ body: 'Hi {{NAME}},\n\nI will confirm the exact deposit and update you shortly.', research, instructed: true });
+  assert.ok(prompted.length && prompted.every((c) => c.level !== 'fail'), JSON.stringify(prompted));
   const processOk = checks.emailChecks({ body: `Hi {{NAME}},\n\nThe GDH206 is approved for import, estimated at $57,781 landed. We will share the inspector's photos before any bid, and we lodge the VIA before shipping.\n\nModel details:\n${page('toyota-hiace-gdh206')}`, research });
   assert.deepEqual(processOk.map((c) => c.code), [], 'what the website promises about the process is ours to say');
   const withBlank = checks.emailChecks({ body: 'Hi {{NAME}},\n\nWhether the GDH206 can be imported in that year is [ELIGIBILITY?], and we will confirm the deposit once that is settled.', research });

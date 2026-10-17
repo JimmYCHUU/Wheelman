@@ -27,12 +27,16 @@ import { listOf } from '../web/lib/copy.js';
 const read = (name) => fs.readFileSync(path.join(config.voiceDir, name), 'utf8').replace(/\r/g, '').trim();
 
 const MARKETPLACE_RULES = `=== THIS CHANNEL: FACEBOOK MARKETPLACE CHAT ===
-The buyer is chatting with us on Facebook Marketplace, not by SMS. Where the VOICE section describes SMS greetings, length or layout, these rules replace it:
-- Courteous and short, in the register described under VOICE: two to four short lines, up to sixty words. No greeting line ("Good morning", "Hello") and no sign-off.
-- Open with a short thank-you that fits what they wrote, as the first sentence: "Thank you for your message, {{NAME}}." on our first reply in this chat (without the name when it is not known), and later "Thank you for your offer.", "Thank you for letting us know." or "Thank you for the photos." as fits. Otherwise leave the name out. Then answer what was asked, and offer one next step when THIS CUSTOMER'S NEXT STEP asks for one.
+The buyer is chatting with us on Facebook Marketplace, not by SMS, and is usually weighing several cars at once: a reply that only states a fact loses them. Where the VOICE section describes SMS greetings, length, layout or what to leave out, these rules replace it:
+- Warm, confident and selling, in correct English and in short lines: up to about ninety words. No greeting line ("Good morning", "Hello") and no sign-off.
+- Open with a short thank-you that fits what they wrote, as the first sentence: "Thank you for your message, {{NAME}}." on our first reply in this chat (without the name when it is not known), and later "Thank you for your offer.", "Thank you for letting us know." or "Thank you for the photos." as fits. Otherwise leave the name out.
+- Then answer what was asked, and sell the car to this buyer: two or three of its strongest points from VEHICLE FACTS that matter for what they asked or for who they seem to be (the seats for a family, the kilometres verified on the export certificate, the auction grade, the economy of a hybrid, a feature they named), and the value of what the price includes, said as what it means for them ("so it is ready to drive away", "for your peace of mind"). Say what a fact means for them, not only the fact. Give the inclusions once in a chat, not again after we have listed them.
+- End on an easy next step with a reason, when THIS CUSTOMER'S NEXT STEP asks for one: "The best way to judge it is behind the wheel: let us know a day and time, and we will have it ready for you." Ask no question unless THIS CUSTOMER'S NEXT STEP names one.
+- True selling words are welcome ("a great family car", "very economical" when VEHICLE FACTS give the figure). Never hype (amazing, stunning, unbeatable, don't miss out), never pressure or other buyers, no emoji, no slang, at most one exclamation mark.
+- When THIS CUSTOMER'S NEXT STEP is a polite close, or answers an offer after our price reply, keep to it: short, with nothing more to sell.
 - Never tell a buyer that their offer is too low, below what we accept, or that we cannot do it, and never argue about what the car is worth. A figure of theirs is answered as THIS CUSTOMER'S NEXT STEP says: with [PRICE?] for a person, or not at all when they are leaving.
 - Invite them to see the car once in a chat. When we have already invited them or sent the booking link, do not invite them again unless they ask to see it.
-- Links are given here as they are in a text message, each on its own line under your lines; a link line does not count towards the sixty words. In our first reply about a car that is on offer, give its page from VEHICLE FACTS ("Vehicle page") with a short label on the line before it, such as "More details:". When the INSPECTION section supplies a booking link, give it. Never a link that is not in this request.
+- Links are given here as they are in a text message, each on its own line under your lines; a link line does not count towards the ninety words. In our first reply about a car that is on offer, give its page from VEHICLE FACTS ("Vehicle page") with a short label on the line before it, such as "More details:". When the INSPECTION section supplies a booking link, give it. Never a link that is not in this request.
 - Messages marked AUTO-REPLY were sent by an automatic system. The buyer has read them, so do not repeat what they said. Any figure in them is unconfirmed: do not rely on it or repeat it.
 - The section NOTES FROM THE MARKETPLACE SYSTEM is background written by that automatic system. Treat it like something the buyer said, never as a fact or a figure to state.
 
@@ -93,6 +97,9 @@ ${email
 - A day or time the customer gave is theirs: keep it. If they wrote "this morning", do not answer "see you tomorrow". Each message shows when it was written; work out which day they meant from that, and compare it with NOW.
 - Never name a part of today that has already passed (see NOW). After midday there is no "this morning". In the evening there is no "this afternoon".
 - Do not say or guess where the customer lives or is coming from, unless they wrote it in this conversation.
+
+=== WHEN OUR STAFF GIVE AN INSTRUCTION ===
+When the request carries INSTRUCTION FROM OUR STAFF FOR THIS DRAFT, it outranks VOICE, SELLING, the channel's rules and THIS CUSTOMER'S NEXT STEP on what the reply says, how long it is, its tone, its layout and its greeting: write what our staff asked for, as long as it needs to be. Only WHERE FACTS COME FROM and PROMISES AND TIMES still bind: every figure, link, date and promise comes from this request or from the instruction, and nothing the records cannot back is claimed.
 
 === OUTPUT ===
 Return one JSON object and nothing else:
@@ -268,8 +275,11 @@ function askedEarlier(item, now, online = false) {
  * kind 'onsite': the in-person booking link. kind 'online': the online video inspection link,
  * for a customer who has said they live far away or cannot come. Returns the lines for the AI.
  * must: the reply is expected to carry the link (the customer asked now, or our staff asked for it).
+ * block: code adds the owner's invitation with the link under the AI's lines. prompted: the reply
+ * is written from the owner's Prompt, which decides what it says: the invitation is added only
+ * when the Prompt asks for the booking link, and otherwise the AI is given the link to use itself.
  */
-export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction = '', now = Date.now() } = {}) {
+export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction = '', prompted = false, now = Date.now() } = {}) {
   const none = { kind: null, url: '', urls: [], lines: [], must: false, block: false };
   if (item.deal) return none; // a buyer is not asking to inspect a car on offer
   const said = item.timeline.filter((e) => e.who === 'customer').slice(-8).map((e) => `${e.text || ''} ${e.event || ''}`).join('\n');
@@ -285,12 +295,14 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
   if (!asksNow && !staffAsked && !earlier && !visiting) return none;
   // Having asked to see the car, the customer now says they are far away: the online link is the answer.
   const farNow = earlier && saidFar && farAway(item.pendingText).far;
-  const must = asksNow || staffAsked || farNow;
+  // A Prompt decides what the reply says: the owner's invitation goes under it only when it asks for the link.
+  const byCode = !prompted || STAFF_WANTS_BOOKING.test(instruction);
+  const must = byCode && (asksNow || staffAsked || farNow);
   const why = asksNow ? 'The customer wants to see this vehicle.'
     : staffAsked ? 'Our staff asked, in their instruction for this draft, for the inspection booking link.'
-      : visiting ? 'The customer asked where we are or when we are open, which usually means they plan to visit. Answer their question first; the invitation to inspect, with the booking link, follows your text.'
+      : visiting ? `The customer asked where we are or when we are open, which usually means they plan to visit. Answer their question first${byCode ? '; the invitation to inspect, with the booking link, follows your text' : ''}.`
       : saidFar ? 'Earlier in this conversation the customer asked to see this vehicle.'
-        : 'Earlier in this conversation the customer asked to see this vehicle, and we have not sent them the booking link yet. The invitation with the link is added under your text.';
+        : `Earlier in this conversation the customer asked to see this vehicle, and we have not sent them the booking link yet.${byCode ? ' The invitation with the link is added under your text.' : ''}`;
   // On a brand-new dashboard enquiry the standard block follows the reply, so the address is not
   // typed again. On Marketplace there is no block, but the invitation is still added under the lines.
   const chat = item.channel === 'marketplace';
@@ -311,20 +323,23 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
   }
   const links = inspectionLinks(vehicle);
   // The invitation is always open and in the owner's words: code adds it under the AI's lines.
-  const added = '- The invitation and the booking link are added under your text automatically, in our own words: do not write the link, a day, a time or a slot, and do not point to them.';
+  // Under a Prompt that did not ask for it, the AI has the link to give itself if it invites them.
+  const added = (url) => (byCode
+    ? '- The invitation and the booking link are added under your text automatically, in our own words: do not write the link, a day, a time or a slot, and do not point to them.'
+    : `- This time no invitation is added under your text. If you invite them, give the booking link yourself on its own line, under a short label such as "You can book an inspection here:": ${url}`);
   if (saidFar) {
-    return { kind: 'online', url: links.online, urls: [links.online], must, block: true, lines: [
+    return { kind: 'online', url: links.online, urls: [links.online], must, block: byCode, lines: [
       `${why} They have said they are far from Sydney, or cannot come.`,
       '- Offer an online video inspection: a live video call on WhatsApp or FaceTime where we walk around the vehicle with them.',
-      added,
+      added(links.online),
       '- Do not ask them to come to Lidcombe, and do not give the in-person booking link.',
       '- If it helps, add that we deliver Australia-wide. A delivery price is quoted by a person.',
     ] };
   }
-  return { kind: 'onsite', url: links.onsite, urls: [links.onsite, links.online], must, block: true, lines: [
+  return { kind: 'onsite', url: links.onsite, urls: [links.onsite, links.online], must, block: byCode, lines: [
     why,
     `- Tell them they are welcome to inspect it at ${config.site.showroom}.`,
-    added,
+    added(links.onsite),
     '- If they have already named a day and a time inside our opening hours, confirm it in a line ("See you ..."); the invitation is then left out. If they named only a day, say that day is fine.',
     blockFollows ? '- Our address and opening hours follow your text automatically (see STANDARD FIRST REPLY). Do not write them.' : '',
     where.source === 'record'
@@ -500,7 +515,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     P.push(`RETURNING CUSTOMER: our records show they bought ${redact(item.pastBuyer.title, lead)} from us${item.pastBuyer.soldAt ? ` (sale recorded ${formatDay(sydneyDay(item.pastBuyer.soldAt))})` : ''}. Answer what they are asking now.`);
   }
   if (chat) {
-    P.push(`CHANNEL: Facebook Marketplace chat${mp.listingTitle ? `, about our listing "${redact(mp.listingTitle, lead)}"` : ''}. Keep it to two to four short lines, opening with a short thank-you.`);
+    P.push(`CHANNEL: Facebook Marketplace chat${mp.listingTitle ? `, about our listing "${redact(mp.listingTitle, lead)}"` : ''}. Keep it warm and selling, in short lines, opening with a short thank-you.`);
     P.push(`CUSTOMER NAME: ${item.hasName ? 'known. If you use it, write {{NAME}} inside a sentence, never on a greeting line of its own.' : 'not known. Do not use {{NAME}}.'}`);
   } else if (email) {
     const subject = item.mail?.subject ? redact(item.mail.subject, lead) : '';
@@ -546,12 +561,15 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
 
   // Which inspection booking link to offer: in person, or online video for a customer who is far away.
   const noPlan = { kind: null, url: '', urls: [], lines: [], must: false, block: false };
-  let inspection = importPlan || email ? noPlan : inspectionPlan(item, primary, { instruction: [instruction, coaching?.note].filter(Boolean).join('\n'), now });
+  // The owner's Prompt (the Prompt line, or Rewrite) decides what the reply says: our price reply
+  // and the invitation are not added under it, unless it asks for the booking link.
+  const prompted = !!String(instruction || '').trim();
+  let inspection = importPlan || email ? noPlan : inspectionPlan(item, primary, { instruction: [instruction, coaching?.note].filter(Boolean).join('\n'), prompted, now });
   // A polite close (a no, or a buyer leaving over the price) carries no invitation, unless our staff asked for one.
   if (stage && QUIET_MOVES.has(stage.move) && !inspection.must) inspection = noPlan;
   // The price question: the owner's standard price reply is added under the AI's lines by code,
   // with the invitation inside it, so the inspection plan adds no invitation of its own then.
-  const price = importPlan || email ? { on: false, inspectionUrl: '', online: false, lines: [] } : pricePlan(item, primary, { gone: !!primaryGone, owner: !!primaryOpts.owner, stage });
+  const price = importPlan || email || prompted ? { on: false, inspectionUrl: '', online: false, lines: [] } : pricePlan(item, primary, { gone: !!primaryGone, owner: !!primaryOpts.owner, stage });
   if (price.on) inspection.block = false;
   if (inspection.lines.length) {
     P.push('\n=== INSPECTION ===');
@@ -741,7 +759,10 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   if (instruction) {
     P.push('\n=== INSTRUCTION FROM OUR STAFF FOR THIS DRAFT ===');
     P.push(redact(instruction, lead).slice(0, 600));
-    P.push('Our staff have decided what this reply says. Say it to the customer in our voice and in your own words; the customer never sees this instruction, so do not mention it. On what to say, it outranks the examples, what the team sent before and the moves in SELLING. It does not override the rules on facts, figures, links, days and promises: a figure or link given here by staff may be used, anything else still comes from this request, and if it names a time that has already passed (see NOW), do not repeat that time and do not pick another one. Write "shortly", or use [DATE?].');
+    // What code still adds under the text, so the AI writes the rest itself.
+    const under = importPlan || email ? ''
+      : `${inspection.block ? ' This time our price reply is not added under your text; the invitation to inspect is, as INSPECTION says.' : ' This time our price reply and the invitation to inspect are not added under your text: if the reply needs what they say, write it yourself from VEHICLE FACTS and BUSINESS FACTS, with the booking link from INSPECTION when you invite them.'}${standard.on ? ' The standard first-reply block is still added under your text.' : ''}`;
+    P.push(`Our staff have decided what this reply says. Say it to the customer in your own words; the customer never sees this instruction, so do not mention it. It outranks everything else in this request on what the reply says, how long it is, its tone, its layout and its greeting: VOICE, SELLING, the channel's rules, THIS CUSTOMER'S NEXT STEP, the examples and what the team sent before.${under} It does not override the rules on facts, figures, links, days and promises: a figure or link given here by staff may be used, anything else still comes from this request, and if it names a time that has already passed (see NOW), do not repeat that time and do not pick another one. Write "shortly", or use [DATE?].`);
   }
 
   P.push(`\nWrite the reply now as the JSON object described.${owner.lessons.length ? ' Before you answer, check it against each of the owner\'s lessons above.' : ''}`);

@@ -138,8 +138,11 @@ function coachingCopied(body, note) {
 /**
  * Turns what the model answered (or a reply written by hand) into the finished suggestion and
  * runs every check on it. plan: an import or auction-order plan, when there is one.
+ * instructed: written from the owner's Prompt (or Rewrite). The section's own rules on length,
+ * tone, layout and greeting step aside: the reply is not trimmed to them and they are not
+ * checked. The facts are checked as always.
  */
-export function assessReply(item, prompt, json, { plan = null, chat = false, email = false, research = null, again = false, staffSaid = '', allowed, said, coaching = null, now = Date.now() }) {
+export function assessReply(item, prompt, json, { plan = null, chat = false, email = false, research = null, again = false, staffSaid = '', instructed = false, allowed, said, coaching = null, now = Date.now() }) {
   // A brand-new enquiry gets the team's standard block in place of the sign-off. A holding
   // reply (a complaint, say) does not.
   const { vehicleUrl, inspectionUrl } = prompt.standard;
@@ -165,15 +168,18 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   const links = asked ? asked.links.filter((l) => !text.includes(l.url)).map((l) => `${l.label}: ${l.url}`).join('\n') : '';
   const extras = [links, owned].filter(Boolean).join('\n\n');
   // An offer opens the way the team writes it: the greeting, a blank line, then one short paragraph.
-  if (offer) text = text.trim().replace(/^([^\n]{1,40},)\n+/, (m, hi) => `${hi}\n\n`).replace(/([^\n])\n(?!\n)/g, (m, c) => `${c} `);
+  if (offer && !instructed) text = text.trim().replace(/^([^\n]{1,40},)\n+/, (m, hi) => `${hi}\n\n`).replace(/([^\n])\n(?!\n)/g, (m, c) => `${c} `);
   let body = fixGreeting(stripModelSignOff(text), sydneyHour(now));
-  if (chat) body = chatStyle(body);
-  else if (again && !offer) body = dropGreeting(body);
+  // The Marketplace chat style and the once-a-day greeting are the section's rules: a Prompt keeps
+  // the greeting and the layout it asked for.
+  const chatStyled = chat && !instructed;
+  if (chatStyled) body = chatStyle(body);
+  else if (again && !offer && !instructed) body = dropGreeting(body);
   // Marketplace suggestions carry no sign-off: it is a chat, not a text message. An import
   // reply keeps its closing lines even when we have already written today.
   const signOff = chat ? '' : plan && block ? block : again ? '' : block || config.signOff;
   // The price reply or the invitation sits under the AI's lines, before the standard block or the sign-off.
-  const reply = finishReply(extras ? `${text.trim()}\n\n${extras}` : text, item.lead, { now, signOff, chat, greeting: offer || !again });
+  const reply = finishReply(extras ? `${text.trim()}\n\n${extras}` : text, item.lead, { now, signOff, chat: chatStyled, greeting: offer || !again || instructed });
   let checks = checkDraft({
     channel: item.channel,
     reply, body,
@@ -185,12 +191,16 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
     allowedText: allowed.trusted, policyText: allowed.policy, customerText: allowed.customer,
     instruction: staffSaid, situation: item.situation, hold: !!json.hold,
     examples: prompt.exampleReplies, inConversation: !item.isFirstReply,
-    said, stage: prompt.stage, nextStep: String(json.next_step || ''), now,
+    said, stage: prompt.stage, nextStep: String(json.next_step || ''), now, instructed,
   });
-  const repeat = offer
-    ? (/[$¥]\s?\d|https?:\/\//.test(body) ? { level: 'fail', code: 'block-repeat', tokens: [], message: 'The opening states a figure or a link. The block below it gives the car, the bid, the costs and the link: write only the greeting and why the car may suit.' } : null)
-    : block || owned ? blockCheck(body, vehicleUrl, inspectionUrl || prompt.inspection?.url || prompt.price?.inspectionUrl || '', { askedWhere: !plan && item.situation.all.includes('location_hours'), address: !!block, price: !!price, invite: !!invite })
-      : links ? pointerCheck(body) : null;
+  // What the block already says is not repeated above it, unless the Prompt asked for it. Pointing
+  // at a block ("below") is never an answer.
+  const repeat = instructed
+    ? (block || owned || links ? pointerCheck(body) : null)
+    : offer
+      ? (/[$¥]\s?\d|https?:\/\//.test(body) ? { level: 'fail', code: 'block-repeat', tokens: [], message: 'The opening states a figure or a link. The block below it gives the car, the bid, the costs and the link: write only the greeting and why the car may suit.' } : null)
+      : block || owned ? blockCheck(body, vehicleUrl, inspectionUrl || prompt.inspection?.url || prompt.price?.inspectionUrl || '', { askedWhere: !plan && item.situation.all.includes('location_hours'), address: !!block, price: !!price, invite: !!invite })
+        : links ? pointerCheck(body) : null;
   if (offer) {
     checks = [...checks.filter((c) => c.level !== 'ok'),
       // Left out of the offer once a deposit is paid, so there is nothing to paste then.
@@ -212,7 +222,7 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   const listing = chat ? listingPriceCheck(item) : null;
   if (listing) checks = [...checks.filter((c) => c.level !== 'ok'), listing];
   // An import email: the exact answer or a blank, never a holding line, and every model asked about answered.
-  const mail = email ? emailChecks({ body, research, hold: !!json.hold }) : [];
+  const mail = email ? emailChecks({ body, research, hold: !!json.hold, instructed }) : [];
   if (mail.length) checks = [...checks.filter((c) => c.level !== 'ok'), ...mail];
   const visit = inspectionCheck(prompt.inspection, body, [block, extras].filter(Boolean).join('\n'));
   if (visit) checks = [...checks.filter((c) => c.level !== 'ok'), visit];
@@ -346,7 +356,8 @@ async function writeDraft(item, { instruction = '', coaching = null, save = true
     // ours to promise, and an auction date in the research is a known day.
     if (email && prompt.researchText) said.push({ who: 'us', text: prompt.researchText, at: now });
 
-    const assess = (json) => assessReply(item, prompt, json, { plan, chat, email, research, again, staffSaid, allowed, said, coaching, now });
+    // The Prompt line and Rewrite: the owner's words come first. A Could be better note is a lesson, not a Prompt.
+    const assess = (json) => assessReply(item, prompt, json, { plan, chat, email, research, again, staffSaid, instructed: !!String(instruction || '').trim(), allowed, said, coaching, now });
     const failures = (checks) => checks.filter((c) => c.level === 'fail').length;
 
     // An offer does not depend on the AI: its figures come from the auction. If no model can
