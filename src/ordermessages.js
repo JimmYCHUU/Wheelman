@@ -436,7 +436,9 @@ export const ENQUIRY_MESSAGES = ['first_estimate', 'lot_offer', 'lot_short', 'lo
  * anything else: an order has its own list, and the other sections get theirs with their templates.
  */
 export function enquiryTemplates(item) {
-  if (item.order || item.section !== 'auction' || !item.imports || item.channel !== 'sms') return [];
+  // Any conversation listed in Auction with no order yet: a text, an email or a Facebook chat moved
+  // there. Nothing for a customer who asked not to be contacted.
+  if (item.order || item.section !== 'auction' || item.state === 'optout') return [];
   const due = { enquiry_ready: 'lot_offer', enquiry_offered: 'search_update' }[enquiryStage(item).code] || '';
   return ENQUIRY_MESSAGES.map((id) => ({ id, label: MESSAGES[id], due: id === due }));
 }

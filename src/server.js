@@ -8,7 +8,7 @@ import { listItems, itemFromKey, orderRows } from './items.js';
 import { latestDraft, getDraft, dismiss, undismiss, isDismissed, setDraftRating, markSeen, isSeen, dataStamp, uncopy, addOrderMessage, removeOrderMessage, setItemRuling, clearItemRuling, setItemMove, clearItemMove } from './db.js';
 import { MESSAGES, messagesFor, wantedText, carTitle, lotName, lotPageUrl, cleanPaste } from './orders.js';
 import { draftOrderMessage, enquiryTemplates, enquiryOrder } from './ordermessages.js';
-import { templatesFor, hasSectionTemplate, draftSectionTemplate } from './sectiontemplates.js';
+import { templatesFor, hasSectionTemplate, draftSectionTemplate, sectionTemplateLabel } from './sectiontemplates.js';
 import { draftFor, writingNow } from './drafter.js';
 import { availability } from './normalize.js';
 import { firstNameOf, isPlaceholderName } from './redact.js';
@@ -314,6 +314,18 @@ function presentOrder(item) {
   };
 }
 
+/**
+ * "Which message?" for a conversation that is not an auction order: the templates that fit it, and
+ * the one in the box even when it no longer fits (picked before the customer wrote again, or the
+ * car sold since), so the list always says what the box holds.
+ */
+function offeredTemplates(item, shown) {
+  const list = item.section === 'auction' ? enquiryTemplates(item) : templatesFor(item);
+  if (!shown || item.state === 'optout' || list.some((t) => t.id === shown)) return list;
+  const label = item.section === 'auction' ? MESSAGES[shown] : sectionTemplateLabel(item, shown);
+  return label ? [...list, { id: shown, label, best: false }] : list;
+}
+
 /** Everything needed to show one open conversation. */
 function present(item) {
   if (item.order) return presentOrder(item);
@@ -350,7 +362,7 @@ function present(item) {
     moves: movesFor(item),
     canMove: movesFor(item).includes('importquery'),
     // "Which message?": the templates that fit this conversation, and the one in the box ('' the reply to what they wrote).
-    templates: item.section === 'auction' ? enquiryTemplates(item) : templatesFor(item),
+    templates: offeredTemplates(item, item.templatePick ?? (draft?.template || '')),
     template: item.templatePick ?? (draft?.template || ''),
     // Why it is listed where it is, when it is not where it came in: 'moved' (the owner), 'imports'
     // (the dashboard's Imports list), 'order' (an auction order under way), or ''.

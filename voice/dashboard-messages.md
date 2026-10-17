@@ -33,10 +33,13 @@
 #   {invitation}         your invitation to inspect with the booking link (voice/inspection-invite.md);
 #                        the online video link when they said they are far away
 #   {first_reply_block}  your standard first-reply block (voice/first-reply.md)
-#   {address_block}      the address, hours and phone, as in that block
+#   {address_block}      the address, hours and phone, as in that block; its closing "Team Carbarn"
+#                        line only on the first message of the day
 #   {stock_link} {finance_link} {warranty_link} {importing_link}   our website's pages
 #   {if_warranty}        keeps its paragraph only when the car includes the 5-year warranty
 #   {if_no_warranty}     keeps its paragraph only when it does not
+#   {if_word}            for any fact above: keeps its paragraph only when that fact applies, such
+#                        as {if_car_link} for a heading over the car's link
 #   [CAPITALS?]          a blank only you can fill in; the page highlights it
 #
 # The AI fits the message to the customer and what they last wrote. Every fact, link, figure and
@@ -49,14 +52,16 @@
 @not: buyer, car sold
 {greeting}
 
-Thank you for your enquiry about the {car}. It is {where}.
+Thank you for your enquiry about the {car}.
+
+It is {where}.
 
 {first_reply_block}
 
 ===== still_available =====
 @label: Still available
 @fits: availability, vehicle_details, general
-@needs: car
+@needs: car available
 @not: car sold, buyer
 {greeting}
 
@@ -64,7 +69,7 @@ Yes, the {car} is still available. It is {where}, with {km} on the odometer.
 
 {if_inclusions}The price of {price} includes {inclusions}.
 
-Vehicle details:
+{if_car_link}Vehicle details:
 {car_link}
 
 {invitation}
@@ -148,10 +153,10 @@ As you are not close to Sydney, we can show you the {car} on a live video call, 
 
 The {car} is {where}, so it cannot be inspected or test driven yet.
 
-You can see its photos and details here:
+{if_car_link}You can see its photos and details here:
 {car_link}
 
-We will let you know as soon as it arrives at our Lidcombe showroom.
+We will let you know as soon as it is ready to see at our Lidcombe showroom.
 
 {sign_off}
 
@@ -207,12 +212,12 @@ Yes, we deliver Australia-wide by car carrier, to your door or to a depot. Deliv
 @label: History and kilometres
 @fits: history_kms, vehicle_details
 @needs: car
-@not: buyer
+@not: car sold, buyer
 {greeting}
 
 The {car} was imported from Japan. Its Japanese export certificate records the odometer history with dates, which is how the kilometres are verified, and we can share it with the auction sheet.
 
-Vehicle details:
+{if_car_link}Vehicle details:
 {car_link}
 
 {sign_off}
@@ -221,7 +226,7 @@ Vehicle details:
 @label: Registration and roadworthy
 @fits: rego_roadworthy
 @needs: car
-@not: buyer
+@not: car sold, buyer
 {greeting}
 
 {if_inclusions}The {car} comes with {inclusions}.
@@ -233,7 +238,8 @@ It is registered in our dealership's name first, and you transfer it into yours 
 ===== warranty =====
 @label: Warranty
 @fits: warranty
-@not: buyer
+@needs: car
+@not: car sold, buyer
 {greeting}
 
 {if_warranty}Yes, the {car} comes with a 5-year extended warranty by Integrity Car Care, valid Australia-wide. It covers mechanical and electrical parts and the hybrid battery, with 1 year of roadside assistance.
@@ -252,7 +258,7 @@ Full details:
 @not: car sold, buyer
 {greeting}
 
-You can see all the photos and videos of the {car} on its page:
+{if_car_link}You can see all the photos and videos of the {car} on its page:
 {car_link}
 
 We are also happy to show it to you on a live video call.
@@ -265,7 +271,7 @@ We are also happy to show it to you on a live video call.
 @not: buyer
 {greeting}
 
-We are at our Lidcombe showroom, open 7 days from 8 AM to 5 PM.
+You are very welcome to visit us at our Lidcombe showroom.
 
 {address_block}
 

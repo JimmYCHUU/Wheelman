@@ -185,7 +185,24 @@ Calls made in step 3, for the owner to check:
     because what a buyer needs is in the conversation, not a template. More can be added in the
     files.
 16. Picking an Import Query message looks the model up on the website (counted against the
-    day's allowance of website requests), as writing a reply does.
+    day's allowance of website requests), as writing a reply does. No model found, the answer is
+    still written, with [MODEL?], [BUILD YEARS?], [LANDED COST?] and [DEPOSIT?] to fill in.
+17. What the owner types for a template (Prompt, Rewrite, Add what you know) goes to the AI with
+    every figure, link and amount as a marker (`maskInstruction`): a fact of the message it
+    repeats is that fact's marker, anything else a marker of its own that the AI may use or
+    leave out. So an auction order's amounts, and our costs typed there, never reach the AI.
+18. The car's records (VEHICLE FACTS, and an email's research) still go to the AI with a
+    template, as with any reply, so it can answer what else the customer asked; a figure it
+    writes itself is checked against the records. The facts in the message are the markers.
+19. The list follows the section, not where the conversation came from: Dashboard, Marketplace
+    and Import Query each have their file; any conversation in Auction with no order gets the
+    enquiry messages. The format (greeting, sign-off, links tagged for Facebook) follows where it
+    came from.
+20. Could be better on a picked message writes Wheelman's own reply again, and the pick is
+    dropped. Learning by template is step 5.
+21. A pick is for the customer message it was made on: when they write again, the box shows the
+    reply for the new message.
+22. A customer who asked not to be contacted is offered no template, and none is written.
 
 ### The PRs
 

@@ -28,8 +28,15 @@ const BLANK = /\[[A-Z][A-Z0-9 &'/-]{1,30}\?\]/g;
 export async function draftFromTemplate(item, { id, label, composed, checks = [], used = [], typed = '', instruction = '', fitWith = null, save = true, fitLater = false, context = {}, file = '', okWords = 'Written from your wording, with the facts from your records.' } = {}) {
   const base = {
     itemKey: item.itemKey, anchorKey: item.anchorKey, situation: item.order ? id : item.situation?.primary || id, instruction: typed || instruction, template: id,
-    context: { channel: item.order ? 'auction' : item.channel, template: id, ...context, ...(fitLater ? { fitLater: true } : {}) },
+    // Where it was written and what it answered, as for any suggestion: nothing written in Auction teaches (learn.js).
+    context: { channel: item.order ? 'auction' : item.channel, section: item.section || null, situations: item.situation?.all || [], firstReply: !!item.isFirstReply, template: id, ...context, ...(fitLater ? { fitLater: true } : {}) },
   };
+  // A customer who asked not to be contacted gets nothing, from a template or otherwise.
+  if (item.state === 'optout') {
+    const d = { ...base, status: 'blocked', reply: '', checks: [{ level: 'fail', code: 'optout', message: 'Customer asked not to be contacted. No reply suggested.' }] };
+    if (save) d.id = insertDraft(d);
+    return d;
+  }
   const left = unfilled(composed.text);
   let reply = restore(composed.text, item.lead);
   if (item.channel === 'marketplace') reply = tagMarketplaceLinks(reply);

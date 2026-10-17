@@ -10,7 +10,7 @@ import { redact, restore } from './redact.js';
 import { planImport, auctionNote, bidBasisLine } from './imports.js';
 import { planOrderReply, restoreAmounts } from './ordermessages.js';
 import { insertDraft, latestDraft } from './db.js';
-import { templatePlan, checkMarkers, markerTrouble, unmask, finishTemplate } from './fitter.js';
+import { templatePlan, checkMarkers, markerTrouble, unmask, finishTemplate, maskInstruction } from './fitter.js';
 import { BLANK_PATTERN } from '../web/lib/blank.js';
 import { sydneyHour } from './time.js';
 import { standardBlock, inviteBlock, repeatsBlock, tidyOpening } from './firstreply.js';
@@ -382,7 +382,15 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
     // The car's photos, videos and documents, when the customer asked for one: read before the
     // request is built, given up after a few seconds so a slow dashboard never holds up a reply.
     const media = plan || email ? null : await mediaForReply(item);
-    const prompt = buildPrompt(item, { instruction, coaching, importPlan: plan, research, media, holdOutConversation, now });
+    // A template's facts go to the AI only as markers, and so do the figures the owner typed: what
+    // it puts in comes back exactly as typed (an auction order's amounts never go to it).
+    let asked = instruction;
+    if (plan?.stage === 'template' && instruction) {
+      plan.markers = [...plan.markers];
+      asked = maskInstruction(instruction, plan.markers);
+      if (plan.mask) asked = plan.mask(asked);
+    }
+    const prompt = buildPrompt(item, { instruction: asked, coaching, importPlan: plan, research, media, holdOutConversation, now });
     // Where the customer was on the way to a sale, and the move asked for, so the report can read it later.
     context.rung = prompt.stage?.rung || null;
     context.insider = prompt.insider || [];
@@ -451,7 +459,7 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
       if (fit && worst(best.checks) === 'fail') { result = wordForWord('facts'); best = assess(result.json); }
     }
     if (fit && result.wordForWord) best.checks = [...best.checks.filter((c) => c.level !== 'ok'), { level: 'warn', code: 'template-word-for-word', tokens: [], message: result.wordForWord === 'unavailable'
-      ? `Written word for word from your template "${plan.label}": the AI was not available just now. While you leave it unchanged it is fitted to the customer on a later check.`
+      ? `Written word for word from your template "${plan.label}": the AI was not available just now. ${item.order ? 'While you leave it unchanged it is fitted to the customer on a later check.' : 'Press Rewrite to fit it to the customer once the AI is back.'}`
       : `Written word for word from your template "${plan.label}": the AI could not fit it to this customer without changing a fact.` }];
     // What the AI made of the template, with its markers: written again with new facts, it is used again.
     if (fit) { context.masked = plan.masked; context.fitted = result.wordForWord ? null : String(result.json.reply || ''); context.fitLater = result.wordForWord === 'unavailable'; context.asked = tpl.asked || ''; }

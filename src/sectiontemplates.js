@@ -24,8 +24,10 @@ import { sydneyHour, sydneyDay } from './time.js';
 import { money } from './imports.js';
 import { draftFromTemplate } from './templatedraft.js';
 
-/** The template file for each kind of conversation. */
-export const SECTION_FILES = { sms: 'dashboard-messages.md', marketplace: 'marketplace-messages.md', email: 'importquery-messages.md' };
+/** The template file for each section. A conversation moved to another section gets that section's list. */
+export const SECTION_FILES = { dashboard: 'dashboard-messages.md', marketplace: 'marketplace-messages.md', importquery: 'importquery-messages.md' };
+const BY_CHANNEL = { sms: 'dashboard', marketplace: 'marketplace', email: 'importquery' };
+const IMPORT_FILE = SECTION_FILES.importquery;
 
 /** Everything a template's @fits, @needs and @not may name. */
 export const SIGNALS = [
@@ -36,7 +38,8 @@ export const SIGNALS = [
   'eligibility', 'cost', 'deposit', 'timeline', 'payment', 'warranty', 'compliance_only', 'process', 'availability', 'eligible',
 ];
 
-/** Every fact a template may use, by file. A {word} outside these is a typing slip. */
+/** Every fact a template may use, by file. A {word} outside these is a typing slip. {if_word}
+ * keeps its paragraph only when that fact applies (has something in it). */
 const CAR_FACTS = ['greeting', 'sign_off', 'thanks', 'car', 'car_link', 'price', 'km', 'where', 'inclusions', 'if_inclusions', 'price_reply', 'invitation',
   'first_reply_block', 'address_block', 'stock_link', 'finance_link', 'warranty_link', 'importing_link', 'if_warranty', 'if_no_warranty', 'sender'];
 export const FACTS = {
@@ -45,7 +48,7 @@ export const FACTS = {
   'importquery-messages.md': ['greeting', 'sign_off', 'model', 'model_page', 'year_range', 'landed_cost', 'deposit', 'if_eligible', 'if_not_listed', 'importing_link', 'eligible_link', 'sender'],
 };
 
-const fileFor = (item) => (item.order || item.section === 'auction' ? null : SECTION_FILES[item.channel] || null);
+const fileFor = (item) => (item.order || item.section === 'auction' ? null : SECTION_FILES[item.section || BY_CHANNEL[item.channel]] || null);
 const list = (line) => String(line || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
 const customerWords = (item, n = 8) => item.timeline.filter((e) => e.who === 'customer').slice(-n).map((e) => `${e.text || ''} ${e.event || ''}`).join('\n');
 
@@ -61,13 +64,14 @@ export function fitSignals(item) {
     const code = availability(v).code;
     if (code === 'sold' || reservedByAnother(v, item.deal)) s.add('car sold');
     else if (code === 'available') s.add('car available');
-    else s.add('car on its way');
+    // Arrived and being prepared, at sea, or in Japan: not to be seen yet. Unknown: neither.
+    else if (code !== 'unknown') s.add('car on its way');
   }
   const text = item.pendingText || '';
   if (farAway(customerWords(item), item.lead?.state, item.lead?.signals?.postcode).far) s.add('far away');
   if (priceFigures(text).length) s.add('their offer');
   if (PARTING.test(text) || DECLINED.test(text)) s.add('parting');
-  if (item.channel === 'email') {
+  if (fileFor(item) === IMPORT_FILE) {
     for (const t of topicsIn(`${item.mail?.subject || ''}\n${text}`)) s.add(t);
     if (item.mail?.car) s.add('eligible');
   }
@@ -82,7 +86,8 @@ export function fitSignals(item) {
 export function templatesFor(item) {
   const file = fileFor(item);
   const t = file ? template(file) : null;
-  if (!t) return [];
+  // A customer who asked not to be contacted is offered nothing.
+  if (!t || item.state === 'optout') return [];
   const sig = fitSignals(item);
   const out = [];
   for (const id of Object.keys(t.sections)) {
@@ -105,8 +110,21 @@ export function hasSectionTemplate(item, id) {
   return !!(file && id && template(file)?.sections?.[id]);
 }
 
+/** The name of one of this section's templates, as the list shows it; '' when there is no such template. */
+export function sectionTemplateLabel(item, id) {
+  if (!hasSectionTemplate(item, id)) return '';
+  return template(fileFor(item)).meta?.[id]?.label || id;
+}
+
+/** The address block without its closing sender line ("Team Carbarn"). */
+const withoutSender = (block) => {
+  const lines = block.split('\n');
+  if (config.firstReplySender && lines[lines.length - 1].trim() === config.firstReplySender.trim()) lines.pop();
+  return lines.join('\n').trim();
+};
+
 /** Where a car is, in a few words for "It is {where}". */
-const WHERE = { available: 'at our Lidcombe showroom', arrived: 'at our Lidcombe showroom, being prepared', transit: 'on its way to Australia', japan: 'still in Japan' };
+const WHERE = { available: 'at our Lidcombe showroom', arrived: 'in Australia and being prepared for sale', transit: 'on its way to Australia', japan: 'still in Japan' };
 
 /**
  * One template filled in with this conversation's facts: { text, part, values, tail, facts }.
@@ -132,7 +150,7 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
   };
   const facts = [];
 
-  if (!email) {
+  if (file !== IMPORT_FILE) {
     const v = item.vehicles?.[0] || null;
     const code = v ? availability(v).code : '';
     const gone = !!v && (code === 'sold' || reservedByAnother(v, item.deal));
@@ -152,13 +170,15 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
       price_reply: v && !gone ? priceBlock({ vehicle: v, inspectionUrl: booking, online: far, chat }) : null,
       invitation: booking ? inviteBlock(booking, { online: far, chat }) : null,
       first_reply_block: chat ? null : standardBlock({ vehicleUrl: v?.url && !gone ? v.url : '', inspectionUrl: item.situation?.all?.includes('inspection_booking') ? booking : '', online: far }),
-      address_block: standardBlock({}),
+      // The block ends with the sender's line: a sign-off, so only on the first message of the day.
+      address_block: again ? withoutSender(standardBlock({})) : standardBlock({}),
       if_warranty: /extended warranty|5[- ]year/i.test(outline),
       if_no_warranty: !!v && !/extended warranty|5[- ]year/i.test(outline),
     });
     if (v) facts.push(`The car: ${v.title}${v.stockNo ? `, stock ${v.stockNo}` : ''}, ${availability(v).text}`);
   } else {
-    // An import email: the model they asked about, as our website lists it.
+    // An import enquiry: the model they asked about, as our website lists it. None found, the
+    // answer is still given, with blanks to fill in, unless they named a code that is not listed.
     const research = await researchFor(item, { now });
     const m = research.models?.[0] || null;
     const unknown = research.asked?.codes?.unknown || [];
@@ -168,13 +188,15 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
       year_range: m?.yearRange || '[BUILD YEARS?]',
       landed_cost: m?.costing?.totalAud ? money(m.costing.totalAud) : '[LANDED COST?]',
       deposit: m?.costing?.depositAud ? money(m.costing.depositAud) : '[DEPOSIT?]',
-      if_eligible: !!m,
+      if_eligible: !!m || !unknown.length,
       if_not_listed: !m && unknown.length > 0,
     });
     if (m) facts.push(`From ${m.source || 'our website'}: ${m.title}${m.costing?.totalAud ? `, estimated landed ${money(m.costing.totalAud)}` : ''}${m.costing?.depositAud ? `, deposit ${money(m.costing.depositAud)}` : ''}`);
   }
   // Facts the file uses that this conversation has nothing for: left out, never a stray {word}.
   for (const k of FACTS[file] || []) if (!(k in values)) values[k] = null;
+  // {if_word} for each fact the file names that is not a switch of its own: on when it has something in it.
+  for (const k of FACTS[file] || []) if (!k.startsWith('if_') && !(`if_${k}` in values)) values[`if_${k}`] = typeof values[k] === 'string' ? !!values[k].trim() : !!values[k];
   const { fillParts } = await import('./templates.js');
   return { text: fillParts(part, values), part, values, tail: '', facts };
 }
@@ -204,7 +226,7 @@ export function checkTemplates() {
       if (!m.label) problems.push(`${file} ${id}: no @label`);
       if (!list(m.fits).length) problems.push(`${file} ${id}: no @fits`);
       for (const k of ['fits', 'needs', 'not']) for (const sig of list(m[k])) if (!SIGNALS.includes(sig)) problems.push(`${file} ${id}: @${k} names "${sig}", which no conversation shows`);
-      for (const [, w] of part.matchAll(/\{([a-z0-9_]+)\}/g)) if (!FACTS[file].includes(w)) problems.push(`${file} ${id}: {${w}} is not a fact Wheelman fills in`);
+      for (const [, w] of part.matchAll(/\{([a-z0-9_]+)\}/g)) if (!FACTS[file].includes(w) && !FACTS[file].includes(w.replace(/^if_/, ''))) problems.push(`${file} ${id}: {${w}} is not a fact Wheelman fills in`);
     }
   }
   return problems;

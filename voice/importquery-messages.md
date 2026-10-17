@@ -16,9 +16,11 @@
 #   {year_range}        the approved build range
 #   {landed_cost}       the estimated landed and complied cost; a blank when there is none
 #   {deposit}           the refundable deposit to start the search; a blank when there is none
-#   {if_eligible}       keeps its paragraph only when the model is on our eligible list
+#   {if_eligible}       keeps its paragraph when the model is on our eligible list, or when none
+#                       was found and they named no unlisted code (then with blanks to fill in)
 #   {if_not_listed}     keeps its paragraph only when they named a model code that is not on it
 #   {importing_link} {eligible_link}   how importing works, and every eligible model
+#   {if_word}           for any fact above: keeps its paragraph only when that fact applies
 #   [CAPITALS?]         a blank only you can fill in; the page highlights it
 
 ===== eligible_cost =====
@@ -32,7 +34,7 @@ Thank you for your enquiry.
 
 {if_eligible}Based on recent auction prices, the estimated landed and complied cost is {landed_cost}, and the refundable deposit to start the search is {deposit}.
 
-{if_eligible}More about this model:
+{if_model_page}More about this model:
 {model_page}
 
 {if_not_listed}The model you mentioned is not on our list of vehicles eligible for import to Australia. You can see every eligible model here:

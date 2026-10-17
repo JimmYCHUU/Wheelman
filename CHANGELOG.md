@@ -12,9 +12,14 @@ and versions follow `MAJOR.MINOR.PATCH`.
   trade-in Trade-in, a sold car Car sold: our other cars, a buyer far away Online video
   inspection). A message picked is written with the conversation's facts (the car, its price,
   links, your price reply and invitation word for word) and fitted to the customer by the AI,
-  which never sees a fact. With a message picked, Prompt and Rewrite change it the way you say,
-  its facts kept; in Auction, what you type into the box goes to the AI too. Hours, days, weeks
-  and years in your own wording are now kept from the AI as well. The first messages are in
+  which cannot change a fact: each is hidden behind a marker and put back by code. With a
+  message picked, Prompt and Rewrite change it the way you say, its facts kept; in Auction, what
+  you type into the box goes to the AI too. Figures you type go to the AI only as markers as
+  well, so an auction order's amounts still never reach it, and one it uses comes back exactly as
+  typed. Hours, days, weeks and years in your own wording are now kept from the AI too. The list
+  follows the section: a text moved to Import Query gets Import Query's messages, an email or a
+  Facebook chat moved to Auction gets Auction's. A customer who asked not to be contacted is
+  offered none. The first messages are in
   `voice/dashboard-messages.md`, `voice/marketplace-messages.md` and
   `voice/importquery-messages.md`, written from the team's best replies, for you to edit; each
   says on its `@fits:` line when it is offered. "Can you do any better?" is now read as a price

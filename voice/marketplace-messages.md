@@ -14,7 +14,7 @@
 ===== still_available =====
 @label: Still available
 @fits: availability, vehicle_details, general, first reply
-@needs: car
+@needs: car available
 @not: car sold
 {thanks} Yes, the {car} is still available. It is {where}, with {km} on the odometer.
 

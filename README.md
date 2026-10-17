@@ -751,11 +751,15 @@ The suggestion waits in the message box, marked **not sent**. The box is an edit
   has sold offers Car sold: our other cars; someone far away who wants to see the car offers
   Online video inspection rather than Book an inspection. Pick one and it is written with this
   conversation's facts (the car, its price, its links, your price reply and invitation word for
-  word), then fitted to the customer by the AI, which never sees or changes a fact. The first
-  choice, **A reply to what they wrote**, is Wheelman's own reply as before. Each message keeps
-  its own suggestion, so switching back to one asks nothing. With a message picked, **Prompt**
-  and **Rewrite** change that message the way you say (`also say we are open this Sunday`),
-  its facts kept. The messages are in `voice/dashboard-messages.md`,
+  word), then fitted to the customer by the AI, which cannot change a fact: each one is hidden
+  behind a marker and put back by code. The first choice, **A reply to what they wrote**, is
+  Wheelman's own reply as before. Each message keeps its own suggestion, so switching back to one
+  asks nothing. With a message picked, **Prompt** and **Rewrite** change that message the way you
+  say (`also say we are open this Sunday`), its facts kept. A figure you type goes to the AI
+  only as a marker too, and comes back exactly as you typed it (`offer $27,500`). The list
+  follows the section a conversation is in: a text you moved to Import Query gets Import Query's
+  messages. A customer who asked not to be contacted is offered none. **Could be better** writes
+  Wheelman's own reply again, not the message picked. The messages are in `voice/dashboard-messages.md`,
   `voice/marketplace-messages.md` and `voice/importquery-messages.md`; Auction's are in
   `voice/auction-messages.md`. Each one says on its `@fits:` line when it is offered. Edit the
   wording, or add a message of your own: it takes effect on the next message. (The owner, 17 Oct
@@ -1012,7 +1016,7 @@ there is always a message. Nothing the AI is not shown in the first request (an 
 reaches it in a second one either. Each kind of message keeps its own
 suggestion, so going back to one already written asks nothing. What you type into **Add what you
 know** fills in the facts it names and goes to the AI as what to change, the way a Prompt does
-elsewhere; written again with the same words and the same wording around them (Refresh
+elsewhere, its figures only as markers; written again with the same words and the same wording around them (Refresh
 figures), the fitting is reused with no new request. `AUCTION_FIT=0` in the `.env` file writes every message word for word with no AI, and
 `AUCTION_FIT_BACKGROUND=0` fits only the messages you pick or write on the page.
 

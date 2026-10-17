@@ -9,7 +9,7 @@ import { createStore } from '../web/lib/store.js';
 import { SECTIONS, SECTION_IDS, sectionOf, TAB_STATE, ORDER_LIST } from '../web/sections/registry.js';
 import { visibleRows, rowTags } from '../web/views/ListColumn.js';
 import { moveChoices } from '../web/views/MoveMenu.js';
-import { pickerOptions } from '../web/views/TemplatePicker.js';
+import { pickerOptions, showsPicked, pickHolds, fillsIn } from '../web/views/TemplatePicker.js';
 
 // 6 October 2026, 2 pm in Sydney (daylight saving: UTC+11).
 const NOW = Date.UTC(2026, 9, 6, 3, 0, 0);
@@ -189,4 +189,23 @@ test('the template picker lists the templates in the order given, the one due ma
   // Dashboard, Marketplace and Import Query: the template that fits best is marked.
   assert.deepEqual(pickerOptions([{ id: 'price_question', label: 'Price question', best: true }, { id: 'where_and_when', label: 'Where and when we are open' }]).slice(1).map((o) => o.text),
     ['Price question (best fit)', 'Where and when we are open']);
+});
+
+test('a message picked from the list is shown whatever the state only while you picked it, for the message you were looking at', () => {
+  const item = { anchor: 'm:5', template: 'trade_in', draft: { status: 'ready', template: 'trade_in' } };
+  assert.equal(showsPicked(item, { picked: true, anchor: 'm:5' }), true);
+  // Nothing picked on the page (its newest suggestion happens to be a template): Dismissed, Replied and the rest show as usual.
+  assert.equal(showsPicked(item, { picked: false, anchor: '' }), false);
+  assert.equal(showsPicked({ ...item, draft: { status: 'failed', template: 'trade_in' } }, { picked: true, anchor: 'm:5' }), false);
+  // The customer wrote again: the pick was for the message before.
+  assert.equal(pickHolds('m:5', { anchor: 'm:5' }), true);
+  assert.equal(pickHolds('m:5', { anchor: 'm:9' }), false);
+});
+
+test('"Add what you know" is for an auction message; a template anywhere else is changed with Rewrite', () => {
+  assert.equal(fillsIn({ order: { replying: false }, section: 'auction' }, { template: 'bid_lost' }), true);
+  assert.equal(fillsIn({ order: { replying: true }, section: 'auction' }, { template: '' }), false);
+  assert.equal(fillsIn({ section: 'auction' }, { template: 'lot_offer' }), true, 'an enquiry in Auction');
+  assert.equal(fillsIn({ section: 'dashboard' }, { template: 'price_question' }), false);
+  assert.equal(fillsIn({ section: 'marketplace' }, { template: 'price_question' }), false);
 });
