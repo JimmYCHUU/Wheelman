@@ -351,13 +351,40 @@ says why, and the details panel has an **Import enquiry** section. You have the 
 - **Not an import enquiry** writes the reply the ordinary way.
 - **Treat as an import enquiry** does the opposite for one Wheelman missed. The details panel
   offers it on every dashboard conversation.
-- **Move to Import Query** lists the conversation in that section instead, with **Move back
-  to Dashboard** there. It keeps its key, and the reply still goes out from the dashboard.
+- **Move to Auction** lists it with the auction customers: what they asked for is searched for
+  in the Japan auctions. **Move to Import Query** lists it there instead. See
+  [Moving a conversation](#moving-a-conversation-to-another-section).
 
 A ruling is kept with the lead, so it follows into the text conversation that starts later.
 After a ruling the suggestion is written again the new way, unless you had already changed its
 text. The AI is also asked whether an ordinary enquiry looks like an import one; when it thinks
 so, the line offers the same buttons, and nothing changes until you choose.
+
+### Moving a conversation to another section
+
+The **Move** button in a conversation's header lists the sections it can go to, each with a
+sentence on how the customer is answered there:
+
+| Section | How the customer is answered |
+|---|---|
+| **Dashboard** | As an ordinary enquiry about our cars |
+| **Auction** | As an auction customer: what they want is searched for in the Japan auctions |
+| **Import Query** | As an import question, with the facts from our importing pages |
+
+Moving works in every direction between those three. A Facebook chat can leave Marketplace and
+come back, but nothing else moves into Marketplace: it is Facebook's inbox. An auction order
+never moves. The conversation keeps its messages and its key, and the reply still goes out the
+way it came in: a text is pasted into the dashboard, a Facebook chat still has Send reply, an
+email is still answered in Gmail. Only the list it sits on, and how the customer is answered,
+change. The toast has **Undo**, and back in its own section the move is forgotten.
+
+A move is kept with the lead, so it follows into the text conversation that starts later. Moved
+into Auction or Import Query, a conversation is answered as an import enquiry, its car read from
+the customer's words even when a car of that model is on the yard; in Auction, until we have
+offered a car, each reply searches the live auction with what they asked for, so a customer who
+already gave the car and the details gets an offer, not the same questions again. Nothing is
+learned while a conversation is in Auction, and nothing written while it was there teaches
+after it leaves. A Facebook chat never teaches, wherever it is listed.
 
 What the reply is depends on how much we know.
 
@@ -898,6 +925,16 @@ dashboard, which moves through stages. Most of them are written to on WhatsApp, 
 cannot read. This section lists every order, says where it has got to, and has the next
 message to that customer written and waiting.
 
+It lists the auction customers who have no order yet too: every lead on the dashboard's
+Imports list, and any conversation you moved here. Their rows say where the enquiry has got to
+(Enquiry: asking for details · ready to search · car offered · compliance only), and they are
+answered the import way: what they are looking for is asked first, then the Japan auctions are
+searched and the best car is offered. **One row per customer:** once a customer has an order
+under way, the order stands for them and their own conversation is no longer a row of its own.
+A text from them since the order opened (within the last week) puts the order in To do as a
+reply to what they wrote, written for a text and pasted into the dashboard; our text back
+answers it. Move their conversation back to Dashboard and its texts are answered there instead.
+
 ### The three lists
 
 | List | What is in it |
@@ -906,7 +943,7 @@ message to that customer written and waiting.
 | **In progress** | Orders that are under way with nothing due |
 | **Finished** | Completed, cancelled and refunded orders. Ended orders are kept for 60 days |
 
-The bottom of the list says how many orders were read from the dashboard and how many are
+The bottom of the list says how many orders and enquiries were read from the dashboard and how many are
 on each list, so it can be checked against the dashboard's own page. **Search looks through
 all three lists at once**: an order found on another list carries a small tag saying which.
 An order with nothing due is under In progress, not To do.

@@ -650,7 +650,7 @@ Responsive behaviour:
 - **1000px and under:** the brand shows only its mark, and the tabs sit a little closer together.
 - **860px and under:** one column. The page shows either the list or the conversation; a back button with the count of other conversations waiting appears in the conversation header. The brand shows only its mark. The section track moves to a row of its own under the bar, with no line above it, starting at its left edge and scrolling sideways when it is wider than the window; it is hidden while a conversation is open. The car strip's button shortens to "23 photos". Bubbles widen to 86%, thread and message-box gutters tighten to 0.75rem, the draft's maximum height drops from 28% to 20% of the window height, the quieter buttons under the draft lose their icons, and the word count is hidden. The tiles sit 0.25rem apart and 0.25rem in from the window's edges, with Soft corners.
 
-Layering, lowest first: the jump-to-newest and Load older buttons over the thread, the panel drawer, the Find a car results, the toast. The status panel, the AI dialog and the viewer open in the browser's top layer, above everything.
+Layering, lowest first: the jump-to-newest and Load older buttons over the thread, the panel drawer, the Find a car results, the toast. The status panel, the Move menu, the AI dialog and the viewer open in the browser's top layer, above everything.
 
 ### Named Rules
 **The Tiles Rule.** The top bar, the list, the conversation and the panel are four tiles with Round corners on the Tray, 0.375rem apart and 0.375rem in from the window's edges (the owner's choice, 16 Oct 2026; narrowed from 0.5rem the same day). The gaps separate them, never a line. Inside a tile nothing is boxed again: headers, the car strip, rows and bands run edge to edge within it.
@@ -723,6 +723,12 @@ How Wheelman is doing, in a few words, at the right of the top bar.
 - **Pill:** 2.25rem, List White with a 1px Line border, a 0.5rem status dot, a few words ("Up to date", "Checking", "Writing", "Dashboard not reached", "Not checked yet", "Not responding") at 0.8125rem / 650 Muted, and a small chevron (hidden at 1100px and under). Hover turns it `side-hover` with Navy Ink text. Its tooltip lists every line.
 - **Dot:** blue after a successful check, red after a failed one, amber and slowly pulsing while checking or writing, Faint when unknown. The words always say the same thing.
 - **Panel:** opens under the pill with its right edge on the pill's: a Sheet with a 1px Line border, 1rem corners and the floating shadow, up to 24rem wide and 70% of the window tall, 0.8125rem text. "Wheelman now" as its title; a bulleted list of what was checked, the AI requests used and the budget; "Writing, in this order" with the AI models numbered in mono; "Suggestions are written by …" with a Change link to the AI dialog; "What it reads and has learned" (replies read, lessons, backup); and the team link when the page is shared. Sub-headings are 0.8125rem / 650 Navy Ink; bullets are 4px Strong Line dots.
+
+### Move button and menu
+Where a conversation is listed, changed from its header.
+- **Button:** in the header's actions, before the copy and panel buttons: the word "Move" and a small chevron, styled as the status pill (2.25rem, List White, 1px Line border, 0.8125rem / 650 Muted). Open, it takes Blue Tint with Blue Text. No button on an auction order: it never moves.
+- **Menu:** a native popover under the button with its right edge on the button's, never past the window's left edge: a Sheet with a 1px Line border, 1rem corners and the floating shadow, up to 24rem wide. "Move this conversation to another section" at 650; then one row per section it can go to, in the order of the section tabs, each a full-width button with 0.75rem corners: "Move to Auction" at 650 and one Muted sentence on how the customer is answered there. Its own section reads "Move back to …". Fine print last: it keeps its messages and the reply still goes out the way it came in. Hover is `side-hover`.
+- **After a move:** the conversation leaves the list, the next one opens, and the toast says where it went, with Undo.
 
 ### Buttons
 Rounded, low, quiet until needed. One filled button per view.

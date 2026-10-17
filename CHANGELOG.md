@@ -5,6 +5,30 @@ and versions follow `MAJOR.MINOR.PATCH`.
 
 ## [Unreleased]
 
+### Added
+- **Imports AU leads are in Auction, and any conversation can be moved.** A lead on the
+  dashboard's Imports list is an auction customer: it is listed in Auction with a stage in plain
+  words (Enquiry: asking for details, ready to search, car offered, compliance only), not in
+  Dashboard. A **Move** button in the conversation's header moves it between Dashboard, Auction and
+  Import Query in every direction, with Undo; a Facebook chat can leave Marketplace and come back,
+  nothing else moves into it, and an auction order never moves. A moved conversation keeps its
+  messages and is still answered the way it came in. Moved into Auction, a customer who already
+  gave the car and what they want is searched for and offered a car, not asked again. (The owner,
+  17 Oct 2026: "The Imports AU leads shows on the dashboard, they don't come up in the Auction
+  section which it is supposed to do", and a lead who asked us to import a car with the full
+  specification should be moved to Auction: "there's nothing to ask him about".)
+- **One row per auction customer.** Once a customer has an order under way, the order stands for
+  them in Auction. A text from them since the order opened puts the order in To do as a reply to
+  what they wrote, written for a text; our text back answers it. The background writer writes for
+  these, and for the enquiries listed in Auction.
+
+### Changed
+- **Moves have their own record.** "Moved to Import Query" used to ride on the import ruling;
+  existing moves are copied across once, so taking a ruling away no longer moves a conversation
+  back. Nothing is learned while a conversation is in Auction (Imports leads used to teach the
+  dashboard). An Imports lead's Customer tab now reads "An import enquiry", not "An ordinary
+  enquiry".
+
 ### Fixed
 - **The top bar is one bar, with the sections in its middle.** The section tabs no longer look
   like part of the conversation under them: the bar has no dividing line inside it, the brand sits
