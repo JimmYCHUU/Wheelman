@@ -11,6 +11,7 @@ import { planImport, auctionNote, bidBasisLine } from './imports.js';
 import { planOrderReply, restoreAmounts } from './ordermessages.js';
 import { insertDraft, latestDraft } from './db.js';
 import { templatePlan, checkMarkers, markerTrouble, unmask, finishTemplate } from './fitter.js';
+import { BLANK_PATTERN } from '../web/lib/blank.js';
 import { sydneyHour } from './time.js';
 import { standardBlock, inviteBlock, repeatsBlock, tidyOpening } from './firstreply.js';
 import { priceBlock } from './pricereply.js';
@@ -144,15 +145,19 @@ function coachingCopied(body, note) {
  */
 function assessTemplate(item, text, json, { plan, allowed, said, staffSaid, instructed, now }) {
   const marks = checkMarkers(text, plan.markers, { optional: instructed });
+  // Every blank the message needs is already one of its markers: one written out is the AI's own.
+  const ownBlanks = [...new Set(String(text).match(new RegExp(BLANK_PATTERN, 'g')) || [])];
   const reply = finishTemplate(unmask(text, plan.markers), item.lead);
   const checks = checkDraft({
     channel: item.channel, reply, body: reply, advertisedPrice: 0, blockNextStep: true,
     needsHuman: json.needs_human, allowedText: allowed.trusted, policyText: allowed.policy, customerText: allowed.customer,
-    instruction: staffSaid, situation: item.situation, hold: false, examples: [], inConversation: !item.isFirstReply,
+    // The template is the owner's own wording: what it promises, our staff have said.
+    instruction: [staffSaid, plan.text].filter(Boolean).join('\n'), situation: item.situation, hold: false, examples: [], inConversation: !item.isFirstReply,
     said, stage: null, nextStep: '', now, instructed: true,
   // The template's own blanks are its own checks (below), said once, in its words.
   }).filter((c) => c.level !== 'ok' && c.code !== 'marker' && c.code !== 'bare-marker');
   if (!marks.ok) checks.push({ level: 'fail', code: 'template-markers', tokens: [], message: `The template's facts did not all come back as they were: ${markerTrouble(marks)}. Keep every marker exactly once, as written.` });
+  if (ownBlanks.length) checks.push({ level: 'fail', code: 'template-blank', tokens: [], message: `The reply adds a blank of its own (${ownBlanks.join(', ')}). The message already has every blank it needs, as markers: write no other.` });
   checks.push(...plan.wordChecks.filter((c) => c.level !== 'ok'));
   if (!checks.length) checks.push({ level: 'ok', code: 'ok', tokens: [], message: 'Fitted to this customer from your wording, with the figures from your records.' });
   return { body: reply, reply, checks };
@@ -349,7 +354,7 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
     // An import or auction enquiry: what to ask, or which auction car to offer, is worked out first.
     let plan = null;
     // One of the owner's templates, fitted to this customer: its facts go to the AI only as markers.
-    if (tpl) plan = templatePlan(tpl, { orderPlan: item.order ? planOrderReply(item) : null });
+    if (tpl) plan = templatePlan(tpl, { orderPlan: item.order ? planOrderReply(item, { forTemplate: true }) : null });
     // A reply to an auction customer: the order's facts go to the AI, its amounts only as markers.
     else if (item.order) plan = planOrderReply(item);
     else if (!chat && !email && item.imports) {
@@ -405,7 +410,8 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
     // A template never depends on the AI either: if no model can answer, or what it wrote loses a
     // fact, the template is used word for word (always a reply, never a refusal).
     const fit = plan?.stage === 'template';
-    const wordForWord = () => ({ json: { reply: plan.masked, needs_human: [], facts_used: [], hold: false }, provider: 'none', model: 'your wording', wordForWord: true });
+    // Why: 'unavailable' (no AI could be asked: fitted again later, while untouched) or 'facts' (the fitting lost a fact).
+    const wordForWord = (why) => ({ json: { reply: plan.masked, needs_human: [], facts_used: [], hold: false }, provider: 'none', model: 'your wording', wordForWord: why });
     const usable = (e) => (plan?.stage === 'offer' && e instanceof LlmError && e.status !== 401 && e.status !== 403) || (fit && e instanceof LlmError);
     // Marketplace chats are the Marketplace job: the small model, so the better ones stay with dashboard customers.
     // A script (the review) may pin one model; otherwise the job's own list.
@@ -418,26 +424,37 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
       catch (e) {
         if (!usable(e)) throw e;
         logLine('suggestion', `${item.itemKey}: no AI model for ${fit ? `the template "${plan.label}", used word for word` : 'the opening of an auction offer, standard opening used'}. ${e.detail || e.message}`);
-        result = fit ? wordForWord() : standardOpening();
+        result = fit ? wordForWord('unavailable') : standardOpening();
       }
     }
     let best = assess(result.json);
 
+    // What goes back to the AI with a second request hides what the first one hid: the customer's
+    // details, a template's facts (as their markers again) and an order's amounts (as theirs). The
+    // reasons for the rejection quote the reply, so they are hidden the same way.
+    const forAi = (text) => {
+      let t = String(text || '');
+      if (fit) for (const m of [...plan.markers].sort((a, b) => b.value.length - a.value.length)) if (m.value.trim().length >= 3) t = t.split(m.value).join(`{{${m.name}}}`);
+      t = redact(t, item.lead);
+      return plan?.mask ? plan.mask(t) : t;
+    };
     // One second attempt when a hard check fails.
     if (worst(best.checks) === 'fail' && result.provider !== 'none') {
       try {
         // A template's rejected draft goes back as the AI wrote it, with its markers: never with the facts put in.
-        const rejected = fit ? String(result.json.reply || '') : redact(best.body, item.lead);
-        const again = await complete(prompt.system, `${prompt.user}\n\n${retryNote(best.checks, { channel: item.channel })}\n\nYour rejected draft was:\n${rejected}`, which);
+        const rejected = fit ? String(result.json.reply || '') : forAi(best.body);
+        const again = await complete(prompt.system, `${prompt.user}\n\n${forAi(retryNote(best.checks, { channel: item.channel }))}\n\nYour rejected draft was:\n${rejected}`, which);
         const second = assess(again.json);
         if (failures(second.checks) < failures(best.checks)) { result = again; best = second; }
       } catch (e) { if (!usable(e)) throw e; }
       if (plan?.stage === 'offer' && worst(best.checks) === 'fail') { result = standardOpening(); best = assess(result.json); }
-      if (fit && worst(best.checks) === 'fail') { result = wordForWord(); best = assess(result.json); }
+      if (fit && worst(best.checks) === 'fail') { result = wordForWord('facts'); best = assess(result.json); }
     }
-    if (fit && result.wordForWord) best.checks = [...best.checks.filter((c) => c.level !== 'ok'), { level: 'warn', code: 'template-word-for-word', tokens: [], message: `Written word for word from your template "${plan.label}": the AI could not fit it to this customer without changing a fact.` }];
+    if (fit && result.wordForWord) best.checks = [...best.checks.filter((c) => c.level !== 'ok'), { level: 'warn', code: 'template-word-for-word', tokens: [], message: result.wordForWord === 'unavailable'
+      ? `Written word for word from your template "${plan.label}": the AI was not available just now. While you leave it unchanged it is fitted to the customer on a later check.`
+      : `Written word for word from your template "${plan.label}": the AI could not fit it to this customer without changing a fact.` }];
     // What the AI made of the template, with its markers: written again with new facts, it is used again.
-    if (fit) { context.masked = plan.masked; context.fitted = result.wordForWord ? null : String(result.json.reply || ''); }
+    if (fit) { context.masked = plan.masked; context.fitted = result.wordForWord ? null : String(result.json.reply || ''); context.fitLater = result.wordForWord === 'unavailable'; }
 
     // The AI's own reading of an ordinary enquiry: it may think the customer wants a car found in
     // Japan. The page then offers to treat it as an import enquiry; nothing changes by itself.

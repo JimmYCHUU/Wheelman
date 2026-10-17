@@ -435,9 +435,10 @@ export const blanksIn = (text) => [...new Set(String(text || '').match(/\[[A-Z][
  * AI's hands (src/fitter.js); written again with new facts and the same wording, the earlier
  * fitting is used again with no request. Without it, no AI request is made.
  */
-export async function draftOrderMessage(item, { type, facts = '', now = Date.now(), save = true, fitWith = null } = {}) {
+export async function draftOrderMessage(item, { type, facts = '', now = Date.now(), save = true, fitWith = null, fitLater = false } = {}) {
   const o = item.order;
-  const base = { itemKey: item.itemKey, anchorKey: item.anchorKey, situation: type, instruction: facts, template: type, context: { channel: 'auction', message: type, template: type, stage: stageOf(o).code } };
+  // `fitLater`: written word for word only because the AI is paused just now; a later check fits it.
+  const base = { itemKey: item.itemKey, anchorKey: item.anchorKey, situation: type, instruction: facts, template: type, context: { channel: 'auction', message: type, template: type, stage: stageOf(o).code, ...(fitLater ? { fitLater: true } : {}) } };
   try {
     if (!MESSAGES[type]) throw new NotNow('Choose which message to write first.');
     const composed = await composeMessage(o, type, { told: factsIn(facts), now });
@@ -455,10 +456,13 @@ export async function draftOrderMessage(item, { type, facts = '', now = Date.now
       const masked = maskTemplate(composed);
       const before = latestDraft(item.itemKey, item.anchorKey, type);
       const again = before?.status === 'ready' && before.context?.fitted && before.context.masked === masked.masked;
-      return await fitWith(item, { template: {
+      const fitted = await fitWith(item, { template: {
         id: type, label: MESSAGES[type], masked, wordChecks: checks, factsUsed: used, typed: facts,
         fitted: again ? before.context.fitted : null, fittedBy: again ? { provider: before.provider, model: before.model } : null,
       } });
+      if (fitted?.status === 'ready') return fitted;
+      // Never a refusal: whatever went wrong in fitting, the owner's wording is written as it stands.
+      logLine('auction', `${item.itemKey} ${type}: the message could not be fitted (${fitted?.error || 'no answer'}); written word for word`);
     }
     if (!checks.length) checks.push({ level: 'ok', code: 'ok', tokens: [], message: 'Written from your wording, with the figures from your records.' });
     const d = { ...base, status: 'ready', reply, needsHuman: [], factsUsed: used, checks, provider: 'none', model: 'your wording', exampleIds: [] };
@@ -527,9 +531,11 @@ export function restoreAmounts(text, tokens) {
 /**
  * What the AI is told about an auction order when it writes a reply to the customer. No name,
  * phone, email or amount is in it. `tokens` are the amounts, kept here; `trustedText` is what a
- * reply may state (used by the checks on this computer, never sent).
+ * reply may state (used by the checks on this computer, never sent). `forTemplate`: the order's
+ * facts only, as context for fitting one of the owner's messages (src/fitter.js), without the
+ * rules for writing a reply, which the message itself has already settled.
  */
-export function planOrderReply(item) {
+export function planOrderReply(item, { forTemplate = false } = {}) {
   const o = item.order;
   const tokens = orderTokens(o);
   const w = o.wanted || {};
@@ -542,7 +548,7 @@ export function planOrderReply(item) {
     w.targetBidYen ? 'they gave a target bid ({{TARGET_BID}})' : '', w.budgetAud ? 'they gave a landed budget ({{BUDGET}})' : ''].filter(Boolean).join('; ');
   const deposit = { NONE: 'not paid yet', PARTIAL: 'part paid' }[o.depositState] || 'paid';
   const lines = [
-    `This customer has an auction order with us: we find a car for them at auction in Japan, bid on it once they approve, and import and comply it. ${item.orderStatus?.replyVia === 'sms' ? 'They texted us, and the reply goes back by text.' : 'They wrote to us on WhatsApp, and their message was typed in for you.'}`,
+    `This customer has an auction order with us: we find a car for them at auction in Japan, bid on it once they approve, and import and comply it.${forTemplate ? '' : item.orderStatus?.replyVia === 'sms' ? ' They texted us, and the reply goes back by text.' : ' They wrote to us on WhatsApp, and their message was typed in for you.'}`,
     `Where the order has got to: ${stage.label}.`,
     wanted ? `What they asked us to find: ${wanted}.` : '',
     w.notes ? `Their own notes on the order: ${maskAmounts(safe(w.notes), tokens).slice(0, 500)}` : '',
@@ -555,10 +561,10 @@ export function planOrderReply(item) {
     '',
     tokens.length ? 'Amounts on the order are given to you as markers, not figures. Where an amount belongs, write its marker exactly as shown, and the figure is put in for you:' : 'No amounts are recorded on the order.',
     ...tokens.map((t) => `- {{${t.name}}}: ${t.means}`),
-    'Never write a dollar figure of your own for anything on the order. For an amount with no marker, write [AMOUNT?].',
-    'Not on the order, so never state or guess them: the ship, sailing and arrival dates, when the car will be ready, and the result of an auction. Use [DATE?] or [CHECK?] and say we will confirm.',
-    'Their deposit link is not available to you. If the reply needs it, write [DEPOSIT LINK?] on a line of its own.',
-    'Do not ask which vehicle they mean, and do not thank them for an enquiry: they are an existing customer. Do not offer an inspection at our yard for a car that is still in Japan or at sea.',
+    forTemplate ? 'Never write a dollar figure of your own for anything on the order, and no amount that has no marker.' : 'Never write a dollar figure of your own for anything on the order. For an amount with no marker, write [AMOUNT?].',
+    forTemplate ? 'Not on the order, so never state or guess them: the ship, sailing and arrival dates, when the car will be ready, and the result of an auction.' : 'Not on the order, so never state or guess them: the ship, sailing and arrival dates, when the car will be ready, and the result of an auction. Use [DATE?] or [CHECK?] and say we will confirm.',
+    forTemplate ? '' : 'Their deposit link is not available to you. If the reply needs it, write [DEPOSIT LINK?] on a line of its own.',
+    forTemplate ? 'Do not offer an inspection at our yard for a car that is still in Japan or at sea.' : 'Do not ask which vehicle they mean, and do not thank them for an enquiry: they are an existing customer. Do not offer an inspection at our yard for a car that is still in Japan or at sea.',
     'We never place a bid without their approval. Before bidding, our team in Japan inspects the car and sends photos and the auction sheet.',
   ].filter((l, i, all) => l || (i > 0 && all[i - 1]));
   const trustedText = [tokens.map((t) => `${t.text} ${Math.round(t.value)}`).join('\n'), lines.join('\n')].join('\n');
@@ -573,7 +579,8 @@ export function planOrderReply(item) {
  * by the AI when the settings say so (AUCTION_FIT and AUCTION_FIT_BACKGROUND); without it no AI
  * is asked and the message is the owner's wording word for word.
  */
-export async function prepareOrders(build, { now = Date.now(), maxWatch = 4, fitWith = null } = {}) {
+export async function prepareOrders(build, { now = Date.now(), maxWatch = 4, fitWith = null, aiPaused = false } = {}) {
+  const fitting = config.auction.fit && config.auction.fitInBackground && !!fitWith;
   let watched = 0, written = 0;
   for (const o of listOrders({ now })) {
     if (o.closed || o.stage !== 'INITIAL_DEPOSIT' || watched >= maxWatch || now - (o.watchedAt || 0) < 60 * 60 * 1000) continue;
@@ -583,9 +590,13 @@ export async function prepareOrders(build, { now = Date.now(), maxWatch = 4, fit
     const item = build(o.id, { now });
     if (!item || item.orderStatus.kind !== 'send') continue;
     const have = latestDraft(item.itemKey, item.anchorKey, item.message);
-    // One that could not be written (the auction was unreachable, say) is tried again after half an hour.
-    if (have && !(have.status === 'failed' && now - have.created_at > 30 * 60 * 1000)) continue;
-    const d = await draftOrderMessage(item, { type: item.message, now, fitWith: config.auction.fit && config.auction.fitInBackground ? fitWith : null });
+    const old = have && now - have.created_at > 30 * 60 * 1000;
+    // One that could not be written (the auction was unreachable, say) is tried again after half an
+    // hour; so is one written word for word only because the AI was away, while nobody has changed or copied it.
+    const untouched = have && typeof have.edited_text !== 'string' && !have.copied_at;
+    const again = have && old && (have.status === 'failed' || (fitting && !aiPaused && have.context?.fitLater && untouched));
+    if (have && !again) continue;
+    const d = await draftOrderMessage(item, { type: item.message, now, fitWith: fitting && !aiPaused ? fitWith : null, fitLater: fitting && aiPaused });
     if (d.status === 'ready') written++;
   }
   return { ordersWatched: watched, orderMessagesWritten: written };

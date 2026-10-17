@@ -985,7 +985,9 @@ they last wrote, without touching a fact: before the AI sees the message, every 
 link, phone number and blank in it is replaced by a marker such as `{{K1}}`, and code puts each
 one back exactly. If the AI loses, repeats or makes up a marker, or adds a figure of its own, it
 is asked once more; then your wording is used word for word, and the page says so. With no AI
-to ask, it is word for word too: there is always a message. Each kind of message keeps its own
+to ask, it is word for word too, and while you leave it unchanged it is fitted on a later check:
+there is always a message. Nothing the AI is not shown in the first request (an amount, a name)
+reaches it in a second one either. Each kind of message keeps its own
 suggestion, so going back to one already written asks nothing. What you type into **Add what you
 know** is put into the same fitting with no new request, as long as the wording around it stays
 the same. `AUCTION_FIT=0` in the `.env` file writes every message word for word with no AI, and

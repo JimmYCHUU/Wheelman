@@ -28,6 +28,10 @@ const ai = aiBehaviour({ behave: (req) => {
   if (fitting === 'keep') reply = reply.replace('Thank you for your', 'Many thanks for your');
   if (fitting === 'lose') reply = reply.replace(/\{\{K1\}\}/, 'your car');
   if (fitting === 'invent') reply = reply.replace('\n\n', '\n\nIt can be yours for only $9,999.\n\n');
+  // A blank of its own: every blank the message needs is already a marker.
+  if (fitting === 'blank') reply = reply.replace('\n\n', '\n\nWe will confirm the date: [DATE?].\n\n');
+  // A promise of a time nobody on our side gave: rejected, so the request is made a second time.
+  if (fitting === 'promise') reply = m ? reply.replace(/(\{\{K\d+\}\} AUD is due on your \{\{K\d+\}\})/, '$1, and we will book shipping by 3 pm tomorrow') : 'Hello {{NAME}},\n\nThe payment of {{DUE}} AUD is due on your car, and we will book shipping by 3 pm tomorrow.';
   return { reply, next_step: '', rung: '', facts_used: [], needs_human: [], hold: false };
 } });
 
@@ -226,4 +230,109 @@ test('the message that is due is fitted in the background only while the setting
   await messages.prepareOrders(items.buildOrderItem, { now, fitWith: drafter.draftFor });
   assert.ok(asked() > before, 'switched on: fitted');
   assert.notEqual(db.latestDraft('ao:504', items.buildOrderItem(504).anchorKey, 'secured').provider, 'none');
+});
+
+// ---- found in review --------------------------------------------------------------------------------
+
+test('a second request after a rejected fitting carries no amount and no name either', async () => {
+  config.auction.fit = true;
+  fitting = 'promise';
+  try {
+    const before = asked();
+    await post('/api/items/ao:505/draft', { message: 'payment_due' });
+    assert.equal(asked() - before, 2, 'asked a second time');
+    const second = lastRequest();
+    for (const secret of ['10,777', 'Quin', 'Marsh']) assert.ok(!second.includes(secret), `"${secret}" reached the AI in the second request`);
+  } finally { fitting = 'keep'; }
+});
+
+test('a second request for a reply to what an auction customer wrote carries no amount either', async () => {
+  fitting = 'promise';
+  try {
+    const before = asked();
+    await post('/api/items/ao:505/paste', { direction: 'in', text: 'How much do I still owe?' });
+    assert.equal(asked() - before, 2, 'asked a second time');
+    const second = lastRequest();
+    for (const secret of ['10,777', 'Quin', 'Marsh']) assert.ok(!second.includes(secret), `"${secret}" reached the AI in the second request`);
+  } finally { fitting = 'keep'; }
+});
+
+test('the request to fit a message asks for that, not for a reply: no rule against its own thank-you, greeting or blanks', async () => {
+  config.auction.fit = true;
+  fitting = 'keep';
+  // Written earlier in this file: forgotten, so it is fitted afresh.
+  db.openDb().prepare("DELETE FROM drafts WHERE item_key = 'ao:501' AND template = 'first_estimate'").run();
+  await post('/api/items/ao:501/draft', { message: 'first_estimate' });
+  const sent = lastRequest();
+  assert.match(sent, /THE MESSAGE TO FIT TO THIS CUSTOMER/);
+  for (const clash of ['Do not thank them for an enquiry', 'wrote to us on WhatsApp', 'Open with the greeting for this hour', 'write [DEPOSIT LINK?]', 'Use [DATE?] or [CHECK?]', 'THE CUSTOMER IS WAITING FOR A REPLY TO']) {
+    assert.ok(!sent.includes(clash), `the request still says "${clash}"`);
+  }
+});
+
+test('a blank the AI adds of its own is caught: every blank the message needs is already in it', async () => {
+  config.auction.fit = true;
+  fitting = 'blank';
+  try {
+    const before = asked();
+    const d = (await post('/api/items/ao:501/draft', { message: 'lots_coming' })).json.item.draft;
+    assert.equal(asked() - before, 2);
+    assert.ok(!d.reply.includes('[DATE?]'), d.reply);
+    assert.ok(d.checks.some((c) => c.code === 'template-word-for-word'));
+  } finally { fitting = 'keep'; }
+});
+
+test('a message written word for word while the AI was away says so, and is fitted on a later check unless you changed it', async () => {
+  const messages = await import('../src/ordermessages.js');
+  const drafter = await import('../src/drafter.js');
+  config.auction.fit = true;
+  config.auction.fitInBackground = true;
+  fitting = 'keep';
+  const anchor = items.buildOrderItem(504).anchorKey;
+  const forget = () => db.openDb().prepare("DELETE FROM drafts WHERE item_key = 'ao:504'").run();
+  const prepare = (at = now, extra = {}) => messages.prepareOrders(items.buildOrderItem, { now: at, fitWith: drafter.draftFor, ...extra });
+
+  forget();
+  ai.down = true;
+  try { await prepare(); } finally { ai.down = false; }
+  let d = db.latestDraft('ao:504', anchor, 'secured');
+  assert.equal(d.provider, 'none');
+  assert.ok(d.checks.some((c) => c.code === 'template-word-for-word' && /not available/.test(c.message)), 'the reason is the AI, not a fact');
+
+  let before = asked();
+  await prepare();
+  assert.equal(asked(), before, 'too soon: left as it is');
+  await prepare(now + 31 * 60e3);
+  assert.ok(asked() > before, 'half an hour on: fitted');
+  assert.notEqual(db.latestDraft('ao:504', anchor, 'secured').provider, 'none');
+
+  // While the AI is paused (its allowance, or a busy spell), the background writes word for word, to fit later.
+  forget();
+  before = asked();
+  await prepare(now, { aiPaused: true });
+  assert.equal(asked(), before, 'nothing asked while paused');
+  d = db.latestDraft('ao:504', anchor, 'secured');
+  assert.equal(d.context.fitLater, true);
+  // One you changed in the meantime is yours: it is not written over.
+  db.recordEdit(d.id, 'Hello Pia, your Hiace is secured. I will call you this afternoon.');
+  await prepare(now + 31 * 60e3);
+  assert.equal(asked(), before, 'changed by you: left alone');
+});
+
+test('whatever goes wrong in fitting, the message is still written, word for word', async () => {
+  const messages = await import('../src/ordermessages.js');
+  const broken = async () => ({ status: 'failed', error: 'something unexpected', checks: [] });
+  const d = await messages.draftOrderMessage(items.buildOrderItem(501), { type: 'search_update', fitWith: broken });
+  assert.equal(d.status, 'ready');
+  assert.equal(d.provider, 'none');
+  assert.match(d.reply, /^Hello Nina,/);
+});
+
+test("a promise that is the owner's own wording is not flagged as one nobody made", async () => {
+  config.auction.fit = true;
+  fitting = 'keep';
+  db.openDb().prepare("DELETE FROM drafts WHERE item_key = 'ao:501' AND template = 'deposit_reminder'").run();
+  const d = (await post('/api/items/ao:501/draft', { message: 'deposit_reminder' })).json.item.draft;
+  assert.notEqual(d.provider, 'none');
+  assert.ok(!d.checks.some((c) => /Make sure someone will do it/i.test(c.message)), JSON.stringify(d.checks));
 });
