@@ -41,8 +41,28 @@ export function inclusionsSentence(vehicle) {
   const dealer = find(DEALER);
   if (dealer) out.push(`a ${dealer.m[1] || 3}-month dealer warranty`);
   if (!out.length) return '';
-  return out.length === 1 ? out[0] : `${out.slice(0, -1).join(', ')} and ${out[out.length - 1]}`;
+  return list(out);
 }
+
+/**
+ * The three inclusions a Marketplace first reply names, as the team says them: "6 months rego, a
+ * fresh roadworthy and a 5-year warranty", keeping only what the car's Included list has, in that
+ * order. '' when it has none of them.
+ */
+export function inclusionsShort(vehicle) {
+  const lines = (vehicle?.outline || []).map((l) => String(l || ''));
+  const find = (re) => { for (const l of lines) { const m = l.match(re); if (m) return m; } return null; };
+  const out = [];
+  const rego = find(REGISTRATION);
+  if (rego) out.push(`${rego[1] || rego[2]} months rego`);
+  if (find(ROADWORTHY)) out.push('a fresh roadworthy');
+  const extended = find(EXTENDED);
+  if (extended) out.push(`a ${extended[1] || 5}-year warranty`);
+  return out.length ? list(out) : '';
+}
+
+/** "a, b and c" */
+const list = (out) => (out.length === 1 ? out[0] : `${out.slice(0, -1).join(', ')} and ${out[out.length - 1]}`);
 
 /**
  * The price reply for one car. inspectionUrl: the booking link when the car can be seen ('' when

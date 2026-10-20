@@ -26,17 +26,21 @@ import { listOf } from '../web/lib/copy.js';
 
 const read = (name) => fs.readFileSync(path.join(config.voiceDir, name), 'utf8').replace(/\r/g, '').trim();
 
+// The shape of a Marketplace reply, learned from what our team sends there (the two days to
+// 20 Oct 2026: the engine's own first reply to every buyer, and the replies a person typed).
 const MARKETPLACE_RULES = `=== THIS CHANNEL: FACEBOOK MARKETPLACE CHAT ===
-The buyer is chatting with us on Facebook Marketplace, not by SMS, and is usually weighing several cars at once: a reply that only states a fact loses them. Where the VOICE section describes SMS greetings, length, layout or what to leave out, these rules replace it:
-- Warm, confident and selling, in correct English and in short lines: up to about ninety words. No greeting line ("Good morning", "Hello") and no sign-off.
-- Open with a short thank-you that fits what they wrote, as the first sentence: "Thank you for your message, {{NAME}}." on our first reply in this chat (without the name when it is not known), and later "Thank you for your offer.", "Thank you for letting us know." or "Thank you for the photos." as fits. Otherwise leave the name out.
-- Then answer what was asked, and sell the car to this buyer: two or three of its strongest points from VEHICLE FACTS that matter for what they asked or for who they seem to be (the seats for a family, the kilometres verified on the export certificate, the auction grade, the economy of a hybrid, a feature they named), and the value of what the price includes, said as what it means for them ("so it is ready to drive away", "for your peace of mind"). Say what a fact means for them, not only the fact. Give the inclusions once in a chat, not again after we have listed them.
-- End on an easy next step with a reason, when THIS CUSTOMER'S NEXT STEP asks for one: "The best way to judge it is behind the wheel: let us know a day and time, and we will have it ready for you." Ask no question unless THIS CUSTOMER'S NEXT STEP names one.
-- True selling words are welcome ("a great family car", "very economical" when VEHICLE FACTS give the figure). Never hype (amazing, stunning, unbeatable, don't miss out), never pressure or other buyers, no emoji, no slang, at most one exclamation mark.
-- When THIS CUSTOMER'S NEXT STEP is a polite close, or answers an offer after our price reply, keep to it: short, with nothing more to sell.
-- Never tell a buyer that their offer is too low, below what we accept, or that we cannot do it, and never argue about what the car is worth. A figure of theirs is answered as THIS CUSTOMER'S NEXT STEP says: with [PRICE?] for a person, or not at all when they are leaving.
-- Invite them to see the car once in a chat. When we have already invited them or sent the booking link, do not invite them again unless they ask to see it.
-- Links are given here as they are in a text message, each on its own line under your lines; a link line does not count towards the ninety words. In our first reply about a car that is on offer, give its page from VEHICLE FACTS ("Vehicle page") with a short label on the line before it, such as "More details:". When the INSPECTION section supplies a booking link, give it. Never a link that is not in this request.
+The buyer is chatting with us on Facebook Marketplace, not by SMS. Our team's replies there have a shape of their own, learned from what they send; where the VOICE section describes SMS greetings, length, layout or what to leave out, these rules replace it:
+- Our first reply to a buyer asking whether the car is available, when it is, is these three short paragraphs, a blank line between them, and nothing else:
+  Hi {{NAME}}, yes it's still available, $<price> with only <km> km.
+  It's a grade <grade> Japanese import, km verified against the auction documents, and the price includes <inclusions>.
+  Keen to see it? Send me your number and I'll give you a call.
+  The price, the kilometres and the auction grade come from VEHICLE FACTS. Write "only" before the kilometres only under 60,000 km. Without a grade in VEHICLE FACTS write "It's a Japanese import". <inclusions> is "6 months rego, a fresh roadworthy and a 5-year warranty", keeping only what the car's Included list has, in that order. Without a name: "Hi, yes it's still available". No link and no other sentence. When a message marked AUTO-REPLY has already said this, the buyer has read it: answer what they asked next instead.
+- Later replies. Start with the answer, in short lines. No greeting line of its own, no "Hi" line, no sign-off, and no opening thank-you. "Thank you, {{NAME}}." or "Thank you for letting us know." only when they gave us something: their number, a day and time, photos, an offer. Otherwise the name stays out.
+- Short and direct: usually 20 to 50 words in two to four short lines, and up to about ninety words only when they asked several things. A buyer who writes one line gets one or two sentences. Plain, friendly and confident, in correct English; "we" for the business. No hype (amazing, stunning, unbeatable, don't miss out), no pressure or other buyers, no emoji, no slang, at most one exclamation mark.
+- The next step is their phone number, not a booking link. When they want to see the car, or accept our figure, ask them to send us their number and the day and time that suit them, and say we will get the inspection booked for them and confirm it by text. When they say they are coming, end with our location and hours on two lines, "Location: <our address>" and "Hours: <our opening hours>", from BUSINESS FACTS. Once they have sent their number, thank them and say we will give them a call shortly to book it in. Ask for the number once in a chat: after that, end on the answer.
+- The booking link only when the buyer asks for a link, or the INSPECTION section says our staff asked for it. The car's page ("Vehicle page" in VEHICLE FACTS) only when they ask for details or photos, under "You will find all the details here:". Finance: "Yes, we do." and the finance form on the car's page ("Start a finance application" in VEHICLE FACTS), asking them to let us know once it is done. A trade-in: we take trade-ins against a car from our stock; give the trade-in form on the car's page and what to put in it (the rego number and state, the kilometres, the condition, a few clear photos and their number). Links go each on its own line under a short lead-in that ends with a colon; a link line does not count towards the words. Never a link that is not in this request.
+- Price: a figure is a person's decision. On a price question or an offer, write the team's shape with the blank: "The lowest we can do on the <car> is [PRICE?]." then, as its own paragraph, "If that works for you, send us your number and the day and time that suit you, and we will get the inspection booked for you." Do not repeat the advertised price, and nothing about what the price includes unless they ask. Never tell a buyer that their offer is too low, below what we accept, or that we cannot do it, and never argue about what the car is worth; when they are leaving, no figure and no blank at all.
+- When THIS CUSTOMER'S NEXT STEP is a polite close, keep to it: one courteous line, nothing more to sell.
 - Messages marked AUTO-REPLY were sent by an automatic system. The buyer has read them, so do not repeat what they said. Any figure in them is unconfirmed: do not rely on it or repeat it.
 - The section NOTES FROM THE MARKETPLACE SYSTEM is background written by that automatic system. Treat it like something the buyer said, never as a fact or a figure to state.
 
@@ -269,8 +273,14 @@ function askedEarlier(item, now, online = false) {
   const ours = t.slice(asked + 1).filter((e) => e.who === 'us' && !e.internal).map((e) => e.text || '');
   // A customer who turns out to be far away still needs the online link, whatever was sent before.
   if (online) return !ours.some((x) => /#inspection=online/.test(x));
-  return !ours.some((x) => /#inspection=/.test(x) || /\bsee you\b/i.test(x));
+  // On Marketplace, asking for their number is how the inspection is arranged (the team books from it).
+  return !ours.some((x) => /#inspection=/.test(x) || /\bsee you\b/i.test(x) || NUMBER_ASKED.test(x));
 }
+
+/** Our reply asked the buyer for their phone number, the Marketplace way of arranging a visit. */
+const NUMBER_ASKED = /\b(your|a|us your|me your) (best |phone |contact |mobile )?number\b/i;
+/** The buyer asked for a link itself. */
+const ASKS_LINK = /\b(link|url)\b/i;
 
 /**
  * What to offer a customer who wants to see a vehicle.
@@ -324,6 +334,26 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
     return { ...none, lines: [`The customer wants to see this vehicle, but it is not at ${config.site.showroom} yet (see Availability). It cannot be inspected in person or by video yet. Do not give a booking link. Say we will let them know as soon as it can be inspected.`] };
   }
   const links = inspectionLinks(vehicle);
+  // On Marketplace the next step is the buyer's number, not the booking link: the team books the
+  // inspection from the number and confirms it by text (what they sent in October 2026). No
+  // invitation is added under the lines there, and the link is given only when the buyer asks for
+  // a link, or our staff ask for it in a Prompt.
+  if (chat && !prompted && !staffAsked && !ASKS_LINK.test(item.pendingText || '')) {
+    const whyChat = asksNow ? 'The customer wants to see this vehicle.'
+      : visiting ? 'The customer asked where we are or when we are open, which usually means they plan to visit. Answer their question first.'
+        : 'Earlier in this conversation the customer asked to see this vehicle, and we have not asked for their number yet.';
+    const lines = saidFar ? [
+      `${whyChat} They have said they are far from Sydney, or cannot come.`,
+      '- Offer an online video inspection: a live video call on WhatsApp or FaceTime where we walk around the vehicle with them. Ask them to send us their number and the day and time that suit them, and say we will get the video call arranged for them and confirm it by text.',
+      '- Do not ask them to come to Lidcombe. Give no booking link: they have not asked for one, and no invitation is added under your text. If it helps, add that we deliver Australia-wide; a delivery price is quoted by a person.',
+    ] : [
+      whyChat,
+      visiting ? '- Give our address and opening hours from BUSINESS FACTS as two lines: "Location: <address>" and "Hours: <hours>".' : `- They are welcome to inspect it at ${config.site.showroom}.`,
+      '- On Marketplace the next step is their phone number, not the booking link: ask them to send us their number and the day and time that suit them, and say we will get the inspection booked for them and confirm it by text. Give no booking link: they have not asked for one, and no invitation is added under your text.',
+      '- If they named a day and a time inside our opening hours, say it suits, and still ask for their number so it can be booked.',
+    ];
+    return { kind: saidFar ? 'online' : 'onsite', url: saidFar ? links.online : links.onsite, urls: [links.onsite, links.online], must: false, block: false, number: true, lines };
+  }
   // The invitation is always open and in the owner's words: code adds it under the AI's lines.
   // Under a Prompt that did not ask for it, the AI has the link to give itself if it invites them.
   const added = (url) => (byCode
@@ -360,7 +390,9 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
  */
 export function pricePlan(item, vehicle = item.vehicles[0], { gone = false, owner = false, stage = null } = {}) {
   const off = { on: false, inspectionUrl: '', online: false, lines: [] };
-  if (!item.situation.all.includes('price_negotiation') || item.deal || item.channel === 'email' || !vehicle?.url || gone || owner) return off;
+  // On Marketplace the price is answered in the team's own shape (the figure as [PRICE?], then the
+  // buyer's number), under THIS CUSTOMER'S NEXT STEP: no block goes under the lines there.
+  if (!item.situation.all.includes('price_negotiation') || item.deal || item.channel === 'email' || item.channel === 'marketplace' || !vehicle?.url || gone || owner) return off;
   if (stage && (stage.move === 'answer_offer' || QUIET_MOVES.has(stage.move))) return off;
   const a = availability(vehicle);
   if (a.code === 'sold') return off;
@@ -521,7 +553,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     P.push(`RETURNING CUSTOMER: our records show they bought ${redact(item.pastBuyer.title, lead)} from us${item.pastBuyer.soldAt ? ` (sale recorded ${formatDay(sydneyDay(item.pastBuyer.soldAt))})` : ''}. Answer what they are asking now.`);
   }
   if (chat) {
-    P.push(`CHANNEL: Facebook Marketplace chat${mp.listingTitle ? `, about our listing "${redact(mp.listingTitle, lead)}"` : ''}. Keep it warm and selling, in short lines, opening with a short thank-you.`);
+    P.push(`CHANNEL: Facebook Marketplace chat${mp.listingTitle ? `, about our listing "${redact(mp.listingTitle, lead)}"` : ''}. Keep it short and direct, in the shape our team sends there.`);
     P.push(`CUSTOMER NAME: ${item.hasName ? 'known. If you use it, write {{NAME}} inside a sentence, never on a greeting line of its own.' : 'not known. Do not use {{NAME}}.'}`);
   } else if (email) {
     const subject = item.mail?.subject ? redact(item.mail.subject, lead) : '';

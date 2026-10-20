@@ -335,6 +335,7 @@ export function vehicleFacts(v, { owner = false, reserved = false } = {}) {
     // the customer asks to see the car (inspectionPlan in prompt.js), so they are not offered unasked.
     L.push(`Vehicle page: ${v.url}`);
     L.push(`Start a trade-in request: ${v.url}#trade-in`);
+    L.push(`Start a finance application: ${v.url}#finance`);
   }
   return L.join('\n');
 }

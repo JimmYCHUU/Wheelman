@@ -105,11 +105,19 @@ test('a Prompt changes the template the way you say, its facts kept', async () =
   assert.equal(d.instruction, 'Also say we are open this Sunday.');
 });
 
-test('a Marketplace template opens with a thank-you, has no greeting or sign-off, and its links say they came from Facebook', async () => {
-  const d = (await post('/api/items/mp:504/draft', { message: 'price_question' })).json.item.draft;
-  assert.match(d.reply, /^Thank you for your message, Ava\./);
-  assert.ok(!/Regards|Team Carbarn/.test(d.reply), d.reply);
-  assert.ok(/utm_source=facebook/.test(d.reply), d.reply);
+test('a Marketplace message has the shape the team sends: the first reply in three paragraphs with the car\'s figures, no greeting line or sign-off, and links tagged as from Marketplace', async () => {
+  // mp:501: "Hi, is this still available?" about the Noah: $28,900, 62,733 km, no auction grade recorded,
+  // Included list of 6 months registration and the 5-year warranty.
+  const first = (await post('/api/items/mp:501/draft', { message: 'still_available' })).json.item.draft;
+  assert.equal(first.reply, "Hi Liam, yes it's still available, $28,900 with 62,733 km.\n\nIt's a Japanese import, km verified against the auction documents, and the price includes 6 months rego and a 5-year warranty.\n\nKeen to see it? Send me your number and I'll give you a call.");
+  // mp:504: "Can you do any better?" The figure is a person's; the next step is their number.
+  const price = (await post('/api/items/mp:504/draft', { message: 'price_question' })).json.item.draft;
+  assert.match(price.reply, /^The lowest we can do on the 2021 Toyota Noah X \(8 Seater\) is \[PRICE\?\]\.\n\nIf that works for you, send us your number/);
+  assert.ok(!/Regards|Team Carbarn|^Hello|^Thank you|price includes|#inspection=/.test(price.reply), price.reply);
+  // Finance: the form on the car's own page, tagged as coming from Marketplace.
+  const finance = (await post('/api/items/mp:504/draft', { message: 'finance' })).json.item.draft;
+  assert.ok(finance.reply.includes('/1159?utm_source=marketplace#finance'), finance.reply);
+  assert.ok(!/utm_source=facebook/.test(finance.reply), finance.reply);
 });
 
 test('an Import Query template answers with the figures our website has for the model', async () => {

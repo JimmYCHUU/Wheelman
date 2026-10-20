@@ -10,8 +10,9 @@
 const SOURCES = [
   [/carsales/, 'They came to us from Carsales.'],
   [/autotrader/, 'They came to us from an Autotrader listing.'],
+  // "marketplace" is also the tag on the links in our Marketplace replies (config.marketplace.linkSource, since 20 Oct 2026).
   [/market ?place/, 'They came to us from our Facebook Marketplace listing.'],
-  // Plain "facebook" is the tag on the links in our Marketplace replies (config.marketplace.linkSource).
+  // Plain "facebook" was that tag until 20 Oct 2026, so a lead that carries it is not an advertisement.
   [/^facebook$/, 'They came to us from Facebook.'],
   [/meta ads|facebook|\bfb\b|instagram|\big\b|l\.wl\.co/, 'They came to us from a Facebook or Instagram advertisement.'],
   [/google ?ads|ads\.google|criteo/, 'They came to us from an online advertisement.'],
