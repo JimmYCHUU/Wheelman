@@ -16,6 +16,12 @@ before(async () => {
   db = await import('../src/db.js');
 });
 
+// ---- the settings -------------------------------------------------------------------------------
+
+test('the follow-up settings have their defaults', () => {
+  assert.deepEqual(config.followUp, { on: true, quietHours: 60, afterInspectionHours: 3, maxAgeDays: 14, reminderHour: 16, stockDays: 30 });
+});
+
 // ---- the table ----------------------------------------------------------------------------------
 
 test('a follow-up occasion is raised once, closed, reopened, and moves with a rekeyed lead', () => {
