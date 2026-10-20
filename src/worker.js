@@ -5,6 +5,7 @@ import { config, missingSettings } from './config.js';
 import { syncAll, syncMarketplace } from './sync.js';
 import { listItems, itemFromKey, buildOrderItem, orderRows } from './items.js';
 import { prepareOrders } from './ordermessages.js';
+import { refreshFollowUps } from './followup.js';
 import { draftFor } from './drafter.js';
 import { latestDraft, isDismissed, draftsAwaitingOutcome, recordOutcome, markSuperseded, setMeta, getMeta, openDb, mpDraftsLastDay, rekeyPhoneThreads } from './db.js';
 import { providers, usage, modelStatus, lastModel } from './llm.js';
@@ -268,6 +269,12 @@ export async function cycle() {
   // A number seen only on the phone may now have a dashboard conversation: its marks move across.
   if (config.phone.switchedOn) { try { rekeyPhoneThreads(); } catch (e) { logLine('phone', `Matching phone conversations failed: ${e.message}`); } }
   try { updateOutcomes(); } catch (e) { state.lastDraftError = { at: Date.now(), message: 'Comparing sent replies failed: ' + e.message }; logLine('outcomes', `${e.message} | ${String(e.stack || '').split('\n').slice(1, 4).join(' ')}`); }
+  // Conversations we replied to last that are due a follow-up: raised and closed here, with no AI.
+  // The follow-up itself is written only when the owner opens one from the Follow-ups list.
+  if (config.followUp.on) {
+    try { const r = refreshFollowUps(); if (r.opened || r.closed) logLine('followups', `${r.opened} follow-up(s) due, ${r.closed} closed`); }
+    catch (e) { logLine('followups', `Finding follow-ups failed: ${e.message}`); }
+  }
   // Once a day, relearn our salespeople's genuine replies from the latest dashboard conversations.
   try { refreshVoiceBankIfStale(); } catch { /* keep the existing bank */ }
   // Once a day, the website's list of import-eligible models, for the Import Query section.

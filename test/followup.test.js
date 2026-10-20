@@ -218,6 +218,63 @@ test('a new customer message closes the row as answered; the car selling closes 
   assert.equal(db.followUpsFor('c:308')[0].done_how, 'lapsed');
 });
 
+// ---- the list, the routes and the worker --------------------------------------------------------
+
+const get = async (p) => (await fetch(base + p)).json();
+const post = async (p, body = {}) => { const r = await fetch(base + p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); return { status: r.status, json: await r.json() }; };
+
+test('the Follow-ups list shows the due rows with their reason, newest due first, and All carries no tag', async () => {
+  const list = await get('/api/items?section=dashboard&tab=followups');
+  const row = list.items.find((r) => r.key === 'c:301');
+  assert.ok(row, 'the passed inspection is listed');
+  assert.deepEqual([row.followUp.reason, row.followUp.done, row.followUp.template, row.anchor, list.counts.followups >= 2], ['Inspection passed', '', 'after_inspection', `fu:${row.followUp.id}`, true]);
+  assert.ok(list.items.findIndex((r) => r.key === 'c:301') < list.items.findIndex((r) => r.key === 'c:302'), 'the one due most recently comes first');
+  const plain = (await get('/api/items?section=dashboard&tab=all')).items.find((r) => r.key === 'c:301');
+  assert.deepEqual([plain.followUp, plain.anchor.startsWith('fu:')], [undefined, false]);
+  assert.equal((await get('/api/items?section=auction&tab=followups')).items.length, 0, 'only the dashboard has follow-ups');
+});
+
+test('a conversation is opened with its follow-up in hand', async () => {
+  const row = db.openFollowUpFor('c:301');
+  const { item } = await get(`/api/items/c:301?followup=${row.id}`);
+  assert.deepEqual([item.anchor, item.followUp.id, item.followUp.reason, item.template, item.firstReply], [`fu:${row.id}`, row.id, 'Inspection passed', 'after_inspection', false]);
+  const plain = (await get('/api/items/c:301')).item;
+  assert.deepEqual([plain.followUp.id, plain.followUp.done, plain.anchor.startsWith('fu:')], [row.id, '', false], 'opened from All: the follow-up is known, the anchor is the conversation\'s own');
+});
+
+test('a closed or stale follow-up is refused a draft', async () => {
+  const id = db.openFollowUpFor('c:302').id;
+  db.closeFollowUp(id, 'dismissed');
+  const refused = await post('/api/items/c:302/draft', { followup: id, message: 'after_inspection' });
+  assert.deepEqual([refused.status, refused.json.error], [400, 'This follow-up is done. Put it back first.']);
+  db.reopenFollowUp(id);
+  // Pia writes before anyone follows up: that message is what to answer.
+  msg(302, 'IN', 'Loved the van, can I come back with my partner on Saturday?', NOW - 10 * MIN);
+  conv(302, 302, phoneOf(2), 'Pia Invented', NOW - 10 * MIN, 'IN');
+  const stale = await post('/api/items/c:302/draft', { followup: id, message: 'after_inspection' });
+  assert.deepEqual([stale.status, stale.json.error, db.getFollowUp(id).done_how], [400, 'They have written since. Reply to that instead.', 'answered']);
+});
+
+test('Dismiss and Put back', async () => {
+  const id = db.openFollowUpFor('c:301').id;
+  const d = await post(`/api/followups/${id}/dismiss`);
+  assert.deepEqual([d.status, d.json.item.followUp.done, d.json.item.key], [200, 'dismissed', 'c:301']);
+  assert.ok(!(await get('/api/items?section=dashboard&tab=followups')).items.some((r) => r.key === 'c:301'), 'it leaves the list');
+  const r = await post(`/api/followups/${id}/restore`);
+  assert.deepEqual([r.status, r.json.item.followUp.done], [200, '']);
+  assert.ok((await get('/api/items?section=dashboard&tab=followups')).items.some((r) => r.key === 'c:301'), 'and is back');
+  assert.equal((await post('/api/followups/99999/dismiss')).status, 404);
+});
+
+test('Check now refreshes the follow-ups', async () => {
+  const key = replied(17, 'Liam', { stocks: ['1159'] });
+  // No AI key for the moment, so the check writes no suggestions in the background while later tests script the AI.
+  const apiKey = config.llm.gemini.apiKey;
+  config.llm.gemini.apiKey = '';
+  try { await post('/api/sync'); } finally { config.llm.gemini.apiKey = apiKey; }
+  assert.deepEqual(openFor(key).map((r) => r.reason), ['Quiet 3 days']);
+});
+
 test('a conversation opened with its follow-up carries the anchor and the template', () => {
   const row = db.openFollowUpFor('c:301');
   const item = items.itemFromKey('c:301', { followUp: row.id });
