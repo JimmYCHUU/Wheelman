@@ -3,18 +3,81 @@
 // our reply. The follow-up is written when the conversation is opened from the Follow-ups list,
 // copied by a person, and never learned from. Every name, number and car here is invented; the
 // phone numbers are in the 0491 570 1xx range reserved for fiction.
-import test, { before } from 'node:test';
+import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import os from 'node:os';
+import path from 'node:path';
 import { applyTestEnv } from './support/env.js';
+import { startStandins, aiBehaviour } from './support/standins.js';
+import { world, sydneyNaive } from './support/fixtures.js';
+import { pointConfigAt } from './support/wire.js';
+import { parseDashboardTime, sydneyDay } from '../src/time.js';
 
 applyTestEnv();
 
-let config, db;
+const MIN = 60e3;
+const HOUR = 3600e3;
+const DAY = 24 * HOUR;
+// A fixed "now": two in the afternoon, Sydney time, today (or yesterday while today's is still to
+// come), so every due time the engine works out lands inside working hours whatever the clock says.
+const NOW = (() => { const d = parseDashboardTime(`${sydneyDay(Date.now())}T14:00`); return d <= Date.now() ? d : d - DAY; })();
+
+let standins, config, db, sync, items, followup, normalize, app, base;
+const ai = aiBehaviour();
 
 before(async () => {
+  standins = await startStandins({ world: world(Date.now()), ai });
   ({ config } = await import('../src/config.js'));
+  pointConfigAt(config, standins, { port: 0, sessionPath: path.join(os.tmpdir(), `wheelman-followup-session-${process.pid}.json`) });
   db = await import('../src/db.js');
+  sync = await import('../src/sync.js');
+  items = await import('../src/items.js');
+  followup = await import('../src/followup.js');
+  normalize = await import('../src/normalize.js');
+  await sync.syncAll();
+  app = await (await import('../src/server.js')).startServer();
+  base = `http://127.0.0.1:${app.address().port}`;
 });
+
+after(async () => {
+  if (app) await new Promise((r) => { app.close(r); app.closeAllConnections?.(); });
+  if (standins) await standins.close();
+});
+
+// ---- invented conversations, as the sync stores them --------------------------------------------
+
+let mid = 5000;
+let iid = 7000;
+const phoneOf = (n) => `0491570${120 + n}`;
+const lead = (id, convId, first, phoneNo, { at = NOW - 3 * DAY, stocks = ['1201'], inquiries = [], status = 'NEW' } = {}) =>
+  db.upsertLead({ id, conversationId: convId, firstName: first, lastName: 'Invented', phone: phoneNo, email: '', source: 'carsales', status, platform: 'CARSALES', state: 'NSW', leadAt: at, updatedAt: at, stocks, inquiries });
+const conv = (id, leadId, phoneNo, name, latestAt, direction = 'OUT') =>
+  db.upsertConversation({ id, phone: `+61${phoneNo.slice(1)}`, channel: 'SMS', status: 'OPEN', leadId, customerName: name, latestDirection: direction, latestAt, latestBody: 'x' });
+const msg = (conversationId, direction, body, at) =>
+  db.upsertMessage({ id: mid++, conversationId, direction, body, sentBy: direction === 'OUT' ? 'Alex STONE' : null, status: 'SENT', mediaType: null, at, importedAt: at });
+const inquiry = (text, { stockNo = '1201', at = NOW - 3 * DAY, type = 'Carsales', staffNotes = [] } = {}) =>
+  ({ id: iid++, type, subject: 'Vehicle enquiry', text, stockNo, at, status: 'NEW', url: '', leadType: '', priceAtTime: null, loanAmount: null, depositAmount: null, years: null, staffNotes, financeStatus: null, weeklyRepayment: null, stockStatus: null, actionType: null, sourceBlock: null, videoViewed: false });
+const clockOf = (at) => new Intl.DateTimeFormat('en-US', { timeZone: 'Australia/Sydney', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(at));
+const bookingInquiry = (at, { stockNo = '1201', bookedAt = at - 26 * HOUR, testDrive = false } = {}) => inquiry(
+  testDrive ? `A Test Drive has been requested by the user for the scheduled time: ${sydneyNaive(at).slice(0, 10)} ${clockOf(at)}. Please review and confirm the request.`
+    : `Preferred inspection: On-site on ${sydneyNaive(at).slice(0, 10)} at ${clockOf(at)}.`,
+  { type: testDrive ? 'Book Inspection' : 'product_page_inspection', stockNo, at: bookedAt });
+
+/** A conversation where we replied last: the customer's text, then ours, with the lead's enquiries. */
+function replied(n, name, { inAt = NOW - 62 * HOUR, outAt = NOW - 61 * HOUR, inText = 'Is the van still available?', outText = `Hello ${name}, yes it is available. Would you like to come and see it?`, stocks = ['1201'], inquiries = [], ours = null } = {}) {
+  const id = 300 + n;
+  const phoneNo = phoneOf(n);
+  lead(id, id, name, phoneNo, { stocks, inquiries });
+  const texts = ours || [[outAt, outText]];
+  if (inText) msg(id, 'IN', inText, inAt);
+  for (const [at, text] of texts) msg(id, 'OUT', text, at);
+  const last = texts[texts.length - 1];
+  conv(id, id, phoneNo, `${name} Invented`, last ? last[0] : inAt, last ? 'OUT' : 'IN');
+  return `c:${id}`;
+}
+
+const refresh = () => followup.refreshFollowUps({ now: NOW });
+const openFor = (key) => db.openFollowUps().filter((r) => r.item_key === key);
 
 // ---- the settings -------------------------------------------------------------------------------
 
@@ -40,10 +103,126 @@ test('a follow-up occasion is raised once, closed, reopened, and moves with a re
   db.dismiss('c:901', 'm:5');
   assert.ok(db.lastDismissedAt('c:901') > 0);
   assert.equal(db.getFollowUp(999), null);
+  // The row is closed again so the engine's tests below start from nothing open.
+  db.closeFollowUp(id, 'lapsed');
 });
 
 test('a follow-up draft is never waiting for an outcome', () => {
   const a = db.insertDraft({ itemKey: 'c:901', anchorKey: 'fu:1', status: 'ready', reply: 'x' });
   const b = db.insertDraft({ itemKey: 'c:901', anchorKey: 'm:5', status: 'ready', reply: 'y' });
   assert.deepEqual(db.draftsAwaitingOutcome().map((d) => d.id).filter((x) => x === a || x === b), [b]);
+});
+
+// ---- the engine ---------------------------------------------------------------------------------
+
+test('due times fall inside working hours', () => {
+  const two = parseDashboardTime('2026-10-21T02:00'), seven = parseDashboardTime('2026-10-21T19:00'), eleven = parseDashboardTime('2026-10-21T11:00');
+  assert.deepEqual([followup.atSensibleHour(two), followup.atSensibleHour(seven), followup.atSensibleHour(eleven)], [parseDashboardTime('2026-10-21T09:00'), parseDashboardTime('2026-10-22T09:00'), eleven]);
+});
+
+test('an inspection whose booked time has passed raises one follow-up at a sensible hour', () => {
+  const visit = NOW - 4 * HOUR;
+  const key = replied(1, 'Quin', { inText: '', inquiries: [bookingInquiry(visit)], ours: [[visit - 25 * HOUR, 'Hello Quin, your inspection of the Hiace is booked. See you then.']] });
+  refresh();
+  const rows = openFor(key);
+  assert.equal(rows.length, 1);
+  const r = rows[0];
+  assert.deepEqual([r.kind, r.reason, r.template, r.since_at, r.due_at, r.data.deposit, r.data.where], ['inspection_passed', 'Inspection passed', 'after_inspection', visit, NOW - HOUR, true, 'onsite']);
+  refresh();
+  assert.equal(openFor(key).length, 1, 'raised once');
+});
+
+test('a test drive reads the same way', () => {
+  const visit = NOW - 5 * HOUR;
+  const key = replied(2, 'Pia', { inText: '', inquiries: [bookingInquiry(visit, { testDrive: true })], ours: [[visit - 25 * HOUR, 'Hello Pia, your test drive is booked. See you then.']] });
+  refresh();
+  assert.deepEqual(openFor(key).map((r) => [r.reason, r.data.kind]), [['Test drive passed', 'test_drive']]);
+});
+
+test('they said they cannot come: no follow-up', () => {
+  const visit = NOW - 4 * HOUR;
+  const key = replied(3, 'Sol', { inAt: NOW - 5 * HOUR, inText: "Sorry, I can't make it today after all", inquiries: [bookingInquiry(visit)], ours: [[visit - 25 * HOUR, 'Hello Sol, your inspection is booked. See you then.'], [NOW - 4.5 * HOUR, 'No problem, another day suits us too.']] });
+  refresh();
+  assert.deepEqual(openFor(key), []);
+});
+
+test('they wrote after the booked time: the ordinary reply, not a follow-up', () => {
+  const visit = NOW - 4 * HOUR;
+  const key = replied(4, 'Tess', { inAt: NOW - 2 * HOUR, inText: 'When can I pick it up?', inquiries: [bookingInquiry(visit)], ours: [[visit - 25 * HOUR, 'Hello Tess, your inspection is booked. See you then.']] });
+  conv(304, 304, phoneOf(4), 'Tess Invented', NOW - 2 * HOUR, 'IN');
+  refresh();
+  assert.deepEqual([items.itemFromKey(key).state, openFor(key)], ['awaiting', []]);
+});
+
+test('a reply 61 hours ago with nothing since is quiet', () => {
+  const key = replied(5, 'Remy', { stocks: ['1159'] });
+  refresh();
+  const rows = openFor(key);
+  assert.equal(rows.length, 1);
+  assert.deepEqual([rows[0].kind, rows[0].reason, rows[0].template, rows[0].since_at, rows[0].due_at], ['quiet', 'Quiet 3 days', 'quiet_nudge', NOW - 62 * HOUR, NOW - HOUR]);
+});
+
+test('30 hours is not quiet yet', () => {
+  const key = replied(6, 'Omar', { inAt: NOW - 31 * HOUR, outAt: NOW - 30 * HOUR });
+  refresh();
+  assert.deepEqual(openFor(key), []);
+});
+
+test('a staff note is not a reply: nothing is raised', () => {
+  // The enquiry came through a portal with no text of its own on the dashboard; a staff note says it was dealt with.
+  const key = replied(7, 'Nina', { inText: '', inquiries: [inquiry('Is the van still available?', { at: NOW - 62 * HOUR, staffNotes: [{ by: 'Alex', text: 'SMS Sent', at: NOW - 61 * HOUR }] })], ours: [] });
+  conv(307, 307, phoneOf(7), 'Nina Invented', NOW - 62 * HOUR, 'IN');
+  refresh();
+  assert.deepEqual([items.itemFromKey(key).state, openFor(key)], ['answered', []]);
+});
+
+test('three texts in five minutes are one burst, so the nudge is still allowed', () => {
+  const key = replied(8, 'Kofi', { stocks: ['1700'], ours: [[NOW - 61 * HOUR, 'Hello Kofi, yes it is available.'], [NOW - 61 * HOUR + 2 * MIN, 'It is at our Lidcombe showroom.'], [NOW - 61 * HOUR + 4 * MIN, 'Would you like to come and see it?']] });
+  refresh();
+  assert.equal(openFor(key).length, 1);
+});
+
+test('two bursts since they last wrote: nothing more', () => {
+  const key = replied(9, 'Maria', { inAt: NOW - 80 * HOUR, ours: [[NOW - 70 * HOUR, 'Hello Maria, yes it is available.'], [NOW - 61 * HOUR, 'Hello again, it is still available if you would like to see it.']] });
+  refresh();
+  assert.deepEqual(openFor(key), []);
+});
+
+test('a future booking, a no, an opt-out, a buyer, a dismissed conversation and a sold car get nothing', () => {
+  const future = replied(10, 'Eli', { inquiries: [bookingInquiry(NOW + DAY, { bookedAt: NOW - 70 * HOUR })], ours: [[NOW - 61 * HOUR, 'Hello Eli, your inspection is booked. See you then.']] });
+  const no = replied(11, 'Dana', { inText: 'Not interested thanks', outText: 'Thank you for letting us know.' });
+  const stop = replied(12, 'Brad', { inText: 'STOP', ours: [] });
+  conv(312, 312, phoneOf(12), 'Brad Invented', NOW - 62 * HOUR, 'IN');
+  const buyer = replied(13, 'Yuki', { stocks: ['1600'] });
+  db.upsertSale({ vehicleId: 7, saleId: 9077, stockNo: '1600', stage: 'PENDING_PAYMENT', soldAt: NOW - DAY, paid: 'part', phones: normalize.phoneKeys(phoneOf(13)), email: '' });
+  const dismissed = replied(14, 'Isla');
+  db.dismiss(dismissed, items.itemFromKey(dismissed).anchorKey);
+  const sold = replied(15, 'Tom', { stocks: ['1200'] });
+  const old = replied(16, 'Rhea', { inAt: NOW - 21 * DAY, outAt: NOW - 20 * DAY });
+  refresh();
+  for (const key of [future, no, stop, buyer, dismissed, sold, old]) assert.deepEqual(openFor(key), [], key);
+  assert.ok(items.itemFromKey(buyer).deal, 'the sale on that number makes them a buyer');
+});
+
+test('a new customer message closes the row as answered; the car selling closes it as lapsed', async () => {
+  const quiet = 'c:305';
+  msg(305, 'IN', 'Still interested, is it there this weekend?', NOW - 10 * MIN);
+  conv(305, 305, phoneOf(5), 'Remy Invented', NOW - 10 * MIN, 'IN');
+  refresh();
+  assert.equal(db.followUpsFor(quiet)[0].done_how, 'answered');
+  // Kofi asked about the Serena; it sells before anyone follows up.
+  const serena = standins.world.vehicles.find((v) => v.id === 8);
+  Object.assign(serena, { status: 'UNPUBLISHED', soldStatus: 'Sold', stockIn: 'Sold' });
+  await sync.syncAll({ vehicles: { force: true } });
+  refresh();
+  assert.equal(db.followUpsFor('c:308')[0].done_how, 'lapsed');
+});
+
+test('a conversation opened with its follow-up carries the anchor and the template', () => {
+  const row = db.openFollowUpFor('c:301');
+  const item = items.itemFromKey('c:301', { followUp: row.id });
+  assert.deepEqual([item.anchorKey, item.templatePick, item.followUp.id, item.isFirstReply, item.followUpDue], [`fu:${row.id}`, 'after_inspection', row.id, false, undefined]);
+  const plain = items.itemFromKey('c:301');
+  assert.deepEqual([plain.followUp, plain.followUpDue.id, plain.anchorKey.startsWith('fu:')], [undefined, row.id, false], 'opened from All it knows a follow-up is due, but the anchor is the conversation\'s own');
+  assert.equal(items.itemFromKey('c:306', { followUp: row.id }).followUp, undefined, 'a follow-up of another conversation is ignored');
 });
