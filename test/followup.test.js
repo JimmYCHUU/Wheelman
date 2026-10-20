@@ -22,7 +22,7 @@ const DAY = 24 * HOUR;
 // come), so every due time the engine works out lands inside working hours whatever the clock says.
 const NOW = (() => { const d = parseDashboardTime(`${sydneyDay(Date.now())}T14:00`); return d <= Date.now() ? d : d - DAY; })();
 
-let standins, config, db, sync, items, followup, normalize, app, base;
+let standins, config, db, sync, items, followup, normalize, st, app, base;
 const ai = aiBehaviour();
 
 before(async () => {
@@ -34,6 +34,9 @@ before(async () => {
   items = await import('../src/items.js');
   followup = await import('../src/followup.js');
   normalize = await import('../src/normalize.js');
+  st = await import('../src/sectiontemplates.js');
+  // A second Noah in stock, so one of the cars has a similar car to offer.
+  standins.world.vehicles.push({ id: 9, stockNo: '1160', year: '2020', title: '2020 Toyota Noah Si', make: 'TOYOTA', model: 'Noah', modelCode: 'ZRR80W', auPublishPrice: 27900, odometer: 70000, seats: 8, fuel: 'Petrol', transmission: 'Automatic', color: 'Silver', status: 'PUBLISHED', soldStatus: 'UnSold', stockIn: 'Online', outline: ['6 Months NSW Registration'], chassisNo: 'ZRR80-0202020' });
   await sync.syncAll();
   app = await (await import('../src/server.js')).startServer();
   base = `http://127.0.0.1:${app.address().port}`;
@@ -273,6 +276,63 @@ test('Check now refreshes the follow-ups', async () => {
   config.llm.gemini.apiKey = '';
   try { await post('/api/sync'); } finally { config.llm.gemini.apiKey = apiKey; }
   assert.deepEqual(openFor(key).map((r) => r.reason), ['Quiet 3 days']);
+});
+
+// ---- the two messages and their facts -----------------------------------------------------------
+
+test('the follow-up messages are offered to a follow-up only, the due one first', async () => {
+  const row = db.openFollowUpFor('c:301');
+  const list = (await get(`/api/items/c:301?followup=${row.id}`)).item.templates;
+  assert.deepEqual([list[0].id, list[0].due, list[0].label], ['after_inspection', true, 'After the inspection']);
+  assert.ok(!(await get('/api/items/c:301')).item.templates.some((t) => t.id === 'after_inspection'), 'not on the ordinary list');
+  assert.ok(!(await get('/api/items/c:202')).item.templates.some((t) => /after_inspection|quiet_nudge/.test(t.id)));
+  assert.deepEqual(st.checkTemplates(), []);
+});
+
+test('the words for the booked day and time', () => {
+  const wed = parseDashboardTime('2026-10-21T14:00');
+  assert.deepEqual([st.bookedDayWords(wed, wed + 2 * HOUR), st.bookedDayWords(wed, wed + DAY), st.bookedDayWords(wed, wed + 3 * DAY), st.bookedTimeWords(wed), st.bookedTimeWords(wed + 30 * MIN)],
+    ['today', 'yesterday', 'on Wednesday 21 October', '2 pm', '2:30 pm']);
+});
+
+test('the one new thing: the documents, then the video, then a similar car, then a time to come in', () => {
+  const noah = db.getVehicleByStock('1159');
+  const hiace = db.getVehicleByStock('1201');
+  const media = { documents: [{ type: 'EXPORT_CERTIFICATE', link: 'https://docs.example/export.pdf', shareable: true }, { type: 'AUCTION_SHEET', link: 'https://docs.example/sheet.png', shareable: true }], videos: [{ label: 'Walkaround 360', link: 'https://videos.example/walk.mp4', shareable: true }] };
+  const item = (texts, v = noah) => ({ timeline: texts.map((t, i) => ({ who: 'us', text: t, at: i + 1 })), vehicles: [v], lead: { inquiries: [] }, deal: null });
+  const docs = st.newThingFor(item([]), media);
+  assert.equal(docs.kind, 'documents');
+  assert.match(docs.text, /export certificate[\s\S]*https:\/\/docs\.example\/export\.pdf[\s\S]*https:\/\/docs\.example\/sheet\.png/i);
+  const video = st.newThingFor(item(['Here is the auction sheet.']), media);
+  assert.deepEqual([video.kind, /https:\/\/videos\.example\/walk\.mp4/.test(video.text)], ['video', true]);
+  const similar = st.newThingFor(item(['Here is the auction sheet and the walkaround video.']), media);
+  assert.deepEqual([similar.kind, /2020 Toyota Noah Si/.test(similar.text), /\$27,900/.test(similar.text), /70,000 km/.test(similar.text)], ['similar', true, true, true]);
+  const visit = st.newThingFor(item(['Here is the auction sheet and the walkaround video.'], hiace), media);
+  assert.deepEqual([visit.kind, /#inspection=onsite/.test(visit.text)], ['visit', true]);
+  assert.equal(st.newThingFor(item(['Here is the auction sheet and the walkaround video. You are welcome to come and see it.'], hiace), media), null, 'everything has been offered');
+  assert.equal(st.newThingFor(item([], hiace), null).kind, 'visit', 'with no media to hand, the documents and the video are not offered');
+});
+
+test('a follow-up greets and signs off even on a day we have already written', async () => {
+  const row = db.openFollowUpFor('c:301');
+  const item = items.itemFromKey('c:301', { followUp: row.id });
+  const visit = row.data.bookedAt;
+  // Ten minutes after our confirmation went out: an ordinary message that day would drop the greeting.
+  const composed = await st.composeSectionTemplate(item, 'after_inspection', { now: visit - 25 * HOUR + 10 * MIN });
+  assert.match(composed.text, /^Good morning {{NAME}},\n\nTeam Carbarn here\. How did you find the 2020 Toyota Hiace DX on \w+day \d+ \w+\?\n\nA \$1,000 refundable holding deposit takes it off the market for you; until then it stays for sale\.\n\nRegards,\nTeam Carbarn$/);
+  const after = await st.composeSectionTemplate(item, 'after_inspection', { now: visit + 4 * HOUR });
+  assert.match(after.text, /How did you find the 2020 Toyota Hiace DX today\?/);
+});
+
+test('a follow-up written word for word names Carbarn, the booked day and the deposit', async () => {
+  ai.down = true;
+  try {
+    const row = db.openFollowUpFor('c:301');
+    const out = await post('/api/items/c:301/draft', { followup: row.id, message: 'after_inspection' });
+    const d = out.json.item.draft;
+    assert.deepEqual([out.status, d.template, d.provider, out.json.item.anchor], [200, 'after_inspection', 'none', `fu:${row.id}`]);
+    assert.match(d.reply, /^Good (morning|afternoon|evening) Quin,\n\nTeam Carbarn here\. How did you find the 2020 Toyota Hiace DX (today|yesterday)\?\n\nA \$1,000 refundable holding deposit takes it off the market for you; until then it stays for sale\.\n\nRegards,\nTeam Carbarn$/);
+  } finally { ai.down = false; }
 });
 
 test('a conversation opened with its follow-up carries the anchor and the template', () => {

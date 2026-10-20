@@ -10,17 +10,19 @@
 // Auction orders and the enquiries in Auction have their own list (src/ordermessages.js).
 
 import { config } from './config.js';
-import { template } from './templates.js';
+import { template, fill } from './templates.js';
 import { availability } from './normalize.js';
 import { reservedByAnother } from './deal.js';
-import { inspectionLinks } from './knowledge.js';
+import { inspectionLinks, alternatives } from './knowledge.js';
+import { allVehicles } from './db.js';
+import { vehicleMedia } from './vehiclemedia.js';
 import { inclusionsSentence, inclusionsShort, priceBlock } from './pricereply.js';
 import { inviteBlock, standardBlock } from './firstreply.js';
 import { farAway, SITUATIONS } from './situations.js';
 import { priceFigures, PARTING, DECLINED } from './selling.js';
 import { topicsIn, researchFor } from './importquery.js';
 import { greetingFor } from './checks.js';
-import { sydneyHour, sydneyDay } from './time.js';
+import { sydneyHour, sydneyDay, sydneyWeekday } from './time.js';
 import { money, wantedFrom } from './imports.js';
 import { draftFromTemplate } from './templatedraft.js';
 
@@ -34,6 +36,8 @@ export const SIGNALS = [
   ...Object.keys(SITUATIONS), 'general',
   'first reply', 'later reply', 'buyer', 'far away', 'their offer', 'parting',
   'car', 'car available', 'car on its way', 'car sold', 'no car', 'any',
+  // a follow-up opened from the Follow-ups list (src/followup.js), and which kind
+  'follow-up', 'inspection passed', 'quiet',
   // emails
   'eligibility', 'cost', 'deposit', 'timeline', 'payment', 'warranty', 'compliance_only', 'process', 'availability', 'eligible',
 ];
@@ -41,7 +45,11 @@ export const SIGNALS = [
 /** Every fact a template may use, by file. A {word} outside these is a typing slip. {if_word}
  * keeps its paragraph only when that fact applies (has something in it). */
 const CAR_FACTS = ['greeting', 'sign_off', 'thanks', 'hi', 'car', 'car_link', 'price', 'km', 'km_said', 'import_said', 'where', 'inclusions', 'if_inclusions', 'inclusions_short', 'price_reply', 'invitation',
-  'first_reply_block', 'address_block', 'stock_link', 'finance_link', 'finance_form', 'trade_in_form', 'warranty_link', 'importing_link', 'if_warranty', 'if_no_warranty', 'if_no_car', 'sender'];
+  'first_reply_block', 'address_block', 'stock_link', 'finance_link', 'finance_form', 'trade_in_form', 'warranty_link', 'importing_link', 'if_warranty', 'if_no_warranty', 'if_no_car', 'sender',
+  // the follow-ups' own facts
+  'booked_day', 'booked_time', 'deposit_offer', 'new_thing'];
+// The fit word for each kind of follow-up.
+const FOLLOW_UP_WORDS = { inspection_passed: 'inspection passed', quiet: 'quiet' };
 export const FACTS = {
   'dashboard-messages.md': CAR_FACTS,
   'marketplace-messages.md': CAR_FACTS,
@@ -56,6 +64,8 @@ const customerWords = (item, n = 8) => item.timeline.filter((e) => e.who === 'cu
 export function fitSignals(item) {
   const s = new Set(['any', ...(item.situation?.all || [])]);
   s.add(item.isFirstReply ? 'first reply' : 'later reply');
+  // A follow-up in hand: its own messages fit it. A conversation that is merely due one shows nothing of it.
+  if (item.followUp) { s.add('follow-up'); if (FOLLOW_UP_WORDS[item.followUp.kind]) s.add(FOLLOW_UP_WORDS[item.followUp.kind]); }
   if (item.deal) s.add('buyer');
   const v = item.vehicles?.[0];
   if (!v) s.add('no car');
@@ -99,7 +109,11 @@ export function templatesFor(item) {
     out.push({ id, label: m.label || id, score });
   }
   out.sort((a, b) => b.score - a.score);
-  return out.map((x, i) => ({ id: x.id, label: x.label, best: i === 0 && x.score > 0 }));
+  const offered = out.map((x, i) => ({ id: x.id, label: x.label, best: i === 0 && x.score > 0 }));
+  // A follow-up in hand: its message is the one that is due, and comes first.
+  const due = item.followUp ? offered.findIndex((t) => t.id === item.followUp.template) : -1;
+  if (due >= 0) { const [t] = offered.splice(due, 1); return [{ ...t, due: true, best: false }, ...offered.map((x) => ({ ...x, best: false }))]; }
+  return offered;
 }
 
 /**
@@ -127,6 +141,67 @@ const withoutSender = (block) => {
 /** Where a car is, in a few words for "It is {where}". */
 const WHERE = { available: 'at our Lidcombe showroom', arrived: 'in Australia and being prepared for sale', transit: 'on its way to Australia', japan: 'still in Japan' };
 
+const DAY_MS = 24 * 3600e3;
+const TZ = 'Australia/Sydney';
+
+/** The day of a booking, as a person says it: "today", "yesterday", or "on Wednesday 21 October". */
+export function bookedDayWords(bookedAt, now = Date.now()) {
+  const day = sydneyDay(bookedAt);
+  if (day === sydneyDay(now)) return 'today';
+  if (day === sydneyDay(now - DAY_MS)) return 'yesterday';
+  const month = new Intl.DateTimeFormat('en-AU', { timeZone: TZ, month: 'long' }).format(new Date(bookedAt));
+  return `on ${sydneyWeekday(bookedAt)} ${Number(day.slice(8, 10))} ${month}`;
+}
+
+/** The time of a booking, as a person says it: "2 pm", "2:30 pm", "9 am". */
+export function bookedTimeWords(bookedAt) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: TZ, hourCycle: 'h23', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(bookedAt)).map((x) => [x.type, x.value]));
+  const hour = Number(p.hour);
+  const minute = Number(p.minute);
+  return `${hour % 12 || 12}${minute ? `:${p.minute}` : ''} ${hour < 12 ? 'am' : 'pm'}`;
+}
+
+// What we have already offered this customer, read from our own texts.
+const OFFERED = {
+  documents: /export certificate|auction sheet/i,
+  video: /\b(video|walkaround)\b/i,
+  invited: /welcome to (come|visit|inspect|see)|come (in|and see|down|by)|(available|ready) (for|to) (inspection|inspect|view|see)|book a time|#inspection=/i,
+};
+
+/**
+ * The one new thing to offer a quiet customer, the first of these they have not been offered:
+ * the export certificate and auction sheet, the walkaround video, a similar car we have, a time
+ * to come in. { kind, text } from the @new_... lines of voice/dashboard-messages.md, or null when
+ * everything has been offered. `media` is the car's media (vehicleMedia), or null when not to hand.
+ */
+export function newThingFor(item, media) {
+  const v = item.vehicles?.[0];
+  if (!v) return null;
+  const t = template(SECTION_FILES.dashboard)?.snippets || {};
+  const said = (re) => (item.timeline || []).some((e) => e.who === 'us' && !e.internal && !e.auto && e.text && re.test(e.text));
+  const doc = (type) => (media?.documents || []).find((d) => d && d.type === type && d.shareable !== false && d.link);
+  const docs = [doc('EXPORT_CERTIFICATE') && `Export certificate: ${doc('EXPORT_CERTIFICATE').link}`, doc('AUCTION_SHEET') && `Auction sheet: ${doc('AUCTION_SHEET').link}`].filter(Boolean);
+  if (docs.length && t.new_documents && !said(OFFERED.documents)) return { kind: 'documents', text: fill(t.new_documents, { documents: docs.join('\n') }) };
+  const video = (media?.videos || []).find((x) => x && x.shareable !== false && x.link);
+  const watched = (item.lead?.inquiries || []).some((i) => i.videoViewed);
+  if (video && t.new_video && !watched && !said(OFFERED.video)) return { kind: 'video', text: fill(t.new_video, { video_link: video.link }) };
+  const similar = alternatives(v, allVehicles(), 1)[0];
+  if (similar && t.new_similar) return { kind: 'similar', text: fill(t.new_similar, { similar_car: similar.title, similar_price: money(Number(similar.price)), similar_km: `${Number(similar.odometer || 0).toLocaleString('en-AU')} km`, similar_link: similar.url }) };
+  if (t.new_visit && v.url && availability(v).code === 'available' && !said(OFFERED.invited)) return { kind: 'visit', text: fill(t.new_visit, { booking_link: inspectionLinks(v).onsite }) };
+  return null;
+}
+
+/** The car's media for a follow-up, read with a short patience: null when it cannot be had in time. */
+async function mediaFor(v, { waitMs = 5000 } = {}) {
+  if (!v?.stockNo || !v.chassisNo) return null;
+  let timer = null;
+  const late = new Promise((resolve) => { timer = setTimeout(() => resolve(null), waitMs); timer.unref?.(); });
+  try {
+    const media = await Promise.race([vehicleMedia(v.stockNo), late]);
+    return media && !media.stale ? media : null;
+  } catch { return null; } finally { clearTimeout(timer); }
+}
+
 /**
  * One template filled in with this conversation's facts: { text, part, values, tail, facts }.
  * A fact that does not apply is null, so its paragraph is left out (see fillParts).
@@ -139,7 +214,9 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
   const chat = item.channel === 'marketplace';
   const email = item.channel === 'email';
   const site = config.site.baseUrl;
-  const again = !chat && !email && item.timeline.some((e) => e.who === 'us' && !e.internal && e.at && sydneyDay(e.at) === sydneyDay(now));
+  // A follow-up is always greeted and signed off, even on a day we have already written.
+  const fu = item.followUp || null;
+  const again = !chat && !email && !fu && item.timeline.some((e) => e.who === 'us' && !e.internal && e.at && sydneyDay(e.at) === sydneyDay(now));
   const name = item.hasName ? ' {{NAME}}' : '';
   const values = {
     greeting: chat ? null : email ? `Hello${name},` : again ? null : `${greetingFor(sydneyHour(now))}${name},`,
@@ -187,8 +264,15 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
       address_block: again ? withoutSender(standardBlock({})) : standardBlock({}),
       if_warranty: /extended warranty|5[- ]year/i.test(outline),
       if_no_warranty: !!v && !/extended warranty|5[- ]year/i.test(outline),
+      // The follow-ups' own facts: the booking they made, the deposit line while it is new to them,
+      // and the one new thing for a quiet customer.
+      booked_day: fu?.data?.bookedAt ? bookedDayWords(fu.data.bookedAt, now) : null,
+      booked_time: fu?.data?.bookedAt ? bookedTimeWords(fu.data.bookedAt) : null,
+      deposit_offer: fu?.kind === 'inspection_passed' && fu.data?.deposit && v && !gone ? t.snippets?.deposit_offer || null : null,
+      new_thing: fu?.kind === 'quiet' ? newThingFor(item, await mediaFor(v))?.text || null : null,
     });
     if (v) facts.push(`The car: ${v.title}${v.stockNo ? `, stock ${v.stockNo}` : ''}, ${availability(v).text}`);
+    if (fu) facts.push(`A follow-up: ${fu.reason}`);
   } else {
     // An import enquiry: the model they asked about, as our website lists it. None found, the
     // answer is still given, with blanks to fill in, unless they named a code that is not listed.
