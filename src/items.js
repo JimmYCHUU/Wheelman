@@ -4,7 +4,7 @@ import { openDb, getLead, getLeadByConversation, getLeadByPhone, getConversation
 import { orderKey, orderMarks, orderStatus, orderRow, occasionFor, listOrderRows, MESSAGES } from './orders.js';
 import { sameMessage, windowFor } from './phone.js';
 import { phoneKeys } from './normalize.js';
-import { readInquiry, isSilentInquiry, isReaction, isAcknowledgement, isOptOut, menuReply, sameText, squash, resolveStock, stockFromUrl, findUrls, unwrapRelay } from './text.js';
+import { readInquiry, bookingFrom, isSilentInquiry, isReaction, isAcknowledgement, isOptOut, menuReply, sameText, squash, resolveStock, stockFromUrl, findUrls, unwrapRelay } from './text.js';
 import { classify, labelFor } from './situations.js';
 import { importContext, judgedContext } from './imports.js';
 import { judgeImport, carIn } from './importjudge.js';
@@ -218,6 +218,8 @@ export function buildTimeline(lead, conversationId, { now = Date.now(), phone = 
       stockNo: inq.stockNo || '',
       url: inq.url || '',
       key: `i:${inq.id}`,
+      // A booking: when they are coming (the entry's own time is when they booked).
+      booking: bookingFrom(inq) || undefined,
     });
     // A staff note on the enquiry ("SMS sent", "Offered $1500") means somebody has dealt with it.
     for (const n of inq.staffNotes || []) {

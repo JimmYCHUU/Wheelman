@@ -7,7 +7,7 @@ applyTestEnv(); // invented names and keys, the same on every computer
 
 const { parseDashboardTime, formatSydney } = await import('../src/time.js');
 const { redact, restore, firstNameOf, leftoverPlaceholders } = await import('../src/redact.js');
-const { isAcknowledgement, isOptOut, isReaction, menuReply, readInquiry, resolveStock, stockFromUrl, unwrapRelay, similarity, tagLinks } = await import('../src/text.js');
+const { isAcknowledgement, isOptOut, isReaction, menuReply, readInquiry, bookingFrom, resolveStock, stockFromUrl, unwrapRelay, similarity, tagLinks } = await import('../src/text.js');
 const { classify, farAway, farPostcode } = await import('../src/situations.js');
 const { vehicleFacts, descriptionFor } = await import('../src/knowledge.js');
 const checksModule = await import('../src/checks.js');
@@ -173,6 +173,17 @@ test('portal enquiry boilerplate is stripped to the customer\'s own words', () =
   const trade = readInquiry({ type: 'product_page_trade_in', text: 'Customer wants to trade in their 2017 Kia Picanto (76,000 km), rego XYZ12A — towards: 2021 Nissan Note X (Stock No 945). Trade-in lead #35 · logistics: local\nDetails: finance owing: no\nCustomer notes: Always garaged.' });
   assert.match(trade.event, /Trade-in request/);
   assert.equal(trade.text, 'Always garaged.');
+});
+
+test('the booked time is read off a booking enquiry, in Sydney time', () => {
+  const b = bookingFrom({ type: 'product_page_inspection', text: 'Preferred inspection: On-site on 2026-10-21 at 02:00 PM.' });
+  assert.deepEqual([b.kind, b.where, b.at], ['inspection', 'onsite', parseDashboardTime('2026-10-21T14:00')]);
+  assert.equal(bookingFrom({ type: 'product_page_inspection', text: 'Preferred inspection: Online on 2026-10-21 at 09:30 AM.' }).where, 'online');
+  const t = bookingFrom({ type: 'Book Inspection', text: 'A Test Drive has been requested by the user for the scheduled time: 2026-02-22 03:00 PM. Please review and confirm the request.' });
+  assert.deepEqual([t.kind, t.at], ['test_drive', parseDashboardTime('2026-02-22T15:00')]);
+  assert.equal(bookingFrom({ type: 'product_page_inspection', text: 'Preferred inspection: On-site on 2026-10-21.' }).at, null);
+  assert.equal(bookingFrom({ type: 'Carsales', text: 'Is it still available?' }), null);
+  assert.equal(bookingFrom(null), null);
 });
 
 test('texts forwarded by the portals are unwrapped', () => {
