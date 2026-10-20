@@ -717,7 +717,7 @@ test('Send: a refused or unreachable engine changes nothing; an offline phone me
   assert.ok(!held.timeline.some((e) => e.who === 'us'));
 });
 
-test('Send: a link to our website typed or pasted into the box goes to the buyer tagged as coming from Facebook', async () => {
+test('Send: a link to our website typed or pasted into the box goes to the buyer tagged as coming from Marketplace', async () => {
   const { items, sync } = await load();
   const base = `http://127.0.0.1:${appServer.address().port}`;
   chats.set(509, { row: row(509, 'Ruby Shaw', 2), messages: [message(90, 'in', 'phone', 'Where can I see more photos?', 2)] });
