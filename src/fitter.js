@@ -125,7 +125,7 @@ export const finishTemplate = (text, lead) => restore(String(text ?? '').replace
  * it. `tpl`: { id, label, masked: maskTemplate(...), wordChecks, factsUsed }. `orderPlan`: for an
  * auction order, planOrderReply's facts about the order, given to the AI as context.
  */
-export function templatePlan(tpl, { orderPlan = null } = {}) {
+export function templatePlan(tpl, { orderPlan = null, followUp = null } = {}) {
   const { masked, markers, text } = tpl.masked;
   return {
     stage: 'template',
@@ -150,6 +150,7 @@ export function templatePlan(tpl, { orderPlan = null } = {}) {
       '- Keep every marker exactly once, written exactly as shown, where it belongs. Never write a figure, link, phone number or blank yourself, and never make up a marker.',
       '- Keep the greeting and the closing lines the message has, with {{NAME}} where it is. Add no other greeting or sign-off.',
       ...(orderPlan ? ['', 'About this order, for context only (the message above is what to send):', ...orderPlan.lines] : []),
+      ...(followUp ? ['', 'This is a follow-up our staff asked for (see FOLLOW-UP below): keep it under 50 words, add no question the message does not have, never "just checking in" or "just following up", and never ask whether they came or made it.'] : []),
     ],
   };
 }

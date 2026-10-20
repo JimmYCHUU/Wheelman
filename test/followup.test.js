@@ -22,7 +22,7 @@ const DAY = 24 * HOUR;
 // come), so every due time the engine works out lands inside working hours whatever the clock says.
 const NOW = (() => { const d = parseDashboardTime(`${sydneyDay(Date.now())}T14:00`); return d <= Date.now() ? d : d - DAY; })();
 
-let standins, config, db, sync, items, followup, normalize, st, app, base;
+let standins, config, db, sync, items, followup, normalize, st, checks, app, base;
 const ai = aiBehaviour();
 
 before(async () => {
@@ -35,6 +35,7 @@ before(async () => {
   followup = await import('../src/followup.js');
   normalize = await import('../src/normalize.js');
   st = await import('../src/sectiontemplates.js');
+  checks = await import('../src/checks.js');
   // A second Noah in stock, so one of the cars has a similar car to offer.
   standins.world.vehicles.push({ id: 9, stockNo: '1160', year: '2020', title: '2020 Toyota Noah Si', make: 'TOYOTA', model: 'Noah', modelCode: 'ZRR80W', auPublishPrice: 27900, odometer: 70000, seats: 8, fuel: 'Petrol', transmission: 'Automatic', color: 'Silver', status: 'PUBLISHED', soldStatus: 'UnSold', stockIn: 'Online', outline: ['6 Months NSW Registration'], chassisNo: 'ZRR80-0202020' });
   await sync.syncAll();
@@ -333,6 +334,55 @@ test('a follow-up written word for word names Carbarn, the booked day and the de
     assert.deepEqual([out.status, d.template, d.provider, out.json.item.anchor], [200, 'after_inspection', 'none', `fu:${row.id}`]);
     assert.match(d.reply, /^Good (morning|afternoon|evening) Quin,\n\nTeam Carbarn here\. How did you find the 2020 Toyota Hiace DX (today|yesterday)\?\n\nA \$1,000 refundable holding deposit takes it off the market for you; until then it stays for sale\.\n\nRegards,\nTeam Carbarn$/);
   } finally { ai.down = false; }
+});
+
+// ---- what the AI is told, the checks, and nothing learned ---------------------------------------
+
+test('the follow-up checks: Carbarn in the first sentence, never "just checking in" or "did you come"', () => {
+  const codes = (body, kind = 'quiet') => checks.followUpChecks({ body, kind }).map((c) => `${c.level}:${c.code}`);
+  assert.deepEqual(codes('Good afternoon Quin,\n\nTeam Carbarn here. How did you find the van today?\n\nA $1,000 refundable holding deposit takes it off the market for you.\n\nRegards,\nTeam Carbarn'), []);
+  assert.deepEqual(codes('Hello Quin,\n\nJust checking in on the van. Did you make it on Tuesday?'), ['fail:followup-identify', 'fail:followup-banned', 'warn:followup-new']);
+  assert.deepEqual(codes('Team Carbarn here, following on from the van. Were you able to come in?'), ['fail:followup-banned', 'warn:followup-new']);
+  assert.ok(codes(`Team Carbarn here. ${'word '.repeat(60)}Welcome to come and see it.`).includes('warn:followup-long'));
+  assert.deepEqual(codes('Team Carbarn here. A reminder of your inspection tomorrow at 2 pm.', 'reminder'), []);
+});
+
+test('a reply that checks in or asks whether they came is sent back once, and the AI is told it is a follow-up', async () => {
+  const id = db.openFollowUpFor('c:317').id;
+  // First the AI "just checks in" and asks whether they came; sent back, it fits the message as given.
+  ai.script.push({ reply: 'Hello {{NAME}},\n\nJust checking in on the {{K1}}. Did you make it in?', next_step: '', facts_used: [], needs_human: [], hold: false });
+  const echo = (req) => { const m = (req.messages?.[1]?.content || '').match(/<<<\n([\s\S]*?)\n>>>/); return { reply: m ? m[1] : 'Hello {{NAME}},\n\nTeam Carbarn here.', next_step: '', facts_used: [], needs_human: [], hold: false }; };
+  const seenBefore = ai.seen.length;
+  ai.behave = echo;
+  let out;
+  try { out = await post('/api/items/c:317/draft', { followup: id, message: 'quiet_nudge' }); } finally { ai.behave = null; }
+  const d = out.json.item.draft;
+  assert.deepEqual([out.status, d.status, d.template, ai.seen.length - seenBefore], [200, 'ready', 'quiet_nudge', 2]);
+  assert.ok(!d.checks.some((c) => c.code === 'followup-banned' || c.code === 'followup-identify'), JSON.stringify(d.checks));
+  assert.match(d.reply, /^Good (morning|afternoon|evening) Liam,\n\nTeam Carbarn here, following on from the 2021 Toyota Noah X \(8 Seater\)\./);
+  assert.match(d.reply, /export certificate[\s\S]*Regards,\nTeam Carbarn$/, 'the one new thing, then the sign-off');
+  const asked = ai.seen[ai.seen.length - 1].messages[1].content;
+  assert.match(asked, /=== FOLLOW-UP ===/);
+  assert.match(asked, /=== THERE IS NO NEW MESSAGE ===/);
+  assert.doesNotMatch(asked, /THE CUSTOMER IS WAITING FOR/);
+  assert.match(ai.seen[ai.seen.length - 1].messages[1].content, /Never "just checking in"/);
+  assert.match(d.checks.map((c) => c.message).join('\n'), /Fitted to this customer|Figures and links match/);
+});
+
+test('Copy on a follow-up counts as done and teaches nothing; Put back makes it due again', async () => {
+  const id = db.openFollowUpFor('c:317').id;
+  const learnedBefore = db.countRows('learned');
+  const item = (await get(`/api/items/c:317?followup=${id}`)).item;
+  assert.deepEqual([item.teaches, item.draft.status, item.draft.context === undefined], [false, 'ready', true]);
+  const out = await post(`/api/drafts/${item.draft.id}/copied`, { text: `${item.draft.reply} Changed by hand.` });
+  assert.deepEqual([out.json.followUpDone, out.json.learned, out.json.why, db.getFollowUp(id).done_how, db.getFollowUp(id).draft_id, db.countRows('learned')], [true, false, 'a follow-up', 'copied', item.draft.id, learnedBefore]);
+  assert.ok(!db.draftsAwaitingOutcome().some((x) => x.id === item.draft.id));
+  assert.ok(!(await get('/api/items?section=dashboard&tab=followups')).items.some((r) => r.key === 'c:317'), 'it left the list');
+  assert.equal((await get(`/api/items/c:317?followup=${id}`)).item.followUp.done, 'copied');
+  assert.deepEqual([(await post(`/api/drafts/${item.draft.id}/rating`, { rating: 'good' })).json.learned, db.countRows('learned')], [false, learnedBefore]);
+  await post(`/api/followups/${id}/restore`);
+  assert.equal(db.getFollowUp(id).done_how, null);
+  assert.ok((await get('/api/items?section=dashboard&tab=followups')).items.some((r) => r.key === 'c:317'), 'and is back');
 });
 
 test('a conversation opened with its follow-up carries the anchor and the template', () => {

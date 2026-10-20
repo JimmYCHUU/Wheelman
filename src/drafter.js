@@ -3,7 +3,7 @@
 import { buildPrompt, writtenToday } from './prompt.js';
 import { complete, LlmError } from './llm.js';
 import { logLine } from './log.js';
-import { finishReply, fixGreeting, checkDraft, retryNote, stripModelSignOff, worst, chatStyle, dropGreeting, emailChecks } from './checks.js';
+import { finishReply, fixGreeting, checkDraft, retryNote, stripModelSignOff, worst, chatStyle, dropGreeting, emailChecks, followUpChecks } from './checks.js';
 import { researchFor, renderResearch } from './importquery.js';
 import { config } from './config.js';
 import { redact, restore } from './redact.js';
@@ -160,6 +160,8 @@ function assessTemplate(item, text, json, { plan, allowed, said, staffSaid, inst
   if (!marks.ok) checks.push({ level: 'fail', code: 'template-markers', tokens: [], message: `The template's facts did not all come back as they were: ${markerTrouble(marks)}. Keep every marker exactly once, as written.` });
   if (ownBlanks.length) checks.push({ level: 'fail', code: 'template-blank', tokens: [], message: `The reply adds a blank of its own (${ownBlanks.join(', ')}). The message already has every blank it needs, as markers: write no other.` });
   checks.push(...plan.wordChecks.filter((c) => c.level !== 'ok'));
+  // A follow-up: Carbarn named, nothing filler, never "did you come" (src/followup.js).
+  if (item.followUp) checks.push(...followUpChecks({ body: reply, kind: item.followUp.kind }));
   if (!checks.length) checks.push({ level: 'ok', code: 'ok', tokens: [], message: 'Fitted to this customer from your wording, with the figures from your records.' });
   return { body: reply, reply, checks };
 }
@@ -258,6 +260,8 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   if (visit) checks = [...checks.filter((c) => c.level !== 'ok'), visit];
   const buyer = buyerCheck(item, body);
   if (buyer) checks = [...checks.filter((c) => c.level !== 'ok'), buyer];
+  // A follow-up: Carbarn named, nothing filler, never "did you come" (src/followup.js).
+  if (item.followUp) { const fu = followUpChecks({ body, kind: item.followUp.kind }); if (fu.length) checks = [...checks.filter((c) => c.level !== 'ok'), ...fu]; }
   return { body, reply, checks };
 }
 
@@ -334,6 +338,8 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
     // The template it was written from, and for an auction message its kind (as before templates).
     template: tpl ? tpl.id : null,
     ...(tpl && item.order ? { message: tpl.id } : {}),
+    // A follow-up (src/followup.js): never learned from, whatever its anchor says later.
+    followUp: item.followUp ? { id: item.followUp.id, kind: item.followUp.kind } : null,
   };
   // What the owner typed into "Add what you know" is kept with a template's suggestion as its instruction was.
   const base = { itemKey: item.itemKey, anchorKey: item.anchorKey, situation: tpl && item.order ? tpl.id : item.situation.primary, instruction: instruction || tpl?.typed || '', context, template: tpl?.id || null };
@@ -348,14 +354,15 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
     const email = item.channel === 'email';
     // The greeting and "Regards, Team Carbarn" go on the first reply to a customer each day, not on
     // every message. An email is greeted every time.
-    const again = !chat && !email && writtenToday(item, now);
+    // A follow-up is always greeted and signed off, even on a day we have already written.
+    const again = !chat && !email && !item.followUp && writtenToday(item, now);
     // The owner's figures, links and promises count as staff-given, whichever box they were typed in.
     const staffSaid = [instruction, coaching?.note].filter(Boolean).join('\n');
 
     // An import or auction enquiry: what to ask, or which auction car to offer, is worked out first.
     let plan = null;
     // One of the owner's templates, fitted to this customer: its facts go to the AI only as markers.
-    if (tpl) plan = templatePlan(tpl, { orderPlan: item.order ? planOrderReply(item, { forTemplate: true }) : null });
+    if (tpl) plan = templatePlan(tpl, { orderPlan: item.order ? planOrderReply(item, { forTemplate: true }) : null, followUp: item.followUp || null });
     // A reply to an auction customer: the order's facts go to the AI, its amounts only as markers.
     else if (item.order) plan = planOrderReply(item);
     else if (!chat && !email && item.imports) {
