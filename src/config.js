@@ -127,8 +127,8 @@ export const config = {
     dailyDrafts: num(env.MARKETPLACE_DAILY_DRAFTS, 60),
     windowDays: 14,
     // Every link to the website in a Marketplace reply carries utm_source=<this>, so a visit (and
-    // the lead it becomes) shows it came from Facebook.
-    linkSource: 'facebook',
+    // the lead it becomes) shows it came from a Marketplace chat. "facebook" until 20 Oct 2026.
+    linkSource: 'marketplace',
   },
 
   // Texts seen on the business phone, reported by the browser add-on (extension/) that reads

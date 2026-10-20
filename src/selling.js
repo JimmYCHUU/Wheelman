@@ -214,7 +214,24 @@ export const STAYS_FOR_SALE = /\b((stays|remains|is still|will stay|will remain)
 export const CLAIM = /\b(no accidents?|accident[- ]free|never (been )?in an accident|perfect condition|immaculate condition|(is|looks|in) like[- ]new|nothing wrong with it|no (issues|problems) (at all|whatsoever)|guaranteed? (approval|finance)|you will be approved|approval is (certain|guaranteed)|no cooling[- ]off|sold as[\s-]is|no warranty|without warranty)\b/i;
 
 /** Words that show a reply ends on something concrete. */
-export const NEXT_STEP_SIGNS = /\b(welcome to|come (in|and|by|down|over|past|through|see)|pop (in|by)|drop (in|by)|book|see you|video (call|walkaround|inspection)|walkaround|send (you|through|over|it|them)|we can (send|hold|arrange|deliver|do|organi[sz]e|quote)|deposit|apply|application|have a look|which day|what day|suit|happy to|let us know which|inspect(ion)?|preferred (date|day|time)|look forward to seeing you|arrange it for you)\b/i;
+export const NEXT_STEP_SIGNS = /\b(welcome to|come (in|and|by|down|over|past|through|see)|pop (in|by)|drop (in|by)|book|see you|video (call|walkaround|inspection)|walkaround|send (you|through|over|it|them)|send (me|us) (your|a) (best |phone |contact |mobile )?number|give you a call|call you|we can (send|hold|arrange|deliver|do|organi[sz]e|quote)|deposit|apply|application|have a look|which day|what day|suit|happy to|let us know which|inspect(ion)?|preferred (date|day|time)|look forward to seeing you|arrange it for you)\b/i;
+
+/**
+ * The same moves on Facebook Marketplace, in the shape the team sends there (October 2026): the
+ * next step is the buyer's phone number, booked by a person and confirmed by text, not the booking
+ * link; a price is the figure as [PRICE?] and then the number; finance and a trade-in are the
+ * forms on the car's own page. Moves not listed here read as on a text.
+ */
+const CHAT_MOVES = {
+  invite_inspection: 'Answer from the facts with the one detail that matters, then ask them to send us their number and the day and time that suit them, so we can get the inspection booked and confirm it by text. No booking link unless INSPECTION says they asked for one.',
+  answer_then_invite: 'Answer the question from the facts, with the one detail that matters for what they asked, then ask them to send us their number and the day and time that suit them, so we can get the inspection booked. No booking link unless INSPECTION says they asked for one.',
+  confirm_or_link: 'They want to see it: ask them to send us their number and the day and time that suit them, and say we will get the inspection booked for them and confirm it by text. If they named a day and a time inside our hours, say it suits and still ask for their number. The booking link only if INSPECTION says they asked for one.',
+  offer_proof: 'Give the proof the records hold: the auction grade and what it means, the export certificate with the odometer history, PPSR, the service done. If VEHICLE FACTS list a flaw, name it before they ask. Offer the auction sheet. Then ask them to send us their number and a time that suits them to see it, unless we have asked for their number already.',
+  invite_before_price: 'The price question. A figure is a person\'s: write "The lowest we can do on the <car> is [PRICE?]." and list it under needs_human; then their number as the next step, in the team\'s words and as its own paragraph: "If that works for you, send us your number and the day and time that suit you, and we will get the inspection booked for you." Do not repeat the advertised price, say nothing about what the price includes unless they asked, and never say that an offer is too low or that we cannot accept it.',
+  answer_offer: 'We have already answered the price in this chat, and they came back with an offer or a view of their own. Thank them for the offer in a few words and neither accept nor refuse it: if they named a figure, write "The lowest we can do is [PRICE?]." for a person to complete (list it under needs_human), then their number and the day and time that suit them, if that works for them. Never say that their offer is too low or below what we accept, and never argue about what the car is worth.',
+  send_finance_link: 'Say "Yes, we do." and give the finance form on the car\'s page from VEHICLE FACTS ("Start a finance application") on its own line, asking them to let us know once it is done. Never a rate, a repayment or a likelihood of approval.',
+  ask_trade_in_details: 'Say we take trade-ins against a car from our stock, and give the trade-in form on the car\'s page from VEHICLE FACTS ("Start a trade-in request") on its own line, with what to put in it: the rego number and state, the kilometres, the condition, a few clear photos and their number. The value is a person\'s: [TRADE-IN VALUE?] if a figure is asked for.',
+};
 
 // ---- the rung and the move ---------------------------------------------------------------------
 
@@ -241,7 +258,8 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
     links: t.some((e) => ours(e) && /#inspection=/.test(e.text)),
     // Offered by us earlier, or watched on the website (the dashboard records that; insider.js).
     video: t.some((e) => ours(e) && /\b(video|walkaround)\b/i.test(e.text)) || !!videoViewed,
-    invited: t.some((e) => ours(e) && /welcome to (come|visit|inspect|see)|come (in|and see|down|by)|(available|ready) (for|to) (inspection|inspect|view|see)/i.test(e.text)),
+    // On Marketplace, asking for their number is the invitation: the team books the visit from it.
+    invited: t.some((e) => ours(e) && /welcome to (come|visit|inspect|see)|come (in|and see|down|by)|(available|ready) (for|to) (inspection|inspect|view|see)|(send|give) (us|me) (your|a) (best |phone |contact |mobile )?number/i.test(e.text)),
   };
 
   const signals = [];
@@ -291,7 +309,8 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
     if (far.far && far.source === 'said' && ['invite_inspection', 'confirm_or_link', 'answer_then_invite'].includes(move)) move = 'offer_online_inspection';
   }
 
-  let question = MOVES[move].question;
+  // On Marketplace a trade-in is sent to the form on the car's page, so nothing is asked.
+  let question = channel === 'marketplace' && move === 'ask_trade_in_details' ? '' : MOVES[move].question;
   // Do not ask what the customer has already answered.
   if (move === 'invite_before_price' && sit.includes('finance')) question = '';
   if (move === 'offer_online_inspection' && /\b\d{4}\b/.test(item.pendingText || '')) question = '';
@@ -302,7 +321,7 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
     label: RUNG_LABELS[rung],
     aim: AIMS[rung],
     move,
-    moveText: MOVES[move].text,
+    moveText: (channel === 'marketplace' && CHAT_MOVES[move]) || MOVES[move].text,
     question,
     signals,
     told,

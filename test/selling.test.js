@@ -169,6 +169,25 @@ test('on Marketplace the invitation to see the car is given once', () => {
   assert.doesNotMatch(selling.stageLines(fresh).join('\n'), /already invited them/);
 });
 
+test('on Marketplace the moves end on the buyer\'s number, not the booking link or the price reply block', () => {
+  const see = stage({ channel: 'marketplace', vehicles: car, situations: ['inspection_booking'], texts: [{ who: 'customer', text: 'Can I come and see it tomorrow?' }] });
+  assert.match(see.moveText, /send us their number and the day and time/i);
+  assert.doesNotMatch(see.moveText, /follow INSPECTION for the link/);
+  const price = stage({ channel: 'marketplace', vehicles: car, situations: ['price_negotiation'], texts: [{ who: 'customer', text: 'Is the price negotiable?' }] });
+  assert.equal(price.move, 'invite_before_price');
+  assert.match(price.moveText, /\[PRICE\?\]/);
+  assert.match(price.moveText, /their number/);
+  assert.doesNotMatch(price.moveText, /added under your text by code/);
+  const sms = stage({ vehicles: car, situations: ['price_negotiation'], texts: [{ who: 'customer', text: 'Is the price negotiable?' }] });
+  assert.match(sms.moveText, /added under your text by code/, 'a text still gets the price reply block');
+  // Asking for their number is the invitation on Marketplace, given once in a chat.
+  const asked = stage({ channel: 'marketplace', vehicles: car, situations: ['vehicle_details'], texts: [{ who: 'customer', text: 'Can I see it?' }, { who: 'us', text: 'Send us your number and the time that suits you, and we will get the inspection booked for you.' }, { who: 'customer', text: 'Is it the hybrid?' }] });
+  assert.match(selling.stageLines(asked).join('\n'), /already invited them/);
+  // "Send me your number and I'll give you a call" ends on a next step.
+  assert.ok(selling.NEXT_STEP_SIGNS.test("Keen to see it? Send me your number and I'll give you a call."));
+  assert.ok(selling.NEXT_STEP_SIGNS.test('Send us your number and we will call you.'));
+});
+
 test('the lines the AI is told', () => {
   const lines = selling.stageLines(stage({ situations: ['deposit_hold'], texts: [{ who: 'customer', text: 'Can you hold it?' }] })).join('\n');
   assert.match(lines, /Where they are: ready to commit/);

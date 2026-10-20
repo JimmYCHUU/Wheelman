@@ -191,22 +191,29 @@ test('the buyer\'s name and number never reach the AI service, and the reply is 
   assert.ok(!d.checks.some((c) => c.level === 'fail'), JSON.stringify(d.checks));
 });
 
-test('a Marketplace reply is warm and sells: a thank-you, the car\'s strongest points, the value included, an easy next step, and never runs down an offer', async () => {
+test('a Marketplace reply has the shape the team sends: the first reply in three short paragraphs, later replies short and direct, the buyer\'s number as the next step, and never runs down an offer', async () => {
   const { items } = await load();
   const { systemPrompt, buildPrompt } = await import('../src/prompt.js');
   const rules = systemPrompt('marketplace');
-  assert.match(rules, /Open with a short thank-you/);
-  assert.match(rules, /Warm, confident and selling/);
+  // The first reply to "is it available?": the three paragraphs the engine sends, with this car's figures.
+  assert.match(rules, /Hi \{\{NAME\}\}, yes it's still available, \$<price> with only <km> km\./);
+  assert.match(rules, /Japanese import, km verified against the auction documents, and the price includes <inclusions>\./);
+  assert.match(rules, /Keen to see it\? Send me your number and I'll give you a call\./);
+  assert.match(rules, /"only" before the kilometres only under 60,000 km/);
+  // Every later reply: the answer first, short, and the buyer's number as the next step.
+  assert.match(rules, /Start with the answer/);
+  assert.match(rules, /usually 20 to 50 words/);
   assert.match(rules, /up to about ninety words/);
-  assert.match(rules, /two or three of its strongest points/);
-  assert.match(rules, /ready to drive away/);
-  assert.match(rules, /an easy next step with a reason/);
-  assert.match(rules, /No greeting line/, 'still no "Good morning" line');
+  assert.match(rules, /send us their number and the day and time that suit them/);
+  assert.match(rules, /No greeting line of its own/);
+  assert.match(rules, /no sign-off/);
   assert.match(rules, /Never tell a buyer that their offer is too low/);
-  assert.match(rules, /Invite them to see the car once/);
-  assert.doesNotMatch(rules, /cut to the bone|forty-five|under 45 words|up to sixty words|Courteous and short/);
+  assert.match(rules, /Ask for the number once in a chat/);
+  assert.doesNotMatch(rules, /Open with a short thank-you|cut to the bone|forty-five|under 45 words|up to sixty words|Courteous and short/);
   const asked = buildPrompt(items.itemFromKey('mp:501')).user;
-  assert.match(asked, /CHANNEL: Facebook Marketplace chat.*warm and selling/);
+  assert.match(asked, /CHANNEL: Facebook Marketplace chat.*short and direct, in the shape our team sends there/);
+  // Every link to our website in a Marketplace reply says it came from Marketplace.
+  assert.equal(config.marketplace.linkSource, 'marketplace');
 });
 
 test('with a Prompt, a Marketplace reply keeps the greeting and the length it was asked for', async () => {
@@ -226,6 +233,15 @@ test('an SMS suggestion still gets its greeting and sign-off', async () => {
   const { finishReply } = await import('../src/checks.js');
   assert.equal(finishReply('Hi {{NAME}},\n\nYes it is.', { first_name: 'Priya' }), 'Hello Priya,\n\nYes it is.\n\nRegards,\nTeam Carbarn');
   assert.equal(finishReply('Hi {{NAME}},\n\nYes it is.', { first_name: 'Priya' }, { signOff: '', chat: true }), 'Yes it is.');
+});
+
+test('a Marketplace first reply keeps its "Hi name," inside the sentence and its paragraph breaks', async () => {
+  const { finishReply } = await import('../src/checks.js');
+  const first = "Hi {{NAME}}, yes it's still available, $28,900 with 62,733 km.\n\nIt's a Japanese import, km verified against the auction documents, and the price includes 6 months rego and a 5-year warranty.\n\nKeen to see it? Send me your number and I'll give you a call.";
+  assert.equal(finishReply(first, { first_name: 'Priya' }, { signOff: '', chat: true }), first.replace('{{NAME}}', 'Priya'));
+  // A greeting on a line of its own is still taken off a chat reply; on a text it still becomes "Hello".
+  assert.equal(finishReply("Hi {{NAME}},\nYes it's still available.", { first_name: 'Priya' }, { signOff: '', chat: true }), "Yes it's still available.");
+  assert.equal(finishReply("Hi {{NAME}}, yes it's still available.", { first_name: 'Priya' }, { signOff: '' }), "Hello Priya, yes it's still available.");
 });
 
 test('a price that only the auto-reply or the engine\'s notes mention is not accepted as ours', async () => {
@@ -249,6 +265,23 @@ test('a price that only the auto-reply or the engine\'s notes mention is not acc
   assert.ok(!ok.checks.some((c) => c.level === 'fail'), JSON.stringify(ok.checks));
 });
 
+test('on Marketplace a price question gets the team\'s shape, not the price reply block: the figure as a blank, then the buyer\'s number', async () => {
+  const { items, drafter } = await load();
+  const item = items.itemFromKey('mp:504'); // "Can you do any better?"
+  aiSeen.length = 0;
+  ai.script = [{ reply: 'The lowest we can do on the Noah is [PRICE?].\n\nIf that works for you, send us your number and the day and time that suit you, and we will get the inspection booked for you.', needs_human: [{ marker: '[PRICE?]', reason: 'A person decides the figure.' }], facts_used: [], hold: false }];
+  const d = await drafter.draftFor(item, { save: false });
+  assert.equal(aiSeen.length, 1, 'accepted first time');
+  const asked = aiSeen[0].messages[1].content;
+  assert.doesNotMatch(asked, /=== PRICE REPLY ===/);
+  assert.doesNotMatch(asked, /added under your text/);
+  assert.match(asked, /THIS CUSTOMER'S NEXT STEP[\s\S]*\[PRICE\?\][\s\S]*their number/);
+  assert.equal(d.status, 'ready');
+  assert.ok(d.reply.startsWith('The lowest we can do on the Noah is [PRICE?].\n\nIf that works for you'), d.reply);
+  assert.ok(!/price includes|government charges|prices competitive|#inspection=/i.test(d.reply), d.reply);
+  assert.ok(!d.checks.some((c) => c.level === 'fail'), JSON.stringify(d.checks));
+});
+
 test('a long Marketplace reply is flagged, and a price difference with the Facebook listing is pointed out', async () => {
   const { items, drafter, db, sync } = await load();
   chats.get(504).row.car.price = '$27,900';
@@ -263,43 +296,55 @@ test('a long Marketplace reply is flagged, and a price difference with the Faceb
   assert.ok(db.countRows('mp_messages') > 0);
 });
 
-test('on Marketplace the booking link and the car\'s page link go in the reply itself, and pass the checks', async () => {
+test('on Marketplace a buyer who wants to see the car is asked for their number; a link the AI gives is tagged, and no invitation is added under the lines', async () => {
   const { items, drafter } = await load();
-  // 503: "Can I come and see it on Saturday?" No standard block follows a Marketplace reply, but
-  // the invitation with the booking link is added under the lines, in the owner's words, so a
-  // reply that carries the link itself passes with the AI's own link line dropped.
+  // 503: "Can I come and see it on Saturday?" On Marketplace the team's next step is the buyer's
+  // number and a time, booked by a person and confirmed by text: no invitation with the booking
+  // link is added under the lines, and a reply without a link is not sent back.
   const item = items.itemFromKey('mp:503');
   const url = item.vehicles[0].url;
   assert.ok(url, 'the listing is matched to a car with a page');
   aiSeen.length = 0;
-  ai.script = [{ reply: `You are welcome to come and see it on Saturday. Book a time that suits you here:\n${url}#inspection=onsite`, needs_human: [], facts_used: [], hold: false }];
+  ai.script = [{ reply: 'Saturday works. Send us your number and the time that suits you, and we will get the inspection booked for you and confirm it by text.', needs_human: [], facts_used: [], hold: false }];
   const d = await drafter.draftFor(item, { save: false });
   assert.equal(aiSeen.length, 1, 'accepted first time');
   const asked = aiSeen[0].messages[1].content;
   assert.match(asked, /=== INSPECTION ===/);
-  assert.match(asked, /The invitation and the booking link are added under your text automatically/);
+  assert.match(asked, /ask them to send us their number/i);
+  assert.doesNotMatch(asked, /added under your text automatically/);
   assert.ok(!/=== STANDARD FIRST REPLY ===/.test(asked));
-  assert.match(aiSeen[0].messages[0].content, /Links are given here as they are in a text message/);
+  assert.match(aiSeen[0].messages[0].content, /Links go each on its own line/);
   assert.equal(d.status, 'ready');
-  // Every link to our website is tagged as coming from Facebook, the tag before the #part.
-  assert.ok(d.reply.includes(`${url}?utm_source=facebook#inspection=onsite`), d.reply);
-  assert.ok(!d.reply.includes(`${url}#`), d.reply);
+  assert.ok(!d.reply.includes('#inspection='), d.reply);
   assert.ok(!d.checks.some((c) => c.level === 'fail'), JSON.stringify(d.checks));
-  assert.ok(!d.checks.some((c) => c.code === 'inspection-link'), JSON.stringify(d.checks));
+  assert.ok(!d.checks.some((c) => c.code === 'inspection-link' || c.code === 'next-step'), JSON.stringify(d.checks));
 
-  // A first reply that gives the car's page link: the page is in our records, so it passes too,
+  // A booking link the AI gives anyway is ours: tagged as coming from Marketplace, the tag before the #part.
+  ai.script = [{ reply: `You are welcome to come and see it on Saturday. Book a time that suits you here:\n${url}#inspection=onsite`, needs_human: [], facts_used: [], hold: false }];
+  const linked = await drafter.draftFor(item, { save: false });
+  assert.ok(linked.reply.includes(`${url}?utm_source=marketplace#inspection=onsite`), linked.reply);
+  assert.ok(!linked.reply.includes(`${url}#`), linked.reply);
+  assert.ok(!linked.checks.some((c) => c.level === 'fail'), JSON.stringify(linked.checks));
+
+  // The car's page link, when they ask for details: the page is in our records, so it passes,
   // and the link line does not count towards the length.
-  ai.script = [{ reply: `Yes, it is still available.\nMore details:\n${url}\nWould you like to come and see it?`, needs_human: [], facts_used: [], hold: false }];
+  ai.script = [{ reply: `Yes, it is still available.\nYou will find all the details here:\n${url}`, needs_human: [], facts_used: [], hold: false }];
   const first = await drafter.draftFor(items.itemFromKey('mp:501'), { save: false });
-  assert.ok(first.reply.includes(`More details:\n${url}?utm_source=facebook\n`), first.reply);
+  assert.ok(first.reply.includes(`You will find all the details here:\n${url}?utm_source=marketplace`), first.reply);
   assert.ok(!first.checks.some((c) => c.level === 'fail'), JSON.stringify(first.checks));
   assert.ok(!first.checks.some((c) => c.code === 'long'), JSON.stringify(first.checks));
 
-  // A link the AI copied already tagged, from a reply earlier in the chat, is ours too.
+  // A link the AI copied from a reply earlier in the chat is ours too, and the old tag is replaced.
   ai.script = [{ reply: `Yes, it is still available.\nMore details:\n${url}?utm_source=facebook`, needs_human: [], facts_used: [], hold: false }];
   const copied = await drafter.draftFor(items.itemFromKey('mp:501'), { save: false });
-  assert.ok(copied.reply.endsWith(`More details:\n${url}?utm_source=facebook`), copied.reply);
+  assert.ok(copied.reply.endsWith(`More details:\n${url}?utm_source=marketplace`), copied.reply);
   assert.ok(!copied.checks.some((c) => c.code === 'link'), JSON.stringify(copied.checks));
+
+  // The finance form on the car's page is in our records too.
+  ai.script = [{ reply: `Yes, we do. Please submit the finance form here and let us know once it is done:\n${url}#finance`, needs_human: [], facts_used: [], hold: false }];
+  const finance = await drafter.draftFor(items.itemFromKey('mp:501'), { save: false });
+  assert.ok(finance.reply.includes(`${url}?utm_source=marketplace#finance`), finance.reply);
+  assert.ok(!finance.checks.some((c) => c.code === 'link'), JSON.stringify(finance.checks));
 
   // A link that is not in our records is still refused.
   const stray = { reply: 'Book here:\nhttps://example.com/book/123', needs_human: [], facts_used: [], hold: false };
@@ -685,7 +730,7 @@ test('Send: a link to our website typed or pasted into the box goes to the buyer
   const res = await post(base, '/api/items/mp:509/send', { text: typed });
   assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
   const out = await res.json();
-  const tagged = `More photos here:\n${url}?utm_source=facebook\nBook a time:\n${url}?utm_source=facebook#inspection=onsite\nOur yard: https://maps.app.goo.gl/AbCdEf`;
+  const tagged = `More photos here:\n${url}?utm_source=marketplace\nBook a time:\n${url}?utm_source=marketplace#inspection=onsite\nOur yard: https://maps.app.goo.gl/AbCdEf`;
   const writes = engineSeen.filter((r) => r.method !== 'GET');
   assert.deepEqual(writes.map((r) => `${r.method} ${r.path}`), ['POST /inbox/conversations/509/reply']);
   assert.deepEqual(JSON.parse(writes[0].body), { text: tagged, urls: [] });

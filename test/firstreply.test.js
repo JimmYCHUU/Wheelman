@@ -8,7 +8,7 @@ import { applyTestEnv } from './support/env.js';
 applyTestEnv();
 
 const { standardBlock, inviteBlock, repeatsBlock, tidyOpening, blockCarries } = await import('../src/firstreply.js');
-const { inclusionsSentence, priceBlock } = await import('../src/pricereply.js');
+const { inclusionsSentence, inclusionsShort, priceBlock } = await import('../src/pricereply.js');
 const { stripLocationBlock } = await import('../src/voice.js');
 
 const URL = 'https://www.carbarn.com.au/vehicles/toyota/noah/zrr80g/1159';
@@ -25,6 +25,16 @@ test("what the price includes comes from the car's own Included list, in the own
   assert.equal(inclusionsSentence({ outline: ['CTP Insurance'] }), 'CTP insurance');
   assert.equal(inclusionsSentence({ outline: ['Professionally Detailed'] }), '', 'what is not one of the six is left out');
   assert.equal(inclusionsSentence({}), '');
+});
+
+test("the short inclusions of a Marketplace first reply: rego, roadworthy and the warranty, as the team says them, from the car's own Included list", () => {
+  assert.equal(inclusionsShort({ outline: ['6 Months NSW Registration', '5-Year Extended Warranty by Integrity Car Care', 'CTP Insurance', 'Fresh Roadworthy Certificate', 'Doorstep Delivery (Greater Sydney)', '1-Year 24/7 Roadside Assistance'] }),
+    '6 months rego, a fresh roadworthy and a 5-year warranty');
+  assert.equal(inclusionsShort({ outline: ['6 Months NSW Registration', '5-Year Extended Warranty'] }), '6 months rego and a 5-year warranty');
+  assert.equal(inclusionsShort({ outline: ['12 Months Registration'] }), '12 months rego');
+  assert.equal(inclusionsShort({ outline: ['Fresh Roadworthy Certificate'] }), 'a fresh roadworthy');
+  assert.equal(inclusionsShort({ outline: ['CTP Insurance', 'Professionally Detailed'] }), '', 'only the three the team names');
+  assert.equal(inclusionsShort({}), '');
 });
 
 test("the price reply: the owner's wording, the inclusions filled in, the invitation when the car can be seen", () => {

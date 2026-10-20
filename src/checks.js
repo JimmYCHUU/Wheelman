@@ -65,26 +65,30 @@ export function greetingFor(hour) {
 /**
  * The greeting line in the brand register. "Good morning" after midday (and the like) becomes the
  * greeting for the hour; "Hi", "Hey" and "G'day" become "Hello". A word that merely starts with
- * "hi" (Hiace) is left alone.
+ * "hi" (Hiace) is left alone. chat: a Marketplace reply, where the first reply opens "Hi {{NAME}},"
+ * inside its first sentence, as the team's own messages there do, so "Hi" stays.
  */
-export function fixGreeting(text, hour) {
+export function fixGreeting(text, hour, { chat = false } = {}) {
   const ok = { morning: hour >= 4 && hour < 12, afternoon: hour >= 12 && hour < 18, evening: hour >= 17 || hour < 2 };
-  return String(text || '')
+  const t = String(text || '')
     .replace(/^(\s*)good (morning|afternoon|evening)\b[ \t]*,?[ \t]*(\{\{NAME\}\})?[ \t]*[,.!]?/i, (m, lead, part, name) => {
       if (ok[part.toLowerCase()]) return m;
       return `${lead}${greetingFor(hour)}${name ? ' ' + name : ''},`;
-    })
-    .replace(/^(\s*)(hi there|hey there|hiya|hi|hey|g'?day)\b[ \t]*,?[ \t]*(\{\{NAME\}\})?[ \t]*[,.!]?(?=\s|$)/i, (m, lead, word, name) => `${lead}Hello${name ? ' ' + name : ''},`);
+    });
+  if (chat) return t;
+  return t.replace(/^(\s*)(hi there|hey there|hiya|hi|hey|g'?day)\b[ \t]*,?[ \t]*(\{\{NAME\}\})?[ \t]*[,.!]?(?=\s|$)/i, (m, lead, word, name) => `${lead}Hello${name ? ' ' + name : ''},`);
 }
 
 /**
- * Marketplace chat style: no greeting on a line of its own, and no blank lines between lines.
- * "Hi {{NAME}},\n\nYes it is." becomes "Yes it is."
+ * Marketplace chat style: no greeting on a line of its own. "Hi {{NAME}},\n\nYes it is." becomes
+ * "Yes it is."; "Hi {{NAME}}, yes it is." keeps its opener, as the first reply there does. The
+ * paragraph breaks stay (the team's first reply is three short paragraphs); runs of blank lines
+ * become one.
  */
 export function chatStyle(text) {
   const t = String(text || '').replace(/\r/g, '').trim()
     .replace(/^(hi|hello|hey|g'?day|good (morning|afternoon|evening))( there)?[ \t]*,?[ \t]*(\{\{NAME\}\})?[ \t]*[,.!]?[ \t]*\n+/i, '');
-  return t.replace(/\n{2,}/g, '\n').trim();
+  return t.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 /**
@@ -108,7 +112,7 @@ export function finishReply(modelReply, lead, { now = Date.now(), signOff = conf
   let t = String(modelReply || '').replace(/\\n/g, '\n').replace(/\r/g, '');
   t = stripModelSignOff(t);
   t = stripEmoji(t).replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/[ \t]{2,}/g, ' ').trim();
-  t = fixGreeting(t, sydneyHour(now));
+  t = fixGreeting(t, sydneyHour(now), { chat });
   if (chat) t = chatStyle(t);
   else if (!greeting) t = dropGreeting(t);
   t = restore(t, lead);

@@ -102,8 +102,8 @@ delivery quote, the details of a trade-in. There is no canned question; the invi
 is the next step.
 
 **Length.** Up to 70 words on a first reply (before the standard block), up to 50 inside a
-conversation, under 45 on Marketplace, about 180 in an import email. A customer who writes one
-line gets two or three sentences. A reply over the band, or one with slang or an apology in it,
+conversation, usually 20 to 50 on Marketplace (up to about 90 when several things were asked),
+about 180 in an import email. A customer who writes one line gets two or three sentences. A reply over the band, or one with slang or an apology in it,
 is pointed out in the message box; it is never refused for that alone.
 
 **What the team's replies teach.** The replies our salespeople really sent are still read for
@@ -223,7 +223,9 @@ Please call or text before visiting.
 The invitation is always open: no time slot is ever proposed. On a first reply it sits inside
 the standard block, which already asks the customer to call or text first, so that last line is
 left out there. For a customer who says they are far away the first line offers the online video
-inspection instead. On Marketplace the last line reads "Please message or call before visiting."
+inspection instead. On Marketplace the invitation is not added: the next step there is the
+buyer's number (see [The Marketplace section](#the-marketplace-section)); when a link is given
+there anyway, its last line reads "Please message or call before visiting."
 The AI writes the sentence that says the car is available to inspect, and nothing about days,
 times, slots or the link: a link line it types anyway is dropped, and a line that repeats the
 invitation's own words is sent back. When the AI confirms a time the customer named ("See you
@@ -898,34 +900,54 @@ Wheelman reads the Facebook Marketplace chats from the content engine and sugges
 every chat where the buyer wrote last. It works like the Dashboard section, with these
 differences:
 
-- **Warm and selling.** Up to about 90 words in short lines. Every reply opens with a short
-  thank-you ("Thank you for your message, Priya." on the first reply, then "Thank you for your
-  offer." or "Thank you for letting us know."), answers, then sells the car to this buyer: two or
-  three of its strongest points for them (the seats, the kilometres verified on the export
-  certificate, the grade, the economy), what the price includes said as what it means for them
-  ("so it is ready to drive away"), and an easy next step with a reason. True selling words are
-  fine; hype, pressure, emoji and slang are not. No greeting line and no "Regards, Team Carbarn".
-  (The owner's choices, 16 Oct 2026: first that the replies read as rude and too brief, then that
-  they were still too short and "just being professional doesn't mean it can generate sales".)
-- **Never pushy.** The invitation to see the car is given once in a chat. An offer is thanked and
-  left to a person, never called too low; a buyer leaving over the price gets a polite close; and
-  the deposit comes up only once the price is agreed (see [The price reply](#the-price-reply)).
-- **Links in the reply.** The car's page link on a first reply, and the invitation to inspect
-  with the booking link when the buyer asks to see the car, added under the lines by code as on
-  the dashboard. The price reply is added the same way. (Marketplace has no standard block, so
-  these go in the reply itself.)
-- **Links say they came from Facebook.** Every link to the Carbarn website in a Marketplace reply
-  carries `utm_source=facebook`, so the website, and the lead it records, shows where the visit
-  came from. The tag goes before a booking link's `#inspection=…` part, so the booking form still
-  opens. Links you type or paste into the box are tagged on **Send reply** too. Links to other
+- **The shape the team sends.** Learned from the replies sent on Marketplace over 18 to 20 Oct
+  2026: the content engine's own first reply to every buyer (written for it by an AI, with the
+  buyer's name and the car's figures) and the replies a person typed, in the engine's inbox or
+  from this page. The first reply to "is it available?" is the engine's three short paragraphs
+  with this car's price, kilometres, grade and inclusions, and nothing else:
+
+  ```
+  Hi Priya, yes it's still available, $28,900 with only 52,400 km.
+
+  It's a grade 4.5 Japanese import, km verified against the auction documents, and the price
+  includes 6 months rego, a fresh roadworthy and a 5-year warranty.
+
+  Keen to see it? Send me your number and I'll give you a call.
+  ```
+
+  Every later reply starts with the answer: no greeting line of its own, no sign-off, no opening
+  thank-you ("Thank you, Priya." only when they gave us something). Usually 20 to 50 words in two
+  to four short lines; up to about 90 when they asked several things. Hype, pressure, emoji and
+  slang are still out. (The owner, 20 Oct 2026: "The reply structure for facebook marketplace
+  has changed. Study the last two days replies and learn how replies were sent.")
+- **The next step is their number.** When a buyer wants to see the car, or accepts our figure,
+  the reply asks them to send their number and the day and time that suit them, and says we will
+  get the inspection booked and confirm it by text; a person books it from the number. When they
+  say they are coming, the location and hours go on two lines at the end. The booking link is not
+  added under the lines on Marketplace any more, and is given only when the buyer asks for a link
+  or a Prompt asks for it. The number is asked for once in a chat.
+- **Never pushy.** An offer is thanked and left to a person, never called too low: a price
+  question or an offer is answered in the team's shape, "The lowest we can do on the Noah is
+  [PRICE?]." and then the number, with no price reply block under it (the dashboard keeps the
+  block). A buyer leaving over the price gets a polite close, and the deposit comes up only once
+  the price is agreed.
+- **Links in the reply.** The finance form and the trade-in form are the ones on the car's own
+  page (`…#finance`, `…#trade-in`), each on its own line under a short lead-in, with "let us
+  know once it is done". The car's page goes in only when the buyer asks for details or photos.
+- **Links say they came from Marketplace.** Every link to the Carbarn website in a Marketplace
+  reply carries `utm_source=marketplace` (it was `facebook` until 20 Oct 2026), so the website,
+  and the lead it records, shows where the visit came from. The tag goes before a booking link's
+  `#inspection=…` part, so the booking form still opens. Links you type or paste into the box are
+  tagged on **Send reply** too, and a link already tagged `facebook` is retagged. Links to other
   sites, and dashboard replies, are left as they are.
-- **Send from here.** **Send reply** hands the text in the box to the content engine, which
-  types it into the Marketplace chat from its phone. The reply shows in the conversation
-  marked "Sending" until the engine reports it sent, and the chat leaves **Waiting** at once.
-  A blank such as `[PRICE?]` is never sent: fill it in first. If the engine's phone is offline
-  the reply is queued and goes when it is back; if the engine refuses, nothing changes and the
-  reason is shown. **Copy reply** is still there for pasting it yourself. This is the only
-  section that sends.
+- **Send from here.** **Send reply** hands the text in the box to the content engine's own reply
+  address, the one its inbox page uses. The engine sends it from that account's phone (since
+  October 2026 through its companion app on the phone; its record of the message says
+  `sent_via: companion`). The reply shows in the conversation marked "Sending" until the engine
+  reports it sent, and the chat leaves **Waiting** at once. A blank such as `[PRICE?]` is never
+  sent: fill it in first. If the phone is offline the reply is queued and goes when it is back;
+  if the engine refuses, nothing changes and the reason is shown. **Copy reply** is still there
+  for pasting it yourself. This is the only section that sends.
 - **Auto-reply.** Messages the engine sent by itself are labelled **Auto-reply**. Messages a
   person sent are labelled **Typed by a person**.
 - **Needs a person.** When the engine has handed a chat to a person, or one of its replies

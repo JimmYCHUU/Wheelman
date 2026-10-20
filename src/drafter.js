@@ -62,7 +62,8 @@ function listingPriceCheck(item) {
  * for the link. When the customer asked earlier in the conversation it is only pointed out.
  */
 function inspectionCheck(plan, body, block = '') {
-  if (!plan?.url) return null;
+  // On Marketplace the next step is the buyer's number (plan.number): no link is expected there.
+  if (!plan?.url || plan.number) return null;
   const givesInPerson = body.includes('#inspection=onsite');
   const givesOnline = body.includes('#inspection=online');
   const missing = plan.must ? 'fail' : 'warn';
@@ -198,10 +199,10 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   const extras = [links, owned].filter(Boolean).join('\n\n');
   // An offer opens the way the team writes it: the greeting, a blank line, then one short paragraph.
   if (offer && !instructed) text = text.trim().replace(/^([^\n]{1,40},)\n+/, (m, hi) => `${hi}\n\n`).replace(/([^\n])\n(?!\n)/g, (m, c) => `${c} `);
-  let body = fixGreeting(stripModelSignOff(text), sydneyHour(now));
   // The Marketplace chat style and the once-a-day greeting are the section's rules: a Prompt keeps
   // the greeting and the layout it asked for.
   const chatStyled = chat && !instructed;
+  let body = fixGreeting(stripModelSignOff(text), sydneyHour(now), { chat: chatStyled });
   if (chatStyled) body = chatStyle(body);
   else if (again && !offer && !instructed) body = dropGreeting(body);
   // Marketplace suggestions carry no sign-off: it is a chat, not a text message. An import

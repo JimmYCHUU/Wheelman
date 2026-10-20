@@ -14,7 +14,7 @@ import { template } from './templates.js';
 import { availability } from './normalize.js';
 import { reservedByAnother } from './deal.js';
 import { inspectionLinks } from './knowledge.js';
-import { inclusionsSentence, priceBlock } from './pricereply.js';
+import { inclusionsSentence, inclusionsShort, priceBlock } from './pricereply.js';
 import { inviteBlock, standardBlock } from './firstreply.js';
 import { farAway, SITUATIONS } from './situations.js';
 import { priceFigures, PARTING, DECLINED } from './selling.js';
@@ -40,8 +40,8 @@ export const SIGNALS = [
 
 /** Every fact a template may use, by file. A {word} outside these is a typing slip. {if_word}
  * keeps its paragraph only when that fact applies (has something in it). */
-const CAR_FACTS = ['greeting', 'sign_off', 'thanks', 'car', 'car_link', 'price', 'km', 'where', 'inclusions', 'if_inclusions', 'price_reply', 'invitation',
-  'first_reply_block', 'address_block', 'stock_link', 'finance_link', 'warranty_link', 'importing_link', 'if_warranty', 'if_no_warranty', 'sender'];
+const CAR_FACTS = ['greeting', 'sign_off', 'thanks', 'hi', 'car', 'car_link', 'price', 'km', 'km_said', 'import_said', 'where', 'inclusions', 'if_inclusions', 'inclusions_short', 'price_reply', 'invitation',
+  'first_reply_block', 'address_block', 'stock_link', 'finance_link', 'finance_form', 'trade_in_form', 'warranty_link', 'importing_link', 'if_warranty', 'if_no_warranty', 'if_no_car', 'sender'];
 export const FACTS = {
   'dashboard-messages.md': CAR_FACTS,
   'marketplace-messages.md': CAR_FACTS,
@@ -145,6 +145,8 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
     greeting: chat ? null : email ? `Hello${name},` : again ? null : `${greetingFor(sydneyHour(now))}${name},`,
     sign_off: chat || (again && !email) ? null : config.signOff,
     thanks: `Thank you for your message${item.hasName ? ', {{NAME}}' : ''}.`,
+    // The Marketplace first reply opens "Hi {{NAME}}," inside its first sentence.
+    hi: `Hi${name},`,
     sender: config.firstReplySender,
     stock_link: `${site}/used-cars`, finance_link: `${site}/finance`, warranty_link: `${site}/warranty`,
     importing_link: `${site}/how-importing-works`, eligible_link: `${site}/importing`,
@@ -165,6 +167,16 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
       car_link: v?.url && !gone ? v.url : null,
       price: v?.price && !gone ? money(Number(v.price)) : null,
       km: v?.odometer ? `${Number(v.odometer).toLocaleString('en-AU')} km` : null,
+      // The Marketplace first reply's own facts, said as the team says them: "only 7,405 km" under
+      // 60,000 km; "a grade 4.5 Japanese import", or without the grade when none is recorded;
+      // "6 months rego, a fresh roadworthy and a 5-year warranty" from the car's Included list.
+      km_said: v?.odometer ? `${Number(v.odometer) < 60000 ? 'only ' : ''}${Number(v.odometer).toLocaleString('en-AU')} km` : null,
+      import_said: v ? (v.auctionGrade ? `a grade ${v.auctionGrade} Japanese import` : 'a Japanese import') : null,
+      inclusions_short: v ? inclusionsShort(v) || null : null,
+      // The forms on the car's own page; the finance page when there is no car.
+      finance_form: v?.url && !gone ? `${v.url}#finance` : `${site}/finance`,
+      trade_in_form: v?.url && !gone ? `${v.url}#trade-in` : null,
+      if_no_car: !v || gone,
       where: v && !gone ? WHERE[code] || null : null,
       inclusions: inclusions || null,
       if_inclusions: !!inclusions,

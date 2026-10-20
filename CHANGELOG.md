@@ -5,6 +5,38 @@ and versions follow `MAJOR.MINOR.PATCH`.
 
 ## [Unreleased]
 
+### Changed
+- **Marketplace replies have the shape the team sends there.** Learned from every reply sent on
+  Facebook Marketplace over 18 to 20 Oct 2026: the content engine's own first reply to each buyer
+  (now written for it by an AI, with the buyer's name and the car's figures) and the 68 replies a
+  person typed, in the engine's inbox or from this page. The first reply to "is it available?" is
+  the engine's three short paragraphs with this car's price, kilometres, auction grade and
+  inclusions ("Hi Priya, yes it's still available, $28,900 with only 52,400 km. / It's a grade 4.5
+  Japanese import, km verified against the auction documents, and the price includes 6 months
+  rego, a fresh roadworthy and a 5-year warranty. / Keen to see it? Send me your number and I'll
+  give you a call."), "only" under 60,000 km, the grade left out when none is recorded, and the
+  inclusions kept to what the car's Included list has. Every later reply starts with the answer,
+  usually 20 to 50 words in short lines: no greeting line of its own, no sign-off and no opening
+  thank-you. The next step is the buyer's phone number, booked by a person and confirmed by text,
+  not the booking link: no invitation is added under the lines on Marketplace any more, and the
+  link goes only when the buyer asks for a link or a Prompt asks for it. A price question or an
+  offer is "The lowest we can do on the Noah is [PRICE?]." and then the number, with no price
+  reply block under it (the dashboard keeps its block). Finance and a trade-in go to the forms on
+  the car's own page, which the AI now sees among the vehicle facts. The Marketplace messages in
+  `voice/marketplace-messages.md` are written the same way (Still available, Price question,
+  Their offer, Book a viewing, a new Their number: we will call, Finance, Trade-in), with new
+  facts for the first reply's kilometres, import line and short inclusions and for the two forms.
+  The length warning still starts above 90 words, where the team's longest reply sat. (The
+  owner, 20 Oct 2026: "The reply structure for facebook marketplace has changed. Study the last
+  two days replies and learn how replies were sent.")
+- **Links in a Marketplace reply say `utm_source=marketplace`.** They said `facebook` until now;
+  a link already tagged `facebook` is retagged when it is written or sent, and a lead that
+  arrives with either tag is still read as a Marketplace lead. (The owner, 20 Oct 2026.)
+- **How a Marketplace reply is sent, as the engine now reports it.** The reply still goes to the
+  engine's one reply address; the engine now sends it from the account's phone through its
+  companion app (its record of the message says `sent_via: companion`). The page's words and the
+  README say so; nothing else changed in the sending.
+
 ### Added
 - **"Which message?" in every section, and your Prompt changes the message picked.** Dashboard,
   Marketplace and Import Query each have a list of your messages for that kind of conversation,

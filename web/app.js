@@ -456,8 +456,8 @@ function renderThread(item, els, { toBottom = false } = {}) {
       e.photos && /^m:\d+$/.test(e.key) ? Array.from({ length: e.photos }, (_, i) => photoIn(e.key.slice(2), i, side)) : null,
       e.media && !(e.photos && /^m:\d+$/.test(e.key)) ? h('span', { class: 'media' }, icon('image'), e.media === 'photo' ? 'Photo' : 'Attachment', e.text ? '\n' : '') : null,
       e.text ? linked(e.text) : null,
-      // A Marketplace reply the engine's phone has yet to type into the chat says so in place of its time.
-      h('span', { class: 'time', text: e.sending ? 'Sending' : clock(e.at), title: e.sending ? 'The Marketplace system is typing this into the chat from the phone.' : null }),
+      // A Marketplace reply the engine's phone has yet to send into the chat says so in place of its time.
+      h('span', { class: 'time', text: e.sending ? 'Sending' : clock(e.at), title: e.sending ? 'The Marketplace system is sending this into the chat from the phone.' : null }),
       item.order && /^(in|po):\d+$/.test(e.key) ? h('button', { class: 'unpaste', type: 'button', title: 'Take this pasted message out of the order', onclick: () => removePaste(item, e.key.split(':')[1]) }, 'Remove') : null);
     box.append(bubble);
     lastSide = side; lastBy = by;
