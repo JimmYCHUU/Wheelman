@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { config } from './config.js';
+import { availability } from './normalize.js';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS leads (
@@ -81,6 +82,18 @@ CREATE TABLE IF NOT EXISTS followups (
   UNIQUE(item_key, occasion)
 );
 CREATE INDEX IF NOT EXISTS followups_open ON followups(done_at, due_at);
+
+-- News about a car, read off the stock list as it changes (src/followup.js): it landed at the
+-- showroom, its price dropped by $100 or more, or it sold. Kept only when the stored row was
+-- fresh (updated within two days), so a stale list does not make old changes news.
+CREATE TABLE IF NOT EXISTS vehicle_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vehicle_id INTEGER NOT NULL, stock_no TEXT,
+  event TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  data_json TEXT
+);
+CREATE INDEX IF NOT EXISTS vehicle_events_at ON vehicle_events(at);
 
 -- Conversations the user has opened. Keyed by the newest customer message, so a new message counts as unread again.
 CREATE TABLE IF NOT EXISTS seen (
@@ -728,7 +741,24 @@ export function messageMedia(id) {
   try { return r?.media_urls_json ? JSON.parse(r.media_urls_json).filter((u) => typeof u === 'string') : []; } catch { return []; }
 }
 
-export function upsertVehicle(v) {
+const FRESH_MS = 2 * 24 * 3600e3;
+
+/** What changed about a car worth telling a customer, comparing the stored row with the new one. */
+function vehicleNews(prev, v) {
+  const was = availability(prev).code;
+  const now = availability(v).code;
+  const out = [];
+  if (now === 'sold' && was !== 'sold') out.push({ event: 'sold', data: { from: was, to: now } });
+  else if (now === 'available' && was !== 'available' && was !== 'sold') out.push({ event: 'landed', data: { from: was, to: now } });
+  const before = Number(prev.price);
+  const after = Number(v.price);
+  if (Number.isFinite(before) && Number.isFinite(after) && before - after >= 100) out.push({ event: 'price', data: { from: before, to: after } });
+  return out;
+}
+
+/** Stores a car from the stock list; a change worth telling, against a fresh stored row, is kept as a vehicle event. */
+export function upsertVehicle(v, { now = Date.now() } = {}) {
+  const prev = stmt('SELECT data_json, updated_at FROM vehicles WHERE id = ?').get(v.id);
   stmt(`
     INSERT INTO vehicles(id, stock_no, year, make, model, model_code, status, sold_status, stock_in, data_json, updated_at)
     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -736,7 +766,25 @@ export function upsertVehicle(v) {
       stock_no = excluded.stock_no, year = excluded.year, make = excluded.make, model = excluded.model,
       model_code = excluded.model_code, status = excluded.status, sold_status = excluded.sold_status,
       stock_in = excluded.stock_in, data_json = excluded.data_json, updated_at = excluded.updated_at
-  `).run(v.id, v.stockNo, v.year, v.make, v.model, v.modelCode, v.status, v.soldStatus, v.stockIn, JSON.stringify(v), Date.now());
+  `).run(v.id, v.stockNo, v.year, v.make, v.model, v.modelCode, v.status, v.soldStatus, v.stockIn, JSON.stringify(v), now);
+  if (!prev || now - Number(prev.updated_at || 0) > FRESH_MS) return;
+  let before;
+  try { before = JSON.parse(prev.data_json); } catch { return; }
+  for (const n of vehicleNews(before, v)) {
+    stmt('INSERT INTO vehicle_events(vehicle_id, stock_no, event, at, data_json) VALUES(?, ?, ?, ?, ?)').run(v.id, v.stockNo ?? null, n.event, now, JSON.stringify(n.data));
+  }
+}
+
+const parseEvent = (r) => ({ id: r.id, vehicle_id: r.vehicle_id, stock_no: r.stock_no, event: r.event, at: r.at, data: r.data_json ? JSON.parse(r.data_json) : {} });
+
+/** The news about one car since a moment, oldest first. */
+export function vehicleEventsFor(vehicleId, sinceMs) {
+  return stmt('SELECT * FROM vehicle_events WHERE vehicle_id = ? AND at >= ? ORDER BY at, id').all(vehicleId, sinceMs).map(parseEvent);
+}
+
+/** All the news since a moment, oldest first. */
+export function vehicleEventsSince(sinceMs) {
+  return stmt('SELECT * FROM vehicle_events WHERE at >= ? ORDER BY at, id').all(sinceMs).map(parseEvent);
 }
 
 // ---- Marketplace chats -----------------------------------------------------

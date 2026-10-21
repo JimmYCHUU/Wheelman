@@ -603,6 +603,26 @@ test('Booking confirmed is offered only for a booking still to come that nobody 
   assert.deepEqual([list[0].id, list[0].best], ['booking_confirmed', true], 'still first for a booking just made');
 });
 
+// ---- PR 3: stock news ------------------------------------------------------------------------------
+
+test("the stock list's changes are kept as events: landed, a price down by $100 or more, sold; nothing on first sight or from a stale row", () => {
+  const voxy = (extra) => ({ id: 900, stockNo: '9900', title: '2019 Toyota Voxy', year: '2019', make: 'TOYOTA', model: 'Voxy', modelCode: 'ZRR80', status: 'PUBLISHED', soldStatus: 'UnSold', stockIn: 'Transit', price: 30000, odometer: 50000, ...extra });
+  db.upsertVehicle(voxy({}), { now: NOW - 5 * HOUR });
+  assert.deepEqual(db.vehicleEventsFor(900, 0), [], 'first sight');
+  db.upsertVehicle(voxy({ stockIn: 'Online' }), { now: NOW - 4 * HOUR });
+  db.upsertVehicle(voxy({ stockIn: 'Online', price: 29950 }), { now: NOW - 3 * HOUR });
+  db.upsertVehicle(voxy({ stockIn: 'Online', price: 29800 }), { now: NOW - 2 * HOUR });
+  db.upsertVehicle(voxy({ stockIn: 'Online', price: 29800 }), { now: NOW - HOUR });
+  db.upsertVehicle(voxy({ stockIn: 'Sold', soldStatus: 'Sold', price: 29800 }), { now: NOW });
+  assert.deepEqual(db.vehicleEventsFor(900, 0).map((e) => [e.event, e.at, e.data]), [['landed', NOW - 4 * HOUR, { from: 'transit', to: 'available' }], ['price', NOW - 2 * HOUR, { from: 29950, to: 29800 }], ['sold', NOW, { from: 'available', to: 'sold' }]]);
+  // Other cars have news of their own from the tests above (the Serena sold); this car's recent news is the sale.
+  assert.deepEqual(db.vehicleEventsSince(NOW - 90 * MIN).filter((e) => e.vehicle_id === 900).map((e) => e.event), ['sold']);
+  // A row last seen three days ago: whatever changed since is not news.
+  db.upsertVehicle(voxy({ id: 901, stockNo: '9901' }), { now: NOW - 3 * DAY });
+  db.upsertVehicle(voxy({ id: 901, stockNo: '9901', stockIn: 'Online', price: 20000 }), { now: NOW });
+  assert.deepEqual(db.vehicleEventsFor(901, 0), [], 'stale row');
+});
+
 test('a Prompt on the reminder tells the AI the visit is still to come, not to ask how it went', async () => {
   const key = replied(64, 'Jo', { inText: '', inquiries: [bookingInquiry(tomorrowAt2(), { bookedAt: NOW - 3 * DAY })], ours: [[NOW - 3 * DAY + HOUR, 'Hello Jo, your inspection of the Hiace is booked. See you then.']] });
   followup.refreshFollowUps({ now: fourToday() + 30 * MIN });
