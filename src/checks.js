@@ -31,7 +31,7 @@ const BANNED = [
 
 // The checks that hold a reply to the section's own rules on length, tone and layout, rather than
 // to the facts. A reply written from the owner's Prompt is not held to them.
-const SECTION_RULES = new Set(['emoji', 'exclaim', 'long', 'questions', 'filler', 'register', 'next-step', 'price', 'opener', 'unasked-link', 'deposit-early']);
+const SECTION_RULES = new Set(['emoji', 'exclaim', 'long', 'questions', 'filler', 'register', 'next-step', 'price', 'opener', 'unasked-link', 'deposit-early', 'quiet-close']);
 
 // What our records say about a customer, said to them. Shape the reply by it; never state it.
 const INSIDER_LEAK = /\b(lead score|your (engagement )?score|scored (as|at)|(hot|warm|cold) lead|our (dashboard|system|records?) (shows?|says?|notes?|records?|tells? us)|came to us (from|via|through)|found us (on|through|via)|(enquir|inquir|look|shopp)\w* (at|with|about|around) other (dealers?|cars|vehicles)|other dealers?|your (finance )?application (was|has been|got|is) (declined|rejected|knocked back|approved|unsuccessful)|finance (was|has been|is|got) (declined|rejected|knocked back|approved)|you (have |'ve )?(watched|viewed|seen) (the|our) (video|walkaround))\b/i;
@@ -354,6 +354,12 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   if (stage && !instructed && stage.rung !== 'buyer' && !stage.told?.depositAgreed) {
     const licence = String(body).match(LICENCE_ASK);
     if (licence) add('warn', 'deposit-early', 'Asks for a driver licence or email address before the customer has said yes to the deposit.', [licence[0]]);
+  }
+  if (stage && !instructed && QUIET_MOVES.has(stage.move)) {
+    const sold = String(body).match(DEPOSIT_MENTION) || String(body).match(LICENCE_ASK);
+    if (sold) add('warn', 'quiet-close', `"${sold[0]}": they are leaving or waiting. Thank them, and sell nothing more.`, [sold[0]]);
+    if (findUrls(body).length) add('warn', 'quiet-close', 'A link in a polite close. They are leaving or waiting: thank them and stop.', findUrls(body));
+    if (stage.move === 'part_well' && markers.length) add('warn', 'quiet-close', 'A buyer leaving over the price is thanked, not quoted: no blank.', markers);
   }
   // A price reply or an invitation under the text is a next step in itself (blockNextStep).
   // A polite close (a no, or a buyer leaving over the price) offers nothing more.

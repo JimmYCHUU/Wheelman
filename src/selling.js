@@ -43,6 +43,9 @@ export const DECLINED = /\b(not interested|no longer (interested|looking|need)|a
 /** They cannot make the visit that was arranged: not a no to the car, but not a commitment either. */
 export const CANNOT_COME = /\b(can'?t|cannot|can not|unable to|not able to|won'?t be able to|will not be able to) (come|make it|get (there|down|up|in|over)|get to|travel|drive)\b|\b(come|visit|make it|pop in|drop in) (another|some other|a different) (time|day)\b/i;
 
+/** They have put it off: a later day, a "not today", an "I'll let you know". Not a no, not a commitment. */
+export const DEFERRED = /\b(i'?ll|i will|we'?ll|we will|let me|(i |we )?need to|(i|we) have to|i'?d like to|i want to) (let you know|get back to you|be in touch|think about it|have a think|think it over|think on it|come back to you|decide|discuss|talk (to|with)|speak (to|with)|chat (to|with)|sleep on it|check with)\b|\b(not (coming|today|this week|right now|yet|ready)|can'?t (come|make it|do) today|another (time|day)|some other (time|day)|next (week|month|time)|later (in the|this) (week|month)|still (deciding|thinking)|need (some |more |a bit of )?time|maybe later|hold off|leave it with me|in (the next )?(couple|few) (of )?(days|weeks))\b/i;
+
 /** The customer says they have seen or driven the car, or watched its video. */
 export const SEEN_WORDS = /\b(saw it|seen it|inspected it|test[\s-]?drove|test[\s-]?drive (yesterday|today|the other day|last|on)|drove it|had a look at it|looked at it (yesterday|today|on|last)|came (in|down|by|past) (yesterday|today|on|last)|visited (yesterday|today|on|last)|after (the|my|our) (inspection|visit|test[\s-]?drive)|thanks for (showing|the test[\s-]?drive|your time (yesterday|today|the other day))|(watched|seen) the (walkaround |video|walkaround))\b/i;
 /** A deposit proposed in a reply. */
@@ -159,6 +162,10 @@ export const MOVES = {
   },
   part_well: {
     text: 'They are leaving: the price does not suit them, or they are annoyed. Thank them for their offer or their interest in one sentence, and leave the door open: if their plans change, they are welcome to message us at any time. Then stop. No [PRICE?] blank and no figure, no link (not even the car\'s page on a first reply), no invitation, no deposit, no other car, and no argument about the price or what the car is worth. Answer an insult with the same calm courtesy, and do not mention it.',
+    question: '',
+  },
+  accept_deferral: {
+    text: "They have put it off: a later day, a 'not today', or an 'I'll let you know'. Answer anything they asked in a sentence (with its blank where a person decides), then one sentence that accepts the wait, with the availability fact when it is true (the vehicle remains available at our Lidcombe showroom), and stop. No deposit, no licence or email, no 'remains for sale', no second question, no link.",
     question: '',
   },
   ask_trade_in_details: {
@@ -312,9 +319,12 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
   // They are leaving over the price, or are rude. Someone still asking to see the car is not leaving.
   const parting = !item.deal && !sit.includes('inspection_booking') && (PARTING.test(item.pendingText || '') || RUDE.test(item.pendingText || ''));
 
+  // They have put it off: accepted in a line, like a no.
+  const deferred = !item.deal && !declined && !parting && (DEFERRED.test(item.pendingText || '') || CANNOT_COME.test(item.pendingText || ''));
+
   let rung;
   if (item.deal) rung = 'buyer';
-  else if (signals.length && !price.open && !parting) rung = 'commit';
+  else if (signals.length && !price.open && !parting && !deferred) rung = 'commit';
   else if (price.open || sit.some((s) => FIT.has(s)) || (sit.includes('vehicle_details') && customer.length > 1)) rung = 'fit';
   else if (sit.includes('history_kms') || sit.includes('photos_video') || (far.far && sit.includes('inspection_booking'))) rung = 'proof';
   else rung = 'interest';
@@ -327,6 +337,7 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
   else if (sit.includes('complaint')) move = 'hold';
   else if (declined) move = 'accept_no';
   else if (parting) move = 'part_well';
+  else if (deferred) move = 'accept_deferral';
   else if (gone) move = 'offer_alternative';
   // Our price reply goes once; after that an offer is answered for a person to decide.
   else if (price.open) move = price.answered ? 'answer_offer' : 'invite_before_price';
@@ -359,7 +370,7 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
 }
 
 /** Moves that close politely: nothing is offered after them, not even the price reply or the invitation. */
-export const QUIET_MOVES = new Set(['accept_no', 'part_well']);
+export const QUIET_MOVES = new Set(['accept_no', 'part_well', 'accept_deferral']);
 // Moves whose words end on an invitation to see the car.
 const INVITING_MOVES = new Set(['invite_inspection', 'answer_then_invite', 'offer_proof', 'answer_offer']);
 

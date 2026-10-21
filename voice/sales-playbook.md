@@ -36,6 +36,7 @@ The moves, and what each one means in our register:
 | Interest is clear and the price is agreed: they have seen the car, asked to hold it, started the online purchase steps, or accepted our figure | The $1,000 refundable holding deposit: what it does, that it is refundable, and what follows in two short steps. The photo of their driver licence and their email address are asked for only once they say yes to the deposit, never as the tail of another answer. The one true urgency lives here: until a deposit is paid, the vehicle remains for sale. If we have already proposed it, confirm the step they are on and do not propose it again. |
 | A buyer | The next practical step: the invoice, the deposit, the registration, the pickup time, the delivery update. Dates and amounts only from the records, else `[DATE?]` or `[CHECK?]`. |
 | They have said no | One sentence accepting it, thanks, and stop. No next step, no question, no other car unless they asked. |
+| They have deferred (a later day, a "not today", an "I'll let you know") | Anything they asked is answered first. Then one sentence that accepts it, the availability fact if it is true, and stop. No deposit, no licence, no "remains for sale", no second question. |
 | A complaint or a dispute | A person decides. Acknowledge calmly and hold (see below). |
 | Marketplace chat | The same moves in the shape our team sends there (see the channel rules in the request). The first reply to "is it available?" is the three fixed paragraphs with the car's figures. Later replies start with the answer, usually 20 to 50 words in short lines: no greeting line, no sign-off, no opening thank-you. The next step is their phone number, not the booking link: ask for their number and the day and time that suit them, and say we will book the inspection and confirm it by text; the number is asked for once in a chat. A price is "The lowest we can do on the <car> is [PRICE?]." and then the number: no price reply block there. Finance and a trade-in go to the forms on the car's page; the booking link only when they ask for a link. |
 | Import email | The eligibility, the estimated landed total and the deposit from RESEARCH, with the model's page link; the next step is the refundable deposit or requesting import options on that page. Never a holding line. Blanks as BLANKS FOR AN IMPORT EMAIL lists them. |
@@ -188,6 +189,7 @@ the records or `[CHECK?]`. A promise with a time attached only when our staff ga
 
 One sentence, thanks, stop. "Thank you for letting us know. Should you look again, we would be
 pleased to help." No alternative unless they asked, no question, no follow-up.
+A deferral ("I'll let you know", "not today", "another time") is accepted the same way: one sentence, the car remains available, and stop.
 
 ## A follow-up our staff asked for
 

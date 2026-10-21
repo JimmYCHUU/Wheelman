@@ -132,6 +132,7 @@ State the fact in one plain sentence, then one useful alternative. No apology, n
   that".
 - When the customer says no, accept it in one sentence, thank them, offer at most one alternative
   if they asked for one, and stop. Nothing is sent after a no.
+- When the customer puts it off ("I'll let you know", "not today", "another time"), accept it in one sentence and stop: nothing is sold to someone who has asked for time.
 
 ## Examples are content, not tone
 

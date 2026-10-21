@@ -104,6 +104,7 @@ test('a booking link we sent is an invitation, not an arranged visit', () => {
   assert.equal(s.allowsUrgency, false);
   const later = stage({ vehicles: car, texts: [...visitSet, { who: 'customer', text: "It's ok I can come another time" }] });
   assert.notEqual(later.rung, 'commit', 'coming another time is not a commitment');
+  assert.equal(later.move, 'accept_deferral', 'it is accepted, not sold to');
 });
 
 test('no deposit while the price is not agreed: an offer, a budget, or "too dear" keeps them working out the cost', async () => {
@@ -437,8 +438,38 @@ test('a deposit, a licence ask or "remains for sale" before the buyer is there i
 });
 
 test('the voice: a booking, a finance application, a thumbs-up or a deferral is not the moment for the deposit', () => {
-  assert.match(promptModule.systemPrompt('sms'), /A booking confirmation, a finance application, a thumbs-up or a deferral is not the moment/);
+  assert.match(promptModule.systemPrompt('sms'), /They have deferred \(a later day, a "not today", an "I'll let you know"\)/);
   const flat = promptModule.systemPrompt('sms').replace(/\s+/g, ' ');
   assert.doesNotMatch(flat, /a customer who has booked to see it is\./);
   assert.match(flat, /a customer who has seen it, or accepted our figure, is\./);
+});
+
+test('a deferral is answered like a no: accepted in a line, nothing sold', () => {
+  for (const text of ["I'll let you know in the next couple of days", "It's ok I can come another time", 'I am not coming today, stuck at work', "Leave it with me, I'll chat with my partner", 'Need to think about it']) {
+    const s = stage({ vehicles: car, texts: [...visitSet, { who: 'customer', text }] });
+    assert.deepEqual([s.move, s.question, s.allowsUrgency], ['accept_deferral', '', false], text);
+    assert.notEqual(s.rung, 'commit', text);
+    assert.match(selling.stageLines(s).join('\n'), /offer no next step/i, text);
+  }
+  const asked = stage({ vehicles: car, situations: ['vehicle_details'], texts: [{ who: 'customer', text: "I'll let you know. Does it have a tow bar?" }] });
+  assert.equal(asked.move, 'accept_deferral');
+  assert.match(asked.moveText, /Answer anything they asked/);
+  const buyer = stage({ situations: ['after_sale'], deal: { source: 'lead_status' }, texts: [{ who: 'customer', text: 'Leave it with me, I will chat with my partner about the balance.' }] });
+  assert.equal(buyer.move, 'after_sale_step', 'a buyer after the sale keeps the after-sale move');
+  assert.equal(stage({ vehicles: car, texts: [{ who: 'customer', text: "Thanks but I've found another car, I'll pass." }] }).move, 'accept_no', 'a no is still a no');
+  assert.ok(selling.QUIET_MOVES.has('accept_deferral'));
+});
+
+test('a deposit, a link or a blank in a polite close is pointed out', () => {
+  const run = (body, stage) => checks.checkDraft({ reply: body, body, allowedText: 'Vehicle: 2021 Toyota Noah X. https://www.carbarn.com.au/vehicles/toyota/noah/zrr80/1300#inspection=onsite', stage, situation: { all: ['general'] } }).map((c) => `${c.level}:${c.code}`);
+  const deferral = { rung: 'interest', move: 'accept_deferral', allowsUrgency: false, aim: 'x', told: { deposit: false, depositAgreed: false } };
+  const r = run('That is completely fine. Until a deposit is paid the Noah remains for sale, so we suggest securing it with a $1,000 refundable holding deposit.', deferral);
+  assert.ok(r.includes('warn:quiet-close') && r.includes('warn:urgency'), r.join(' '));
+  assert.ok(run('Certainly. You can book here:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80/1300#inspection=onsite', deferral).includes('warn:quiet-close'));
+  const fine = run('Thank you for letting us know. The Noah remains available at our Lidcombe showroom.', deferral);
+  assert.ok(!fine.includes('warn:quiet-close') && !fine.includes('warn:next-step'), fine.join(' '));
+  const parting = { rung: 'fit', move: 'part_well', allowsUrgency: false, aim: 'x', told: { deposit: false, depositAgreed: false } };
+  assert.ok(run('Thank you for the offer. Our best price is [PRICE?].', parting).includes('warn:quiet-close'), 'a buyer leaving over the price is not quoted');
+  assert.ok(!run('Thank you for the offer, and all the best with your search.', parting).includes('warn:quiet-close'));
+  assert.ok(!checks.checkDraft({ reply: 'x', body: 'A $1,000 holding deposit secures it.', stage: deferral, instructed: true }).some((c) => c.code === 'quiet-close'));
 });
