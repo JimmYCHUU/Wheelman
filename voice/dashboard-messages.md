@@ -23,7 +23,9 @@
 #   car on its way (in Japan or at sea), car sold (sold, or held by another customer's deposit),
 #   no car, any (always offered)
 #   follow-up (a follow-up opened from the Follow-ups list), inspection passed (the booked time
-#     of their inspection or test drive has gone by), quiet (days without a reply to our message)
+#     of their inspection or test drive has gone by), quiet (days without a reply to our message),
+#     reminder (their visit is booked for tomorrow)
+#   booking made (their newest message is a booking through the website)
 #
 # Facts Wheelman fills in. A paragraph whose fact does not apply is left out:
 #   {greeting}           the greeting for the time of day with their name; left out when we have
@@ -44,6 +46,12 @@
 #   {if_no_warranty}     keeps its paragraph only when it does not
 #   {booked_day} {booked_time}   on a follow-up after an inspection: "today", "yesterday" or
 #                        "on Wednesday 21 October", and "2 pm"
+#   {booking_kind} {booked_when}   "inspection" or "test drive", and "today", "tomorrow" or
+#                        "on Wednesday 21 October", for the booking in hand: the follow-up's,
+#                        else the newest one they made through the website
+#   {address}            136 Frances Street, Lidcombe NSW 2141
+#   {if_onsite} {if_online}   keeps its paragraph only for a visit to the yard, or only for an
+#                        online video inspection
 #   {deposit_offer}      the holding-deposit line (@deposit_offer below), on a follow-up after an
 #                        inspection, only while the deposit has not been offered to them yet
 #   {new_thing}          on a follow-up to a quiet customer: the one thing they have not been

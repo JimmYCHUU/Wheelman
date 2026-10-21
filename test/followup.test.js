@@ -501,3 +501,18 @@ test('a message marked @fit: no is written by code, word for word; a Prompt stil
   try { assert.equal((await post('/api/items/c:350/draft', { message: 'booking_confirmed', instruction: 'add that we are closed on Sunday' })).status, 200); } finally { ai.behave = null; }
   assert.equal(ai.seen.length - seenBefore, 1, 'a Prompt goes to the AI');
 });
+
+test('a booking just made is answered first with Booking confirmed; online and test-drive bookings read right', async () => {
+  const list = (await get('/api/items/c:350')).item.templates;
+  assert.deepEqual([list[0].id, list[0].best], ['booking_confirmed', true]);
+  const d = (await post('/api/items/c:350/draft', { message: 'booking_confirmed' })).json.item.draft;
+  assert.match(d.reply, /^Good (morning|afternoon|evening) Tara,\n\nTeam Carbarn here\. Your inspection of the 2020 Toyota Hiace DX is booked for (today|tomorrow) at 2 pm\.\n\nWe are at 136 Frances Street, Lidcombe NSW 2141\. If the time no longer suits, let us know and we will find another\.\n\nRegards,\nTeam Carbarn$/);
+  const online = replied(55, 'Yara', { inText: '', inquiries: [inquiry(`Preferred inspection: Online on ${sydneyNaive(NOW + DAY).slice(0, 10)} at 09:30 AM.`, { type: 'product_page_inspection', at: NOW - HOUR })], ours: [] });
+  const o = (await post(`/api/items/${online}/draft`, { message: 'booking_confirmed' })).json.item.draft;
+  assert.match(o.reply, /at 9:30 am\.\n\nWe will call you at that time on this number and walk you around the car on video\./);
+  assert.doesNotMatch(o.reply, /Frances Street/);
+  const drive = replied(56, 'Zed', { inText: '', inquiries: [bookingInquiry(NOW + DAY, { bookedAt: NOW - HOUR, testDrive: true })], ours: [] });
+  assert.match((await post(`/api/items/${drive}/draft`, { message: 'booking_confirmed' })).json.item.draft.reply, /Your test drive of the 2020 Toyota Hiace DX is booked/);
+  assert.ok(!(await get('/api/items/c:305')).item.templates.some((t) => t.id === 'booking_confirmed'), 'not offered without a booking');
+  assert.deepEqual(st.checkTemplates(), []);
+});
