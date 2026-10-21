@@ -395,9 +395,14 @@ export function followUpChecks({ body, kind = '' }) {
   if (!/carbarn/i.test(first)) out.push({ level: 'fail', code: 'followup-identify', tokens: [], message: 'A follow-up names us in its first sentence: "Team Carbarn here, …". The customer did not write first, so they must see at once who this is from.' });
   const banned = text.match(FOLLOWUP_BANNED);
   if (banned) out.push({ level: 'fail', code: 'followup-banned', tokens: [banned[0]], message: `"${banned[0]}": never "just checking in" or its kin, and never ask whether they came or made it. Write as if the visit happened and ask how it went, or offer the one new thing.` });
-  if (kind !== 'reminder') {
+  // A reminder carries nothing new by design; news about the car is the new thing itself; the sold
+  // news lists two cars, so it may run longer.
+  const news = /^stock_/.test(String(kind || ''));
+  if (kind !== 'reminder' && !news) {
     // "Were you able to come in?" asks about the past: it offers nothing, so it does not count here.
     if (!FOLLOWUP_NEW.test(text.replace(FOLLOWUP_BANNED, ''))) out.push({ level: 'warn', code: 'followup-new', tokens: [], message: 'Nothing new is offered. A follow-up carries one new thing: the documents, the walkaround video, a similar car, a time to come in, or the holding deposit after a visit.' });
+  }
+  if (kind !== 'reminder' && kind !== 'stock_sold') {
     const words = wordCount(text.replace(/https?:\/\/\S+/g, ''));
     if (words > 50) out.push({ level: 'warn', code: 'followup-long', tokens: [], message: `${words} words. A follow-up is under 50: one new thing, one invitation, stop.` });
   }

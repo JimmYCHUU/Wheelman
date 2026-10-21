@@ -691,6 +691,21 @@ test('a price drop replaces the landed news; a sale replaces that and offers two
   assert.deepEqual(openFor(nia), [], 'no quiet nudge on the silence the news answered');
 });
 
+test('the AI is told it is news about the car, and the checks do not ask the news for something new', async () => {
+  const price = openFor('c:365')[0];
+  assert.equal(price?.kind, 'stock_price');
+  ai.behave = echoFit;
+  let out;
+  try { out = await post('/api/items/c:365/draft', { followup: price.id, message: 'stock_price', instruction: 'add that it is a hybrid' }); } finally { ai.behave = null; }
+  assert.equal(out.status, 200);
+  const asked = ai.seen[ai.seen.length - 1].messages[1].content;
+  assert.match(asked, /news about the car they asked about: Price dropped \(from \$18,900 to \$18,500\)/);
+  assert.doesNotMatch(asked, /as if the visit happened|still to come/);
+  assert.deepEqual(checks.followUpChecks({ body: 'Team Carbarn here. The 2017 Toyota Prius S you asked about is now $18,500, down from $18,900.', kind: 'stock_price' }), []);
+  assert.deepEqual(checks.followUpChecks({ body: `Team Carbarn here. The car you asked about has now been sold. ${'word '.repeat(60)}`, kind: 'stock_sold' }), []);
+  assert.ok(checks.followUpChecks({ body: `Team Carbarn here. ${'word '.repeat(60)}`, kind: 'stock_price' }).some((c) => c.code === 'followup-long'));
+});
+
 test('a Prompt on the reminder tells the AI the visit is still to come, not to ask how it went', async () => {
   const key = replied(64, 'Jo', { inText: '', inquiries: [bookingInquiry(tomorrowAt2(), { bookedAt: NOW - 3 * DAY })], ours: [[NOW - 3 * DAY + HOUR, 'Hello Jo, your inspection of the Hiace is booked. See you then.']] });
   followup.refreshFollowUps({ now: fourToday() + 30 * MIN });

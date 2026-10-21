@@ -152,7 +152,9 @@ export function templatePlan(tpl, { orderPlan = null, followUp = null } = {}) {
       ...(orderPlan ? ['', 'About this order, for context only (the message above is what to send):', ...orderPlan.lines] : []),
       ...(followUp ? ['', followUp.kind === 'reminder'
         ? 'This is a reminder of a visit still to come (see FOLLOW-UP below): keep the day, the time and the address as the message has them, add no question, and say nothing about how the visit went or whether they are coming.'
-        : 'This is a follow-up our staff asked for (see FOLLOW-UP below): keep it under 50 words, add no question the message does not have, never "just checking in" or "just following up", and never ask whether they came or made it.'] : []),
+        : /^stock_/.test(String(followUp.kind || ''))
+          ? 'This is news about the car they asked about (see FOLLOW-UP below): keep the news and every figure as the message has them, add no question, and never "just checking in" or "just following up".'
+          : 'This is a follow-up our staff asked for (see FOLLOW-UP below): keep it under 50 words, add no question the message does not have, never "just checking in" or "just following up", and never ask whether they came or made it.'] : []),
     ],
   };
 }
