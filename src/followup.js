@@ -1,8 +1,8 @@
 // Follow-ups: a reason to write to a customer we replied to last. The worker runs refreshFollowUps
 // each check with no AI: it reads every dashboard conversation we answered, raises an occasion
 // when one is due (an inspection's booked time has passed; the customer has been quiet after our
-// reply), and closes the ones that no longer hold (the customer wrote, the car sold, the reason
-// aged out). The follow-up itself is written only when the owner opens the conversation from the
+// reply; a booked visit is tomorrow, so a reminder is due the afternoon before), and closes the
+// ones that no longer hold (the customer wrote, the car sold, the reason aged out). The follow-up itself is written only when the owner opens the conversation from the
 // Follow-ups list (src/server.js), from a template in voice/dashboard-messages.md, and is never
 // sent or learned from. Everything here but refreshFollowUps is pure.
 
@@ -92,7 +92,8 @@ export function dueFollowUps(item, { now = Date.now(), cfg = config.followUp, ro
   const have = rows || followUpsFor(item.itemKey);
   const { lastOurs, lastTheirs, bookings } = e;
   const out = [];
-  const blocked = (occasion, sinceAt) => have.some((r) => r.occasion !== occasion && r.since_at >= sinceAt) || burstsSince(item, sinceAt) >= 2;
+  // A reminder is not about a silence: it neither blocks another follow-up nor is blocked by one.
+  const blocked = (occasion, sinceAt) => have.some((r) => r.kind !== 'reminder' && r.occasion !== occasion && r.since_at >= sinceAt) || burstsSince(item, sinceAt) >= 2;
 
   // An inspection or test drive whose booked time has gone by: the newest such booking, unless
   // they wrote after the visit (then there is a message to answer) or said they could not come.
@@ -108,6 +109,25 @@ export function dueFollowUps(item, { now = Date.now(), cfg = config.followUp, ro
         template: 'after_inspection',
         dueAt: atSensibleHour(passed.booking.at + cfg.afterInspectionHours * HOUR),
         data: { bookedAt: passed.booking.at, where: passed.booking.where, kind: passed.booking.kind, deposit: !told(item, /\bdeposit\b/i) },
+      });
+    }
+  }
+
+  // A visit still to come: a reminder at the reminder hour the day before, hanging on the booked
+  // time itself (a text of theirs before the visit does not close it). None when they booked after
+  // that hour (booked today for today: the confirmation serves), when we have written to them since
+  // it, or when they said they cannot come.
+  const next = bookings.filter((b) => b.booking.at > now).pop();
+  if (next) {
+    const dueAt = atSensibleHour(parseDashboardTime(`${sydneyDay(next.booking.at - DAY)}T${String(cfg.reminderHour).padStart(2, '0')}:00`));
+    const cancelled = item.timeline.some((x) => x.who === 'customer' && x.text && x.at > next.at && CANNOT_COME.test(x.text));
+    if (next.at <= dueAt && !cancelled && !(lastOurs && lastOurs.at >= dueAt)) {
+      out.push({
+        kind: 'reminder', occasion: `reminder:${next.key}`, sinceAt: next.booking.at,
+        reason: next.booking.kind === 'test_drive' ? 'Test drive tomorrow' : 'Inspection tomorrow',
+        template: 'inspection_reminder',
+        dueAt,
+        data: { bookedAt: next.booking.at, where: next.booking.where, kind: next.booking.kind },
       });
     }
   }

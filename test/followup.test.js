@@ -516,3 +516,49 @@ test('a booking just made is answered first with Booking confirmed; online and t
   assert.ok(!(await get('/api/items/c:305')).item.templates.some((t) => t.id === 'booking_confirmed'), 'not offered without a booking');
   assert.deepEqual(st.checkTemplates(), []);
 });
+
+// ---- the reminder the day before a booked visit --------------------------------------------------
+
+const tomorrowAt2 = () => parseDashboardTime(`${sydneyDay(NOW + DAY)}T14:00`);
+const fourToday = () => parseDashboardTime(`${sydneyDay(NOW)}T16:00`);
+
+test('a booking for tomorrow raises a reminder at four the day before, hanging on the booked time', () => {
+  const visit = tomorrowAt2();
+  const key = replied(51, 'Uma', { inText: '', inquiries: [bookingInquiry(visit, { bookedAt: NOW - 3 * DAY })], ours: [[NOW - 3 * DAY + HOUR, 'Hello Uma, your inspection of the Hiace is booked. See you then.']] });
+  followup.refreshFollowUps({ now: NOW });
+  assert.equal(openFor(key).length, 0, 'two in the afternoon: not yet');
+  followup.refreshFollowUps({ now: fourToday() + 30 * MIN });
+  const r = openFor(key)[0];
+  assert.ok(r, 'raised after four');
+  assert.deepEqual([r.kind, r.reason, r.template, r.since_at, r.due_at, r.data], ['reminder', 'Inspection tomorrow', 'inspection_reminder', visit, fourToday(), { bookedAt: visit, where: 'onsite', kind: 'inspection' }]);
+  followup.refreshFollowUps({ now: fourToday() + HOUR });
+  assert.equal(openFor(key).length, 1, 'raised once');
+});
+
+test('no reminder when they booked after the reminder time, or we have written since it, or they cannot come', () => {
+  const visit = tomorrowAt2();
+  const late = replied(52, 'Vik', { inText: '', inquiries: [bookingInquiry(NOW + 3 * HOUR, { bookedAt: NOW - HOUR })], ours: [[NOW - 30 * MIN, 'Hello Vik, see you at five.']] });
+  const evening = replied(53, 'Wes', { inText: '', inquiries: [bookingInquiry(visit, { bookedAt: fourToday() + 10 * MIN })], ours: [[fourToday() + 15 * MIN, 'Hello Wes, your inspection is booked for tomorrow at 2 pm.']] });
+  const wrote = replied(54, 'Xan', { inText: '', inquiries: [bookingInquiry(visit, { bookedAt: NOW - 2 * DAY })], ours: [[fourToday() + 5 * MIN, 'Hello Xan, just confirming tomorrow at 2 pm.']] });
+  const cannot = replied(57, 'Ana', { inText: '', inquiries: [bookingInquiry(visit, { bookedAt: NOW - 2 * DAY })], ours: [[NOW - 2 * DAY + HOUR, 'Hello Ana, your inspection is booked.']] });
+  msg(357, 'IN', "Sorry, can't make it tomorrow after all.", NOW - HOUR);
+  msg(357, 'OUT', 'No problem Ana, let us know another day.', NOW - 30 * MIN);
+  conv(357, 357, phoneOf(57), 'Ana Invented', NOW - 30 * MIN);
+  followup.refreshFollowUps({ now: fourToday() + 30 * MIN });
+  assert.deepEqual([openFor(late), openFor(evening), openFor(wrote), openFor(cannot)], [[], [], [], []]);
+});
+
+test('their "see you tomorrow", answered before the hour, keeps the reminder; a copied reminder never blocks the follow-up after the visit', () => {
+  const visit = tomorrowAt2();
+  const key = replied(58, 'Bea', { inText: '', inquiries: [bookingInquiry(visit, { bookedAt: NOW - 2 * DAY })], ours: [[NOW - 2 * DAY + HOUR, 'Hello Bea, your inspection is booked for tomorrow at 2 pm.']] });
+  msg(358, 'IN', 'Thanks, see you tomorrow', NOW - 2 * HOUR);
+  msg(358, 'OUT', 'See you then Bea.', NOW - HOUR);
+  conv(358, 358, phoneOf(58), 'Bea Invented', NOW - HOUR);
+  followup.refreshFollowUps({ now: fourToday() + 30 * MIN });
+  const r = openFor(key)[0];
+  assert.equal(r?.kind, 'reminder');
+  db.closeFollowUp(r.id, 'copied');
+  followup.refreshFollowUps({ now: visit + 4 * HOUR });
+  assert.deepEqual(openFor(key).map((x) => x.kind), ['inspection_passed'], 'how did it go, the day after the reminder');
+  assert.equal(db.getFollowUp(r.id).done_how, 'copied', 'the reminder row is left as it was');
+});
