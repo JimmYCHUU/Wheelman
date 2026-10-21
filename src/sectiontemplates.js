@@ -165,7 +165,9 @@ export function bookedTimeWords(bookedAt) {
 const OFFERED = {
   documents: /export certificate|auction sheet/i,
   video: /\b(video|walkaround)\b/i,
-  invited: /welcome to (come|visit|inspect|see)|come (in|and see|down|by)|(available|ready) (for|to) (inspection|inspect|view|see)|book a time|#inspection=/i,
+  // A time to come in is offered once the booking link has gone out. "Would you like to come and
+  // see it?" on its own leaves the opening hours and the link as something new to say.
+  booking: /book a time|#inspection=/i,
 };
 
 /**
@@ -187,7 +189,7 @@ export function newThingFor(item, media) {
   if (video && t.new_video && !watched && !said(OFFERED.video)) return { kind: 'video', text: fill(t.new_video, { video_link: video.link }) };
   const similar = alternatives(v, allVehicles(), 1)[0];
   if (similar && t.new_similar) return { kind: 'similar', text: fill(t.new_similar, { similar_car: similar.title, similar_price: money(Number(similar.price)), similar_km: `${Number(similar.odometer || 0).toLocaleString('en-AU')} km`, similar_link: similar.url }) };
-  if (t.new_visit && v.url && availability(v).code === 'available' && !said(OFFERED.invited)) return { kind: 'visit', text: fill(t.new_visit, { booking_link: inspectionLinks(v).onsite }) };
+  if (t.new_visit && v.url && availability(v).code === 'available' && !said(OFFERED.booking)) return { kind: 'visit', text: fill(t.new_visit, { booking_link: inspectionLinks(v).onsite }) };
   return null;
 }
 

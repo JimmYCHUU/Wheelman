@@ -310,7 +310,9 @@ test('the one new thing: the documents, then the video, then a similar car, then
   assert.deepEqual([similar.kind, /2020 Toyota Noah Si/.test(similar.text), /\$27,900/.test(similar.text), /70,000 km/.test(similar.text)], ['similar', true, true, true]);
   const visit = st.newThingFor(item(['Here is the auction sheet and the walkaround video.'], hiace), media);
   assert.deepEqual([visit.kind, /#inspection=onsite/.test(visit.text)], ['visit', true]);
-  assert.equal(st.newThingFor(item(['Here is the auction sheet and the walkaround video. You are welcome to come and see it.'], hiace), media), null, 'everything has been offered');
+  // "Would you like to come and see it?" offers no booking link: the hours and the link are still new.
+  assert.equal(st.newThingFor(item(['Here is the auction sheet and the walkaround video. Would you like to come and see it?'], hiace), media).kind, 'visit', 'invited in words only');
+  assert.equal(st.newThingFor(item(['Here is the auction sheet and the walkaround video. You can book a time here:\nhttps://www.carbarn.com.au/vehicles/toyota/hiace/gdh206v/1201#inspection=onsite'], hiace), media), null, 'everything has been offered');
   assert.equal(st.newThingFor(item([], hiace), null).kind, 'visit', 'with no media to hand, the documents and the video are not offered');
 });
 
