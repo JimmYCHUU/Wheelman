@@ -9,6 +9,8 @@
 #   @fits:   when it is offered: the conversation must show at least one of these (see below)
 #   @needs:  (optional) it is offered only when all of these are true too
 #   @not:    (optional) never offered when one of these is true
+#   @fit: no (optional) written by code, word for word, with no AI; a Prompt or Rewrite still
+#            goes to the AI
 # Only the messages that fit the conversation are offered; the best fit comes first.
 #
 # What the conversation can show (for @fits, @needs and @not):
@@ -21,7 +23,9 @@
 #   car on its way (in Japan or at sea), car sold (sold, or held by another customer's deposit),
 #   no car, any (always offered)
 #   follow-up (a follow-up opened from the Follow-ups list), inspection passed (the booked time
-#     of their inspection or test drive has gone by), quiet (days without a reply to our message)
+#     of their inspection or test drive has gone by), quiet (days without a reply to our message),
+#     reminder (their visit is booked for tomorrow)
+#   booking made (their newest message is a booking through the website)
 #
 # Facts Wheelman fills in. A paragraph whose fact does not apply is left out:
 #   {greeting}           the greeting for the time of day with their name; left out when we have
@@ -42,6 +46,12 @@
 #   {if_no_warranty}     keeps its paragraph only when it does not
 #   {booked_day} {booked_time}   on a follow-up after an inspection: "today", "yesterday" or
 #                        "on Wednesday 21 October", and "2 pm"
+#   {booking_kind} {booked_when}   "inspection" or "test drive", and "today", "tomorrow" or
+#                        "on Wednesday 21 October", for the booking in hand: the follow-up's,
+#                        else the newest one they made through the website
+#   {address}            136 Frances Street, Lidcombe NSW 2141
+#   {if_onsite} {if_online}   keeps its paragraph only for a visit to the yard, or only for an
+#                        online video inspection
 #   {deposit_offer}      the holding-deposit line (@deposit_offer below), on a follow-up after an
 #                        inspection, only while the deposit has not been offered to them yet
 #   {new_thing}          on a follow-up to a quiet customer: the one thing they have not been
@@ -313,6 +323,23 @@ Thank you for letting us know. If you are looking again in future, we would be g
 
 {sign_off}
 
+# A booking that has just come in through the website: confirmed by code, word for word.
+===== booking_confirmed =====
+@label: Booking confirmed
+@fits: booking made, inspection_booking
+@needs: booking made
+@not: buyer, car sold, no car
+@fit: no
+{greeting}
+
+Team Carbarn here. Your {booking_kind} of the {car} is {booked_when} at {booked_time}.
+
+{if_onsite}We are at {address}. If the time no longer suits, let us know and we will find another.
+
+{if_online}We will call you at that time on this number and walk you around the car on video.
+
+{sign_off}
+
 # The follow-ups: offered only from the Follow-ups list, and always greeted and signed off, even
 # when we have already written that day. Never ask whether they came: ask how it went.
 ===== after_inspection =====
@@ -336,5 +363,21 @@ Team Carbarn here. How did you find the {car} {booked_day}?
 Team Carbarn here, following on from the {car}.
 
 {new_thing}
+
+{sign_off}
+
+# The afternoon before a booked visit: written by code, word for word, with the address.
+===== inspection_reminder =====
+@label: Inspection reminder
+@fits: reminder
+@not: buyer, car sold
+@fit: no
+{greeting}
+
+Team Carbarn here. A reminder of your {booking_kind} of the {car} {booked_when} at {booked_time}.
+
+{if_onsite}We are at {address}. If the time no longer suits, let us know and we will find another.
+
+{if_online}We will call you at that time on this number and walk you around the car on video.
 
 {sign_off}

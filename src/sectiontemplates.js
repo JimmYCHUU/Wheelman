@@ -36,8 +36,9 @@ export const SIGNALS = [
   ...Object.keys(SITUATIONS), 'general',
   'first reply', 'later reply', 'buyer', 'far away', 'their offer', 'parting',
   'car', 'car available', 'car on its way', 'car sold', 'no car', 'any',
-  // a follow-up opened from the Follow-ups list (src/followup.js), and which kind
-  'follow-up', 'inspection passed', 'quiet',
+  // a follow-up opened from the Follow-ups list (src/followup.js), and which kind; a booking that
+  // has just come in through the website
+  'follow-up', 'inspection passed', 'quiet', 'reminder', 'booking made',
   // emails
   'eligibility', 'cost', 'deposit', 'timeline', 'payment', 'warranty', 'compliance_only', 'process', 'availability', 'eligible',
 ];
@@ -46,10 +47,10 @@ export const SIGNALS = [
  * keeps its paragraph only when that fact applies (has something in it). */
 const CAR_FACTS = ['greeting', 'sign_off', 'thanks', 'hi', 'car', 'car_link', 'price', 'km', 'km_said', 'import_said', 'where', 'inclusions', 'if_inclusions', 'inclusions_short', 'price_reply', 'invitation',
   'first_reply_block', 'address_block', 'stock_link', 'finance_link', 'finance_form', 'trade_in_form', 'warranty_link', 'importing_link', 'if_warranty', 'if_no_warranty', 'if_no_car', 'sender',
-  // the follow-ups' own facts
-  'booked_day', 'booked_time', 'deposit_offer', 'new_thing'];
+  // the follow-ups' own facts, and the booking in hand (the follow-up's, else the newest they made)
+  'booked_day', 'booked_time', 'deposit_offer', 'new_thing', 'booking_kind', 'booked_when', 'address', 'if_onsite', 'if_online'];
 // The fit word for each kind of follow-up.
-const FOLLOW_UP_WORDS = { inspection_passed: 'inspection passed', quiet: 'quiet' };
+const FOLLOW_UP_WORDS = { inspection_passed: 'inspection passed', quiet: 'quiet', reminder: 'reminder' };
 export const FACTS = {
   'dashboard-messages.md': CAR_FACTS,
   'marketplace-messages.md': CAR_FACTS,
@@ -66,6 +67,10 @@ export function fitSignals(item) {
   s.add(item.isFirstReply ? 'first reply' : 'later reply');
   // A follow-up in hand: its own messages fit it. A conversation that is merely due one shows nothing of it.
   if (item.followUp) { s.add('follow-up'); if (FOLLOW_UP_WORDS[item.followUp.kind]) s.add(FOLLOW_UP_WORDS[item.followUp.kind]); }
+  // Their newest message is a booking through the website for a visit still to come, and nobody
+  // has answered it yet: it is confirmed first.
+  const newest = [...(item.timeline || [])].reverse().find((e) => e.who === 'customer' && (e.text || e.event || e.media));
+  if (newest?.booking?.at > Date.now() && item.state === 'awaiting') s.add('booking made');
   if (item.deal) s.add('buyer');
   const v = item.vehicles?.[0];
   if (!v) s.add('no car');
@@ -161,6 +166,25 @@ export function bookedTimeWords(bookedAt) {
   return `${hour % 12 || 12}${minute ? `:${p.minute}` : ''} ${hour < 12 ? 'am' : 'pm'}`;
 }
 
+/** When a booking is, looking forward: "today", "tomorrow", or "on Wednesday 21 October". */
+export function bookedWhenWords(bookedAt, now = Date.now()) {
+  const day = sydneyDay(bookedAt);
+  if (day === sydneyDay(now)) return 'today';
+  if (day === sydneyDay(now + DAY_MS)) return 'tomorrow';
+  return bookedDayWords(bookedAt, now);
+}
+
+/**
+ * The booking a message is about: the follow-up's own (a reminder, or after the inspection), else
+ * the newest booking the customer made through the website. { kind, where, at } or null.
+ */
+export function bookingInHand(item) {
+  const fu = item.followUp;
+  if (fu?.data?.bookedAt) return { kind: fu.data.kind || 'inspection', where: fu.data.where || '', at: fu.data.bookedAt };
+  const e = [...(item.timeline || [])].reverse().find((x) => x.who === 'customer' && x.booking?.at);
+  return e ? { kind: e.booking.kind, where: e.booking.where, at: e.booking.at } : null;
+}
+
 // What we have already offered this customer, read from our own texts.
 const OFFERED = {
   documents: /export certificate|auction sheet/i,
@@ -239,6 +263,7 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
     const far = farAway(customerWords(item), item.lead?.state, item.lead?.signals?.postcode).far;
     const links = v?.url ? inspectionLinks(v) : null;
     const booking = v && !gone && code === 'available' && links ? (far ? links.online : links.onsite) : '';
+    const b = bookingInHand(item);
     const inclusions = v ? inclusionsSentence(v) : '';
     const outline = (v?.outline || []).join('\n');
     Object.assign(values, {
@@ -267,9 +292,15 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
       if_warranty: /extended warranty|5[- ]year/i.test(outline),
       if_no_warranty: !!v && !/extended warranty|5[- ]year/i.test(outline),
       // The follow-ups' own facts: the booking they made, the deposit line while it is new to them,
-      // and the one new thing for a quiet customer.
+      // and the one new thing for a quiet customer. The booking in hand (the follow-up's, else the
+      // newest they made) gives the confirmation and the reminder their day, time and place.
       booked_day: fu?.data?.bookedAt ? bookedDayWords(fu.data.bookedAt, now) : null,
-      booked_time: fu?.data?.bookedAt ? bookedTimeWords(fu.data.bookedAt) : null,
+      booked_time: b ? bookedTimeWords(b.at) : null,
+      booked_when: b ? bookedWhenWords(b.at, now) : null,
+      booking_kind: b ? (b.kind === 'test_drive' ? 'test drive' : 'inspection') : null,
+      address: config.site.address,
+      if_onsite: !!b && b.where !== 'online',
+      if_online: !!b && b.where === 'online',
       deposit_offer: fu?.kind === 'inspection_passed' && fu.data?.deposit && v && !gone ? t.snippets?.deposit_offer || null : null,
       new_thing: fu?.kind === 'quiet' ? newThingFor(item, await mediaFor(v))?.text || null : null,
     });
@@ -300,15 +331,23 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
   return { text: fillParts(part, values), part, values, tail: '', facts };
 }
 
+/** A part marked "@fit: no" is written by code, word for word, with no AI. */
+const byCode = (meta) => /^(no|0|off|false)$/i.test(String(meta?.fit || '').trim());
+
 /**
  * Writes one template for this conversation (see draftFromTemplate): fitted to the customer by
- * the AI when `fitWith` is given, with the owner's `instruction` (Prompt or Rewrite) if any.
+ * the AI when `fitWith` is given, with the owner's `instruction` (Prompt or Rewrite) if any. A
+ * part marked "@fit: no" (the booking confirmation, the reminder) is written word for word with
+ * no AI; only a Prompt or Rewrite sends it to the AI.
  */
 export async function draftSectionTemplate(item, { id, instruction = '', fitWith = null, now = Date.now(), save = true } = {}) {
   const file = fileFor(item);
-  const label = template(file)?.meta?.[id]?.label || id;
+  const meta = template(file)?.meta?.[id] || {};
+  const label = meta.label || id;
   const composed = await composeSectionTemplate(item, id, { now });
-  return draftFromTemplate(item, { id, label, composed, used: composed.facts, instruction, fitWith, save, file });
+  const plain = byCode(meta) && !instruction;
+  return draftFromTemplate(item, { id, label, composed, used: composed.facts, instruction, fitWith: plain ? null : fitWith, save, file,
+    ...(plain ? { okWords: `Written by code from your wording "${label}", with the facts from your records. No AI.` } : {}) });
 }
 
 /**
