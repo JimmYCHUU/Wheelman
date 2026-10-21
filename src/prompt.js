@@ -299,6 +299,8 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
   const where = farAway(said, item.lead?.state, item.lead?.signals?.postcode);
   const saidFar = where.far && where.source === 'said';
 
+  const bookedNow = (item.events || []).some((e) => /booked (an inspection|a test drive)/i.test(e));
+  if (bookedNow) return { ...none, booked: true, lines: ['The customer has booked an inspection through the website (the booking, with its day and time, is in the conversation). Confirm it in one sentence and say the vehicle will be ready for them. No invitation or booking link is added under your text; do not ask for a date or time.'] };
   const asksNow = item.situation.all.includes('inspection_booking');
   const staffAsked = !asksNow && STAFF_WANTS_BOOKING.test(instruction);
   const earlier = !asksNow && !staffAsked && askedEarlier(item, now, saidFar);

@@ -3,7 +3,7 @@
 import { buildPrompt, writtenToday } from './prompt.js';
 import { complete, LlmError } from './llm.js';
 import { logLine } from './log.js';
-import { finishReply, fixGreeting, checkDraft, retryNote, stripModelSignOff, worst, chatStyle, dropGreeting, emailChecks, followUpChecks } from './checks.js';
+import { finishReply, fixGreeting, checkDraft, retryNote, stripModelSignOff, confirmsTime, worst, chatStyle, dropGreeting, emailChecks, followUpChecks } from './checks.js';
 import { researchFor, renderResearch } from './importquery.js';
 import { config } from './config.js';
 import { redact, restore } from './redact.js';
@@ -89,7 +89,7 @@ function inspectionCheck(plan, body, block = '') {
     return { level: missing, code: 'inspection-link', tokens: [], message: 'The customer wants to see the car and seems to be far away, but the reply has no online video inspection link. Add the link given in the INSPECTION section.' };
   }
   // In-person was expected. A confirmed time ("See you at ...") or the online link is also a fair answer.
-  if (givesOnline || /see you/i.test(body)) return null;
+  if (givesOnline || confirmsTime(body)) return null;
   return { level: missing, code: 'inspection-link', tokens: [], message: 'The customer wants to see the car, but the reply has no inspection booking link. Add the link given in the INSPECTION section.' };
 }
 
@@ -197,8 +197,8 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   // the invitation when the customer wants to see the car (not when the AI confirmed a time in
   // words, and not on a first reply, where the standard block carries it).
   const price = !plan && !hold && prompt.price?.on ? priceBlock({ vehicle: item.vehicles[0], inspectionUrl: prompt.price.inspectionUrl, online: prompt.price.online, chat, withStandard: prompt.standard.on }) : '';
-  const confirmedTime = /\bsee you\b|\bready for you\b|look forward to seeing you/i.test(text);
-  const invite = !price && !plan && !hold && prompt.inspection?.block && prompt.inspection.url && !prompt.standard.on && !confirmedTime
+  const confirmedTime = confirmsTime(text);
+  const invite = !price && !plan && !hold && prompt.inspection?.block && prompt.inspection.url && !prompt.standard.on && !confirmedTime && !prompt.inspection.booked
     ? inviteBlock(prompt.inspection.url, { online: prompt.inspection.kind === 'online', chat, tail: true }) : '';
   const owned = [price, invite].filter(Boolean).join('\n\n');
   // The links the customer asked for (a video, the auction sheet, the export certificate, the
@@ -208,7 +208,7 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   const block = plan ? (hold ? '' : plan.tail || '') : prompt.standard.on && !hold ? standardBlock({ vehicleUrl, inspectionUrl, online: !!prompt.standard.online }) : '';
   if (plan?.tokens) text = restoreAmounts(text, plan.tokens);
   if (plan?.stage === 'template') return assessTemplate(item, text, json, { plan, allowed, said, staffSaid, instructed, now });
-  if (block || owned || asked) text = tidyOpening(text, vehicleUrl, inspectionUrl, prompt.price?.inspectionUrl || '', invite ? prompt.inspection.url : '', ...(asked ? asked.links.map((l) => l.url) : []));
+  if (block || owned || asked) text = tidyOpening(text, vehicleUrl, inspectionUrl, prompt.price?.inspectionUrl || '', invite ? prompt.inspection.url : '', (invite || price) ? (item.vehicles[0]?.url || '') : '', ...(asked ? asked.links.map((l) => l.url) : []));
   // A link the AI wrote out with its own words around it stays there, once.
   const links = asked ? asked.links.filter((l) => !text.includes(l.url)).map((l) => `${l.label}: ${l.url}`).join('\n') : '';
   const extras = [links, owned].filter(Boolean).join('\n\n');

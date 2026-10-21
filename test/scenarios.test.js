@@ -949,4 +949,28 @@ test("a later request to see the car gets the invitation under the AI's lines, i
   const confirmed = await draft(262, 'See you on Saturday. The Noah will be out the front for you.');
   assert.ok(!confirmed.d.reply.includes('book an inspection'), confirmed.d.reply);
   assert.deepEqual(fails(confirmed.d), [], JSON.stringify(confirmed.d.checks));
+  // The AI wrote the page link itself: the line goes, the invitation is added once.
+  const doubled = await draft(262, `Yes, Saturday is fine to inspect the Noah at Lidcombe.
+You can arrange the inspection here:
+${NOAH}`);
+  assert.equal((doubled.d.reply.match(/#inspection=onsite/g) || []).length, 1, doubled.d.reply);
+  assert.ok(!doubled.d.reply.includes(`${NOAH}
+`), 'the bare page link line is dropped');
+  // They named a time and the AI confirmed it in words: no invitation under it.
+  msg(262, 'IN', 'Is it ok to visit tomorrow around 9 am?', 2 * MIN);
+  const timed = await draft(262, 'Yes, tomorrow at 9:00 am suits well. We will have the Noah ready for you.');
+  assert.ok(!timed.d.reply.includes('book an inspection'), timed.d.reply);
+  assert.deepEqual(fails(timed.d), [], JSON.stringify(timed.d.checks));
+});
+
+test('a booking made on the website is confirmed in words, with no invitation under it', async () => {
+  lead(43, 263, 'Mira', '0421 000 043', { stocks: ['1300'], inquiries: [{ id: 9431, type: 'Book Inspection', text: 'Preferred inspection: Wednesday 21 October at 2:00 pm.', stockNo: '1300', at: now - 10 * MIN }] });
+  conv(263, 43, 'Mira Test', '+61421000043');
+  msg(263, 'OUT', 'Hi Mira, thanks for your interest in the Noah.', 3 * HOUR);
+  msg(263, 'IN', 'Is the Noah still available?', 5 * MIN);
+  assert.match(ask(263), /has booked an inspection through the website/);
+  const { d } = await draft(263, 'Your inspection of the Noah is booked for Wednesday 21 October at 2:00 pm.');
+  assert.ok(!d.reply.includes('book an inspection here'), d.reply);
+  assert.ok(!d.checks.some((c) => c.code === 'inspection-link'), JSON.stringify(d.checks));
+  assert.deepEqual(fails(d), [], JSON.stringify(d.checks));
 });
