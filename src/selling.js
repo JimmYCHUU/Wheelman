@@ -247,11 +247,12 @@ const CHAT_MOVES = {
 // ---- the rung and the move ---------------------------------------------------------------------
 
 /**
- * The visit our "see you" line arranged has passed: the latest day it names is before today, or no
- * day is readable and more than a day has gone by since we wrote it.
+ * The visit our "see you" line arranged has passed. A bare weekday has two candidate dates (this
+ * one or next); the visit is the nearest, so each day word counts by its earliest date and the
+ * latest of those must be before today. With no readable day, more than a day since we wrote it.
  */
 function visitPassed(entry, now) {
-  const dates = dayRefs(entry.text, entry.at || now, { loose: true }).flatMap((r) => r.dates).sort();
+  const dates = dayRefs(entry.text, entry.at || now, { loose: true }).map((r) => r.dates[0]).sort();
   if (dates.length) return dates[dates.length - 1] < sydneyDay(now);
   return !!entry.at && now - entry.at > DAY;
 }

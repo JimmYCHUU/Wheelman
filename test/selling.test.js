@@ -397,6 +397,19 @@ test('the deposit waits for the buyer: a booking, a finance application or a vis
   assert.equal(stage({ vehicles: car, situations: ['deposit_hold'], events: ['Customer started the online purchase steps on the website.'] }).rung, 'commit');
 });
 
+test('a visit arranged for a weekday counts as taken once its nearest date has passed', () => {
+  const thu = Date.parse('2026-10-15T10:00:00+11:00');
+  const item = plain({ vehicles: car });
+  item.timeline = [{ who: 'customer', text: 'Can I come Saturday at 10?', at: thu }, { who: 'us', text: 'See you Saturday at 10.', at: thu + HOUR }, { who: 'customer', text: 'Great car. Does it have a tow bar?', at: thu + 2 * HOUR }];
+  item.pendingText = 'Great car. Does it have a tow bar?';
+  const monday = selling.saleStage(item, { now: Date.parse('2026-10-19T10:00:00+11:00') });
+  assert.ok(monday.signals.includes('the visit we arranged has taken place and they wrote again'), monday.signals.join('; '));
+  assert.equal(monday.rung, 'commit');
+  const friday = selling.saleStage(item, { now: Date.parse('2026-10-16T10:00:00+11:00') });
+  assert.ok(!friday.signals.includes('the visit we arranged has taken place and they wrote again'));
+  assert.notEqual(friday.rung, 'commit');
+});
+
 test('the licence and email are asked for only once they say yes to the deposit', () => {
   const proposed = [{ who: 'customer', text: 'Can you hold it?' }, { who: 'us', text: 'A $1,000 refundable holding deposit takes it off the market for you.' }];
   const yes = stage({ vehicles: car, situations: ['deposit_hold'], texts: [...proposed, { who: 'customer', text: "Yes let's do it, how do I pay?" }] });
