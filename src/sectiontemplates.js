@@ -46,8 +46,8 @@ export const SIGNALS = [
  * keeps its paragraph only when that fact applies (has something in it). */
 const CAR_FACTS = ['greeting', 'sign_off', 'thanks', 'hi', 'car', 'car_link', 'price', 'km', 'km_said', 'import_said', 'where', 'inclusions', 'if_inclusions', 'inclusions_short', 'price_reply', 'invitation',
   'first_reply_block', 'address_block', 'stock_link', 'finance_link', 'finance_form', 'trade_in_form', 'warranty_link', 'importing_link', 'if_warranty', 'if_no_warranty', 'if_no_car', 'sender',
-  // the follow-ups' own facts
-  'booked_day', 'booked_time', 'deposit_offer', 'new_thing'];
+  // the follow-ups' own facts, and the booking in hand (the follow-up's, else the newest they made)
+  'booked_day', 'booked_time', 'deposit_offer', 'new_thing', 'booking_kind', 'booked_when', 'address', 'if_onsite', 'if_online'];
 // The fit word for each kind of follow-up.
 const FOLLOW_UP_WORDS = { inspection_passed: 'inspection passed', quiet: 'quiet' };
 export const FACTS = {
@@ -161,6 +161,25 @@ export function bookedTimeWords(bookedAt) {
   return `${hour % 12 || 12}${minute ? `:${p.minute}` : ''} ${hour < 12 ? 'am' : 'pm'}`;
 }
 
+/** When a booking is, looking forward: "today", "tomorrow", or "on Wednesday 21 October". */
+export function bookedWhenWords(bookedAt, now = Date.now()) {
+  const day = sydneyDay(bookedAt);
+  if (day === sydneyDay(now)) return 'today';
+  if (day === sydneyDay(now + DAY_MS)) return 'tomorrow';
+  return bookedDayWords(bookedAt, now);
+}
+
+/**
+ * The booking a message is about: the follow-up's own (a reminder, or after the inspection), else
+ * the newest booking the customer made through the website. { kind, where, at } or null.
+ */
+export function bookingInHand(item) {
+  const fu = item.followUp;
+  if (fu?.data?.bookedAt) return { kind: fu.data.kind || 'inspection', where: fu.data.where || '', at: fu.data.bookedAt };
+  const e = [...(item.timeline || [])].reverse().find((x) => x.who === 'customer' && x.booking?.at);
+  return e ? { kind: e.booking.kind, where: e.booking.where, at: e.booking.at } : null;
+}
+
 // What we have already offered this customer, read from our own texts.
 const OFFERED = {
   documents: /export certificate|auction sheet/i,
@@ -239,6 +258,7 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
     const far = farAway(customerWords(item), item.lead?.state, item.lead?.signals?.postcode).far;
     const links = v?.url ? inspectionLinks(v) : null;
     const booking = v && !gone && code === 'available' && links ? (far ? links.online : links.onsite) : '';
+    const b = bookingInHand(item);
     const inclusions = v ? inclusionsSentence(v) : '';
     const outline = (v?.outline || []).join('\n');
     Object.assign(values, {
@@ -267,9 +287,15 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
       if_warranty: /extended warranty|5[- ]year/i.test(outline),
       if_no_warranty: !!v && !/extended warranty|5[- ]year/i.test(outline),
       // The follow-ups' own facts: the booking they made, the deposit line while it is new to them,
-      // and the one new thing for a quiet customer.
+      // and the one new thing for a quiet customer. The booking in hand (the follow-up's, else the
+      // newest they made) gives the confirmation and the reminder their day, time and place.
       booked_day: fu?.data?.bookedAt ? bookedDayWords(fu.data.bookedAt, now) : null,
-      booked_time: fu?.data?.bookedAt ? bookedTimeWords(fu.data.bookedAt) : null,
+      booked_time: b ? bookedTimeWords(b.at) : null,
+      booked_when: b ? bookedWhenWords(b.at, now) : null,
+      booking_kind: b ? (b.kind === 'test_drive' ? 'test drive' : 'inspection') : null,
+      address: config.site.address,
+      if_onsite: !!b && b.where !== 'online',
+      if_online: !!b && b.where === 'online',
       deposit_offer: fu?.kind === 'inspection_passed' && fu.data?.deposit && v && !gone ? t.snippets?.deposit_offer || null : null,
       new_thing: fu?.kind === 'quiet' ? newThingFor(item, await mediaFor(v))?.text || null : null,
     });

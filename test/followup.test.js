@@ -470,3 +470,21 @@ test('the AI is told a time to come in was offered only once the booking link we
   assert.match(asked, /Already offered to this customer in this conversation: nothing yet\./);
   assert.match(out.json.item.draft.reply, /#inspection=onsite/, 'the hours and the booking link are the one new thing');
 });
+
+// ---- PR 2: the booking in hand, messages written by code, the booking confirmation, the reminder ----
+
+test('the words for when a booking is: today, tomorrow, or the day', () => {
+  const wed = parseDashboardTime('2026-10-21T14:00');
+  assert.deepEqual([st.bookedWhenWords(wed, wed - 2 * HOUR), st.bookedWhenWords(wed, wed - DAY), st.bookedWhenWords(wed, wed - 3 * DAY)], ['today', 'tomorrow', 'on Wednesday 21 October']);
+});
+
+test('the booking in hand: the newest booking the customer made, and its facts', async () => {
+  const visit = NOW + DAY;
+  const key = replied(50, 'Tara', { inText: '', inquiries: [bookingInquiry(visit, { bookedAt: NOW - HOUR })], ours: [] });
+  const item = items.itemFromKey(key);
+  assert.deepEqual(st.bookingInHand(item), { kind: 'inspection', where: 'onsite', at: visit });
+  const { values } = await st.composeSectionTemplate(item, 'price_question', { now: NOW });
+  assert.deepEqual([values.booking_kind, values.booked_when, values.booked_time, values.address, values.if_onsite, values.if_online], ['inspection', 'tomorrow', '2 pm', '136 Frances Street, Lidcombe NSW 2141', true, false]);
+  assert.equal(st.bookingInHand(items.itemFromKey('c:305')), null, 'no booking, nothing in hand');
+  assert.equal((await st.composeSectionTemplate(items.itemFromKey('c:305'), 'price_question', { now: NOW })).values.booked_when, null);
+});
