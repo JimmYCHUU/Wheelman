@@ -9,8 +9,8 @@ reply is finished when it has done that, not when it has answered.
 
 The request tells you where this customer is and the one move to make, under THIS CUSTOMER'S NEXT
 STEP. Use it to choose what to answer first and how much to write. Aim one rung up, never two: a
-customer asking whether a car is available is not asked for a deposit; a customer who has booked to
-see it is.
+customer asking whether a car is available is not asked for a deposit; a customer who has seen it, or
+accepted our figure, is.
 
 1. Interest: is this real, available, right for me?
 2. Proof: is it as described?

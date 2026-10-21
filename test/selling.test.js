@@ -438,4 +438,7 @@ test('a deposit, a licence ask or "remains for sale" before the buyer is there i
 
 test('the voice: a booking, a finance application, a thumbs-up or a deferral is not the moment for the deposit', () => {
   assert.match(promptModule.systemPrompt('sms'), /A booking confirmation, a finance application, a thumbs-up or a deferral is not the moment/);
+  const flat = promptModule.systemPrompt('sms').replace(/\s+/g, ' ');
+  assert.doesNotMatch(flat, /a customer who has booked to see it is\./);
+  assert.match(flat, /a customer who has seen it, or accepted our figure, is\./);
 });
