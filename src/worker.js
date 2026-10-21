@@ -7,7 +7,7 @@ import { listItems, itemFromKey, buildOrderItem, orderRows } from './items.js';
 import { prepareOrders } from './ordermessages.js';
 import { refreshFollowUps } from './followup.js';
 import { draftFor } from './drafter.js';
-import { latestDraft, isDismissed, draftsAwaitingOutcome, recordOutcome, markSuperseded, setMeta, getMeta, openDb, mpDraftsLastDay, rekeyPhoneThreads } from './db.js';
+import { latestDraft, isDismissed, draftsAwaitingOutcome, recordOutcome, markSuperseded, setMeta, getMeta, openDb, mpDraftsLastDay, rekeyPhoneThreads, followUpDraftTextsFor } from './db.js';
 import { providers, usage, modelStatus, lastModel } from './llm.js';
 import { budgetStatus } from './budget.js';
 import { learnFrom, canLearnFrom, comparable, distilPending } from './learn.js';
@@ -180,6 +180,9 @@ export function updateOutcomes() {
     }
     const sentText = burst.map((e) => e.text).join('\n');
     const sent = burst[0];
+    // A follow-up of ours that went out (copied from its own draft, src/followup.js) answers nothing
+    // the customer wrote: it neither scores these suggestions nor teaches, whatever they were for.
+    if (followUpDraftTextsFor(item.itemKey).some((t) => similarity(comparable(t), comparable(sentText)) >= 0.8)) { for (const d of drafts) markSuperseded(d.id); continue; }
     // A reply seen only on the phone: the dashboard's copy may still be on its way, so wait a
     // while. If it never comes, the reply counts as sent, and teaches like any other as long as
     // the add-on saw all of it: a text the Messages list cut short is not what was said.

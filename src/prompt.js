@@ -771,7 +771,8 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     const offered = [
       [/\bdeposit\b/i, 'the holding deposit'], [/\b(video|walkaround)\b/i, 'the walkaround video'],
       [/export certificate|auction sheet/i, 'the export certificate or auction sheet'],
-      [/welcome to (come|visit|inspect|see)|come (in|and see|down|by)|#inspection=/i, 'an invitation to come and see it'],
+      // A time to come in counts once the booking link went out, as src/sectiontemplates.js reads it.
+      [/book a time|#inspection=/i, 'a time to come in, with the booking link'],
     ].filter(([re]) => re.test(oursText)).map(([, w]) => w);
     const lastTheirs = [...item.timeline].reverse().find((e) => e.who === 'customer' && (e.text || e.event));
     P.push('\n=== FOLLOW-UP ===');

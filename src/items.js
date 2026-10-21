@@ -811,11 +811,13 @@ export function itemFromKey(key, opts = {}) {
   // The template picked from "Which message?" ('' is the reply to what they wrote); left out, none was picked.
   if (item && typeof opts.message === 'string') item.templatePick = opts.message;
   // A follow-up in hand (opened from the Follow-ups list): its draft lives under its own anchor and
-  // is written from its template; it is never a first reply. Otherwise the conversation only knows
-  // that a follow-up is due, in followUpDue, and keeps its own anchor.
+  // is written from its template; it is never a first reply. A row that is open, copied or
+  // dismissed can be in hand (the page shows those three, with Put back); one closed because the
+  // customer wrote or the reason passed cannot. Otherwise the conversation only knows that a
+  // follow-up is due, in followUpDue, and keeps its own anchor.
   if (item && /^[cl]:/.test(item.itemKey)) {
     const row = opts.followUp ? getFollowUp(opts.followUp) : null;
-    if (row && row.item_key === item.itemKey) {
+    if (row && row.item_key === item.itemKey && (!row.done_how || row.done_how === 'copied' || row.done_how === 'dismissed')) {
       item.followUp = row;
       item.anchorKey = `fu:${row.id}`;
       if (typeof opts.message !== 'string') item.templatePick = row.template;

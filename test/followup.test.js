@@ -395,3 +395,78 @@ test('a conversation opened with its follow-up carries the anchor and the templa
   assert.deepEqual([plain.followUp, plain.followUpDue.id, plain.anchorKey.startsWith('fu:')], [undefined, row.id, false], 'opened from All it knows a follow-up is due, but the anchor is the conversation\'s own');
   assert.equal(items.itemFromKey('c:306', { followUp: row.id }).followUp, undefined, 'a follow-up of another conversation is ignored');
 });
+
+// ---- after the whole-branch review ---------------------------------------------------------------
+
+test('a follow-up closed as answered or lapsed is no longer in hand: the conversation keeps its own anchor', async () => {
+  const key = replied(40, 'Nora');
+  refresh();
+  const id = openFor(key)[0].id;
+  db.closeFollowUp(id, 'answered');
+  const item = items.itemFromKey(key, { followUp: id });
+  assert.deepEqual([item.followUp, item.anchorKey.startsWith('fu:')], [undefined, false], 'the box falls back to the conversation');
+  assert.equal((await get(`/api/items/${key}?followup=${id}`)).item.followUp, null);
+  db.reopenFollowUp(id);
+  db.closeFollowUp(id, 'dismissed');
+  assert.equal(items.itemFromKey(key, { followUp: id }).followUp.id, id, 'a dismissed one is still in hand, for Put back');
+  db.closeFollowUp(id, 'lapsed');
+});
+
+test('an inspection follow-up stands when its conversation falls out of the fortnight the worker reads, until the visit is a week old', () => {
+  const visit = NOW - 4 * HOUR;
+  const confirmedAt = NOW - 12 * DAY;
+  const n = 41; const id = 300 + n; const phoneNo = phoneOf(n);
+  lead(id, id, 'Omar', phoneNo, { at: confirmedAt - HOUR, inquiries: [bookingInquiry(visit, { bookedAt: confirmedAt - HOUR })] });
+  msg(id, 'OUT', 'Hello Omar, your inspection of the Hiace is booked. See you then.', confirmedAt);
+  conv(id, id, phoneNo, 'Omar Invented', confirmedAt);
+  refresh();
+  const row = openFor(`c:${id}`)[0];
+  assert.ok(row, 'raised while the conversation is still read');
+  // Read with a shorter fortnight, so the conversation is no longer among the ones the worker reads.
+  const shorter = { ...config.followUp, maxAgeDays: 10 };
+  followup.refreshFollowUps({ now: NOW + DAY, cfg: shorter });
+  assert.equal(db.getFollowUp(row.id).done_how, null, 'still due the next day');
+  followup.refreshFollowUps({ now: NOW + 8 * DAY, cfg: shorter });
+  assert.equal(db.getFollowUp(row.id).done_how, 'lapsed', 'a week after the visit the reason has passed');
+});
+
+test('a sent follow-up never teaches, even through an older suggestion for the booking', async () => {
+  const visit = NOW - 5 * HOUR;
+  const n = 42; const id = 300 + n; const phoneNo = phoneOf(n); const key = `c:${id}`;
+  // A website booking dealt with by phone: a staff note, no text of ours on the dashboard.
+  const booking = bookingInquiry(visit, { bookedAt: visit - 30 * HOUR });
+  booking.staffNotes = [{ by: 'Alex', text: 'Phoned to confirm', at: visit - 29 * HOUR }];
+  lead(id, id, 'Pia', phoneNo, { inquiries: [booking] });
+  conv(id, id, phoneNo, 'Pia Invented', visit - 30 * HOUR, 'IN');
+  // While the booking was waiting, Wheelman had written an ordinary suggestion for it.
+  const bookingKey = items.itemFromKey(key).timeline.find((e) => e.booking)?.key;
+  const older = db.insertDraft({ itemKey: key, anchorKey: bookingKey, status: 'ready', reply: 'Hello Pia, your inspection is booked. See you then.' });
+  refresh();
+  const row = openFor(key)[0];
+  assert.ok(row, 'the inspection follow-up is raised');
+  ai.down = true;
+  let written;
+  try { written = (await post(`/api/items/${key}/draft`, { followup: row.id, message: 'after_inspection' })).json.item.draft; } finally { ai.down = false; }
+  assert.equal(written.status, 'ready');
+  await post(`/api/drafts/${written.id}/copied`, { text: written.reply });
+  // The owner pastes it into the dashboard; the next check brings it back as a text of ours.
+  msg(id, 'OUT', written.reply, NOW - HOUR);
+  const learnedBefore = db.countRows('learned');
+  const worker = await import('../src/worker.js');
+  worker.updateOutcomes();
+  assert.equal(db.countRows('learned'), learnedBefore, 'nothing learned from the follow-up');
+  assert.equal(db.getDraft(older).status, 'superseded', 'the older suggestion is not scored against it either');
+});
+
+test('the AI is told a time to come in was offered only once the booking link went out', async () => {
+  const key = replied(43, 'Sana', { outText: 'Hello Sana, yes it is available. Would you like to come and see it?' });
+  refresh();
+  const id = openFor(key)[0].id;
+  const echo = (req) => { const m = (req.messages?.[1]?.content || '').match(/<<<\n([\s\S]*?)\n>>>/); return { reply: m ? m[1] : 'Hello {{NAME}},\n\nTeam Carbarn here.', next_step: '', facts_used: [], needs_human: [], hold: false }; };
+  ai.behave = echo;
+  let out;
+  try { out = await post(`/api/items/${key}/draft`, { followup: id, message: 'quiet_nudge' }); } finally { ai.behave = null; }
+  const asked = ai.seen[ai.seen.length - 1].messages[1].content;
+  assert.match(asked, /Already offered to this customer in this conversation: nothing yet\./);
+  assert.match(out.json.item.draft.reply, /#inspection=onsite/, 'the hours and the booking link are the one new thing');
+});

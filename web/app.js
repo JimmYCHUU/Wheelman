@@ -1774,8 +1774,12 @@ function markRead(item) {
   api(`/api/items/${item.key}/seen`, { body: {} }).catch(() => {});
 }
 
-/** Opens a conversation. `followUpId`: opened from the Follow-ups list, so the box holds that follow-up and writes it. */
-async function open(key, followUpId = null) {
+/**
+ * Opens a conversation. `followUpId`: opened from the Follow-ups list, so the box holds that
+ * follow-up and writes it; `write: false` holds it without writing (the next row after a Dismiss:
+ * the owner did not choose it, so no request is spent until they press Write).
+ */
+async function open(key, followUpId = null, { write: writeNow = true } = {}) {
   if (state.selected === key && state.detail && (followUpId || null) === (state.followUp || null)) { $('#app').dataset.view = 'chat'; return; }
   state.selected = key;
   state.followUp = followUpId || null;
@@ -1795,15 +1799,24 @@ async function open(key, followUpId = null) {
     const { item } = await api(`/api/items/${key}${followUpId ? `?followup=${followUpId}` : ''}`);
     if (state.selected !== key) return;
     state.detail = item;
+    followUpInHand(item);
     markRead(item);
     if (item.vehicle && (!state.media.has(String(item.vehicle.stockNo)) || state.media.get(String(item.vehicle.stockNo)).status === 'error')) loadMedia(item.vehicle.stockNo);
     renderChat({ toBottom: true });
     // Opened from the Follow-ups list: the follow-up is written now, unless it already is.
-    if (followUpId && item.followUp && !item.followUp.done && item.anchor === `fu:${followUpId}` && !(item.draft && item.draft.status === 'ready') && !item.writing) write(item, '');
+    if (writeNow && state.followUp && item.followUp && !item.followUp.done && !(item.draft && item.draft.status === 'ready') && !item.writing) write(item, '');
     if (narrow()) $('.thread')?.focus({ preventScroll: true });
   } catch (e) {
     toast(e.message);
   }
+}
+
+/**
+ * Keeps the follow-up in hand only while the conversation came back holding it: once it closed
+ * because the customer wrote or the reason passed, the box follows the conversation again.
+ */
+function followUpInHand(item) {
+  if (state.followUp && !(item.followUp && item.anchor === `fu:${state.followUp}`)) state.followUp = null;
 }
 
 function closeChat() {
@@ -1940,7 +1953,8 @@ async function dismissFollowUp(item) {
       state.listTotal = Math.max(0, state.listTotal - 1);
       repaint();
       toast(t('toast.followUpDismissed'), { label: 'Undo', run: () => restoreFollowUp(fu.id, true) });
-      if (next && !narrow()) { state.selected = null; state.detail = null; await open(next.key, next.followUp?.id || null); }
+      // The next row opens so the list keeps its place, holding its follow-up but not writing it.
+      if (next && !narrow()) { state.selected = null; state.detail = null; await open(next.key, next.followUp?.id || null, { write: false }); }
       else { state.selected = null; state.detail = null; repaint(); renderChat(); $('#app').dataset.view = 'list'; }
     } else {
       if (state.selected === item.key && out.item) { state.detail = out.item; renderChat(); }
@@ -2084,6 +2098,7 @@ async function refreshDetail() {
     }
     const previous = state.detail;
     state.detail = item;
+    followUpInHand(item);
     // A suggestion being written in the background: look again in a few seconds, not at the next
     // twenty-second check, so it appears as soon as it is ready.
     if (item.writing && !state.writingPoll) state.writingPoll = setTimeout(() => { state.writingPoll = null; refreshDetail(); }, 4000);

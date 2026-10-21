@@ -898,6 +898,12 @@ export function draftTextsFor(itemKey) {
   return stmt("SELECT reply, copied_text FROM drafts WHERE item_key = ? AND reply IS NOT NULL AND reply != ''").all(itemKey);
 }
 
+/** The texts of the follow-ups written for one conversation (drafts under fu:), as written and as copied. */
+export function followUpDraftTextsFor(itemKey) {
+  return stmt("SELECT reply, copied_text FROM drafts WHERE item_key = ? AND anchor_key LIKE 'fu:%'").all(itemKey)
+    .flatMap((r) => [r.reply, r.copied_text]).filter((t) => typeof t === 'string' && t.trim());
+}
+
 export function setDraftRating(id, rating) {
   stmt('UPDATE drafts SET rating = ? WHERE id = ?').run(rating, id);
 }

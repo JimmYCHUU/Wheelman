@@ -146,6 +146,8 @@ export function stillDue(item, row, { now = Date.now(), cfg = config.followUp } 
   if ((last && last.at > row.since_at) || item.state === 'awaiting') return { ok: false, why: 'They have written since. Reply to that instead.', how: 'answered' };
   const e = followUpEligibility(item, { now, cfg });
   if (!e.allowed) return { ok: false, why: `No follow-up now: ${e.why}.`, how: 'lapsed' };
+  // The reason itself must still hold: the visit still within the week, the silence still quiet.
+  if (!dueFollowUps(item, { now, cfg }).some((d) => d.occasion === row.occasion)) return { ok: false, why: 'No follow-up now: the reason for it has passed.', how: 'lapsed' };
   return { ok: true, why: '', how: '' };
 }
 
@@ -171,12 +173,13 @@ export function refreshFollowUps({ now = Date.now(), cfg = config.followUp } = {
       if (insertFollowUp({ itemKey: item.itemKey, leadId: item.lead?.id || null, ...d, now })) opened++;
     }
   }
-  // Open follow-ups whose conversation has left the list: answered by the customer, or gone.
+  // Open follow-ups whose conversation was not among those: gone, answered by the customer, or
+  // no longer holding. One that still holds stands, even when its conversation's last activity
+  // is older than the fortnight read above (a visit booked long ahead).
   for (const r of openFollowUps()) {
     if (seen.has(r.item_key)) continue;
-    const item = itemFromKey(r.item_key);
-    const last = item && lastTheirsOf(item);
-    close(r, !item ? 'lapsed' : (last && last.at > r.since_at) || item.state === 'awaiting' ? 'answered' : 'lapsed');
+    const still = stillDue(itemFromKey(r.item_key), r, { now, cfg });
+    if (!still.ok) close(r, still.how);
   }
   return { opened, closed };
 }
