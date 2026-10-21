@@ -623,6 +623,21 @@ test("the stock list's changes are kept as events: landed, a price down by $100 
   assert.deepEqual(db.vehicleEventsFor(901, 0), [], 'stale row');
 });
 
+test('the news messages: the price before, two cars like the one that sold, and the showroom when there are none', async () => {
+  const noah = items.itemFromKey('c:201');   // Priya's Noah 1159; the second Noah 1160 was pushed into stock in before()
+  const soldRow = { id: 0, kind: 'stock_sold', reason: 'Car sold', template: 'stock_sold', data: { event: 'sold' } };
+  const s = await st.composeSectionTemplate({ ...noah, followUp: soldRow }, 'stock_sold', { now: NOW });
+  assert.match(s.values.similar_cars, /^2020 Toyota Noah Si, \$27,900, 70,000 km:\nhttps:\/\/www\.carbarn\.com\.au\/vehicles\/toyota\/noah\/zrr80w\/1160$/);
+  assert.match(s.text, /Team Carbarn here\. The 2021 Toyota Noah X \(8 Seater\) you asked about has now been sold\.\n\nWe have these, if one of them suits:\n\n2020 Toyota Noah Si/);
+  const serena = items.itemFromKey('c:205');   // Yuki's Serena: nothing like it in stock
+  const none = await st.composeSectionTemplate({ ...serena, followUp: soldRow }, 'stock_sold', { now: NOW });
+  assert.deepEqual([none.values.similar_cars, none.values.if_no_similar_cars, /available now here:\nhttps:\/\/www\.carbarn\.com\.au\/used-cars/.test(none.text)], [null, true, true]);
+  const price = await st.composeSectionTemplate({ ...noah, followUp: { id: 0, kind: 'stock_price', reason: 'Price dropped', template: 'stock_price', data: { event: 'price', from: 29900, to: 28900 } } }, 'stock_price', { now: NOW });
+  assert.match(price.text, /is now \$28,900, down from \$29,900\.\n\n/);
+  assert.match(price.text, /#inspection=onsite/);
+  assert.deepEqual(st.checkTemplates(), []);
+});
+
 test('a Prompt on the reminder tells the AI the visit is still to come, not to ask how it went', async () => {
   const key = replied(64, 'Jo', { inText: '', inquiries: [bookingInquiry(tomorrowAt2(), { bookedAt: NOW - 3 * DAY })], ours: [[NOW - 3 * DAY + HOUR, 'Hello Jo, your inspection of the Hiace is booked. See you then.']] });
   followup.refreshFollowUps({ now: fourToday() + 30 * MIN });

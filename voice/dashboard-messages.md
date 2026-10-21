@@ -24,7 +24,8 @@
 #   no car, any (always offered)
 #   follow-up (a follow-up opened from the Follow-ups list), inspection passed (the booked time
 #     of their inspection or test drive has gone by), quiet (days without a reply to our message),
-#     reminder (their visit is booked for tomorrow)
+#     reminder (their visit is booked for tomorrow), car landed, price dropped, car sold news
+#     (news about the car they asked about, on a follow-up)
 #   booking made (their newest message is a booking through the website)
 #
 # Facts Wheelman fills in. A paragraph whose fact does not apply is left out:
@@ -50,6 +51,9 @@
 #                        "on Wednesday 21 October", for the booking in hand: the follow-up's,
 #                        else the newest one they made through the website
 #   {address}            136 Frances Street, Lidcombe NSW 2141
+#   {old_price}          the price before it dropped, on that follow-up
+#   {similar_cars}       two cars like the one that sold, each with its price, kilometres and page,
+#                        on that follow-up; {if_no_similar_cars} keeps its paragraph when there are none
 #   {if_onsite} {if_online}   keeps its paragraph only for a visit to the yard, or only for an
 #                        online video inspection
 #   {deposit_offer}      the holding-deposit line (@deposit_offer below), on a follow-up after an
@@ -379,5 +383,47 @@ Team Carbarn here. A reminder of your {booking_kind} of the {car} {booked_when} 
 {if_onsite}We are at {address}. If the time no longer suits, let us know and we will find another.
 
 {if_online}We will call you at that time on this number and walk you around the car on video.
+
+{sign_off}
+
+# News about the car they asked about: landed, the price dropped, or sold (then two like it).
+===== stock_landed =====
+@label: Car landed
+@fits: car landed
+@not: buyer, car sold
+{greeting}
+
+Team Carbarn here. The {car} you asked about has arrived at our Lidcombe showroom and can be seen now.
+
+{invitation}
+
+{sign_off}
+
+===== stock_price =====
+@label: Price dropped
+@fits: price dropped
+@not: buyer, car sold
+{greeting}
+
+Team Carbarn here. The {car} you asked about is now {price}, down from {old_price}.
+
+{invitation}
+
+{sign_off}
+
+===== stock_sold =====
+@label: Car sold: two like it
+@fits: car sold news
+@not: buyer
+{greeting}
+
+Team Carbarn here. The {car} you asked about has now been sold.
+
+{if_similar_cars}We have these, if one of them suits:
+
+{similar_cars}
+
+{if_no_similar_cars}You can see the cars we have available now here:
+{stock_link}
 
 {sign_off}
