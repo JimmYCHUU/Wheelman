@@ -15,6 +15,7 @@ import { BLANK_PATTERN } from '../web/lib/blank.js';
 import { sydneyHour } from './time.js';
 import { standardBlock, inviteBlock, repeatsBlock, tidyOpening } from './firstreply.js';
 import { priceBlock } from './pricereply.js';
+import { untagged } from './text.js';
 import { LEFTOVER_LABEL } from './practice.js';
 import { tagMarketplaceLinks } from './marketplace.js';
 import { mediaForReply } from './vehiclemedia.js';
@@ -54,6 +55,18 @@ function listingPriceCheck(item) {
   if (!listed || !ours || listed === ours) return null;
   const fmt = (n) => '$' + n.toLocaleString('en-AU');
   return { level: 'warn', code: 'listing-price', message: `The Facebook listing shows ${fmt(listed)} but the dashboard price is ${fmt(ours)}. Check which is right before talking about price.`, tokens: [] };
+}
+
+// What a buyer says when they want the car's page, photos or details: a link is then an answer.
+const ASKS_FOR_DETAILS = /\b(details?|photos?|pics?|pictures?|images?|link|url|info|information|specs?|listing|page|website)\b/i;
+
+/** Marketplace only: a "More details" line or the page link the buyer did not ask for is pointed out. */
+function unaskedLinkCheck(item, body) {
+  if (ASKS_FOR_DETAILS.test(item.pendingText || '')) return null;
+  const page = item.vehicles[0]?.url ? untagged(item.vehicles[0].url).toLowerCase().replace(/\/$/, '') : '';
+  const lines = String(body).split('\n').map((l) => l.trim());
+  const found = lines.some((l) => /^more details:?$/i.test(l) || (page && !l.includes('#') && untagged(l).toLowerCase().replace(/\/$/, '') === page));
+  return found ? { level: 'warn', code: 'unasked-link', tokens: [], message: "The buyer did not ask for details, photos or a link: leave the car's page link out and end on the next step." } : null;
 }
 
 /**
@@ -253,6 +266,8 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   if (pasted) checks = [...checks.filter((c) => c.level !== 'ok'), { level: 'fail', code: 'coaching-copied', tokens: [], message: `The reply repeats the owner's coaching word for word ("${pasted} …"). The note says how to handle the message. Say it to the customer in your own words, or leave it out if it was a line to avoid.` }];
   const listing = chat ? listingPriceCheck(item) : null;
   if (listing) checks = [...checks.filter((c) => c.level !== 'ok'), listing];
+  const unasked = chat ? unaskedLinkCheck(item, body) : null;
+  if (unasked) checks = [...checks.filter((c) => c.level !== 'ok'), unasked];
   // An import email: the exact answer or a blank, never a holding line, and every model asked about answered.
   const mail = email ? emailChecks({ body, research, hold: !!json.hold, instructed }) : [];
   if (mail.length) checks = [...checks.filter((c) => c.level !== 'ok'), ...mail];

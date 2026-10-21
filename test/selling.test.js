@@ -368,3 +368,14 @@ test('a buyer leaving over the price gets no price reply and no invitation; a se
   assert.equal(again.price.on, false, 'the price reply was sent already');
   assert.match(again.user, /\[PRICE\?\]/);
 });
+
+test('on Marketplace an opening thank-you and an unasked link are pointed out', () => {
+  const run = (body, extra = {}) => checks.checkDraft({ reply: body, body, allowedText: 'Vehicle: 2021 Toyota Noah X.', channel: 'marketplace', inConversation: true, ...extra }).map((c) => `${c.level}:${c.code}`);
+  assert.ok(run('Thank you for your message. Yes, it is available.').includes('warn:opener'));
+  assert.ok(run('Thank you for your enquiry, {{NAME}}. Yes.').includes('warn:opener'));
+  assert.ok(!run('Thank you for your offer. The lowest we can do on the Noah is [PRICE?].').includes('warn:opener'), 'an offer is something they gave');
+  assert.ok(!run('Yes, it is available.').includes('warn:opener'));
+  assert.ok(!checks.checkDraft({ reply: 'Thank you for your message.', body: 'Thank you for your message.', channel: 'sms' }).some((c) => c.code === 'opener'), 'SMS keeps its own rules');
+  assert.ok(run('Thank you for your message. Yes.', { instructed: true }).every((c) => c !== 'warn:opener'), 'a Prompt sets it aside');
+  assert.match(promptModule.systemPrompt('marketplace'), /A bare figure \("15k", "\$17000", "24 will do", "I have15000k"\) is an offer/);
+});

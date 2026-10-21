@@ -30,9 +30,9 @@ const item = (conversationId) => items.buildItem({ conversationId });
 // ---- what needs no reply -----------------------------------------------------------------
 
 test('happy noises and laughter need no reply; anything with a real point still does', () => {
-  for (const t of ['Awesome! I’m excited', 'Hahahaha', "Can't wait!", 'Looking forward to it', 'ok great haha', 'Wow thanks', 'lol ok', 'Sweet, thanks mate', 'Perfect, so excited'])
+  for (const t of ['Awesome! I’m excited', 'Hahahaha', "Can't wait!", 'Looking forward to it', 'ok great haha', 'Wow thanks', 'lol ok', 'Sweet, thanks mate', 'Perfect, so excited', 'ok see you at 10', 'ok 10:30 works', 'k'])
     assert.equal(text.isAcknowledgement(t), true, t);
-  for (const t of ["Can't today", 'Haha, what time do you close', "I'm excited, when can I pick it up", 'Hello', 'Looking forward to hearing about the price', "Can't wait to see it, what's the address", 'Thanks, is it still available?'])
+  for (const t of ["Can't today", 'Haha, what time do you close', "I'm excited, when can I pick it up", 'Hello', 'Looking forward to hearing about the price', "Can't wait to see it, what's the address", 'Thanks, is it still available?', '15k', '$17000', 'I have15000k', '24 will do', '17,500', 'Hi would u consider 17k'])
     assert.equal(text.isAcknowledgement(t), false, t);
 });
 

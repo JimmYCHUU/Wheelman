@@ -736,3 +736,18 @@ test('Send: a link to our website typed or pasted into the box goes to the buyer
   assert.deepEqual(JSON.parse(writes[0].body), { text: tagged, urls: [] });
   assert.equal(out.item.thread.at(-1).text, tagged, 'the chat shows what the buyer gets');
 });
+
+test('an unasked "More details" link is pointed out, and a link the buyer asked for is not', async () => {
+  const { items, drafter, sync } = await load();
+  chats.set(510, { row: row(510, 'Zoe Hart', 3), messages: [message(91, 'in', 'phone', 'Can you send me the link to the photos?', 3)] });
+  await sync.syncMarketplace();
+  const url = items.itemFromKey('mp:502').vehicles[0].url;
+  assert.ok(url);
+  ai.script = [{ reply: `Yes, it is still available.\nMore details:\n${url}`, needs_human: [], facts_used: [], hold: false }];
+  const unasked = await drafter.draftFor(items.itemFromKey('mp:502'), { save: false });
+  assert.ok(unasked.checks.some((c) => c.level === 'warn' && c.code === 'unasked-link'), JSON.stringify(unasked.checks));
+  assert.ok(!unasked.checks.some((c) => c.level === 'fail'), 'only a warning');
+  ai.script = [{ reply: `Yes, here are the photos.\nMore details:\n${url}`, needs_human: [], facts_used: [], hold: false }];
+  const asked = await drafter.draftFor(items.itemFromKey('mp:510'), { save: false });
+  assert.ok(!asked.checks.some((c) => c.code === 'unasked-link'), JSON.stringify(asked.checks));
+});

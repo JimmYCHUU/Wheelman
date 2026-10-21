@@ -31,7 +31,7 @@ const BANNED = [
 
 // The checks that hold a reply to the section's own rules on length, tone and layout, rather than
 // to the facts. A reply written from the owner's Prompt is not held to them.
-const SECTION_RULES = new Set(['emoji', 'exclaim', 'long', 'questions', 'filler', 'register', 'next-step', 'price']);
+const SECTION_RULES = new Set(['emoji', 'exclaim', 'long', 'questions', 'filler', 'register', 'next-step', 'price', 'opener', 'unasked-link']);
 
 // What our records say about a customer, said to them. Shape the reply by it; never state it.
 const INSIDER_LEAK = /\b(lead score|your (engagement )?score|scored (as|at)|(hot|warm|cold) lead|our (dashboard|system|records?) (shows?|says?|notes?|records?|tells? us)|came to us (from|via|through)|found us (on|through|via)|(enquir|inquir|look|shopp)\w* (at|with|about|around) other (dealers?|cars|vehicles)|other dealers?|your (finance )?application (was|has been|got|is) (declined|rejected|knocked back|approved|unsuccessful)|finance (was|has been|is|got) (declined|rejected|knocked back|approved)|you (have |'ve )?(watched|viewed|seen) (the|our) (video|walkaround))\b/i;
@@ -299,7 +299,10 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   if (bangs > 1) add('warn', 'exclaim', `Contains ${bangs} exclamation marks.`);
 
   const words = wordCount(String(body).replace(/https?:\/\/\S+/g, ''));
-  if (channel === 'marketplace') { if (words > 90) add('warn', 'long', `Long for a Marketplace chat (${words} words). Up to about 90 words, in short lines.`); }
+  if (channel === 'marketplace') {
+    if (words > 90) add('warn', 'long', `Long for a Marketplace chat (${words} words). Up to about 90 words, in short lines.`);
+    if (/^\s*thank(s| you) for (your|the) (message|enquiry|inquiry|interest)\b/i.test(body)) add('warn', 'opener', 'Opens on a thank-you for the message. On Marketplace the first line is the answer, or names what they gave us (their offer, their number, a time).');
+  }
   else if (channel === 'email') {
     // An email has room, and a cost breakdown (one line per part) may run longer still.
     const breakdown = (String(body).match(/^.*\$\d[\d,]*/gm) || []).length >= 4;
