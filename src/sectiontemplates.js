@@ -189,9 +189,12 @@ export function bookingInHand(item) {
   return e ? { kind: e.booking.kind, where: e.booking.where, at: e.booking.at } : null;
 }
 
-/** Cars like this one that we have for sale, one paragraph each with the price, the kilometres and the page; null when none. */
+/**
+ * Cars like this one that we have for sale, one paragraph each with the price, the kilometres and
+ * the page; null when none. A car another customer has paid a deposit on is never offered.
+ */
 export function similarCarsText(v, { max = 2 } = {}) {
-  const like = v ? alternatives(v, allVehicles(), max) : [];
+  const like = v ? alternatives(v, allVehicles().filter((o) => !reservedByAnother(o)), max) : [];
   if (!like.length) return null;
   return like.map((o) => `${o.title || `stock ${o.stockNo}`}, ${money(Number(o.price))}, ${Number(o.odometer || 0).toLocaleString('en-AU')} km:\n${o.url}`).join('\n\n');
 }
@@ -275,6 +278,7 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
     const links = v?.url ? inspectionLinks(v) : null;
     const booking = v && !gone && code === 'available' && links ? (far ? links.online : links.onsite) : '';
     const b = bookingInHand(item);
+    const like = fu?.kind === 'stock_sold' ? similarCarsText(v) : null;
     const inclusions = v ? inclusionsSentence(v) : '';
     const outline = (v?.outline || []).join('\n');
     Object.assign(values, {
@@ -310,8 +314,8 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
       booked_when: b ? bookedWhenWords(b.at, now) : null,
       // News about the car: the price before it dropped; two cars like the one that sold.
       old_price: fu?.kind === 'stock_price' && Number.isFinite(Number(fu.data?.from)) ? money(Number(fu.data.from)) : null,
-      similar_cars: fu?.kind === 'stock_sold' ? similarCarsText(v) : null,
-      if_no_similar_cars: fu?.kind === 'stock_sold' && !similarCarsText(v),
+      similar_cars: like,
+      if_no_similar_cars: fu?.kind === 'stock_sold' && !like,
       booking_kind: b ? (b.kind === 'test_drive' ? 'test drive' : 'inspection') : null,
       address: config.site.address,
       if_onsite: !!b && b.where !== 'online',

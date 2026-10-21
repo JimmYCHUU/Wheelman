@@ -743,16 +743,20 @@ export function messageMedia(id) {
 
 const FRESH_MS = 2 * 24 * 3600e3;
 
-/** What changed about a car worth telling a customer, comparing the stored row with the new one. */
-function vehicleNews(prev, v) {
+/**
+ * What changed about a car worth telling a customer, comparing the stored row with the new one.
+ * A car lands once: taken down for a correction and listed again, it has not landed anew. A price
+ * counts only when there is one on both sides (a cleared price is not a drop to nothing).
+ */
+function vehicleNews(prev, v, { landedBefore = false } = {}) {
   const was = availability(prev).code;
   const now = availability(v).code;
   const out = [];
   if (now === 'sold' && was !== 'sold') out.push({ event: 'sold', data: { from: was, to: now } });
-  else if (now === 'available' && was !== 'available' && was !== 'sold') out.push({ event: 'landed', data: { from: was, to: now } });
+  else if (now === 'available' && was !== 'available' && was !== 'sold' && !landedBefore) out.push({ event: 'landed', data: { from: was, to: now } });
   const before = Number(prev.price);
   const after = Number(v.price);
-  if (Number.isFinite(before) && Number.isFinite(after) && before - after >= 100) out.push({ event: 'price', data: { from: before, to: after } });
+  if (before > 0 && after > 0 && before - after >= 100) out.push({ event: 'price', data: { from: before, to: after } });
   return out;
 }
 
@@ -770,7 +774,8 @@ export function upsertVehicle(v, { now = Date.now() } = {}) {
   if (!prev || now - Number(prev.updated_at || 0) > FRESH_MS) return;
   let before;
   try { before = JSON.parse(prev.data_json); } catch { return; }
-  for (const n of vehicleNews(before, v)) {
+  const landedBefore = !!stmt("SELECT 1 FROM vehicle_events WHERE vehicle_id = ? AND event = 'landed' LIMIT 1").get(v.id);
+  for (const n of vehicleNews(before, v, { landedBefore })) {
     stmt('INSERT INTO vehicle_events(vehicle_id, stock_no, event, at, data_json) VALUES(?, ?, ?, ?, ?)').run(v.id, v.stockNo ?? null, n.event, now, JSON.stringify(n.data));
   }
 }

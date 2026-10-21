@@ -703,7 +703,47 @@ test('the AI is told it is news about the car, and the checks do not ask the new
   assert.doesNotMatch(asked, /as if the visit happened|still to come/);
   assert.deepEqual(checks.followUpChecks({ body: 'Team Carbarn here. The 2017 Toyota Prius S you asked about is now $18,500, down from $18,900.', kind: 'stock_price' }), []);
   assert.deepEqual(checks.followUpChecks({ body: `Team Carbarn here. The car you asked about has now been sold. ${'word '.repeat(60)}`, kind: 'stock_sold' }), []);
-  assert.ok(checks.followUpChecks({ body: `Team Carbarn here. ${'word '.repeat(60)}`, kind: 'stock_price' }).some((c) => c.code === 'followup-long'));
+  // The owner's invitation block alone runs past 50 words: no length warning on news.
+  assert.deepEqual(checks.followUpChecks({ body: `Team Carbarn here. ${'word '.repeat(60)}`, kind: 'stock_price' }), []);
+});
+
+// ---- after the whole-branch review ---------------------------------------------------------------
+
+test('news is checked against the car as it is now: a car lands once, a cleared price is not a drop, a price put back and a sale undone are not news', () => {
+  const car = (extra) => ({ id: 902, stockNo: '9902', title: '2018 Toyota Esquire', year: '2018', make: 'TOYOTA', model: 'Esquire', modelCode: 'ZRR80', status: 'PUBLISHED', soldStatus: 'UnSold', stockIn: 'Arrived', price: 25000, odometer: 60000, url: 'https://www.carbarn.com.au/vehicles/toyota/esquire/zrr80/9902', ...extra });
+  db.upsertVehicle(car({ stockIn: 'Transit' }), { now: NOW - 6 * HOUR });
+  db.upsertVehicle(car({}), { now: NOW - 5 * HOUR });                        // arrived and listed: it landed
+  db.upsertVehicle(car({ status: 'UNPUBLISHED' }), { now: NOW - 4 * HOUR });  // taken down for a correction
+  db.upsertVehicle(car({}), { now: NOW - 3 * HOUR });                        // listed again: not a second landing
+  db.upsertVehicle(car({ price: null }), { now: NOW - 2 * HOUR });           // the price cleared: not a drop to nothing
+  db.upsertVehicle(car({ price: 24000 }), { now: NOW - HOUR });              // a price again: not a drop from nothing
+  assert.deepEqual(db.vehicleEventsFor(902, 0).map((e) => e.event), ['landed']);
+  const key = replied(69, 'Pam', { inAt: NOW - 2 * DAY, outAt: NOW - 2 * DAY + HOUR, stocks: ['9902'] });
+  db.upsertVehicle(car({ price: 23000 }), { now: NOW - 30 * MIN });          // dropped
+  db.upsertVehicle(car({ price: 24500 }), { now: NOW - 20 * MIN });          // put back up
+  db.upsertVehicle(car({ price: 24500, soldStatus: 'Sold', stockIn: 'Sold' }), { now: NOW - 10 * MIN });
+  db.upsertVehicle(car({ price: 24500 }), { now: NOW - 5 * MIN });           // the sale undone
+  assert.deepEqual(db.vehicleEventsFor(902, 0).map((e) => e.event), ['landed', 'price', 'sold']);
+  followup.refreshFollowUps({ now: NOW });
+  assert.deepEqual(openFor(key).map((x) => x.kind), ['stock_landed'], 'the sale undone and the price put back are not news; the landing still is');
+});
+
+test('the sold news never offers a car another customer has a deposit on', () => {
+  const noah = db.getVehicleByStock('1159');
+  assert.match(st.similarCarsText(noah) || '', /Noah Si/);
+  db.upsertSale({ vehicleId: 9, saleId: 9099, stockNo: '1160', stage: 'PENDING_PAYMENT', soldAt: NOW - DAY, paid: 'part', phones: normalize.phoneKeys('0491570197'), email: '' });
+  try { assert.equal(st.similarCarsText(noah), null); } finally { db.deleteSale(9); }
+  assert.match(st.similarCarsText(noah) || '', /Noah Si/, 'offered again once the deposit is gone');
+});
+
+test('after two texts of ours with nothing back there is no news either; the buyer of the car that sold hears nothing', async () => {
+  const twice = replied(78, 'Rae', { inAt: NOW - 5 * DAY, stocks: ['1500'], ours: [[NOW - 5 * DAY + HOUR, 'Hello Rae, yes the Prius is on its way.'], [NOW - 3 * DAY, 'Hello Rae, it lands next week if you are still interested.']] });
+  await restock(6, { auPublishPrice: 18000 });
+  followup.refreshFollowUps({ now: LATER() });
+  assert.deepEqual(openFor(twice), [], 'the cap holds for news too');
+  await restock(7, { soldStatus: 'Sold', stockIn: 'Sold' });
+  followup.refreshFollowUps({ now: LATER() });
+  assert.deepEqual(openFor('c:366'), [], 'the buyer is not told the car sold');
 });
 
 test('a Prompt on the reminder tells the AI the visit is still to come, not to ask how it went', async () => {

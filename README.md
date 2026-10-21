@@ -772,10 +772,12 @@ under **Follow-ups** in the Dashboard section, the reason on the row. Four reaso
 - **Car landed, Price dropped, Car sold**: news about the car they asked about, for the
   conversations of the last 30 days (`FOLLOW_UP_STOCK_DAYS`): it has arrived at the showroom and
   can be seen, its price has dropped by $100 or more (the old and the new price), or it has sold,
-  with two cars like it from stock. The newest news only; it takes the place of a quiet nudge,
-  and nobody we have already told, nor the buyer, gets it. A car held by another customer's
-  deposit gets no landed or price news. A change seen after the stock list was out of date for
-  more than two days is not news.
+  with two cars like it from stock (never one another customer has a deposit on). The newest
+  news only, and only while it still holds of the car (a sale undone or a price put back up is
+  not news; a car lands once); it takes the place of a quiet nudge, and nobody we have already
+  told, nor the buyer, gets it. A car held by another customer's deposit gets no landed or price
+  news. After two texts of ours with nothing back, no news either. A change seen after the stock
+  list was out of date for more than two days is not news.
 
 A booking that has just arrived, for a visit still to come and with nobody's reply yet, is
 answered first with **Booking confirmed** in Which message?, written by code too: the day and

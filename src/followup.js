@@ -135,15 +135,21 @@ export function dueFollowUps(item, { now = Date.now(), cfg = config.followUp, ro
   }
 
   // News about the car they asked about: it landed at the showroom, its price dropped, or it sold.
-  // The newest piece of news since they last wrote and since we last wrote; a car that has since
-  // sold, or is held by another customer's deposit, gets the sold news only. News is not about a
-  // silence: nothing blocks it.
+  // The newest piece of news since they last wrote and since we last wrote, and only while it still
+  // holds of the car as it is now (a sale undone, a price put back up, are not news). A car that
+  // has since sold, or is held by another customer's deposit, gets the sold news only. News is
+  // not blocked by an earlier follow-up on the same silence, but the cap holds: after two texts of
+  // ours with nothing back, nothing more.
   const v = item.vehicles?.[0];
   let news = null;
   if (v && Number.isFinite(Number(v.id))) {
-    const fresh = vehicleEventsFor(v.id, now - cfg.stockDays * DAY).filter((x) => x.at <= now && x.at > (lastTheirs?.at || 0) && x.at > (lastOurs?.at || 0));
-    const held = availability(v).code === 'sold' || reservedByAnother(v, item.deal);
+    const code = availability(v).code;
+    const price = Number(v.price);
+    const holds = (x) => (x.event === 'sold' ? code === 'sold' : x.event === 'price' ? price > 0 && price < Number(x.data?.from) : code === 'available');
+    const fresh = vehicleEventsFor(v.id, now - cfg.stockDays * DAY).filter((x) => x.at <= now && x.at > (lastTheirs?.at || 0) && x.at > (lastOurs?.at || 0) && holds(x));
+    const held = code === 'sold' || reservedByAnother(v, item.deal);
     news = fresh.filter((x) => !held || x.event === 'sold').pop() || null;
+    if (news && burstsSince(item, lastTheirs?.at || 0) >= 2) news = null;
   }
   if (news) {
     out.push({
