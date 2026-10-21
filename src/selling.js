@@ -44,7 +44,7 @@ export const DECLINED = /\b(not interested|no longer (interested|looking|need)|a
 export const CANNOT_COME = /\b(can'?t|cannot|can not|unable to|not able to|won'?t be able to|will not be able to) (come|make it|get (there|down|up|in|over)|get to|travel|drive)\b|\b(come|visit|make it|pop in|drop in) (another|some other|a different) (time|day)\b/i;
 
 /** They have put it off: a later day, a "not today", an "I'll let you know". Not a no, not a commitment. */
-export const DEFERRED = /\b(i'?ll|i will|we'?ll|we will|let me|(i |we )?need to|(i|we) have to|i'?d like to|i want to) (let you know|get back to you|be in touch|think about it|have a think|think it over|think on it|come back to you|decide|discuss|talk (to|with)|speak (to|with)|chat (to|with)|sleep on it|check with)\b|\b(not (coming|today|this week|right now|yet|ready)|can'?t (come|make it|do) today|another (time|day)|some other (time|day)|next (week|month|time)|later (in the|this) (week|month)|still (deciding|thinking)|need (some |more |a bit of )?time|maybe later|hold off|leave it with me|in (the next )?(couple|few) (of )?(days|weeks))\b/i;
+export const DEFERRED = /\b(i'?ll|i will|we'?ll|we will|let me|(i |we )?need to|(i|we) have to|i'?d like to|i want to) (let you know|get back to you|be in touch|think about it|have a think|think it over|think on it|come back to you|sleep on it)\b|\b(i'?ll|i will|we'?ll|we will|let me) decide\b|\b(discuss|talk|speak|chat|check|run) (it |this |that )?(over |through |past )?(to |with )?(my|our|the) (partner|wife|husband|missus|family|parents|dad|mum|mother|father|son|daughter|bank|accountant|mechanic|boss)\b|\b(not (coming|today|this week|right now|ready)|can'?t (come|make it|do) today|another (time|day)|some other (time|day)|still (deciding|thinking)|need (some |more |a bit of )?time|maybe later|hold off|leave it with me|in (the next )?(couple|few) (of )?(days|weeks))\b/i;
 
 /** The customer says they have seen or driven the car, or watched its video. */
 export const SEEN_WORDS = /\b(saw it|seen it|inspected it|test[\s-]?drove|test[\s-]?drive (yesterday|today|the other day|last|on)|drove it|had a look at it|looked at it (yesterday|today|on|last)|came (in|down|by|past) (yesterday|today|on|last)|visited (yesterday|today|on|last)|after (the|my|our) (inspection|visit|test[\s-]?drive)|thanks for (showing|the test[\s-]?drive|your time (yesterday|today|the other day))|(watched|seen) the (walkaround |video|walkaround))\b/i;
@@ -320,7 +320,7 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
   const parting = !item.deal && !sit.includes('inspection_booking') && (PARTING.test(item.pendingText || '') || RUDE.test(item.pendingText || ''));
 
   // They have put it off: accepted in a line, like a no.
-  const deferred = !item.deal && !declined && !parting && (DEFERRED.test(item.pendingText || '') || CANNOT_COME.test(item.pendingText || ''));
+  const deferred = !item.deal && !declined && !parting && !sit.includes('inspection_booking') && !price.open && (DEFERRED.test(item.pendingText || '') || CANNOT_COME.test(item.pendingText || ''));
 
   let rung;
   if (item.deal) rung = 'buyer';

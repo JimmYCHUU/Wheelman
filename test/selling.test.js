@@ -458,6 +458,12 @@ test('a deferral is answered like a no: accepted in a line, nothing sold', () =>
   assert.equal(buyer.move, 'after_sale_step', 'a buyer after the sale keeps the after-sale move');
   assert.equal(stage({ vehicles: car, texts: [{ who: 'customer', text: "Thanks but I've found another car, I'll pass." }] }).move, 'accept_no', 'a no is still a no');
   assert.ok(selling.QUIET_MOVES.has('accept_deferral'));
+  for (const [text, situations] of [['Can I see it next week Saturday at 10?', ['inspection_booking']], ['I want to discuss finance options', ['finance']], ['Is it still available? Not yet sold I hope', ['availability']], ['I need to decide between this and the Alphard, what is the price?', ['price_negotiation']]]) {
+    assert.notEqual(stage({ vehicles: car, situations, texts: [{ who: 'customer', text }] }).move, 'accept_deferral', text);
+  }
+  const priced = stage({ vehicles: car, situations: ['price_negotiation'], texts: [...linkSent, { who: 'customer', text: "I'll think about it, would you take 19k?" }] });
+  assert.ok(['invite_before_price', 'answer_offer'].includes(priced.move), priced.move);
+  assert.equal(priced.allowsUrgency, false);
 });
 
 test('a deposit, a link or a blank in a polite close is pointed out', () => {
@@ -468,6 +474,8 @@ test('a deposit, a link or a blank in a polite close is pointed out', () => {
   assert.ok(run('Certainly. You can book here:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80/1300#inspection=onsite', deferral).includes('warn:quiet-close'));
   const fine = run('Thank you for letting us know. The Noah remains available at our Lidcombe showroom.', deferral);
   assert.ok(!fine.includes('warn:quiet-close') && !fine.includes('warn:next-step'), fine.join(' '));
+  const asked = checks.checkDraft({ reply: 'x', body: 'Certainly. Here is the link:\nhttps://www.carbarn.com.au/vehicles/toyota/noah/zrr80/1300#inspection=onsite', allowedText: 'https://www.carbarn.com.au/vehicles/toyota/noah/zrr80/1300#inspection=onsite', customerText: "I'll let you know, can you send me the link?", stage: deferral, situation: { all: ['general'] } });
+  assert.ok(!asked.some((c) => c.code === 'quiet-close'), 'a link they asked for');
   const parting = { rung: 'fit', move: 'part_well', allowsUrgency: false, aim: 'x', told: { deposit: false, depositAgreed: false } };
   assert.ok(run('Thank you for the offer. Our best price is [PRICE?].', parting).includes('warn:quiet-close'), 'a buyer leaving over the price is not quoted');
   assert.ok(!run('Thank you for the offer, and all the best with your search.', parting).includes('warn:quiet-close'));

@@ -358,7 +358,7 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   if (stage && !instructed && QUIET_MOVES.has(stage.move)) {
     const sold = String(body).match(DEPOSIT_MENTION) || String(body).match(LICENCE_ASK);
     if (sold) add('warn', 'quiet-close', `"${sold[0]}": they are leaving or waiting. Thank them, and sell nothing more.`, [sold[0]]);
-    if (findUrls(body).length) add('warn', 'quiet-close', 'A link in a polite close. They are leaving or waiting: thank them and stop.', findUrls(body));
+    if (findUrls(body).length && !/\b(link|url)\b/i.test(String(customerText || ''))) add('warn', 'quiet-close', 'A link in a polite close. They are leaving or waiting: thank them and stop.', findUrls(body));
     if (stage.move === 'part_well' && markers.length) add('warn', 'quiet-close', 'A buyer leaving over the price is thanked, not quoted: no blank.', markers);
   }
   // A price reply or an invitation under the text is a next step in itself (blockNextStep).
