@@ -50,7 +50,7 @@ const CAR_FACTS = ['greeting', 'sign_off', 'thanks', 'hi', 'car', 'car_link', 'p
   // the follow-ups' own facts, and the booking in hand (the follow-up's, else the newest they made)
   'booked_day', 'booked_time', 'deposit_offer', 'new_thing', 'booking_kind', 'booked_when', 'address', 'if_onsite', 'if_online'];
 // The fit word for each kind of follow-up.
-const FOLLOW_UP_WORDS = { inspection_passed: 'inspection passed', quiet: 'quiet' };
+const FOLLOW_UP_WORDS = { inspection_passed: 'inspection passed', quiet: 'quiet', reminder: 'reminder' };
 export const FACTS = {
   'dashboard-messages.md': CAR_FACTS,
   'marketplace-messages.md': CAR_FACTS,

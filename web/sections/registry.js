@@ -27,7 +27,7 @@ export const SECTIONS = {
       waiting: ['Nobody is waiting', 'New customer messages appear here with a reply ready to check.'],
       quiet: ['Nothing here', 'Customers who only said thanks, opted out, or are no longer looking, and conversations you dismissed.'],
       other: ['Nothing here', 'Texts from suppliers, couriers and marketers.'],
-      followups: ['No follow-ups due', 'A conversation appears here when an inspection time has passed or a customer has gone quiet after our reply. Open it and the follow-up is written for you to check.'],
+      followups: ['No follow-ups due', 'A conversation appears here when an inspection time has passed, a visit is booked for tomorrow, or a customer has gone quiet after our reply. Open it and the follow-up is written for you to check.'],
       search: ['Nothing matches', 'Try a name, part of a phone number, or a word from the message.'],
     },
     welcome: { pick: 'Pick a customer', check: 'Check the reply', paste: 'and send it from the dashboard.' },

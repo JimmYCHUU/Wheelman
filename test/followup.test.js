@@ -562,3 +562,22 @@ test('their "see you tomorrow", answered before the hour, keeps the reminder; a 
   assert.deepEqual(openFor(key).map((x) => x.kind), ['inspection_passed'], 'how did it go, the day after the reminder');
   assert.equal(db.getFollowUp(r.id).done_how, 'copied', 'the reminder row is left as it was');
 });
+
+test('the reminder is written by code when opened from Follow-ups, first in Which message? and marked due', async () => {
+  // A conversation of its own: the refresh the day after the visit, above, lapsed Uma's reminder as it should.
+  const key = replied(59, 'Cleo', { inText: '', inquiries: [bookingInquiry(tomorrowAt2(), { bookedAt: NOW - 3 * DAY })], ours: [[NOW - 3 * DAY + HOUR, 'Hello Cleo, your inspection of the Hiace is booked. See you then.']] });
+  followup.refreshFollowUps({ now: fourToday() + 30 * MIN });
+  const r = openFor(key)[0];
+  assert.equal(r?.kind, 'reminder');
+  const list = (await get(`/api/items/${key}?followup=${r.id}`)).item.templates;
+  assert.deepEqual([list[0]?.id, list[0]?.due], ['inspection_reminder', true]);
+  const seenBefore = ai.seen.length;
+  // The draft route judges "still due" by the clock: with the reminder hour at 0, a visit tomorrow is due from 9 am the day before.
+  const was = config.followUp.reminderHour;
+  config.followUp.reminderHour = 0;
+  let d;
+  try { d = (await post(`/api/items/${key}/draft`, { followup: r.id, message: 'inspection_reminder' })).json.item.draft; } finally { config.followUp.reminderHour = was; }
+  assert.deepEqual([d?.status, d?.provider, ai.seen.length - seenBefore, d?.checks.filter((c) => /^followup-/.test(c.code))], ['ready', 'none', 0, []]);
+  assert.match(d.reply, /^Good (morning|afternoon|evening) Cleo,\n\nTeam Carbarn here\. A reminder of your inspection of the 2020 Toyota Hiace DX (today|tomorrow) at 2 pm\.\n\nWe are at 136 Frances Street, Lidcombe NSW 2141\. If the time no longer suits, let us know and we will find another\.\n\nRegards,\nTeam Carbarn$/);
+  assert.equal((await get('/api/items?section=dashboard&tab=followups')).items.find((x) => x.key === key).followUp.reason, 'Inspection tomorrow');
+});

@@ -364,3 +364,19 @@ Team Carbarn here, following on from the {car}.
 {new_thing}
 
 {sign_off}
+
+# The afternoon before a booked visit: written by code, word for word, with the address.
+===== inspection_reminder =====
+@label: Inspection reminder
+@fits: reminder
+@not: buyer, car sold
+@fit: no
+{greeting}
+
+Team Carbarn here. A reminder of your {booking_kind} of the {car} {booked_when} at {booked_time}.
+
+{if_onsite}We are at {address}. If the time no longer suits, let us know and we will find another.
+
+{if_online}We will call you at that time on this number and walk you around the car on video.
+
+{sign_off}
