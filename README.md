@@ -752,7 +752,7 @@ Every row is one conversation, newest first.
 
 Wheelman writes when the customer wrote last. A conversation where our message is the last one
 used to get nothing more; now it is put in front of you again when there is a reason to write,
-under **Follow-ups** in the Dashboard section, the reason on the row. Two reasons so far:
+under **Follow-ups** in the Dashboard section, the reason on the row. Three reasons so far:
 
 - **Inspection passed**: the customer booked an inspection or a test drive through the website
   and the booked time has gone by (three hours after it, by default). The follow-up asks how
@@ -762,6 +762,17 @@ under **Follow-ups** in the Dashboard section, the reason on the row. Two reason
   with one new thing, whichever they have not been offered yet: the export certificate and the
   auction sheet, the walkaround video, a similar car we have, or a time to come in with the
   booking link. A booking for a day still to come holds the nudge back.
+- **Inspection tomorrow**: a visit booked through the website is tomorrow. At 4 pm the day
+  before (by default) a reminder with the address is due, written by code from your wording, no
+  AI. None when they booked today for today or after the reminder hour (your confirmation
+  serves), when you have written to them since that hour, or when they said they cannot come. A
+  text of theirs before the visit does not close it, and a reminder you copied never holds back
+  the "how did it go" after the visit.
+
+A booking that has just arrived is answered first with **Booking confirmed** in Which message?,
+written by code too: the day and time, and the address, or the call for an online inspection. A
+message marked `@fit: no` in the wording file is written word for word; a Prompt or Rewrite on it
+still goes to the AI.
 
 A follow-up is never raised for a buyer, after a no or an opt-out, for a conversation you
 dismissed, for a message of ours older than 14 days, while a car has sold, or while another
@@ -773,11 +784,12 @@ conversations, for the same 14-day reason.
 
 Nothing is written ahead: the follow-up is written when you open the conversation from the
 Follow-ups list, so no AI request is spent on one you never open. Each kind is a message of
-yours in `voice/dashboard-messages.md` (**After the inspection** and **Follow-up: one new
-thing**), offered to a follow-up only and marked **(due now)** in Which message?, written with
-the conversation's facts and fitted to the customer by the AI with every fact kept from it, as
-any message there is; the deposit line and the four new-thing wordings are the `@deposit_offer:`
-and `@new_...:` lines at the top of that file. The AI is told it is a follow-up and held to it:
+yours in `voice/dashboard-messages.md` (**After the inspection**, **Follow-up: one new thing**
+and **Inspection reminder**), offered to a follow-up only and marked **(due now)** in Which
+message?, written with the conversation's facts and fitted to the customer by the AI with every
+fact kept from it, as any message there is (the reminder is written by code, word for word); the
+deposit line and the four new-thing wordings are the `@deposit_offer:` and `@new_...:` lines at
+the top of that file. The AI is told it is a follow-up and held to it:
 Carbarn named in the first sentence, never "just checking in" or "did you come", greeting and
 sign-off always (even on a day we already wrote), about 50 words for a nudge. An answer that
 breaks a rule is sent back once. Nothing is sent by Wheelman, and nothing written for a
@@ -798,6 +810,7 @@ inspection went … it would be wise not to ask that directly".)
 | `FOLLOW_UP_QUIET_HOURS` | Hours of silence after our reply before the quiet nudge is due | `60` |
 | `FOLLOW_UP_AFTER_INSPECTION_HOURS` | Hours after the booked time before "how did it go" is due | `3` |
 | `FOLLOW_UP_MAX_AGE_DAYS` | A message of ours older than this gets no follow-up | `14` |
+| `FOLLOW_UP_REMINDER_HOUR` | The hour (Sydney) of the reminder the day before a booked visit | `16` |
 
 ### The message box
 
