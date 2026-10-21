@@ -1,10 +1,12 @@
 // Follow-ups: a reason to write to a customer we replied to last. The worker runs refreshFollowUps
 // each check with no AI: it reads every dashboard conversation we answered, raises an occasion
 // when one is due (an inspection's booked time has passed; the customer has been quiet after our
-// reply; a booked visit is tomorrow, so a reminder is due the afternoon before), and closes the
-// ones that no longer hold (the customer wrote, the car sold, the reason aged out). The follow-up itself is written only when the owner opens the conversation from the
-// Follow-ups list (src/server.js), from a template in voice/dashboard-messages.md, and is never
-// sent or learned from. Everything here but refreshFollowUps is pure.
+// reply; a booked visit is tomorrow, so a reminder is due the afternoon before; there is news
+// about the car they asked about: it landed, its price dropped, or it sold), and closes the ones
+// that no longer hold (the customer wrote, the car sold, the reason aged out). The follow-up
+// itself is written only when the owner opens the conversation from the Follow-ups list
+// (src/server.js), from a template in voice/dashboard-messages.md, and is never sent or learned
+// from. Everything here but refreshFollowUps is pure.
 
 import { config } from './config.js';
 import { listItems, itemFromKey } from './items.js';
@@ -13,7 +15,7 @@ import { DECLINED, PARTING, RUDE, CANNOT_COME } from './selling.js';
 import { availability } from './normalize.js';
 import { reservedByAnother } from './deal.js';
 import { sydneyHour, sydneyDay, parseDashboardTime } from './time.js';
-import { followUpsFor, openFollowUps, insertFollowUp, closeFollowUp, lastDismissedAt } from './db.js';
+import { followUpsFor, openFollowUps, insertFollowUp, closeFollowUp, lastDismissedAt, vehicleEventsFor, vehicleEventsSince } from './db.js';
 
 const HOUR = 3600e3;
 const DAY = 24 * HOUR;
@@ -132,12 +134,40 @@ export function dueFollowUps(item, { now = Date.now(), cfg = config.followUp, ro
     }
   }
 
+  // News about the car they asked about: it landed at the showroom, its price dropped, or it sold.
+  // The newest piece of news since they last wrote and since we last wrote, and only while it still
+  // holds of the car as it is now (a sale undone, a price put back up, are not news). A car that
+  // has since sold, or is held by another customer's deposit, gets the sold news only. News is
+  // not blocked by an earlier follow-up on the same silence, but the cap holds: after two texts of
+  // ours with nothing back, nothing more.
+  const v = item.vehicles?.[0];
+  let news = null;
+  if (v && Number.isFinite(Number(v.id))) {
+    const code = availability(v).code;
+    const price = Number(v.price);
+    const holds = (x) => (x.event === 'sold' ? code === 'sold' : x.event === 'price' ? price > 0 && price < Number(x.data?.from) : code === 'available');
+    const fresh = vehicleEventsFor(v.id, now - cfg.stockDays * DAY).filter((x) => x.at <= now && x.at > (lastTheirs?.at || 0) && x.at > (lastOurs?.at || 0) && holds(x));
+    const held = code === 'sold' || reservedByAnother(v, item.deal);
+    news = fresh.filter((x) => !held || x.event === 'sold').pop() || null;
+    if (news && burstsSince(item, lastTheirs?.at || 0) >= 2) news = null;
+  }
+  if (news) {
+    out.push({
+      kind: `stock_${news.event}`, occasion: `stock:${v.id}:${news.event}:${news.id}`, sinceAt: lastTheirs?.at || 0,
+      reason: { landed: 'Car landed', price: 'Price dropped', sold: 'Car sold' }[news.event],
+      template: `stock_${news.event}`,
+      dueAt: atSensibleHour(news.at),
+      data: { event: news.event, from: news.data?.from, to: news.data?.to, vehicleId: v.id },
+    });
+  }
+  // While news stands (due now, or raised and still open), it takes the place of the quiet nudge.
+  const newsStands = !!news || have.some((r) => !r.done_how && String(r.kind).startsWith('stock_'));
+
   // Quiet: our reply stands unanswered for long enough, about a car still on offer, with no visit
   // booked (the reminder covers that) and none just passed (the message above covers that).
-  const v = item.vehicles?.[0];
   const future = bookings.some((b) => b.booking.at > now);
   const recentVisit = bookings.some((b) => b.booking.at >= now - 7 * DAY && b.booking.at <= now);
-  if (item.state === 'answered' && lastOurs && lastTheirs && lastOurs.at > lastTheirs.at && !future && !recentVisit && v
+  if (item.state === 'answered' && lastOurs && lastTheirs && lastOurs.at > lastTheirs.at && !future && !recentVisit && !newsStands && v
     && availability(v).code !== 'sold' && !reservedByAnother(v, item.deal)
     && lastOurs.at + cfg.quietHours * HOUR <= now && lastOurs.at >= now - cfg.maxAgeDays * DAY
     && !(lastOurs.text && CLOSE.test(lastOurs.text))) {
@@ -181,7 +211,7 @@ export function refreshFollowUps({ now = Date.now(), cfg = config.followUp } = {
   let closed = 0;
   const seen = new Set();
   const close = (r, how) => { closeFollowUp(r.id, how, { now }); closed++; };
-  for (const item of listItems({ source: 'dashboard', states: ['answered', 'ack'], maxAgeHours: cfg.maxAgeDays * 24, limit: Infinity })) {
+  const refreshItem = (item) => {
     seen.add(item.itemKey);
     const last = lastTheirsOf(item);
     for (const r of followUpsFor(item.itemKey)) if ((!r.done_how || r.done_how === 'copied') && last && last.at > r.since_at) close(r, 'answered');
@@ -191,6 +221,16 @@ export function refreshFollowUps({ now = Date.now(), cfg = config.followUp } = {
     for (const d of due) {
       if (rows.some((r) => r.occasion === d.occasion)) continue;
       if (insertFollowUp({ itemKey: item.itemKey, leadId: item.lead?.id || null, ...d, now })) opened++;
+    }
+  };
+  for (const item of listItems({ source: 'dashboard', states: ['answered', 'ack'], maxAgeHours: cfg.maxAgeDays * 24, limit: Infinity })) refreshItem(item);
+  // News about a car reaches the conversations about it from the last stockDays days, beyond the
+  // fortnight read above: read only when there is fresh news, and only for those cars.
+  const newsCars = new Set(vehicleEventsSince(now - 2 * DAY).map((x) => x.vehicle_id));
+  if (newsCars.size) {
+    for (const item of listItems({ source: 'dashboard', states: ['answered', 'ack'], maxAgeHours: cfg.stockDays * 24, limit: Infinity })) {
+      if (seen.has(item.itemKey) || !newsCars.has(item.vehicles?.[0]?.id)) continue;
+      refreshItem(item);
     }
   }
   // Open follow-ups whose conversation was not among those: gone, answered by the customer, or

@@ -603,6 +603,149 @@ test('Booking confirmed is offered only for a booking still to come that nobody 
   assert.deepEqual([list[0].id, list[0].best], ['booking_confirmed', true], 'still first for a booking just made');
 });
 
+// ---- PR 3: stock news ------------------------------------------------------------------------------
+
+test("the stock list's changes are kept as events: landed, a price down by $100 or more, sold; nothing on first sight or from a stale row", () => {
+  const voxy = (extra) => ({ id: 900, stockNo: '9900', title: '2019 Toyota Voxy', year: '2019', make: 'TOYOTA', model: 'Voxy', modelCode: 'ZRR80', status: 'PUBLISHED', soldStatus: 'UnSold', stockIn: 'Transit', price: 30000, odometer: 50000, ...extra });
+  db.upsertVehicle(voxy({}), { now: NOW - 5 * HOUR });
+  assert.deepEqual(db.vehicleEventsFor(900, 0), [], 'first sight');
+  db.upsertVehicle(voxy({ stockIn: 'Online' }), { now: NOW - 4 * HOUR });
+  db.upsertVehicle(voxy({ stockIn: 'Online', price: 29950 }), { now: NOW - 3 * HOUR });
+  db.upsertVehicle(voxy({ stockIn: 'Online', price: 29800 }), { now: NOW - 2 * HOUR });
+  db.upsertVehicle(voxy({ stockIn: 'Online', price: 29800 }), { now: NOW - HOUR });
+  db.upsertVehicle(voxy({ stockIn: 'Sold', soldStatus: 'Sold', price: 29800 }), { now: NOW });
+  assert.deepEqual(db.vehicleEventsFor(900, 0).map((e) => [e.event, e.at, e.data]), [['landed', NOW - 4 * HOUR, { from: 'transit', to: 'available' }], ['price', NOW - 2 * HOUR, { from: 29950, to: 29800 }], ['sold', NOW, { from: 'available', to: 'sold' }]]);
+  // Other cars have news of their own from the tests above (the Serena sold); this car's recent news is the sale.
+  assert.deepEqual(db.vehicleEventsSince(NOW - 90 * MIN).filter((e) => e.vehicle_id === 900).map((e) => e.event), ['sold']);
+  // A row last seen three days ago: whatever changed since is not news.
+  db.upsertVehicle(voxy({ id: 901, stockNo: '9901' }), { now: NOW - 3 * DAY });
+  db.upsertVehicle(voxy({ id: 901, stockNo: '9901', stockIn: 'Online', price: 20000 }), { now: NOW });
+  assert.deepEqual(db.vehicleEventsFor(901, 0), [], 'stale row');
+});
+
+test('the news messages: the price before, two cars like the one that sold, and the showroom when there are none', async () => {
+  const noah = items.itemFromKey('c:201');   // Priya's Noah 1159; the second Noah 1160 was pushed into stock in before()
+  const soldRow = { id: 0, kind: 'stock_sold', reason: 'Car sold', template: 'stock_sold', data: { event: 'sold' } };
+  const s = await st.composeSectionTemplate({ ...noah, followUp: soldRow }, 'stock_sold', { now: NOW });
+  assert.match(s.values.similar_cars, /^2020 Toyota Noah Si, \$27,900, 70,000 km:\nhttps:\/\/www\.carbarn\.com\.au\/vehicles\/toyota\/noah\/zrr80w\/1160$/);
+  assert.match(s.text, /Team Carbarn here\. The 2021 Toyota Noah X \(8 Seater\) you asked about has now been sold\.\n\nWe have these, if one of them suits:\n\n2020 Toyota Noah Si/);
+  const serena = items.itemFromKey('c:205');   // Yuki's Serena: nothing like it in stock
+  const none = await st.composeSectionTemplate({ ...serena, followUp: soldRow }, 'stock_sold', { now: NOW });
+  assert.deepEqual([none.values.similar_cars, none.values.if_no_similar_cars, /available now here:\nhttps:\/\/www\.carbarn\.com\.au\/used-cars/.test(none.text)], [null, true, true]);
+  const price = await st.composeSectionTemplate({ ...noah, followUp: { id: 0, kind: 'stock_price', reason: 'Price dropped', template: 'stock_price', data: { event: 'price', from: 29900, to: 28900 } } }, 'stock_price', { now: NOW });
+  assert.match(price.text, /is now \$28,900, down from \$29,900\.\n\n/);
+  assert.match(price.text, /#inspection=onsite/);
+  assert.deepEqual(st.checkTemplates(), []);
+});
+
+const LATER = () => Date.now() + DAY;
+// A change to the stock list, synced at the real clock; the news it makes is set to midday today
+// (two hours before NOW), inside working hours whatever the clock says, so the draft route finds it due.
+const restock = async (id, patch) => {
+  Object.assign(standins.world.vehicles.find((v) => v.id === id), patch);
+  await sync.syncAll({ vehicles: { force: true } });
+  db.openDb().prepare('UPDATE vehicle_events SET at = ? WHERE vehicle_id = ? AND at > ?').run(NOW - 2 * HOUR, id, NOW - HOUR);
+};
+
+test('a car that lands is news to the conversations about it from the last month, with the invitation; the buyer and a customer we told get nothing', async () => {
+  // The Prius 1500 (id 6) is in transit: Kim asked three weeks ago; Oli was told by us after it landed.
+  // The Corolla 1600 (id 7) is in Japan: Lou asked, then paid a deposit on it (a sale on the stock list).
+  // (Numbers 185 to 188: the fixtures' own people hold 101-117, 139, 150, 180, 190 and 199.)
+  const kim = replied(65, 'Kim', { inAt: NOW - 20 * DAY, outAt: NOW - 20 * DAY + HOUR, stocks: ['1500'] });
+  const lou = replied(66, 'Lou', { inAt: NOW - 8 * DAY, outAt: NOW - 8 * DAY + HOUR, stocks: ['1600'] });
+  const oli = replied(67, 'Oli', { inAt: NOW - 6 * DAY, outAt: NOW - 6 * DAY + HOUR, stocks: ['1500'] });
+  await restock(6, { stockIn: 'Online', status: 'PUBLISHED' });
+  await restock(7, { stockIn: 'Online', status: 'PUBLISHED', salesInfo: { salesId: 9071, deliveryStatus: 'PENDING_PAYMENT', salesDateTime: sydneyNaive(NOW - 2 * DAY), totalPrice: 29900, paidAmount: 1000, customerName: 'Lou Invented', customerMobile: phoneOf(66), customerEmail: '' } });
+  msg(367, 'OUT', 'Hello Oli, the Prius has arrived, come and see it.', Date.now() + 1000);
+  followup.refreshFollowUps({ now: LATER() });
+  const r = openFor(kim)[0];
+  assert.deepEqual([r?.kind, r?.reason, r?.template, r?.data.event, r?.data.vehicleId], ['stock_landed', 'Car landed', 'stock_landed', 'landed', 6]);
+  assert.ok(items.itemFromKey(lou).deal, 'Lou is the buyer of the Corolla');
+  assert.deepEqual([openFor(lou), openFor(oli)], [[], []], 'not the buyer, not someone we told');
+  ai.behave = echoFit;
+  let d;
+  try { d = (await post(`/api/items/${kim}/draft`, { followup: r.id, message: 'stock_landed' })).json.item.draft; } finally { ai.behave = null; }
+  assert.match(d.reply, /Team Carbarn here\. The 2017 Toyota Prius S you asked about has arrived at our Lidcombe showroom and can be seen now\.\n\n[\s\S]*#inspection=onsite/);
+  assert.ok(!d.checks.some((c) => c.code === 'followup-new'), 'the news is the new thing');
+});
+
+test('a price drop replaces the landed news; a sale replaces that and offers two like it; the quiet nudge waits while news stands', async () => {
+  const kim = 'c:365';
+  const landed = openFor(kim)[0];
+  await restock(6, { auPublishPrice: 18500 });
+  followup.refreshFollowUps({ now: LATER() });
+  const price = openFor(kim)[0];
+  assert.deepEqual([openFor(kim).length, price?.kind, price?.data.from, price?.data.to, db.getFollowUp(landed.id).done_how], [1, 'stock_price', 18900, 18500, 'lapsed']);
+  // Nia asked about the Noah two and a half days ago: a quiet nudge is due; the Noah sells first.
+  const nia = replied(68, 'Nia', { inAt: NOW - 62 * HOUR, outAt: NOW - 61 * HOUR, stocks: ['1159'] });
+  await restock(1, { status: 'UNPUBLISHED', soldStatus: 'Sold', stockIn: 'Sold' });
+  followup.refreshFollowUps({ now: LATER() });
+  assert.deepEqual(openFor(nia).map((x) => x.kind), ['stock_sold'], 'the news, not the nudge');
+  const sold = openFor(nia)[0];
+  ai.behave = echoFit;
+  let d;
+  try { d = (await post(`/api/items/${nia}/draft`, { followup: sold.id, message: 'stock_sold' })).json.item.draft; } finally { ai.behave = null; }
+  assert.match(d.reply, /has now been sold\.\n\nWe have these, if one of them suits:\n\n2020 Toyota Noah Si, \$27,900, 70,000 km:\nhttps:\/\/www\.carbarn\.com\.au\/vehicles\/toyota\/noah\/zrr80w\/1160/);
+  db.closeFollowUp(sold.id, 'copied');
+  followup.refreshFollowUps({ now: LATER() });
+  assert.deepEqual(openFor(nia), [], 'no quiet nudge on the silence the news answered');
+});
+
+test('the AI is told it is news about the car, and the checks do not ask the news for something new', async () => {
+  const price = openFor('c:365')[0];
+  assert.equal(price?.kind, 'stock_price');
+  ai.behave = echoFit;
+  let out;
+  try { out = await post('/api/items/c:365/draft', { followup: price.id, message: 'stock_price', instruction: 'add that it is a hybrid' }); } finally { ai.behave = null; }
+  assert.equal(out.status, 200);
+  const asked = ai.seen[ai.seen.length - 1].messages[1].content;
+  assert.match(asked, /news about the car they asked about: Price dropped \(from \$18,900 to \$18,500\)/);
+  assert.doesNotMatch(asked, /as if the visit happened|still to come/);
+  assert.deepEqual(checks.followUpChecks({ body: 'Team Carbarn here. The 2017 Toyota Prius S you asked about is now $18,500, down from $18,900.', kind: 'stock_price' }), []);
+  assert.deepEqual(checks.followUpChecks({ body: `Team Carbarn here. The car you asked about has now been sold. ${'word '.repeat(60)}`, kind: 'stock_sold' }), []);
+  // The owner's invitation block alone runs past 50 words: no length warning on news.
+  assert.deepEqual(checks.followUpChecks({ body: `Team Carbarn here. ${'word '.repeat(60)}`, kind: 'stock_price' }), []);
+});
+
+// ---- after the whole-branch review ---------------------------------------------------------------
+
+test('news is checked against the car as it is now: a car lands once, a cleared price is not a drop, a price put back and a sale undone are not news', () => {
+  const car = (extra) => ({ id: 902, stockNo: '9902', title: '2018 Toyota Esquire', year: '2018', make: 'TOYOTA', model: 'Esquire', modelCode: 'ZRR80', status: 'PUBLISHED', soldStatus: 'UnSold', stockIn: 'Arrived', price: 25000, odometer: 60000, url: 'https://www.carbarn.com.au/vehicles/toyota/esquire/zrr80/9902', ...extra });
+  db.upsertVehicle(car({ stockIn: 'Transit' }), { now: NOW - 6 * HOUR });
+  db.upsertVehicle(car({}), { now: NOW - 5 * HOUR });                        // arrived and listed: it landed
+  db.upsertVehicle(car({ status: 'UNPUBLISHED' }), { now: NOW - 4 * HOUR });  // taken down for a correction
+  db.upsertVehicle(car({}), { now: NOW - 3 * HOUR });                        // listed again: not a second landing
+  db.upsertVehicle(car({ price: null }), { now: NOW - 2 * HOUR });           // the price cleared: not a drop to nothing
+  db.upsertVehicle(car({ price: 24000 }), { now: NOW - HOUR });              // a price again: not a drop from nothing
+  assert.deepEqual(db.vehicleEventsFor(902, 0).map((e) => e.event), ['landed']);
+  const key = replied(69, 'Pam', { inAt: NOW - 2 * DAY, outAt: NOW - 2 * DAY + HOUR, stocks: ['9902'] });
+  db.upsertVehicle(car({ price: 23000 }), { now: NOW - 30 * MIN });          // dropped
+  db.upsertVehicle(car({ price: 24500 }), { now: NOW - 20 * MIN });          // put back up
+  db.upsertVehicle(car({ price: 24500, soldStatus: 'Sold', stockIn: 'Sold' }), { now: NOW - 10 * MIN });
+  db.upsertVehicle(car({ price: 24500 }), { now: NOW - 5 * MIN });           // the sale undone
+  assert.deepEqual(db.vehicleEventsFor(902, 0).map((e) => e.event), ['landed', 'price', 'sold']);
+  followup.refreshFollowUps({ now: NOW });
+  assert.deepEqual(openFor(key).map((x) => x.kind), ['stock_landed'], 'the sale undone and the price put back are not news; the landing still is');
+});
+
+test('the sold news never offers a car another customer has a deposit on', () => {
+  const noah = db.getVehicleByStock('1159');
+  assert.match(st.similarCarsText(noah) || '', /Noah Si/);
+  db.upsertSale({ vehicleId: 9, saleId: 9099, stockNo: '1160', stage: 'PENDING_PAYMENT', soldAt: NOW - DAY, paid: 'part', phones: normalize.phoneKeys('0491570197'), email: '' });
+  try { assert.equal(st.similarCarsText(noah), null); } finally { db.deleteSale(9); }
+  assert.match(st.similarCarsText(noah) || '', /Noah Si/, 'offered again once the deposit is gone');
+});
+
+test('after two texts of ours with nothing back there is no news either; the buyer of the car that sold hears nothing', async () => {
+  const twice = replied(78, 'Rae', { inAt: NOW - 5 * DAY, stocks: ['1500'], ours: [[NOW - 5 * DAY + HOUR, 'Hello Rae, yes the Prius is on its way.'], [NOW - 3 * DAY, 'Hello Rae, it lands next week if you are still interested.']] });
+  await restock(6, { auPublishPrice: 18000 });
+  followup.refreshFollowUps({ now: LATER() });
+  assert.deepEqual(openFor(twice), [], 'the cap holds for news too');
+  await restock(7, { soldStatus: 'Sold', stockIn: 'Sold' });
+  followup.refreshFollowUps({ now: LATER() });
+  assert.deepEqual(openFor('c:366'), [], 'the buyer is not told the car sold');
+});
+
 test('a Prompt on the reminder tells the AI the visit is still to come, not to ask how it went', async () => {
   const key = replied(64, 'Jo', { inText: '', inquiries: [bookingInquiry(tomorrowAt2(), { bookedAt: NOW - 3 * DAY })], ours: [[NOW - 3 * DAY + HOUR, 'Hello Jo, your inspection of the Hiace is booked. See you then.']] });
   followup.refreshFollowUps({ now: fourToday() + 30 * MIN });

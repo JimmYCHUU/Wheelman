@@ -9,7 +9,7 @@ import { redact } from './redact.js';
 import { maskCustomerSignOff, stripLocationBlock } from './voice.js';
 import { reservedByAnother } from './deal.js';
 import { labelFor, farAway, SITUATIONS } from './situations.js';
-import { businessFactsForPrompt, relevantWebsite, vehicleFacts, alternatives, operationsGuide, inspectionLinks, importPagesFor } from './knowledge.js';
+import { businessFactsForPrompt, relevantWebsite, vehicleFacts, alternatives, operationsGuide, inspectionLinks, importPagesFor, formatMoney as money } from './knowledge.js';
 import { availability } from './normalize.js';
 import { pickExamples } from './examples.js';
 import { learnedExamples, corrections, ownerGuidance } from './learn.js';
@@ -776,11 +776,16 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     ].filter(([re]) => re.test(oursText)).map(([, w]) => w);
     const lastTheirs = [...item.timeline].reverse().find((e) => e.who === 'customer' && (e.text || e.event));
     const reminder = fu.kind === 'reminder';
+    const news = /^stock_/.test(String(fu.kind || ''));
+    const priceWords = fu.kind === 'stock_price' && Number.isFinite(Number(fu.data?.from)) && Number.isFinite(Number(fu.data?.to)) ? ` (from ${money(Number(fu.data.from))} to ${money(Number(fu.data.to))})` : '';
     P.push('\n=== FOLLOW-UP ===');
     P.push(`This is a follow-up our staff asked for, not a reply: the customer has not written since our last message${lastUs ? ` ${ago(now - lastUs.at)} ago` : ''}. Reason: ${fu.reason}${fu.data?.bookedAt ? ` (their ${fu.data.kind === 'test_drive' ? 'test drive' : 'inspection'} ${reminder ? 'is' : 'was'} booked for ${formatSydney(fu.data.bookedAt)})` : ''}.`);
     if (reminder) {
       // A visit still to come: the message is the reminder; the AI only fits its wording.
       P.push('This is a reminder of a visit still to come. Name us in the first sentence ("Team Carbarn here"). Keep the day, the time and the address exactly as the message has them. The visit has not happened yet: nothing about how it went, no question whether they are coming, nothing new and no question at all. Never "just checking in", "just following up" or "touching base". If their last message was a no, write nothing and set hold to true.');
+    } else if (news) {
+      // News about the car: the message carries it; the AI only fits the wording.
+      P.push(`This is news about the car they asked about: ${fu.reason}${priceWords}. Name us in the first sentence ("Team Carbarn here") and say the news plainly; the message carries it and the one thing to offer with it. Nothing else new, no urgency, no question beyond the invitation the message has. Never "just checking in", "just following up" or "touching base". If their last message was a no, write nothing and set hold to true.`);
     } else {
       P.push(`Already offered to this customer in this conversation: ${offered.length ? offered.join(', ') : 'nothing yet'}.`);
       P.push('Name us in the first sentence ("Team Carbarn here"). Write as if the visit happened: ask how it went, never whether they came or made it. Add nothing they have already been offered; the message carries the one new thing. No urgency beyond the holding deposit when the message carries it. Never "just checking in", "just following up" or "touching base". Under 50 words. If their last message was a no, write nothing and set hold to true.');

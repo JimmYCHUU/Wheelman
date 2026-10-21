@@ -38,6 +38,20 @@ and versions follow `MAJOR.MINOR.PATCH`.
   README say so; nothing else changed in the sending.
 
 ### Added
+- **News about the car they asked about.** A fourth reason under Follow-ups: when a car lands at
+  the showroom (**Car landed**), its price drops by $100 or more (**Price dropped**, with the old
+  and the new price), or it sells (**Car sold**, with two cars like it from stock), the
+  conversations about it from the last 30 days (`FOLLOW_UP_STOCK_DAYS`) are due a follow-up with
+  that news, written from three new messages of yours in `voice/dashboard-messages.md`. The newest
+  news only, and only while it still holds of the car (a sale undone or a price put back up is
+  not news; a car lands once); it takes the place of a quiet nudge; nobody we have already told,
+  nor the buyer, gets it; a car held by another customer's deposit gets no landed or price news
+  and is never offered as one like it; after two texts of ours with nothing back there is no news
+  either; and a change seen after the stock list was out of date for more than two days is not
+  news. The stock list's
+  changes are kept in a `vehicle_events` table as it is read. (The owner's decision of 20 Oct
+  2026: "Stock news about their car: landed or arrived at Lidcombe, price dropped, or sold (then
+  two similar cars from stock)".)
 - **The reminder the day before a visit, and the booking confirmation, written by code.** A
   third reason under Follow-ups, **Inspection tomorrow**: at 4 pm the day before a visit booked
   through the website (`FOLLOW_UP_REMINDER_HOUR`, Sydney) a reminder with the address is due,

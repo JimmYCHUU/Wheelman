@@ -39,6 +39,8 @@ export const SIGNALS = [
   // a follow-up opened from the Follow-ups list (src/followup.js), and which kind; a booking that
   // has just come in through the website
   'follow-up', 'inspection passed', 'quiet', 'reminder', 'booking made',
+  // news about the car they asked about, on a follow-up
+  'car landed', 'price dropped', 'car sold news',
   // emails
   'eligibility', 'cost', 'deposit', 'timeline', 'payment', 'warranty', 'compliance_only', 'process', 'availability', 'eligible',
 ];
@@ -48,9 +50,11 @@ export const SIGNALS = [
 const CAR_FACTS = ['greeting', 'sign_off', 'thanks', 'hi', 'car', 'car_link', 'price', 'km', 'km_said', 'import_said', 'where', 'inclusions', 'if_inclusions', 'inclusions_short', 'price_reply', 'invitation',
   'first_reply_block', 'address_block', 'stock_link', 'finance_link', 'finance_form', 'trade_in_form', 'warranty_link', 'importing_link', 'if_warranty', 'if_no_warranty', 'if_no_car', 'sender',
   // the follow-ups' own facts, and the booking in hand (the follow-up's, else the newest they made)
-  'booked_day', 'booked_time', 'deposit_offer', 'new_thing', 'booking_kind', 'booked_when', 'address', 'if_onsite', 'if_online'];
+  'booked_day', 'booked_time', 'deposit_offer', 'new_thing', 'booking_kind', 'booked_when', 'address', 'if_onsite', 'if_online',
+  // news about the car: the price before it dropped, two cars like the one that sold
+  'old_price', 'similar_cars', 'if_no_similar_cars'];
 // The fit word for each kind of follow-up.
-const FOLLOW_UP_WORDS = { inspection_passed: 'inspection passed', quiet: 'quiet', reminder: 'reminder' };
+const FOLLOW_UP_WORDS = { inspection_passed: 'inspection passed', quiet: 'quiet', reminder: 'reminder', stock_landed: 'car landed', stock_price: 'price dropped', stock_sold: 'car sold news' };
 export const FACTS = {
   'dashboard-messages.md': CAR_FACTS,
   'marketplace-messages.md': CAR_FACTS,
@@ -185,6 +189,16 @@ export function bookingInHand(item) {
   return e ? { kind: e.booking.kind, where: e.booking.where, at: e.booking.at } : null;
 }
 
+/**
+ * Cars like this one that we have for sale, one paragraph each with the price, the kilometres and
+ * the page; null when none. A car another customer has paid a deposit on is never offered.
+ */
+export function similarCarsText(v, { max = 2 } = {}) {
+  const like = v ? alternatives(v, allVehicles().filter((o) => !reservedByAnother(o)), max) : [];
+  if (!like.length) return null;
+  return like.map((o) => `${o.title || `stock ${o.stockNo}`}, ${money(Number(o.price))}, ${Number(o.odometer || 0).toLocaleString('en-AU')} km:\n${o.url}`).join('\n\n');
+}
+
 // What we have already offered this customer, read from our own texts.
 const OFFERED = {
   documents: /export certificate|auction sheet/i,
@@ -264,6 +278,7 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
     const links = v?.url ? inspectionLinks(v) : null;
     const booking = v && !gone && code === 'available' && links ? (far ? links.online : links.onsite) : '';
     const b = bookingInHand(item);
+    const like = fu?.kind === 'stock_sold' ? similarCarsText(v) : null;
     const inclusions = v ? inclusionsSentence(v) : '';
     const outline = (v?.outline || []).join('\n');
     Object.assign(values, {
@@ -297,6 +312,10 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
       booked_day: fu?.data?.bookedAt ? bookedDayWords(fu.data.bookedAt, now) : null,
       booked_time: b ? bookedTimeWords(b.at) : null,
       booked_when: b ? bookedWhenWords(b.at, now) : null,
+      // News about the car: the price before it dropped; two cars like the one that sold.
+      old_price: fu?.kind === 'stock_price' && Number.isFinite(Number(fu.data?.from)) ? money(Number(fu.data.from)) : null,
+      similar_cars: like,
+      if_no_similar_cars: fu?.kind === 'stock_sold' && !like,
       booking_kind: b ? (b.kind === 'test_drive' ? 'test drive' : 'inspection') : null,
       address: config.site.address,
       if_onsite: !!b && b.where !== 'online',

@@ -752,7 +752,7 @@ Every row is one conversation, newest first.
 
 Wheelman writes when the customer wrote last. A conversation where our message is the last one
 used to get nothing more; now it is put in front of you again when there is a reason to write,
-under **Follow-ups** in the Dashboard section, the reason on the row. Three reasons so far:
+under **Follow-ups** in the Dashboard section, the reason on the row. Four reasons:
 
 - **Inspection passed**: the customer booked an inspection or a test drive through the website
   and the booked time has gone by (three hours after it, by default). The follow-up asks how
@@ -769,6 +769,15 @@ under **Follow-ups** in the Dashboard section, the reason on the row. Three reas
   text of theirs before the reminder hour does not close it (a question after that hour is
   answered as usual, and the reminder is dropped), and a reminder you copied never holds back the
   "how did it go" after the visit.
+- **Car landed, Price dropped, Car sold**: news about the car they asked about, for the
+  conversations of the last 30 days (`FOLLOW_UP_STOCK_DAYS`): it has arrived at the showroom and
+  can be seen, its price has dropped by $100 or more (the old and the new price), or it has sold,
+  with two cars like it from stock (never one another customer has a deposit on). The newest
+  news only, and only while it still holds of the car (a sale undone or a price put back up is
+  not news; a car lands once); it takes the place of a quiet nudge, and nobody we have already
+  told, nor the buyer, gets it. A car held by another customer's deposit gets no landed or price
+  news. After two texts of ours with nothing back, no news either. A change seen after the stock
+  list was out of date for more than two days is not news.
 
 A booking that has just arrived, for a visit still to come and with nobody's reply yet, is
 answered first with **Booking confirmed** in Which message?, written by code too: the day and
@@ -812,6 +821,7 @@ inspection went … it would be wise not to ask that directly".)
 | `FOLLOW_UP_AFTER_INSPECTION_HOURS` | Hours after the booked time before "how did it go" is due | `3` |
 | `FOLLOW_UP_MAX_AGE_DAYS` | A message of ours older than this gets no follow-up | `14` |
 | `FOLLOW_UP_REMINDER_HOUR` | The hour (Sydney) of the reminder the day before a booked visit | `16` |
+| `FOLLOW_UP_STOCK_DAYS` | How far back a conversation is told news about its car, in days | `30` |
 
 ### The message box
 
