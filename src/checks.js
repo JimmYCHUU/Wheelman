@@ -153,7 +153,7 @@ export function numbersIn(text) {
 /** A sentence that names a figure as the customer's own ("your offer of $15,000", "hoping for $30,000"), not as ours. */
 export const OWNED_BY_CUSTOMER = /\b(your (offer|budget|figure|proposal|limit|max(imum)?|price)|(offer|budget|figure) of|you (mentioned|offered|proposed|suggested|named|have|are offering|can do|hoped|were hoping)|hoping (for|to get))\b/i;
 /** Beside the customer's figure these mean we took it: still refused. */
-const TAKES_FIGURE = /\b(accept\w*|agree\w*|a deal|deal\b|done|match\w*|meet\w*|confirm\w*|take it|we can do|can do that)\b/i;
+const TAKES_FIGURE = /\b(accept\w*|agree\w*|a deal|deal\b|done|match\w*|meet\w*|confirm\w*|take it|we can do|can do that|(is|would be|sounds) (fine|ok(ay)?|good|acceptable|enough)|works? for us|we('ll| will) (take|accept|do|sell)|sell (it|the \w+) (at|for))\b/i;
 
 /**
  * Figures in a reply that cannot be traced to a source.
@@ -195,6 +195,14 @@ function figureProblems(replyBody, trustedText, customerText = '', policyText = 
   const customerOnly = [];
   const body = plainTimes(String(replyBody || '').replace(/https?:\/\/\S+/g, ' '));
   const bodySentences = sentences(body);
+  // The sentence that holds the character at `index`, so a figure said twice is judged each time in its own sentence.
+  const spans = [];
+  for (let from = 0, i = 0; i < bodySentences.length; i++) {
+    const start = body.indexOf(bodySentences[i], from);
+    spans.push({ start, end: start + bodySentences[i].length, text: bodySentences[i] });
+    from = start + bodySentences[i].length;
+  }
+  const sentenceAt = (index) => (spans.find((s) => index >= s.start && index < s.end) || { text: body }).text;
 
   for (const m of body.matchAll(NUMBER)) {
     const raw = m[0].trim();
@@ -215,7 +223,7 @@ function figureProblems(replyBody, trustedText, customerText = '', policyText = 
         if (usedInContext(n, sentence, policyText)) continue;
       }
       if (fromCustomer.has(n)) {
-        const sentence = bodySentences.find((s) => s.includes(m[0].trim())) || body;
+        const sentence = sentenceAt(m.index);
         if (OWNED_BY_CUSTOMER.test(sentence) && !TAKES_FIGURE.test(sentence)) continue;
         customerOnly.push(raw);
         continue;

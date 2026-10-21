@@ -208,6 +208,8 @@ test('a figure the customer gave may be named as theirs, never as ours', () => {
   assert.ok(run('We can do $15,000 for you.', 'can do 15k').includes('fail:customer-figure'));
   assert.ok(run('Thank you for your offer of $15,000, which we can accept.', 'can do 15k').includes('fail:customer-figure'), 'an acceptance verb beside their figure still fails');
   assert.ok(run('Your $15,000 offer is a deal.', 'can do 15k').includes('fail:customer-figure'));
+  assert.ok(run('Thank you for your offer of $15,000. We can do $15,000 for you.', 'can do 15k').includes('fail:customer-figure'), 'the same figure stated as ours in a second sentence still fails');
+  for (const plain of ['Your offer of $15,000 works for us.', 'Your offer of $15,000 is fine.', 'As you have asked, we will sell it at $15,000.']) assert.ok(run(plain, 'can do 15k').includes('fail:customer-figure'), plain);
 });
 
 test('the voice: the first sentence names what the person gave, and a form is already read', () => {
