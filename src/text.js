@@ -12,7 +12,9 @@ export const wordCount = (s) => (squash(s).match(/\S+/g) || []).length;
 
 /** iMessage-style reactions arrive as text, e.g. Liked “…”. They are not messages. */
 export function isReaction(body) {
-  return /^\s*(Liked|Loved|Emphasi[sz]ed|Laughed at|Disliked|Questioned|Reacted)\b.{0,12}[“"']/i.test(String(body || ''));
+  const s = String(body || '');
+  return /^\s*(Liked|Loved|Emphasi[sz]ed|Laughed at|Disliked|Questioned|Reacted)\b.{0,12}[“"']/i.test(s)
+    || /^\s*[\p{Extended_Pictographic}]+\s*(to|on)\s+['"‘“]/u.test(s);
 }
 
 /** Customer asked not to be contacted. */

@@ -6,7 +6,7 @@ import { restore, leftoverPlaceholders, NAME_TOKEN } from './redact.js';
 import { findUrls, untagged, hasEmoji, wordCount, stripEmoji, similarity } from './text.js';
 import { sydneyHour } from './time.js';
 import { promiseChecks } from './promises.js';
-import { FILLER, URGENCY, STAYS_FOR_SALE, CLAIM, NEXT_STEP_SIGNS, SLANG, SERVILE, QUIET_MOVES } from './selling.js';
+import { FILLER, URGENCY, STAYS_FOR_SALE, CLAIM, NEXT_STEP_SIGNS, SLANG, SERVILE, QUIET_MOVES, DEPOSIT_MENTION, LICENCE_ASK } from './selling.js';
 import { oldAddressIn, CURRENT_ADDRESS } from './address.js';
 
 export const MARKERS = ['[PRICE?]', '[TRADE-IN VALUE?]', '[DELIVERY COST?]', '[DATE?]', '[CHECK?]', '[DEPOSIT LINK?]', '[ELIGIBILITY?]', '[LANDED COST?]', '[DEPOSIT?]', '[TIMELINE?]'];
@@ -31,7 +31,7 @@ const BANNED = [
 
 // The checks that hold a reply to the section's own rules on length, tone and layout, rather than
 // to the facts. A reply written from the owner's Prompt is not held to them.
-const SECTION_RULES = new Set(['emoji', 'exclaim', 'long', 'questions', 'filler', 'register', 'next-step', 'price', 'opener', 'unasked-link']);
+const SECTION_RULES = new Set(['emoji', 'exclaim', 'long', 'questions', 'filler', 'register', 'next-step', 'price', 'opener', 'unasked-link', 'deposit-early']);
 
 // What our records say about a customer, said to them. Shape the reply by it; never state it.
 const INSIDER_LEAK = /\b(lead score|your (engagement )?score|scored (as|at)|(hot|warm|cold) lead|our (dashboard|system|records?) (shows?|says?|notes?|records?|tells? us)|came to us (from|via|through)|found us (on|through|via)|(enquir|inquir|look|shopp)\w* (at|with|about|around) other (dealers?|cars|vehicles)|other dealers?|your (finance )?application (was|has been|got|is) (declined|rejected|knocked back|approved|unsuccessful)|finance (was|has been|is|got) (declined|rejected|knocked back|approved)|you (have |'ve )?(watched|viewed|seen) (the|our) (video|walkaround))\b/i;
@@ -346,7 +346,15 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   const urgency = String(body).match(URGENCY);
   if (urgency) add('fail', 'urgency', `"${urgency[0]}": never say that other people are interested, that the car is selling fast or that the price will change.`, [urgency[0]]);
   const stays = String(body).match(STAYS_FOR_SALE);
-  if (stays && !stage?.allowsUrgency) add('warn', 'urgency', 'Says the deposit takes the car off the market. Say this only once the customer has shown real interest and agreed the price: booked to see it, seen it, asked to hold it, or accepted our figure.', [stays[0]]);
+  if (stays && !stage?.allowsUrgency) add('warn', 'urgency', 'Says the deposit takes the car off the market. Say this only once the customer has accepted our figure, asked to hold the car, or seen it and is ready to commit.', [stays[0]]);
+  if (stage && !instructed && !['commit', 'buyer'].includes(stage.rung) && !situation?.all?.includes('deposit_hold') && !situation?.all?.includes('after_sale')) {
+    const early = String(body).match(DEPOSIT_MENTION);
+    if (early) add('warn', 'deposit-early', 'Proposes the deposit before the customer has accepted the figure, asked to hold the car or seen it. Answer, and offer the next step instead.', [early[0]]);
+  }
+  if (stage && !instructed && stage.rung !== 'buyer' && !stage.told?.depositAgreed) {
+    const licence = String(body).match(LICENCE_ASK);
+    if (licence) add('warn', 'deposit-early', 'Asks for a driver licence or email address before the customer has said yes to the deposit.', [licence[0]]);
+  }
   // A price reply or an invitation under the text is a next step in itself (blockNextStep).
   // A polite close (a no, or a buyer leaving over the price) offers nothing more.
   if (stage && !hold && !blockNextStep && stage.rung !== 'buyer' && stage.move !== 'hold' && !QUIET_MOVES.has(stage.move) && !/\?/.test(body) && !findUrls(body).length && !NEXT_STEP_SIGNS.test(body)) {

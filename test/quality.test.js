@@ -34,6 +34,8 @@ test('happy noises and laughter need no reply; anything with a real point still 
     assert.equal(text.isAcknowledgement(t), true, t);
   for (const t of ["Can't today", 'Haha, what time do you close', "I'm excited, when can I pick it up", 'Hello', 'Looking forward to hearing about the price', "Can't wait to see it, what's the address", 'Thanks, is it still available?', '15k', '$17000', 'I have15000k', '24 will do', '17,500', 'Hi would u consider 17k'])
     assert.equal(text.isAcknowledgement(t), false, t);
+  assert.equal(text.isReaction("👍 to ' We register the vehicle when the deposit is paid. '"), true);
+  assert.equal(text.isReaction('👍 see you tomorrow'), false);
 });
 
 test('an automatic notice is filed as not a customer even when the number has a lead; a real customer never is', () => {

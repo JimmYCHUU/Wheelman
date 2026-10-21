@@ -9,6 +9,8 @@ import { availability } from './normalize.js';
 import { reservedByAnother } from './deal.js';
 import { findUrls, hasEmoji } from './text.js';
 import { config } from './config.js';
+import { dayRefs } from './promises.js';
+import { sydneyDay } from './time.js';
 
 const DAY = 24 * 3600 * 1000;
 
@@ -19,7 +21,7 @@ export const RUNG_LABELS = {
   interest: 'interested: asking whether the car is real, available or right for them',
   proof: 'wants proof: history, condition, photos, or cannot see the car in person',
   fit: 'working out fit and cost: price, finance, trade-in, delivery, what is included',
-  commit: 'ready to commit: has booked or seen the car, asked to hold it, or started buying',
+  commit: 'ready to commit: has seen the car, asked to hold it, accepted our figure, or started buying',
   buyer: 'a buyer: a deposit is paid or a sale is recorded',
 };
 
@@ -40,6 +42,15 @@ export const DECLINED = /\b(not interested|no longer (interested|looking|need)|a
 
 /** They cannot make the visit that was arranged: not a no to the car, but not a commitment either. */
 export const CANNOT_COME = /\b(can'?t|cannot|can not|unable to|not able to|won'?t be able to|will not be able to) (come|make it|get (there|down|up|in|over)|get to|travel|drive)\b|\b(come|visit|make it|pop in|drop in) (another|some other|a different) (time|day)\b/i;
+
+/** The customer says they have seen or driven the car, or watched its video. */
+export const SEEN_WORDS = /\b(saw it|seen it|inspected it|test[\s-]?drove|test[\s-]?drive (yesterday|today|the other day|last|on)|drove it|had a look at it|looked at it (yesterday|today|on|last)|came (in|down|by|past) (yesterday|today|on|last)|visited (yesterday|today|on|last)|after (the|my|our) (inspection|visit|test[\s-]?drive)|thanks for (showing|the test[\s-]?drive|your time (yesterday|today|the other day))|(watched|seen) the (walkaround |video|walkaround))\b/i;
+/** A deposit proposed in a reply. */
+export const DEPOSIT_MENTION = /\$1,000 (refundable )?(holding )?deposit|\bholding deposit\b|\b(secur|reserv)\w* (it|the \w+( \w+)?) with a deposit\b/i;
+/** The licence photo and email address asked for. */
+export const LICENCE_ASK = /\b(driver'?s? licen[cs]e|licen[cs]e photo|photo of your licen[cs]e)\b/i;
+/** Yes to the deposit we proposed. */
+export const AGREES_DEPOSIT = /\b(yes|ok(ay)?|sure|let'?s do (it|that)|i can do that|go ahead|sounds good|happy to|i'?ll (pay|put|place|send|transfer) (the |a )?deposit|how do i pay|send (me |through )?the invoice|(bank|account) details|where do i pay)\b/i;
 
 /** Leaving, kindly: the deal does not suit them. Nothing is sold to them after this. */
 export const PARTING = /\b(all the best|best of luck|good luck|never ?mind|forget (it|about it)|(i'?ll|i will) keep (saving|looking)|keep(ing)? saving|no deal|not worth (it|that)|still not worth|thanks anyway|thank you anyway|cheers anyway|maybe (next time|another time))\b/i;
@@ -151,7 +162,7 @@ export const MOVES = {
     question: '',
   },
   ask_trade_in_details: {
-    text: 'Say we take trade-ins against a car from our stock, and list what we need so a figure is ready before they come: the rego number and state, the kilometres, the condition, and a few clear photos. The value is confirmed on inspection and a person decides it: [TRADE-IN VALUE?] if a figure is asked for.',
+    text: 'Say we take trade-ins against a car from our stock, and list what we need so a figure is ready before they come: the rego number and state, the kilometres, the condition, and a few clear photos. The value is confirmed on inspection and a person decides it: [TRADE-IN VALUE?] if a figure is asked for. No deposit is proposed with a trade-in figure.',
     question: 'Could you send the rego, the kilometres and a few photos?',
   },
   send_finance_link: {
@@ -159,7 +170,7 @@ export const MOVES = {
     question: '',
   },
   propose_deposit: {
-    text: 'Propose the $1,000 refundable holding deposit as the next step: it takes the car off the market for them; it is refundable if they do not go ahead after inspecting it, or if their finance is not approved; to send the invoice we need a photo of their driver licence and their email address; then registration and preparation start. Two or three short sentences.',
+    text: 'Propose the $1,000 refundable holding deposit as the next step: it takes the car off the market for them; it is refundable if they do not go ahead after inspecting it, or if their finance is not approved; registration and preparation start once it is paid. Two or three short sentences. Do not ask for their driver licence or email address yet: that comes once they say yes.',
     question: '',
   },
   confirm_step: {
@@ -236,6 +247,16 @@ const CHAT_MOVES = {
 // ---- the rung and the move ---------------------------------------------------------------------
 
 /**
+ * The visit our "see you" line arranged has passed: the latest day it names is before today, or no
+ * day is readable and more than a day has gone by since we wrote it.
+ */
+function visitPassed(entry, now) {
+  const dates = dayRefs(entry.text, entry.at || now, { loose: true }).flatMap((r) => r.dates).sort();
+  if (dates.length) return dates[dates.length - 1] < sydneyDay(now);
+  return !!entry.at && now - entry.at > DAY;
+}
+
+/**
  * Where this customer is and what the reply should do.
  * @returns {null|{ rung, label, aim, move, moveText, question, signals, told, allowsUrgency, far, channel }}
  *   null for an auction order or an import enquiry: those replies have their own plan.
@@ -255,6 +276,7 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
 
   const told = {
     deposit: t.some((e) => ours(e) && /\bdeposit\b/i.test(e.text)),
+    depositAgreed: false,
     links: t.some((e) => ours(e) && /#inspection=/.test(e.text)),
     // Offered by us earlier, or watched on the website (the dashboard records that; insider.js).
     video: t.some((e) => ours(e) && /\b(video|walkaround)\b/i.test(e.text)) || !!videoViewed,
@@ -262,20 +284,24 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
     invited: t.some((e) => ours(e) && /welcome to (come|visit|inspect|see)|come (in|and see|down|by)|(available|ready) (for|to) (inspection|inspect|view|see)|(send|give) (us|me) (your|a) (best |phone |contact |mobile )?number/i.test(e.text)),
   };
 
+  // Yes to the deposit we proposed (not a price complaint): only then are the licence and email asked for.
+  told.depositAgreed = told.deposit && AGREES_DEPOSIT.test(item.pendingText || '') && !PRICE_OBJECTION.test(item.pendingText || '');
+
   const signals = [];
   const events = t.filter((e) => e.event && recent(e)).map((e) => e.event);
-  if (events.some((e) => /booked (an inspection|a test drive)/i.test(e))) signals.push('booked an inspection or test drive');
+  // A booking or a finance application shows interest, not commitment: neither is a signal.
   if (events.some((e) => /online purchase steps/i.test(e))) signals.push('started the online purchase steps');
-  if (events.some((e) => /finance application/i.test(e))) signals.push('applied for finance');
   if (customer.some((e) => recent(e) && SITUATIONS.deposit_hold.re.test(e.text))) signals.push('asked to hold or secure it');
-  // We confirmed a visit and they wrote again without declining. A booking link we sent is an
-  // invitation, not an arranged visit: since Marketplace replies carry it, it would make almost
-  // every buyer who writes back look ready for the deposit.
+  if (customer.some((e) => recent(e) && SEEN_WORDS.test(e.text))) signals.push('they have seen the car');
+  // We confirmed a visit, the day has passed, and they wrote again without declining. A booking
+  // link we sent is an invitation, not an arranged visit: since Marketplace replies carry it, it
+  // would make almost every buyer who writes back look ready for the deposit. A visit still to
+  // come is no commitment either.
   let arranged = -1;
   for (let i = t.length - 1; i >= 0; i--) if (ours(t[i]) && recent(t[i]) && /\bsee you\b/i.test(t[i].text)) { arranged = i; break; }
   if (arranged >= 0) {
     const after = t.slice(arranged + 1).filter((e) => e.who === 'customer' && e.text);
-    if (after.length && !after.some((e) => DECLINED.test(e.text) || CANNOT_COME.test(e.text))) signals.push('a visit was arranged and they wrote again');
+    if (after.length && !after.some((e) => DECLINED.test(e.text) || CANNOT_COME.test(e.text)) && visitPassed(t[arranged], now)) signals.push('the visit we arranged has taken place and they wrote again');
   }
   // The price: while it is open (an offer, a budget, "too dear"), nobody is asked for a deposit.
   const price = priceTalk(item);
@@ -356,6 +382,7 @@ export function stageLines(stage) {
     L.push('No urgency of any kind: nothing about other buyers, nothing about selling fast, and nothing about the deposit taking the car off the market.');
   }
   if (stage.told.deposit) L.push('We have already proposed the deposit to this customer: do not propose it again.');
+  if (stage.told.deposit) L.push(stage.told.depositAgreed ? 'They have said yes to the deposit: ask for a photo of their driver licence and their email address, so the invoice can be sent.' : 'They have not yet said yes to the deposit: do not ask for their licence or email.');
   if (stage.told.video) L.push('We have already offered a video: do not offer it again.');
   L.push(`Set "rung" in your answer to "${stage.rung}".`);
   return L;

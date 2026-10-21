@@ -69,7 +69,7 @@ test('where the customer is: interest, proof, fit, commit, buyer', () => {
   assert.deepEqual([again.rung, again.move, again.allowsUrgency, again.told.deposit], ['commit', 'confirm_step', false, true]);
 
   const arranged = stage({ situations: ['general'], texts: [{ who: 'customer', text: 'Can I come Saturday at 10?' }, { who: 'us', text: 'See you Saturday at 10.' }, { who: 'customer', text: 'Great, see you then. Does it have a tow bar?' }] });
-  assert.deepEqual([arranged.rung, arranged.move], ['commit', 'propose_deposit']);
+  assert.notEqual(arranged.rung, 'commit', 'a visit not yet taken is not a commitment');
   const declined = stage({ situations: ['general'], texts: [{ who: 'customer', text: 'Can I come Saturday?' }, { who: 'us', text: 'See you Saturday at 10.' }, { who: 'customer', text: 'Sorry, we have already bought elsewhere.' }] });
   assert.equal(declined.rung, 'interest', 'a decline after an arranged visit is not a commitment');
   const cannot = stage({ situations: ['inspection_booking'], texts: [{ who: 'customer', text: 'Can I come Saturday?' }, { who: 'us', text: 'See you Saturday at 10.' }, { who: 'customer', text: "Sorry, I can't make it down on Saturday after all." }] });
@@ -79,7 +79,7 @@ test('where the customer is: interest, proof, fit, commit, buyer', () => {
   assert.match(no.moveText, /no next step, no question/);
 
   const booked = stage({ situations: ['inspection_booking'], events: ['Customer booked an inspection through the website: Saturday 10:00'] });
-  assert.deepEqual([booked.rung, booked.move], ['commit', 'propose_deposit']);
+  assert.deepEqual([booked.rung, booked.move, booked.allowsUrgency], ['interest', 'confirm_or_link', false]);
 
   const buyer = stage({ situations: ['after_sale'], deal: { source: 'lead_status' }, texts: [{ who: 'customer', text: 'When will it be ready?' }] });
   assert.deepEqual([buyer.rung, buyer.move], ['buyer', 'after_sale_step']);
@@ -378,4 +378,51 @@ test('on Marketplace an opening thank-you and an unasked link are pointed out', 
   assert.ok(!checks.checkDraft({ reply: 'Thank you for your message.', body: 'Thank you for your message.', channel: 'sms' }).some((c) => c.code === 'opener'), 'SMS keeps its own rules');
   assert.ok(run('Thank you for your message. Yes.', { instructed: true }).every((c) => c !== 'warn:opener'), 'a Prompt sets it aside');
   assert.match(promptModule.systemPrompt('marketplace'), /A bare figure \("15k", "\$17000", "24 will do", "I have15000k"\) is an offer/);
+});
+
+test('the deposit waits for the buyer: a booking, a finance application or a visit still to come is not a commitment; seeing the car, holding it or accepting the figure is', () => {
+  const finance = stage({ vehicles: car, situations: ['finance'], events: ['Customer submitted a finance application through the website.'] });
+  assert.notEqual(finance.rung, 'commit'); assert.equal(finance.allowsUrgency, false);
+  const seen = stage({ vehicles: car, texts: [{ who: 'customer', text: 'Thanks for the test drive yesterday, does it come with two keys?' }] });
+  assert.deepEqual([seen.rung, seen.move], ['commit', 'propose_deposit']);
+  assert.ok(seen.signals.includes('they have seen the car'), seen.signals.join('; '));
+  const video = stage({ vehicles: car, texts: [{ who: 'customer', text: 'I watched the walkaround video, looks good' }] });
+  assert.equal(video.rung, 'commit');
+  // A dated visit, so the day it names is known whatever day the test runs on.
+  const visitDay = new Date(now + 2 * DAY).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Sydney' });
+  const past = selling.saleStage(plain({ vehicles: car, texts: [{ who: 'customer', text: `Can I come on ${visitDay} at 10?` }, { who: 'us', text: `See you on ${visitDay} at 10.` }, { who: 'customer', text: 'Great car. Does it have a tow bar?' }] }), { now: now + 9 * DAY });
+  assert.ok(past.signals.includes('the visit we arranged has taken place and they wrote again'), past.signals.join('; '));
+  assert.equal(past.rung, 'commit');
+  assert.equal(stage({ vehicles: car, situations: ['deposit_hold'], texts: [{ who: 'customer', text: 'Can you hold it for me until Saturday?' }] }).move, 'propose_deposit');
+  assert.equal(stage({ vehicles: car, situations: ['deposit_hold'], events: ['Customer started the online purchase steps on the website.'] }).rung, 'commit');
+});
+
+test('the licence and email are asked for only once they say yes to the deposit', () => {
+  const proposed = [{ who: 'customer', text: 'Can you hold it?' }, { who: 'us', text: 'A $1,000 refundable holding deposit takes it off the market for you.' }];
+  const yes = stage({ vehicles: car, situations: ['deposit_hold'], texts: [...proposed, { who: 'customer', text: "Yes let's do it, how do I pay?" }] });
+  assert.deepEqual([yes.move, yes.told.deposit, yes.told.depositAgreed], ['confirm_step', true, true]);
+  assert.match(selling.stageLines(yes).join('\n'), /ask for a photo of their driver licence and their email address/);
+  const notYet = stage({ vehicles: car, situations: ['deposit_hold'], texts: [...proposed, { who: 'customer', text: 'Is the deposit refundable?' }] });
+  assert.equal(notYet.told.depositAgreed, false);
+  assert.match(selling.stageLines(notYet).join('\n'), /do not ask for their licence or email/);
+  assert.match(selling.MOVES.propose_deposit.text, /Do not ask for their driver licence or email address yet/);
+  assert.doesNotMatch(selling.MOVES.propose_deposit.text, /we need a photo|photo of their driver licence/);
+  assert.match(selling.MOVES.ask_trade_in_details.text, /No deposit is proposed with a trade-in figure/);
+});
+
+test('a deposit, a licence ask or "remains for sale" before the buyer is there is pointed out', () => {
+  const run = (body, stage) => checks.checkDraft({ reply: body, body, allowedText: 'Vehicle: 2021 Toyota Noah X.', stage, situation: { all: ['general'] } }).map((c) => `${c.level}:${c.code}`);
+  const interest = { rung: 'interest', move: 'confirm_or_link', allowsUrgency: false, aim: 'x', told: { deposit: false, depositAgreed: false } };
+  const early = run('Yes, 9:00 am suits well. To take the vehicle off the market while you decide, we suggest securing it with a $1,000 refundable holding deposit. Until a deposit is paid, the vehicle remains for sale.', interest);
+  assert.ok(early.includes('warn:deposit-early') && early.includes('warn:urgency'), early.join(' '));
+  assert.ok(run('To proceed with the invoice, please send through a photo of your driver licence and your email address.', interest).includes('warn:deposit-early'));
+  const agreed = { rung: 'commit', move: 'confirm_step', allowsUrgency: false, aim: 'x', told: { deposit: true, depositAgreed: true } };
+  assert.ok(!run('Please send through a photo of your driver licence and your email address, and we will email the invoice.', agreed).includes('warn:deposit-early'));
+  const commit = { rung: 'commit', move: 'propose_deposit', allowsUrgency: true, aim: 'x', told: { deposit: false, depositAgreed: false } };
+  assert.ok(!run('A $1,000 refundable holding deposit takes the Noah off the market for you.', commit).includes('warn:deposit-early'));
+  assert.ok(!checks.checkDraft({ reply: 'x', body: 'A $1,000 refundable holding deposit takes it off the market.', stage: interest, instructed: true }).some((c) => c.code === 'deposit-early'), 'a Prompt sets it aside');
+});
+
+test('the voice: a booking, a finance application, a thumbs-up or a deferral is not the moment for the deposit', () => {
+  assert.match(promptModule.systemPrompt('sms'), /A booking confirmation, a finance application, a thumbs-up or a deferral is not the moment/);
 });
