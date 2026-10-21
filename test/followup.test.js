@@ -638,6 +638,59 @@ test('the news messages: the price before, two cars like the one that sold, and 
   assert.deepEqual(st.checkTemplates(), []);
 });
 
+const LATER = () => Date.now() + DAY;
+// A change to the stock list, synced at the real clock; the news it makes is set to midday today
+// (two hours before NOW), inside working hours whatever the clock says, so the draft route finds it due.
+const restock = async (id, patch) => {
+  Object.assign(standins.world.vehicles.find((v) => v.id === id), patch);
+  await sync.syncAll({ vehicles: { force: true } });
+  db.openDb().prepare('UPDATE vehicle_events SET at = ? WHERE vehicle_id = ? AND at > ?').run(NOW - 2 * HOUR, id, NOW - HOUR);
+};
+
+test('a car that lands is news to the conversations about it from the last month, with the invitation; the buyer and a customer we told get nothing', async () => {
+  // The Prius 1500 (id 6) is in transit: Kim asked three weeks ago; Oli was told by us after it landed.
+  // The Corolla 1600 (id 7) is in Japan: Lou asked, then paid a deposit on it (a sale on the stock list).
+  // (Numbers 185 to 188: the fixtures' own people hold 101-117, 139, 150, 180, 190 and 199.)
+  const kim = replied(65, 'Kim', { inAt: NOW - 20 * DAY, outAt: NOW - 20 * DAY + HOUR, stocks: ['1500'] });
+  const lou = replied(66, 'Lou', { inAt: NOW - 8 * DAY, outAt: NOW - 8 * DAY + HOUR, stocks: ['1600'] });
+  const oli = replied(67, 'Oli', { inAt: NOW - 6 * DAY, outAt: NOW - 6 * DAY + HOUR, stocks: ['1500'] });
+  await restock(6, { stockIn: 'Online', status: 'PUBLISHED' });
+  await restock(7, { stockIn: 'Online', status: 'PUBLISHED', salesInfo: { salesId: 9071, deliveryStatus: 'PENDING_PAYMENT', salesDateTime: sydneyNaive(NOW - 2 * DAY), totalPrice: 29900, paidAmount: 1000, customerName: 'Lou Invented', customerMobile: phoneOf(66), customerEmail: '' } });
+  msg(367, 'OUT', 'Hello Oli, the Prius has arrived, come and see it.', Date.now() + 1000);
+  followup.refreshFollowUps({ now: LATER() });
+  const r = openFor(kim)[0];
+  assert.deepEqual([r?.kind, r?.reason, r?.template, r?.data.event, r?.data.vehicleId], ['stock_landed', 'Car landed', 'stock_landed', 'landed', 6]);
+  assert.ok(items.itemFromKey(lou).deal, 'Lou is the buyer of the Corolla');
+  assert.deepEqual([openFor(lou), openFor(oli)], [[], []], 'not the buyer, not someone we told');
+  ai.behave = echoFit;
+  let d;
+  try { d = (await post(`/api/items/${kim}/draft`, { followup: r.id, message: 'stock_landed' })).json.item.draft; } finally { ai.behave = null; }
+  assert.match(d.reply, /Team Carbarn here\. The 2017 Toyota Prius S you asked about has arrived at our Lidcombe showroom and can be seen now\.\n\n[\s\S]*#inspection=onsite/);
+  assert.ok(!d.checks.some((c) => c.code === 'followup-new'), 'the news is the new thing');
+});
+
+test('a price drop replaces the landed news; a sale replaces that and offers two like it; the quiet nudge waits while news stands', async () => {
+  const kim = 'c:365';
+  const landed = openFor(kim)[0];
+  await restock(6, { auPublishPrice: 18500 });
+  followup.refreshFollowUps({ now: LATER() });
+  const price = openFor(kim)[0];
+  assert.deepEqual([openFor(kim).length, price?.kind, price?.data.from, price?.data.to, db.getFollowUp(landed.id).done_how], [1, 'stock_price', 18900, 18500, 'lapsed']);
+  // Nia asked about the Noah two and a half days ago: a quiet nudge is due; the Noah sells first.
+  const nia = replied(68, 'Nia', { inAt: NOW - 62 * HOUR, outAt: NOW - 61 * HOUR, stocks: ['1159'] });
+  await restock(1, { status: 'UNPUBLISHED', soldStatus: 'Sold', stockIn: 'Sold' });
+  followup.refreshFollowUps({ now: LATER() });
+  assert.deepEqual(openFor(nia).map((x) => x.kind), ['stock_sold'], 'the news, not the nudge');
+  const sold = openFor(nia)[0];
+  ai.behave = echoFit;
+  let d;
+  try { d = (await post(`/api/items/${nia}/draft`, { followup: sold.id, message: 'stock_sold' })).json.item.draft; } finally { ai.behave = null; }
+  assert.match(d.reply, /has now been sold\.\n\nWe have these, if one of them suits:\n\n2020 Toyota Noah Si, \$27,900, 70,000 km:\nhttps:\/\/www\.carbarn\.com\.au\/vehicles\/toyota\/noah\/zrr80w\/1160/);
+  db.closeFollowUp(sold.id, 'copied');
+  followup.refreshFollowUps({ now: LATER() });
+  assert.deepEqual(openFor(nia), [], 'no quiet nudge on the silence the news answered');
+});
+
 test('a Prompt on the reminder tells the AI the visit is still to come, not to ask how it went', async () => {
   const key = replied(64, 'Jo', { inText: '', inquiries: [bookingInquiry(tomorrowAt2(), { bookedAt: NOW - 3 * DAY })], ours: [[NOW - 3 * DAY + HOUR, 'Hello Jo, your inspection of the Hiace is booked. See you then.']] });
   followup.refreshFollowUps({ now: fourToday() + 30 * MIN });
