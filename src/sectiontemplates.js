@@ -36,8 +36,9 @@ export const SIGNALS = [
   ...Object.keys(SITUATIONS), 'general',
   'first reply', 'later reply', 'buyer', 'far away', 'their offer', 'parting',
   'car', 'car available', 'car on its way', 'car sold', 'no car', 'any',
-  // a follow-up opened from the Follow-ups list (src/followup.js), and which kind
-  'follow-up', 'inspection passed', 'quiet',
+  // a follow-up opened from the Follow-ups list (src/followup.js), and which kind; a booking that
+  // has just come in through the website
+  'follow-up', 'inspection passed', 'quiet', 'reminder', 'booking made',
   // emails
   'eligibility', 'cost', 'deposit', 'timeline', 'payment', 'warranty', 'compliance_only', 'process', 'availability', 'eligible',
 ];
@@ -326,15 +327,23 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
   return { text: fillParts(part, values), part, values, tail: '', facts };
 }
 
+/** A part marked "@fit: no" is written by code, word for word, with no AI. */
+const byCode = (meta) => /^(no|0|off|false)$/i.test(String(meta?.fit || '').trim());
+
 /**
  * Writes one template for this conversation (see draftFromTemplate): fitted to the customer by
- * the AI when `fitWith` is given, with the owner's `instruction` (Prompt or Rewrite) if any.
+ * the AI when `fitWith` is given, with the owner's `instruction` (Prompt or Rewrite) if any. A
+ * part marked "@fit: no" (the booking confirmation, the reminder) is written word for word with
+ * no AI; only a Prompt or Rewrite sends it to the AI.
  */
 export async function draftSectionTemplate(item, { id, instruction = '', fitWith = null, now = Date.now(), save = true } = {}) {
   const file = fileFor(item);
-  const label = template(file)?.meta?.[id]?.label || id;
+  const meta = template(file)?.meta?.[id] || {};
+  const label = meta.label || id;
   const composed = await composeSectionTemplate(item, id, { now });
-  return draftFromTemplate(item, { id, label, composed, used: composed.facts, instruction, fitWith, save, file });
+  const plain = byCode(meta) && !instruction;
+  return draftFromTemplate(item, { id, label, composed, used: composed.facts, instruction, fitWith: plain ? null : fitWith, save, file,
+    ...(plain ? { okWords: `Written by code from your wording "${label}", with the facts from your records. No AI.` } : {}) });
 }
 
 /**

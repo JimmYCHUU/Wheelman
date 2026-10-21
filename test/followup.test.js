@@ -81,6 +81,8 @@ function replied(n, name, { inAt = NOW - 62 * HOUR, outAt = NOW - 61 * HOUR, inT
 }
 
 const refresh = () => followup.refreshFollowUps({ now: NOW });
+/** The AI stand-in answering a fitting with the message itself, markers kept. */
+const echoFit = (req) => { const m = (req.messages?.[1]?.content || '').match(/<<<\n([\s\S]*?)\n>>>/); return { reply: m ? m[1] : 'Hello {{NAME}},\n\nTeam Carbarn here.', next_step: '', facts_used: [], needs_human: [], hold: false }; };
 const openFor = (key) => db.openFollowUps().filter((r) => r.item_key === key);
 
 // ---- the settings -------------------------------------------------------------------------------
@@ -487,4 +489,15 @@ test('the booking in hand: the newest booking the customer made, and its facts',
   assert.deepEqual([values.booking_kind, values.booked_when, values.booked_time, values.address, values.if_onsite, values.if_online], ['inspection', 'tomorrow', '2 pm', '136 Frances Street, Lidcombe NSW 2141', true, false]);
   assert.equal(st.bookingInHand(items.itemFromKey('c:305')), null, 'no booking, nothing in hand');
   assert.equal((await st.composeSectionTemplate(items.itemFromKey('c:305'), 'price_question', { now: NOW })).values.booked_when, null);
+});
+
+test('a message marked @fit: no is written by code, word for word; a Prompt still goes to the AI', async () => {
+  const seenBefore = ai.seen.length;
+  const out = await post('/api/items/c:350/draft', { message: 'booking_confirmed' });
+  const d = out.json.item.draft;
+  assert.deepEqual([out.status, d?.status, d?.template, d?.provider, d?.model, ai.seen.length - seenBefore], [200, 'ready', 'booking_confirmed', 'none', 'your wording', 0]);
+  assert.match(d.checks.map((c) => c.message).join('\n'), /Written by code from your wording "Booking confirmed"/);
+  ai.behave = echoFit;
+  try { assert.equal((await post('/api/items/c:350/draft', { message: 'booking_confirmed', instruction: 'add that we are closed on Sunday' })).status, 200); } finally { ai.behave = null; }
+  assert.equal(ai.seen.length - seenBefore, 1, 'a Prompt goes to the AI');
 });

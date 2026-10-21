@@ -9,6 +9,8 @@
 #   @fits:   when it is offered: the conversation must show at least one of these (see below)
 #   @needs:  (optional) it is offered only when all of these are true too
 #   @not:    (optional) never offered when one of these is true
+#   @fit: no (optional) written by code, word for word, with no AI; a Prompt or Rewrite still
+#            goes to the AI
 # Only the messages that fit the conversation are offered; the best fit comes first.
 #
 # What the conversation can show (for @fits, @needs and @not):
@@ -310,6 +312,22 @@ How importing works:
 {greeting}
 
 Thank you for letting us know. If you are looking again in future, we would be glad to help.
+
+{sign_off}
+
+# A booking that has just come in through the website: confirmed by code, word for word.
+===== booking_confirmed =====
+@label: Booking confirmed
+@fits: booking made, inspection_booking
+@not: buyer, car sold
+@fit: no
+{greeting}
+
+Team Carbarn here. Your {booking_kind} of the {car} is booked for {booked_when} at {booked_time}.
+
+{if_onsite}We are at {address}. If the time no longer suits, let us know and we will find another.
+
+{if_online}We will call you at that time on this number and walk you around the car on video.
 
 {sign_off}
 
