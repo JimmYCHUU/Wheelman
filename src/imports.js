@@ -388,6 +388,7 @@ function askPlan(item, w, instruction) {
       `- the greeting, and thank them for their ${w.car || 'import'} enquiry;`,
       '- if they asked something in their own words, answer it in a sentence or two from the supplied facts;',
       '- ask for the details listed above, in one sentence;',
+      w.given.length ? `- They have already told us: ${wantedLine(w)}. Do not ask for those again, and do not read them back.` : '',
       '- say that if a particular one interests them they can send a target bid or overall budget, and we will work out an estimated landed cost before placing anything;',
       '- say that once we have those details we will keep the search focused and let them know when a suitable one comes up.',
       first ? 'Our address, phone number, opening hours and sign-off are added below your text automatically. Do not write them, and do not point to them.' : '',

@@ -460,7 +460,7 @@ export function standardPlan(item, vehicle, { gone = false, owner = false, inspe
     `${holds.slice(0, -1).join(', ')} and ${holds[holds.length - 1]}.`,
     'So write only:',
     '- the greeting line, then',
-    "- one or two short sentences that answer what the customer asked, then one sentence that offers the next step named under THIS CUSTOMER'S NEXT STEP, in words. Under 70 words in all.",
+    "- one or two short sentences: the first names what this customer gave us (their question, their figure, their car, their situation) and answers it, then one sentence that offers the next step named under THIS CUSTOMER'S NEXT STEP, in words. Under 70 words in all.",
     `Do not write ${item.situation.all.includes('location_hours') ? '' : 'the address, the suburb, the opening hours, '}a map link${vehicleUrl ? ", the vehicle's page link" : ''}${inspectionUrl ? ', the booking link' : ''} or a phone number: the block gives them. Do not add a closing line after the next step: no "let us know", no "feel free", no "any questions".`,
     'Never point at the block: no "below", "see below" or "details are below". Each sentence must stand on its own.',
     item.situation.all.includes('location_hours')

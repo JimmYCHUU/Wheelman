@@ -150,6 +150,11 @@ export function numbersIn(text) {
   return out;
 }
 
+/** A sentence that names a figure as the customer's own ("your offer of $15,000", "hoping for $30,000"), not as ours. */
+export const OWNED_BY_CUSTOMER = /\b(your (offer|budget|figure|proposal|limit|max(imum)?|price)|(offer|budget|figure) of|you (mentioned|offered|proposed|suggested|named|have|are offering|can do|hoped|were hoping)|hoping (for|to get))\b/i;
+/** Beside the customer's figure these mean we took it: still refused. */
+const TAKES_FIGURE = /\b(accept\w*|agree\w*|a deal|deal\b|done|match\w*|meet\w*|confirm\w*|take it|we can do|can do that)\b/i;
+
 /**
  * Figures in a reply that cannot be traced to a source.
  * - trustedText: the dealership's records, our own past messages, staff notes and instructions.
@@ -209,7 +214,12 @@ function figureProblems(replyBody, trustedText, customerText = '', policyText = 
         const sentence = bodySentences.find((s) => s.includes(m[0].trim())) || body;
         if (usedInContext(n, sentence, policyText)) continue;
       }
-      if (fromCustomer.has(n)) { customerOnly.push(raw); continue; }
+      if (fromCustomer.has(n)) {
+        const sentence = bodySentences.find((s) => s.includes(m[0].trim())) || body;
+        if (OWNED_BY_CUSTOMER.test(sentence) && !TAKES_FIGURE.test(sentence)) continue;
+        customerOnly.push(raw);
+        continue;
+      }
       problems.push(raw);
       continue;
     }

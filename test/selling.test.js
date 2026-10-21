@@ -200,6 +200,27 @@ test('the lines the AI is told', () => {
   assert.match(quiet, /No urgency of any kind/);
 });
 
+test('a figure the customer gave may be named as theirs, never as ours', () => {
+  const facts = 'Vehicle: 2021 Toyota Noah X. Advertised price $28,900.';
+  const run = (body, customerText, extra = {}) => checks.checkDraft({ reply: body, body, allowedText: facts, customerText, ...extra }).map((c) => `${c.level}:${c.code}`);
+  assert.ok(!run('Thank you for your offer of $15,000. Regarding your offer, [PRICE?].', 'can do 15k if you are neg').includes('fail:customer-figure'));
+  assert.ok(!run('You were hoping for $30,000 for your STI. Our offer of $27,000 stands.', 'I was hoping to get a minimum of $30,000', { allowedText: `${facts}\nWe can offer you $27,000 for your STI.` }).includes('fail:customer-figure'));
+  assert.ok(run('We can do $15,000 for you.', 'can do 15k').includes('fail:customer-figure'));
+  assert.ok(run('Thank you for your offer of $15,000, which we can accept.', 'can do 15k').includes('fail:customer-figure'), 'an acceptance verb beside their figure still fails');
+  assert.ok(run('Your $15,000 offer is a deal.', 'can do 15k').includes('fail:customer-figure'));
+});
+
+test('the voice: the first sentence names what the person gave, and a form is already read', () => {
+  const voice = promptModule.systemPrompt('sms');
+  assert.match(voice, /The first sentence names what this person just gave us/);
+  assert.match(voice, /never the opener for an offer, a location, a trade-in or a thank-you/);
+  assert.match(voice, /End on one step chosen from what they said/);
+  assert.match(voice, /\| Thank you for your message \/ Thank you for your enquiry \| \(nothing: name what they gave us\) \|/);
+  assert.match(voice, /A lead form's fields and the engine's auto-reply are the customer's words/);
+  assert.doesNotMatch(voice, /The first sentence answers what was asked\./);
+  assert.match(voice, /Never match slang, abbreviations, emoji or capitals\./, 'kept word for word');
+});
+
 test('the checks refuse pressure and unbacked claims, and warn on filler, two questions and no next step', () => {
   const facts = 'Vehicle: 2021 Toyota Noah X. Advertised price $28,900. Odometer 60,000 km. Seats 8.';
   const run = (body, extra = {}) => checks.checkDraft({ reply: body, body, allowedText: facts, ...extra });
