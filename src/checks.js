@@ -371,7 +371,37 @@ export function retryNote(checks, { channel = 'sms' } = {}) {
     + (fails.some((c) => c.code === 'wording' && /customer's offer/.test(c.message)) ? '\nNever say that their offer is too low, below what we accept, or that we cannot match or accept it. Thank them for the offer and leave the figure to a person: "Regarding your offer, [PRICE?]."' : '')
     + (fails.some((c) => c.code === 'insider-leak') ? '\nNever tell the customer what our records show about them: no score, no status, no source, no other dealers, no finance decision. Use it only to choose what to say.' : '')
     + (fails.some((c) => c.code === 'old-address') ? `\nNever write our old address or a map link. Our address is ${CURRENT_ADDRESS}. The block gives it on a first reply; write it yourself only when the customer asked where we are.` : '')
-    + (fails.some((c) => c.code === 'claim') ? '\nSay nothing about accidents, condition, approval, cooling-off or warranty beyond what VEHICLE FACTS and BUSINESS FACTS state, in their words.' : '');
+    + (fails.some((c) => c.code === 'claim') ? '\nSay nothing about accidents, condition, approval, cooling-off or warranty beyond what VEHICLE FACTS and BUSINESS FACTS state, in their words.' : '')
+    + (fails.some((c) => c.code === 'followup-identify') ? '\nName Carbarn in the first sentence: "Team Carbarn here, …". The customer did not write first and must see at once who this is from.' : '')
+    + (fails.some((c) => c.code === 'followup-banned') ? '\nNever "just checking in", "just following up" or "touching base", and never ask whether they came or made it: write as if the visit happened and ask how it went, or offer the one new thing.' : '');
+}
+
+// ---- a follow-up: Carbarn named, nothing filler, never "did you come" ---------------------------
+
+const GREETING_LINE = /^\s*(good (morning|afternoon|evening)|hello|hi)\b[^\n]*\n+/i;
+const FOLLOWUP_BANNED = /\bjust (following up|checking in|touching base|reaching out)\b|\bfollowing up on\b|\bchecking in (on|to|about)\b|\btouch(ing)? base\b|\bdid you (end up )?(come|coming|make it|making it|visit|attend|get (here|there|in|down|along))\b|\bwere you able to (come|make it|visit|attend|get (here|there|in))\b|\bdid you (manage|get) to (come|visit|make it)\b/i;
+const FOLLOWUP_NEW = /export certificate|auction sheet|\bvideo\b|walkaround|similar|also have|another|come (in|and see|down|by)|welcome to|\bbook\b|deposit|#inspection=/i;
+
+/**
+ * The checks only a follow-up gets (src/followup.js). followup-identify: Carbarn is not named in
+ * the first sentence after the greeting (a fail). followup-banned: "just checking in" and its kin,
+ * or asking whether they came (a fail). followup-new: nothing new is offered (a warning, not for
+ * a reminder). followup-long: over fifty words, links aside (a warning, not for a reminder).
+ */
+export function followUpChecks({ body, kind = '' }) {
+  const out = [];
+  const text = String(body || '').replace(/\r/g, '').trim();
+  const first = text.replace(GREETING_LINE, '').split(/(?<=[.!?])\s|\n/)[0] || '';
+  if (!/carbarn/i.test(first)) out.push({ level: 'fail', code: 'followup-identify', tokens: [], message: 'A follow-up names us in its first sentence: "Team Carbarn here, …". The customer did not write first, so they must see at once who this is from.' });
+  const banned = text.match(FOLLOWUP_BANNED);
+  if (banned) out.push({ level: 'fail', code: 'followup-banned', tokens: [banned[0]], message: `"${banned[0]}": never "just checking in" or its kin, and never ask whether they came or made it. Write as if the visit happened and ask how it went, or offer the one new thing.` });
+  if (kind !== 'reminder') {
+    // "Were you able to come in?" asks about the past: it offers nothing, so it does not count here.
+    if (!FOLLOWUP_NEW.test(text.replace(FOLLOWUP_BANNED, ''))) out.push({ level: 'warn', code: 'followup-new', tokens: [], message: 'Nothing new is offered. A follow-up carries one new thing: the documents, the walkaround video, a similar car, a time to come in, or the holding deposit after a visit.' });
+    const words = wordCount(text.replace(/https?:\/\/\S+/g, ''));
+    if (words > 50) out.push({ level: 'warn', code: 'followup-long', tokens: [], message: `${words} words. A follow-up is under 50: one new thing, one invitation, stop.` });
+  }
+  return out;
 }
 
 const TIME_CODES = new Set(['time-passed', 'day-mismatch', 'promise']);

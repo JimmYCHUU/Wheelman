@@ -203,6 +203,19 @@ export const config = {
   draftMaxAgeHours: num(env.DRAFT_MAX_AGE_HOURS, 72),
   // A message older than this still shows under Waiting, but no suggestion is written until asked.
   autoDraftMaxAgeHours: num(env.AUTO_DRAFT_MAX_AGE_HOURS, 24),
+  // Follow-ups: when a conversation we replied to last is put in front of you again (src/followup.js).
+  // Quiet: hours after our last message with nothing from them. After an inspection: hours after
+  // the booked time. Max age: our last message older than this gets no follow-up. The reminder
+  // hour is the hour (Sydney) of the reminder the day before; stock days is how far back a change
+  // to a car reaches the people who asked about it.
+  followUp: {
+    on: !/^(0|false|no|off)$/i.test((env.FOLLOW_UPS ?? '1').trim()),
+    quietHours: num(env.FOLLOW_UP_QUIET_HOURS, 60),
+    afterInspectionHours: num(env.FOLLOW_UP_AFTER_INSPECTION_HOURS, 3),
+    maxAgeDays: num(env.FOLLOW_UP_MAX_AGE_DAYS, 14),
+    reminderHour: num(env.FOLLOW_UP_REMINDER_HOUR, 16),
+    stockDays: num(env.FOLLOW_UP_STOCK_DAYS, 30),
+  },
   signOff: (env.SIGN_OFF ?? 'Regards,\\nTeam Carbarn').replace(/\\n/g, '\n').trim(),
   // The name on the last lines of the standard first reply (voice/first-reply.md).
   firstReplySender: (env.FIRST_REPLY_SENDER || 'Team Carbarn').trim(),

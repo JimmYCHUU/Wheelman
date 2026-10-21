@@ -63,6 +63,25 @@ CREATE TABLE IF NOT EXISTS dismissed (
   PRIMARY KEY (item_key, anchor_key)
 );
 
+-- Follow-ups: a reason to write to a customer we replied to last (an inspection's booked time has
+-- passed, a quiet customer, news about their car). One row per occasion, raised once ever; the
+-- draft for it is kept under the anchor "fu:<id>". done_how: copied, dismissed, answered (the
+-- customer wrote after since_at), lapsed (the reason stopped holding); NULL while it is open.
+CREATE TABLE IF NOT EXISTS followups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_key TEXT NOT NULL, lead_id INTEGER,
+  kind TEXT NOT NULL,
+  occasion TEXT NOT NULL,
+  since_at INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  template TEXT NOT NULL,
+  due_at INTEGER NOT NULL, created_at INTEGER NOT NULL,
+  done_at INTEGER, done_how TEXT, draft_id INTEGER,
+  data_json TEXT,
+  UNIQUE(item_key, occasion)
+);
+CREATE INDEX IF NOT EXISTS followups_open ON followups(done_at, due_at);
+
 -- Conversations the user has opened. Keyed by the newest customer message, so a new message counts as unread again.
 CREATE TABLE IF NOT EXISTS seen (
   item_key TEXT NOT NULL, anchor_key TEXT NOT NULL, at INTEGER,
@@ -392,6 +411,7 @@ export function oldRowsStamp() {
       (SELECT COUNT(*) || ':' || IFNULL(MAX(id), 0) FROM messages) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(id), 0) || ':' || IFNULL(MAX(sent_at), 0) || ':' || IFNULL(SUM(LENGTH(status)), 0) FROM drafts) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(rowid), 0) || ':' || IFNULL(MAX(at), 0) FROM dismissed) || '/' ||
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(id), 0) || ':' || IFNULL(MAX(done_at), 0) FROM followups) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(at), 0) FROM seen) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(at), 0) FROM item_rulings) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(at), 0) FROM item_moves) || '/' ||
@@ -676,12 +696,14 @@ export function rekeyLeadItems() {
             UNION SELECT item_key FROM dismissed WHERE item_key LIKE 'l:%'
             UNION SELECT item_key FROM seen WHERE item_key LIKE 'l:%'
             UNION SELECT item_key FROM item_moves WHERE item_key LIKE 'l:%'
+            UNION SELECT item_key FROM followups WHERE item_key LIKE 'l:%'
             UNION SELECT item_key FROM learned WHERE item_key LIKE 'l:%') k
       JOIN leads l ON l.id = CAST(substr(k.item_key, 3) AS INTEGER)
      WHERE l.conversation_id IS NOT NULL`).all();
   for (const r of rows) {
     d.prepare('UPDATE drafts SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
     d.prepare('UPDATE learned SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
+    d.prepare('UPDATE OR REPLACE followups SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
     d.prepare('UPDATE OR REPLACE dismissed SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
     d.prepare('UPDATE OR REPLACE seen SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
     d.prepare('UPDATE OR REPLACE item_moves SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
@@ -857,7 +879,8 @@ export function getDraft(id) {
 }
 
 export function draftsAwaitingOutcome() {
-  return stmt("SELECT * FROM drafts WHERE status = 'ready' AND sent_text IS NULL AND (item_key LIKE 'c:%' OR item_key LIKE 'l:%' OR item_key LIKE 'em:%') ORDER BY id DESC LIMIT 500").all().map(parseDraft);
+  // A follow-up's draft (anchor "fu:<id>") answers no customer message: its outcome is its own row.
+  return stmt("SELECT * FROM drafts WHERE status = 'ready' AND sent_text IS NULL AND anchor_key NOT LIKE 'fu:%' AND (item_key LIKE 'c:%' OR item_key LIKE 'l:%' OR item_key LIKE 'em:%') ORDER BY id DESC LIMIT 500").all().map(parseDraft);
 }
 
 export function recordOutcome(id, { sentText, sentBy, sentAt, similarity }) {
@@ -873,6 +896,12 @@ export function markSuperseded(id) {
 /** Every Wheelman suggestion written for one conversation, for telling its own text from staff writing. */
 export function draftTextsFor(itemKey) {
   return stmt("SELECT reply, copied_text FROM drafts WHERE item_key = ? AND reply IS NOT NULL AND reply != ''").all(itemKey);
+}
+
+/** The texts of the follow-ups written for one conversation (drafts under fu:), as written and as copied. */
+export function followUpDraftTextsFor(itemKey) {
+  return stmt("SELECT reply, copied_text FROM drafts WHERE item_key = ? AND anchor_key LIKE 'fu:%'").all(itemKey)
+    .flatMap((r) => [r.reply, r.copied_text]).filter((t) => typeof t === 'string' && t.trim());
 }
 
 export function setDraftRating(id, rating) {
@@ -899,6 +928,53 @@ export function isSeen(itemKey, anchorKey) {
 /** Undoes Dismiss: the conversation goes back to Waiting. */
 export function undismiss(itemKey) {
   stmt('DELETE FROM dismissed WHERE item_key = ?').run(itemKey);
+}
+
+/** When this conversation was last dismissed, in milliseconds; 0 when it never was. */
+export function lastDismissedAt(itemKey) {
+  return stmt('SELECT IFNULL(MAX(at), 0) AS at FROM dismissed WHERE item_key = ?').get(itemKey).at || 0;
+}
+
+// ---- follow-ups ------------------------------------------------------------
+
+const parseFollowUp = (r) => r && ({ ...r, data: r.data_json ? JSON.parse(r.data_json) : {} });
+
+/** Raises one occasion. The same occasion for the same conversation is never raised twice: null then. */
+export function insertFollowUp({ itemKey, leadId = null, kind, occasion, sinceAt, reason, template, dueAt, data = null, now = Date.now() }) {
+  const info = stmt(`
+    INSERT OR IGNORE INTO followups(item_key, lead_id, kind, occasion, since_at, reason, template, due_at, created_at, data_json)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(itemKey, leadId ?? null, kind, occasion, sinceAt, reason, template, dueAt, now, data ? JSON.stringify(data) : null);
+  return info.changes ? Number(info.lastInsertRowid) : null;
+}
+
+export function getFollowUp(id) {
+  return parseFollowUp(stmt('SELECT * FROM followups WHERE id = ?').get(Number(id))) || null;
+}
+
+/** Every follow-up ever raised for one conversation, oldest first. */
+export function followUpsFor(itemKey) {
+  return stmt('SELECT * FROM followups WHERE item_key = ? ORDER BY id').all(itemKey).map(parseFollowUp);
+}
+
+/** The follow-ups that are due and not yet dealt with, the newest due first. */
+export function openFollowUps() {
+  return stmt('SELECT * FROM followups WHERE done_at IS NULL ORDER BY due_at DESC, id DESC').all().map(parseFollowUp);
+}
+
+/** The open follow-up for one conversation, if any (the newest when there are several). */
+export function openFollowUpFor(itemKey) {
+  return parseFollowUp(stmt('SELECT * FROM followups WHERE item_key = ? AND done_at IS NULL ORDER BY due_at DESC, id DESC LIMIT 1').get(itemKey)) || null;
+}
+
+/** Deals with a follow-up: copied or dismissed by the owner, answered by the customer, or lapsed. */
+export function closeFollowUp(id, how, { draftId = null, now = Date.now() } = {}) {
+  stmt('UPDATE followups SET done_at = ?, done_how = ?, draft_id = COALESCE(?, draft_id) WHERE id = ?').run(now, how, draftId, Number(id));
+}
+
+/** Put back: the follow-up is due again. */
+export function reopenFollowUp(id) {
+  stmt('UPDATE followups SET done_at = NULL, done_how = NULL WHERE id = ?').run(Number(id));
 }
 
 // ---- the owner's rulings: an import enquiry or not, and which section -------------------------
@@ -1310,11 +1386,13 @@ export function rekeyPhoneThreads() {
       FROM (SELECT item_key FROM drafts WHERE item_key LIKE 'ph:%'
             UNION SELECT item_key FROM dismissed WHERE item_key LIKE 'ph:%'
             UNION SELECT item_key FROM seen WHERE item_key LIKE 'ph:%'
-            UNION SELECT item_key FROM item_moves WHERE item_key LIKE 'ph:%') k
+            UNION SELECT item_key FROM item_moves WHERE item_key LIKE 'ph:%'
+            UNION SELECT item_key FROM followups WHERE item_key LIKE 'ph:%') k
       JOIN phone_threads t ON t.id = CAST(substr(k.item_key, 4) AS INTEGER)
      WHERE t.conversation_id IS NOT NULL OR t.lead_id IS NOT NULL`).all();
   for (const r of rows) {
     d.prepare('UPDATE drafts SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
+    d.prepare('UPDATE OR REPLACE followups SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
     d.prepare('UPDATE OR REPLACE dismissed SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
     d.prepare('UPDATE OR REPLACE seen SET item_key = ? WHERE item_key = ?').run(r.new, r.old);
     d.prepare('UPDATE OR REPLACE item_moves SET item_key = ? WHERE item_key = ?').run(r.new, r.old);

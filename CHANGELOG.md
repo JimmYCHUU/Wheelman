@@ -38,6 +38,24 @@ and versions follow `MAJOR.MINOR.PATCH`.
   README say so; nothing else changed in the sending.
 
 ### Added
+- **Follow-ups: Wheelman writes again when there is a reason to.** A third chip in the Dashboard
+  section, **Follow-ups**, fills itself with the conversations we replied to last that are due a
+  follow-up, the reason on the row: **Inspection passed** (a website booking's time has gone by,
+  three hours on) and **Quiet 3 days** (nothing back for 60 hours after our reply). The
+  follow-up is written when you open the conversation from that list, not ahead of time: how
+  they found the car, written as if the visit happened, with the refundable holding deposit
+  offered once; or one nudge with one new thing, whichever they have not had (the export
+  certificate and auction sheet, the walkaround video, a similar car, or a time to come in with
+  the booking link). Both are messages of yours in `voice/dashboard-messages.md`, fitted by the
+  AI with every fact kept from it, and held to the rules: Carbarn in the first sentence, never
+  "just checking in" or "did you come", greeting and sign-off always, about 50 words. Never for
+  a buyer, after a no or an opt-out, for a dismissed conversation, for a message of ours older
+  than 14 days, or twice for the same silence; due times land inside 9 am to 6 pm Sydney. Copy
+  counts as done, with Put back; Dismiss, in the Customer panel, has Undo; a customer who writes
+  again closes it by itself. Nothing is sent, and nothing written for a follow-up is learned
+  from. Settings: `FOLLOW_UPS`, `FOLLOW_UP_QUIET_HOURS`, `FOLLOW_UP_AFTER_INSPECTION_HOURS`,
+  `FOLLOW_UP_MAX_AGE_DAYS`. (The owner, 20 Oct 2026: "for this customer I want to follow up how
+  his inspection went … it would be wise not to ask that directly".)
 - **"Which message?" in every section, and your Prompt changes the message picked.** Dashboard,
   Marketplace and Import Query each have a list of your messages for that kind of conversation,
   only the ones that fit it, the best fit first (a price question offers Price question, a

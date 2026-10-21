@@ -30,6 +30,8 @@ export function rowTags(r, state) {
   const tags = [];
   const order = r.section === 'auction';
   const setAside = r.dismissed && r.state === 'awaiting';
+  // A row on the Follow-ups list: why it is due. Rows elsewhere carry nothing about follow-ups.
+  if (r.followUp && !r.followUp.done) tags.push({ text: r.followUp.reason, tone: 'warning' });
   if (order && r.state !== TAB_STATE[state.tab] && ORDER_LIST[r.state]) tags.push({ text: ORDER_LIST[r.state], tone: 'neutral' });
   if (r.phoneOnly) tags.push({ text: t('tag.phoneOnly'), tone: 'neutral' });
   // An email thread with a message Gmail had folded, so part of it could not be read.
@@ -104,7 +106,8 @@ export function mountListColumn(root, store, actions) {
   store.select((s) => ({ section: s.section, tab: s.tab, tick: s.listTick }), ({ section, tab }) => {
     const sec = SECTIONS[section];
     const n = newCount(state, section);
-    filters.update({ items: sec.tabs.map((tb) => (tb ? { id: tb.id, label: tb.label, count: tb.counted ? n : 0, srCount: ' ' + t(`row.newIn.${section}`, { n }) } : null)), value: tab });
+    // The Waiting chip counts what is new; the Follow-ups chip counts what is due.
+    filters.update({ items: sec.tabs.map((tb) => (tb ? { id: tb.id, label: tb.label, count: tb.counted ? n : tb.countOf ? (state.counts[tb.countOf] || 0) : 0, srCount: ' ' + (tb.countOf ? t('row.due', { n: state.counts[tb.countOf] || 0 }) : t(`row.newIn.${section}`, { n })) } : null)), value: tab });
     search.placeholder = sec.search.placeholder;
     if (state.q !== search.value) search.value = state.q;
   });
@@ -129,7 +132,7 @@ export function mountListColumn(root, store, actions) {
       const row = Row({
         key: r.key, name: r.name, title: r.phone || r.email || sec.unknown, time: r.lastAt, car: (state.section !== 'dashboard') ? r.car : '',
         tags: rowTags(r, state), prefix: !order && r.preview.who === 'us' ? t('row.you') : '', preview, unread,
-        selected: r.key === state.selected, onOpen: actions.open,
+        selected: r.key === state.selected, onOpen: (key) => actions.open(key, r.followUp && !r.followUp.done ? r.followUp.id : null),
       });
       if (!state.selected && i === 0) row.tabIndex = 0;
       return row;

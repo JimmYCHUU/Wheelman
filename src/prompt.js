@@ -549,6 +549,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     : item.isFirstReply
       ? 'THIS IS: our first written reply to this customer.'
       : `THIS IS: a reply inside an ongoing conversation. Our last message was ${lastUs ? ago(now - lastUs.at) : 'some time'} ago.`);
+  if (item.followUp) P.push('This one is a follow-up our staff asked for, not a reply: see FOLLOW-UP below.');
   if (item.pastBuyer) {
     P.push(`RETURNING CUSTOMER: our records show they bought ${redact(item.pastBuyer.title, lead)} from us${item.pastBuyer.soldAt ? ` (sale recorded ${formatDay(sydneyDay(item.pastBuyer.soldAt))})` : ''}. Answer what they are asking now.`);
   }
@@ -762,8 +763,29 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     P.push(told);
   }
 
+  // A follow-up our staff asked for (src/followup.js): there is no new message to answer. The AI
+  // is told why we are writing, what this customer has already been offered, and the rules.
+  if (item.followUp) {
+    const fu = item.followUp;
+    const oursText = item.timeline.filter((e) => e.who === 'us' && !e.internal && !e.auto && e.text).map((e) => e.text).join('\n');
+    const offered = [
+      [/\bdeposit\b/i, 'the holding deposit'], [/\b(video|walkaround)\b/i, 'the walkaround video'],
+      [/export certificate|auction sheet/i, 'the export certificate or auction sheet'],
+      // A time to come in counts once the booking link went out, as src/sectiontemplates.js reads it.
+      [/book a time|#inspection=/i, 'a time to come in, with the booking link'],
+    ].filter(([re]) => re.test(oursText)).map(([, w]) => w);
+    const lastTheirs = [...item.timeline].reverse().find((e) => e.who === 'customer' && (e.text || e.event));
+    P.push('\n=== FOLLOW-UP ===');
+    P.push(`This is a follow-up our staff asked for, not a reply: the customer has not written since our last message${lastUs ? ` ${ago(now - lastUs.at)} ago` : ''}. Reason: ${fu.reason}${fu.data?.bookedAt ? ` (their ${fu.data.kind === 'test_drive' ? 'test drive' : 'inspection'} was booked for ${formatSydney(fu.data.bookedAt)})` : ''}.`);
+    P.push(`Already offered to this customer in this conversation: ${offered.length ? offered.join(', ') : 'nothing yet'}.`);
+    P.push('Name us in the first sentence ("Team Carbarn here"). Write as if the visit happened: ask how it went, never whether they came or made it. Add nothing they have already been offered; the message carries the one new thing. No urgency beyond the holding deposit when the message carries it. Never "just checking in", "just following up" or "touching base". Under 50 words. If their last message was a no, write nothing and set hold to true.');
+    P.push('\n=== THERE IS NO NEW MESSAGE ===');
+    P.push(lastTheirs
+      ? `Their last message was:\n<customer_message>\n${mask(lastTheirs.event ? `(${redact(lastTheirs.event, lead)})` : maskCustomerSignOff(redact(lastTheirs.text, lead)))}\n</customer_message>`
+      : 'They have not written to us at all: they booked through the website.');
+  }
   // A message of ours fitted when nobody is waiting has nothing to answer.
-  if (!fitting || pendingRedacted.length) {
+  if (!item.followUp && (!fitting || pendingRedacted.length)) {
     P.push('\n=== THE CUSTOMER IS WAITING FOR A REPLY TO ===');
     P.push(pendingRedacted.map((t) => `<customer_message>\n${t}\n</customer_message>`).join('\n'));
   }

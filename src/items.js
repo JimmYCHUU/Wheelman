@@ -1,10 +1,10 @@
 // Builds the list of "work items": customers who have said something and are waiting for a reply.
 
-import { openDb, getLead, getLeadByConversation, getLeadByPhone, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor, getMailThread, getMailMessages, listMailThreads, itemRuling, itemMove, movedKeys, getAuctionOrder, liveOrderCustomers } from './db.js';
+import { openDb, getLead, getLeadByConversation, getLeadByPhone, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor, getMailThread, getMailMessages, listMailThreads, itemRuling, itemMove, movedKeys, getAuctionOrder, liveOrderCustomers, getFollowUp, openFollowUpFor } from './db.js';
 import { orderKey, orderMarks, orderStatus, orderRow, occasionFor, listOrderRows, MESSAGES } from './orders.js';
 import { sameMessage, windowFor } from './phone.js';
 import { phoneKeys } from './normalize.js';
-import { readInquiry, isSilentInquiry, isReaction, isAcknowledgement, isOptOut, menuReply, sameText, squash, resolveStock, stockFromUrl, findUrls, unwrapRelay } from './text.js';
+import { readInquiry, bookingFrom, isSilentInquiry, isReaction, isAcknowledgement, isOptOut, menuReply, sameText, squash, resolveStock, stockFromUrl, findUrls, unwrapRelay } from './text.js';
 import { classify, labelFor } from './situations.js';
 import { importContext, judgedContext } from './imports.js';
 import { judgeImport, carIn } from './importjudge.js';
@@ -218,6 +218,8 @@ export function buildTimeline(lead, conversationId, { now = Date.now(), phone = 
       stockNo: inq.stockNo || '',
       url: inq.url || '',
       key: `i:${inq.id}`,
+      // A booking: when they are coming (the entry's own time is when they booked).
+      booking: bookingFrom(inq) || undefined,
     });
     // A staff note on the enquiry ("SMS sent", "Offered $1500") means somebody has dealt with it.
     for (const n of inq.staffNotes || []) {
@@ -808,6 +810,23 @@ export function itemFromKey(key, opts = {}) {
     : buildItem(m[1] === 'c' ? { conversationId: id } : { leadId: id });
   // The template picked from "Which message?" ('' is the reply to what they wrote); left out, none was picked.
   if (item && typeof opts.message === 'string') item.templatePick = opts.message;
+  // A follow-up in hand (opened from the Follow-ups list): its draft lives under its own anchor and
+  // is written from its template; it is never a first reply. A row that is open, copied or
+  // dismissed can be in hand (the page shows those three, with Put back); one closed because the
+  // customer wrote or the reason passed cannot. Otherwise the conversation only knows that a
+  // follow-up is due, in followUpDue, and keeps its own anchor.
+  if (item && /^[cl]:/.test(item.itemKey)) {
+    const row = opts.followUp ? getFollowUp(opts.followUp) : null;
+    if (row && row.item_key === item.itemKey && (!row.done_how || row.done_how === 'copied' || row.done_how === 'dismissed')) {
+      item.followUp = row;
+      item.anchorKey = `fu:${row.id}`;
+      if (typeof opts.message !== 'string') item.templatePick = row.template;
+      item.isFirstReply = false;
+      item.isNewEnquiry = false;
+    } else {
+      item.followUpDue = openFollowUpFor(item.itemKey) || undefined;
+    }
+  }
   return item;
 }
 

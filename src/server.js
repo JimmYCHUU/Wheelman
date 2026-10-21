@@ -5,7 +5,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 import { listItems, itemFromKey, orderRows } from './items.js';
-import { latestDraft, getDraft, dismiss, undismiss, isDismissed, setDraftRating, markSeen, isSeen, dataStamp, uncopy, addOrderMessage, removeOrderMessage, setItemRuling, clearItemRuling, setItemMove, clearItemMove } from './db.js';
+import { latestDraft, getDraft, dismiss, undismiss, isDismissed, setDraftRating, markSeen, isSeen, dataStamp, uncopy, addOrderMessage, removeOrderMessage, setItemRuling, clearItemRuling, setItemMove, clearItemMove, openFollowUps, getFollowUp, closeFollowUp, reopenFollowUp } from './db.js';
+import { stillDue, refreshFollowUps } from './followup.js';
 import { MESSAGES, messagesFor, wantedText, carTitle, lotName, lotPageUrl, cleanPaste } from './orders.js';
 import { draftOrderMessage, enquiryTemplates, enquiryOrder } from './ordermessages.js';
 import { templatesFor, hasSectionTemplate, draftSectionTemplate, sectionTemplateLabel } from './sectiontemplates.js';
@@ -160,6 +161,9 @@ function flagLevel(draft) {
   const c = (draft.checks || []).filter((x) => draft.edited === null || !x.tokens?.length || x.tokens.some((t) => text.includes(t)));
   return c.some((x) => x.level === 'fail') ? 'fail' : c.some((x) => x.level === 'input') ? 'input' : 'ok';
 }
+
+/** A follow-up as the page sees it: why it is due, and what became of it ('' while it is open). */
+const followUpOf = (r) => ({ id: r.id, kind: r.kind, reason: r.reason, dueAt: r.due_at, done: r.done_how || '', template: r.template });
 
 /** One row in the conversation list. Deliberately small. */
 function summary(item) {
@@ -349,6 +353,9 @@ function present(item) {
     autoDraft: item.autoDraft,
     autoReason: item.autoReason,
     firstReply: item.isFirstReply,
+    // The follow-up in hand (opened from the Follow-ups list: the anchor is then "fu:<id>"), or the
+    // one that is due for this conversation; null when there is none.
+    followUp: item.followUp ? followUpOf(item.followUp) : item.followUpDue ? followUpOf(item.followUpDue) : null,
     looking: lookingFor(item),
     // An ordinary enquiry read as an import enquiry (why, and the car), and the owner's ruling on it.
     judged: item.judged ? { sign: item.judged.sign, why: item.judged.why, car: item.judged.car?.title || '' } : null,
@@ -429,6 +436,21 @@ function enquiryRows() {
 }
 
 /**
+ * The Follow-ups list: every follow-up that is due and not yet dealt with, each with its
+ * conversation, the one due most recently first. Dashboard only; a row whose conversation has
+ * left the dashboard is left out here and closed by the worker's next pass.
+ */
+function followUpRows() {
+  const rows = [];
+  for (const r of openFollowUps()) {
+    const item = itemFromKey(r.item_key, { followUp: r.id });
+    if (!item || item.section !== 'dashboard') continue;
+    rows.push({ ...summary(item), followUp: followUpOf(r) });
+  }
+  return rows;
+}
+
+/**
  * The rows of one section, by tab. Every conversation ever stored is listed (hours = Infinity),
  * newest first, so an old thread with a new message comes to the top, as in any messaging app.
  * Built once and reused until something in the database is written; the auction lists also
@@ -455,6 +477,7 @@ function sectionRows(section, hours = Infinity) {
       waiting: [...rows.filter((r) => r.state === 'awaiting'), ...asks.waiting].sort(order),
       quiet: [...rows.filter((r) => r.state === 'answered'), ...asks.quiet].sort(order),
       other: [...rows.filter((r) => r.state === 'closed'), ...asks.other].sort(order),
+      followups: [],
     };
   } else {
     let all;
@@ -476,6 +499,9 @@ function sectionRows(section, hours = Infinity) {
       // Conversations we replied to last: not waiting, not set aside, simply going on.
       answered: all.filter((i) => i.state === 'answered').slice(0, LIST_LIMIT).map(summary),
       other: section === 'dashboard' ? all.filter((i) => i.state === 'other').slice(0, LIST_LIMIT).map(summary) : [],
+      // Conversations we replied to last that are due a follow-up (src/followup.js). The list of
+      // its own; nothing marks them in All.
+      followups: section === 'dashboard' ? followUpRows() : [],
     };
   }
   // Every conversation in one list, newest message first, whoever wrote it. A reply does not move
@@ -616,7 +642,7 @@ async function api(req, res, url) {
   }
 
   if (req.method === 'GET' && p === '/api/items') {
-    const tab = ['all', 'waiting', 'quiet', 'other'].includes(url.searchParams.get('tab')) ? url.searchParams.get('tab') : 'waiting';
+    const tab = ['all', 'waiting', 'quiet', 'other', 'followups'].includes(url.searchParams.get('tab')) ? url.searchParams.get('tab') : 'waiting';
     // Every conversation unless a window is asked for (hours=72 keeps the list to the last three days).
     const askedHours = Number(url.searchParams.get('hours'));
     const hours = askedHours > 0 ? askedHours : Infinity;
@@ -639,13 +665,14 @@ async function api(req, res, url) {
     // looks through every row of the list, or every order, and sends the matches.
     const limit = Math.max(1, Math.min(LIST_LIMIT, Number(url.searchParams.get('limit')) || LIST_PAGE));
     const q = String(url.searchParams.get('q') || '').trim().slice(0, 200);
-    const rows = q ? (everything || here[tab]).filter((r) => rowMatches(r, q)) : here[tab];
-    return send(res, 200, { items: rows.slice(0, limit), total: rows.length, everything, counts: { all: here.all.length, waiting: here.waiting.length, quiet: here.quiet.length, other: here.other.length }, sections, unread, section, hours: Number.isFinite(hours) ? hours : null, q });
+    const rows = q ? (everything || here[tab] || []).filter((r) => rowMatches(r, q)) : here[tab] || [];
+    return send(res, 200, { items: rows.slice(0, limit), total: rows.length, everything, counts: { all: here.all.length, waiting: here.waiting.length, quiet: here.quiet.length, other: here.other.length, followups: (here.followups || []).length }, sections, unread, section, hours: Number.isFinite(hours) ? hours : null, q });
   }
 
   if (req.method === 'POST' && p === '/api/sync') {
     await Promise.all([worker.runSync(), worker.runMarketplaceSync()]);
     worker.updateOutcomes();
+    if (config.followUp.on) { try { refreshFollowUps(); } catch (e) { logLine('followups', `Finding follow-ups failed: ${e.message}`); } }
     worker.draftWaiting().catch(() => {});
     return send(res, 200, worker.statusReport());
   }
@@ -654,7 +681,8 @@ async function api(req, res, url) {
   let m = p.match(itemRoute());
   if (req.method === 'GET' && m) {
     const asked = url.searchParams.has('message') ? url.searchParams.get('message') : undefined;
-    const item = itemFromKey(m[1], { message: m[1].startsWith('ao:') ? asked || '' : asked });
+    // A follow-up opened from the Follow-ups list comes with its id: the box then holds the follow-up.
+    const item = itemFromKey(m[1], { message: m[1].startsWith('ao:') ? asked || '' : asked, followUp: Number(url.searchParams.get('followup')) || undefined });
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
     return send(res, 200, { item: present(item) });
   }
@@ -712,9 +740,17 @@ async function api(req, res, url) {
   m = p.match(itemRoute('/draft'));
   if (req.method === 'POST' && m) {
     const body = await readBody(req);
-    const picked = { message: String(body.message || '') };
+    const picked = { message: String(body.message || ''), followUp: Number(body.followup) || undefined };
     const item = itemFromKey(m[1], picked);
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
+    // A follow-up is written only while it is still due: not once it was copied or dismissed, and
+    // not once the customer has written (then there is a message to answer instead).
+    if (picked.followUp) {
+      if (!item.followUp) return send(res, 404, { error: 'That follow-up was not found.' });
+      if (item.followUp.done_how) return send(res, 400, { error: 'This follow-up is done. Put it back first.' });
+      const still = stillDue(item, item.followUp);
+      if (!still.ok) { closeFollowUp(item.followUp.id, still.how); return send(res, 400, { error: still.why }); }
+    }
     const instruction = String(body.instruction || '').slice(0, 600);
     // The page is writing it now, with or without a prompt: nothing to wait for any more.
     worker.releaseItem(item.itemKey);
@@ -855,6 +891,18 @@ async function api(req, res, url) {
     return send(res, 200, { ok: true, item: present(itemFromKey(m[1]) || item) });
   }
 
+  // A follow-up: Dismiss takes it out of the Follow-ups list (the owner phoned them, say); Put back
+  // makes it due again, after Dismiss or after Copy. Nothing is deleted.
+  m = p.match(/^\/api\/followups\/(\d+)\/(dismiss|restore)$/);
+  if (req.method === 'POST' && m) {
+    const row = getFollowUp(Number(m[1]));
+    if (!row) return send(res, 404, { error: 'That follow-up was not found.' });
+    if (m[2] === 'dismiss') closeFollowUp(row.id, 'dismissed'); else reopenFollowUp(row.id);
+    const item = itemFromKey(row.item_key, { followUp: row.id });
+    if (!item) return send(res, 404, { error: 'That conversation was not found.' });
+    return send(res, 200, { ok: true, item: present(item) });
+  }
+
   // The owner pasted a message into an auction order: what the customer wrote on WhatsApp (a
   // reply is then suggested), or something we sent by hand (so the thread stays true).
   m = p.match(itemRoute('/paste'));
@@ -887,6 +935,9 @@ async function api(req, res, url) {
     if (!draft) return send(res, 404, { error: 'Suggestion not found.' });
     const item = itemFromKey(draft.item_key);
     const result = item ? onCopied(item, draft.id, String(body.text || '')) : { learned: false, why: 'conversation not found' };
+    // A follow-up that was copied is done: it leaves the Follow-ups list (and can be put back).
+    const fu = String(draft.anchor_key || '').match(/^fu:(\d+)$/);
+    if (fu) { closeFollowUp(Number(fu[1]), 'copied', { draftId: draft.id }); result.followUpDone = true; }
     return send(res, 200, { ok: true, ...result });
   }
 

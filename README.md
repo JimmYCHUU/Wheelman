@@ -321,7 +321,9 @@ customer's name or number typed into it is removed before the AI sees it, like e
 
 Thank-yous and laughter, login codes and missed-call notices, texts of ours that failed to
 send (the customer is still waiting), and messages more than a day old. Those older messages
-stay listed with **Write it now**.
+stay listed with **Write it now**. A conversation where we wrote last gets no reply either:
+when there is a reason to write again it appears under **Follow-ups** (see "Follow-ups" under
+The page), and the follow-up is written when you open it from there.
 
 | Setting in `.env` | What it does | Default |
 |---|---|---|
@@ -727,10 +729,13 @@ Every row is one conversation, newest first.
   stays under Waiting until a reply is sent.
 - **Blank to fill:** at the start of a row means the suggestion has a gap only you can fill.
 - **Check the reply:** means a figure or link in the suggestion is not in our records.
-- Two chips choose what is shown (Auction has its own three: To do, In progress, Finished):
+- Three chips choose what is shown (Auction has its own three: To do, In progress, Finished):
   - **All**: every conversation, newest message first, whoever wrote it. A dismissed one stays,
     marked.
   - **Waiting**: customers who said something and have not been answered.
+  - **Follow-ups** (Dashboard only): conversations we replied to last that are due a follow-up,
+    the reason on the row (**Inspection passed**, **Quiet 3 days**). The number on the chip is
+    how many are due; it is never counted as unread. See "Follow-ups" below.
   Texts from suppliers, couriers and marketers on the same phone are never listed.
 - The search box finds a name, part of a phone number, or a word from a message.
 - The list column shows a notice only for a problem that needs action now.
@@ -742,6 +747,57 @@ Every row is one conversation, newest first.
 - Small centred notes show dates, website events such as a booked inspection, and staff notes.
 - The strip under the customer's name shows the car: its first photo, price, kilometres and
   availability, **Photos and videos** with how many there are, and **Open listing**.
+
+### Follow-ups
+
+Wheelman writes when the customer wrote last. A conversation where our message is the last one
+used to get nothing more; now it is put in front of you again when there is a reason to write,
+under **Follow-ups** in the Dashboard section, the reason on the row. Two reasons so far:
+
+- **Inspection passed**: the customer booked an inspection or a test drive through the website
+  and the booked time has gone by (three hours after it, by default). The follow-up asks how
+  they found the car, written as if the visit happened and never whether they came, and offers
+  the refundable holding deposit as the way to take the car off the market, once.
+- **Quiet 3 days**: we replied and they have said nothing for 60 hours (by default). One nudge
+  with one new thing, whichever they have not been offered yet: the export certificate and the
+  auction sheet, the walkaround video, a similar car we have, or a time to come in with the
+  booking link. A booking for a day still to come holds the nudge back.
+
+A follow-up is never raised for a buyer, after a no or an opt-out, for a conversation you
+dismissed, for a message of ours older than 14 days, while a car has sold, or while another
+follow-up for the same silence stands; once we have texted twice in a row with nothing back
+(texts within fifteen minutes count as one), nothing more is raised. Rows appear when the
+follow-up is due, inside working hours: anything that falls due outside 9 am to 6 pm Sydney is
+due at the next 9 am. The first check after this upgrade does not fill the list with old
+conversations, for the same 14-day reason.
+
+Nothing is written ahead: the follow-up is written when you open the conversation from the
+Follow-ups list, so no AI request is spent on one you never open. Each kind is a message of
+yours in `voice/dashboard-messages.md` (**After the inspection** and **Follow-up: one new
+thing**), offered to a follow-up only and marked **(due now)** in Which message?, written with
+the conversation's facts and fitted to the customer by the AI with every fact kept from it, as
+any message there is; the deposit line and the four new-thing wordings are the `@deposit_offer:`
+and `@new_...:` lines at the top of that file. The AI is told it is a follow-up and held to it:
+Carbarn named in the first sentence, never "just checking in" or "did you come", greeting and
+sign-off always (even on a day we already wrote), about 50 words for a nudge. An answer that
+breaks a rule is sent back once. Nothing is sent by Wheelman, and nothing written for a
+follow-up is learned from.
+
+In the message box the editor is headed **Follow-up: Inspection passed** (or the reason it has).
+**Copy message** counts as done: the row leaves Follow-ups and the box offers **Put back in
+Follow-ups**. **Dismiss this follow-up**, in the Customer panel, takes it out too, for when you
+phoned them instead, with **Undo**; nothing is deleted. A customer who writes again closes the
+follow-up by itself, and the conversation is back under Waiting as usual. The same conversation
+opened from **All** says **A follow-up is due** with **Write the follow-up**, and writes nothing
+until you press it. (The owner, 20 Oct 2026: "for this customer I want to follow up how his
+inspection went … it would be wise not to ask that directly".)
+
+| Setting in `.env` | What it does | Default |
+|---|---|---|
+| `FOLLOW_UPS` | Whether follow-ups are found at all; `0` switches the list off | `1` |
+| `FOLLOW_UP_QUIET_HOURS` | Hours of silence after our reply before the quiet nudge is due | `60` |
+| `FOLLOW_UP_AFTER_INSPECTION_HOURS` | Hours after the booked time before "how did it go" is due | `3` |
+| `FOLLOW_UP_MAX_AGE_DAYS` | A message of ours older than this gets no follow-up | `14` |
 
 ### The message box
 
@@ -1330,7 +1386,8 @@ From dashboard leads and conversations, the website and the dashboard's records,
 import email threads sent from Gmail, each kind kept to itself (see the Import Query section).
 Never from Marketplace, never from the phone, and not from the Auction section: its messages
 come from a wording file, and what a customer wrote on WhatsApp is pasted in, not read from
-the dashboard.
+the dashboard. Never from a follow-up either: its wording is yours in
+`voice/dashboard-messages.md`, and copying one teaches nothing.
 
 Wheelman learns two different things from two different places. **What to say** comes from
 what the team really sends. **How to say it** comes from the two voices.

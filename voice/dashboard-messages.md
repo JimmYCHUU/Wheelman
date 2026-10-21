@@ -20,6 +20,8 @@
 #   car (a car of ours is in the conversation), car available (at the showroom now),
 #   car on its way (in Japan or at sea), car sold (sold, or held by another customer's deposit),
 #   no car, any (always offered)
+#   follow-up (a follow-up opened from the Follow-ups list), inspection passed (the booked time
+#     of their inspection or test drive has gone by), quiet (days without a reply to our message)
 #
 # Facts Wheelman fills in. A paragraph whose fact does not apply is left out:
 #   {greeting}           the greeting for the time of day with their name; left out when we have
@@ -38,12 +40,26 @@
 #   {stock_link} {finance_link} {warranty_link} {importing_link}   our website's pages
 #   {if_warranty}        keeps its paragraph only when the car includes the 5-year warranty
 #   {if_no_warranty}     keeps its paragraph only when it does not
+#   {booked_day} {booked_time}   on a follow-up after an inspection: "today", "yesterday" or
+#                        "on Wednesday 21 October", and "2 pm"
+#   {deposit_offer}      the holding-deposit line (@deposit_offer below), on a follow-up after an
+#                        inspection, only while the deposit has not been offered to them yet
+#   {new_thing}          on a follow-up to a quiet customer: the one thing they have not been
+#                        offered yet, in this order: the export certificate and auction sheet, the
+#                        walkaround video, a similar car we have, a time to come in (@new_... below)
 #   {if_word}            for any fact above: keeps its paragraph only when that fact applies, such
 #                        as {if_car_link} for a heading over the car's link
 #   [CAPITALS?]          a blank only you can fill in; the page highlights it
 #
 # The AI fits the message to the customer and what they last wrote. Every fact, link, figure and
 # blank above stays exactly as Wheelman put it in. Your Prompt changes the wording as you say.
+#
+# The lines below are the pieces the follow-up messages are built from. "\n" is a line break.
+@deposit_offer: A $1,000 refundable holding deposit takes it off the market for you; until then it stays for sale.
+@new_documents: We can send you the export certificate, which carries the odometer history, and the auction sheet:\n{documents}
+@new_video: There is a walkaround video of it here:\n{video_link}
+@new_similar: We also have a {similar_car} at {similar_price} with {similar_km}, if that is of interest:\n{similar_link}
+@new_visit: You are welcome to come and see it any day between 8 am and 5 pm. You can book a time here:\n{booking_link}
 
 ===== first_reply =====
 @label: First reply: the car
@@ -294,5 +310,31 @@ How importing works:
 {greeting}
 
 Thank you for letting us know. If you are looking again in future, we would be glad to help.
+
+{sign_off}
+
+# The follow-ups: offered only from the Follow-ups list, and always greeted and signed off, even
+# when we have already written that day. Never ask whether they came: ask how it went.
+===== after_inspection =====
+@label: After the inspection
+@fits: inspection passed
+@not: buyer, car sold
+{greeting}
+
+Team Carbarn here. How did you find the {car} {booked_day}?
+
+{deposit_offer}
+
+{sign_off}
+
+===== quiet_nudge =====
+@label: Follow-up: one new thing
+@fits: quiet
+@not: buyer, car sold
+{greeting}
+
+Team Carbarn here, following on from the {car}.
+
+{new_thing}
 
 {sign_off}

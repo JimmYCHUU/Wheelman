@@ -45,7 +45,10 @@ export const canLearnFrom = (itemKey) => /^(?:[cl]|em):\d+$/.test(String(itemKey
  * Whether this conversation teaches where it is listed now: one that can teach at all, and is not
  * in the Auction section. Nothing is learned from Auction, whatever the conversation came from.
  */
-export const teachesHere = (item) => !!item && canLearnFrom(item.itemKey) && item.section !== 'auction';
+export const teachesHere = (item) => !!item && canLearnFrom(item.itemKey) && item.section !== 'auction' && !/^fu:/.test(String(item.anchorKey || ''));
+/** A follow-up's suggestion (src/followup.js): it answers no customer message and teaches nothing. */
+const isFollowUp = (draft) => /^fu:\d+$/.test(String(draft?.anchor_key || '')) || !!draft?.context?.followUp;
+const FOLLOW_UP = 'a follow-up';
 /** A suggestion written while its conversation was in Auction teaches nothing, even after it is moved out. */
 const writtenInAuction = (draft) => draft?.context?.section === 'auction';
 const NOT_HERE = 'not a dashboard conversation or an import email';
@@ -106,6 +109,7 @@ function aboutOf(item, draft, upto) {
  */
 export function learnFrom(item, draft, finalText, source, { at = Date.now() } = {}) {
   if (!item || !draft || !teachesHere(item)) return { learned: false, why: notHereWhy(item) };
+  if (isFollowUp(draft)) return { learned: false, why: FOLLOW_UP };
   if (draft.item_key !== undefined && !canLearnFrom(draft.item_key)) return { learned: false, why: NOT_HERE };
   if (writtenInAuction(draft)) return { learned: false, why: 'written in the Auction section' };
   if (draft.rating === 'bad' && source === 'copied') return { learned: false, why: 'rated not usable' };
@@ -163,6 +167,8 @@ export function onCopied(item, draftId, text) {
   // A message for an auction order: the text is kept, because Wheelman cannot see WhatsApp and
   // this is its only record of what was said to the customer. Nothing is learned from it.
   if (/^ao:\d+$/.test(String(draft.item_key || ''))) { recordCopied(draftId, String(text || '').slice(0, 4000)); return { learned: false, why: 'an auction order' }; }
+  // A follow-up: the text is kept as the record of what was said; nothing is learned from it.
+  if (isFollowUp(draft)) { recordCopied(draftId, String(text || '').slice(0, 4000)); return { learned: false, why: FOLLOW_UP }; }
   // A Marketplace suggestion, or one for a text seen only on the phone: note that Copy was
   // pressed, keep none of the text, learn nothing.
   if (!canLearnFrom(draft.item_key) || !canLearnFrom(item?.itemKey)) { recordCopiedTime(draftId); return { learned: false, why: NOT_HERE }; }
@@ -186,7 +192,7 @@ export function onEdited(item, draftId, text) {
   recordEdit(draftId, edited ? clean : null);
   let rating = draft.rating || '';
   // A reply that was approved and is then changed: the approval follows the text. Emptied, it is taken back.
-  if (rating === 'good' && item && canLearnFrom(draft.item_key) && teachesHere(item) && !writtenInAuction(draft)) {
+  if (rating === 'good' && item && canLearnFrom(draft.item_key) && teachesHere(item) && !writtenInAuction(draft) && !isFollowUp(draft)) {
     if (clean.trim()) onApproved(item, draftId, true);
     else { setDraftRating(draftId, ''); onApproved(item, draftId, false); rating = ''; }
   }
@@ -211,6 +217,7 @@ export function onRated(draftId, rating) {
 export function onApproved(item, draftId, approved = true) {
   const draft = getDraft(draftId);
   if (!draft) return { learned: false, why: 'suggestion not found' };
+  if (isFollowUp(draft)) return { learned: false, why: FOLLOW_UP };
   if (!canLearnFrom(draft.item_key) || !teachesHere(item) || writtenInAuction(draft)) return { learned: false, why: item?.section === 'auction' || writtenInAuction(draft) ? 'in the Auction section' : 'not a dashboard conversation' };
   if (!approved) {
     if (getLearned(draftId)?.source === 'approved') deleteLearned(draftId);

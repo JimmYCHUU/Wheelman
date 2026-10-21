@@ -1,6 +1,7 @@
 // Helpers for reading customer messages and enquiry records.
 
 import { loadPeople } from './people.js';
+import { parseDashboardTime } from './time.js';
 
 const EMOJI = /[\p{Extended_Pictographic}\p{Emoji_Modifier}‍️]/gu;
 
@@ -90,6 +91,34 @@ const HEADER_LINE = /^\s*(make|model|year|badge|description|enginedescription|bo
  * Pulls the customer's own words out of an enquiry record and describes any system event.
  * Returns { text, event } where either may be empty.
  */
+/**
+ * The booking inside a booking enquiry: an inspection ("Preferred inspection: On-site on 2026-10-21
+ * at 02:00 PM.") or a test drive ("… scheduled time: 2026-02-22 03:00 PM."), with the booked time
+ * in Sydney time as epoch milliseconds (null when the form gave a day and no time). The enquiry's
+ * own time is when they booked; this is when they are coming. null for any other enquiry.
+ */
+export function bookingFrom(inq) {
+  const raw = String(inq?.text || '');
+  let m = raw.match(/^\s*preferred inspection:\s*(on-?site|online)?\s*(?:on\s+)?(\d{4}-\d\d-\d\d)(?:\s+(?:at\s+)?(\d{1,2}):(\d\d)\s*([AP]M)?)?/i);
+  let kind = 'inspection';
+  if (!m) {
+    const t = raw.match(/scheduled time:\s*(\d{4}-\d\d-\d\d)\s+(\d{1,2}):(\d\d)\s*([AP]M)?/i);
+    if (!t) return null;
+    m = [t[0], '', t[1], t[2], t[3], t[4]];
+    kind = 'test_drive';
+  }
+  const where = /online/i.test(m[1] || '') ? 'online' : /site/i.test(m[1] || '') ? 'onsite' : '';
+  let at = null;
+  if (m[3]) {
+    let hour = Number(m[3]);
+    const ap = (m[5] || '').toUpperCase();
+    if (ap === 'PM' && hour < 12) hour += 12;
+    if (ap === 'AM' && hour === 12) hour = 0;
+    at = parseDashboardTime(`${m[2]}T${String(hour).padStart(2, '0')}:${m[4]}`);
+  }
+  return { kind, where, at };
+}
+
 export function readInquiry(inq) {
   const raw = String(inq?.text || '').replace(/\r/g, '');
   const type = String(inq?.type || '');

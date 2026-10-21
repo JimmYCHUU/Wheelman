@@ -29,7 +29,7 @@ export async function draftFromTemplate(item, { id, label, composed, checks = []
   const base = {
     itemKey: item.itemKey, anchorKey: item.anchorKey, situation: item.order ? id : item.situation?.primary || id, instruction: typed || instruction, template: id,
     // Where it was written and what it answered, as for any suggestion: nothing written in Auction teaches (learn.js).
-    context: { channel: item.order ? 'auction' : item.channel, section: item.section || null, situations: item.situation?.all || [], firstReply: !!item.isFirstReply, template: id, ...context, ...(fitLater ? { fitLater: true } : {}) },
+    context: { channel: item.order ? 'auction' : item.channel, section: item.section || null, situations: item.situation?.all || [], firstReply: !!item.isFirstReply, template: id, followUp: item.followUp ? { id: item.followUp.id, kind: item.followUp.kind } : null, ...context, ...(fitLater ? { fitLater: true } : {}) },
   };
   // A customer who asked not to be contacted gets nothing, from a template or otherwise.
   if (item.state === 'optout') {
