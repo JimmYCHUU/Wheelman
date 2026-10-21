@@ -506,13 +506,13 @@ test('a booking just made is answered first with Booking confirmed; online and t
   const list = (await get('/api/items/c:350')).item.templates;
   assert.deepEqual([list[0].id, list[0].best], ['booking_confirmed', true]);
   const d = (await post('/api/items/c:350/draft', { message: 'booking_confirmed' })).json.item.draft;
-  assert.match(d.reply, /^Good (morning|afternoon|evening) Tara,\n\nTeam Carbarn here\. Your inspection of the 2020 Toyota Hiace DX is booked for (today|tomorrow) at 2 pm\.\n\nWe are at 136 Frances Street, Lidcombe NSW 2141\. If the time no longer suits, let us know and we will find another\.\n\nRegards,\nTeam Carbarn$/);
+  assert.match(d.reply, /^Good (morning|afternoon|evening) Tara,\n\nTeam Carbarn here\. Your inspection of the 2020 Toyota Hiace DX is (today|tomorrow) at 2 pm\.\n\nWe are at 136 Frances Street, Lidcombe NSW 2141\. If the time no longer suits, let us know and we will find another\.\n\nRegards,\nTeam Carbarn$/);
   const online = replied(55, 'Yara', { inText: '', inquiries: [inquiry(`Preferred inspection: Online on ${sydneyNaive(NOW + DAY).slice(0, 10)} at 09:30 AM.`, { type: 'product_page_inspection', at: NOW - HOUR })], ours: [] });
   const o = (await post(`/api/items/${online}/draft`, { message: 'booking_confirmed' })).json.item.draft;
   assert.match(o.reply, /at 9:30 am\.\n\nWe will call you at that time on this number and walk you around the car on video\./);
   assert.doesNotMatch(o.reply, /Frances Street/);
   const drive = replied(56, 'Zed', { inText: '', inquiries: [bookingInquiry(NOW + DAY, { bookedAt: NOW - HOUR, testDrive: true })], ours: [] });
-  assert.match((await post(`/api/items/${drive}/draft`, { message: 'booking_confirmed' })).json.item.draft.reply, /Your test drive of the 2020 Toyota Hiace DX is booked/);
+  assert.match((await post(`/api/items/${drive}/draft`, { message: 'booking_confirmed' })).json.item.draft.reply, /Your test drive of the 2020 Toyota Hiace DX is (today|tomorrow) at 2 pm\./);
   assert.ok(!(await get('/api/items/c:305')).item.templates.some((t) => t.id === 'booking_confirmed'), 'not offered without a booking');
   assert.deepEqual(st.checkTemplates(), []);
 });
@@ -580,4 +580,42 @@ test('the reminder is written by code when opened from Follow-ups, first in Whic
   assert.deepEqual([d?.status, d?.provider, ai.seen.length - seenBefore, d?.checks.filter((c) => /^followup-/.test(c.code))], ['ready', 'none', 0, []]);
   assert.match(d.reply, /^Good (morning|afternoon|evening) Cleo,\n\nTeam Carbarn here\. A reminder of your inspection of the 2020 Toyota Hiace DX (today|tomorrow) at 2 pm\.\n\nWe are at 136 Frances Street, Lidcombe NSW 2141\. If the time no longer suits, let us know and we will find another\.\n\nRegards,\nTeam Carbarn$/);
   assert.equal((await get('/api/items?section=dashboard&tab=followups')).items.find((x) => x.key === key).followUp.reason, 'Inspection tomorrow');
+});
+
+// ---- after the whole-branch review ---------------------------------------------------------------
+
+test('Booking confirmed reads right for a visit two or more days ahead', async () => {
+  const visit = parseDashboardTime(`${sydneyDay(NOW + 3 * DAY)}T14:00`);
+  const key = replied(60, 'Fay', { inText: '', inquiries: [bookingInquiry(visit, { bookedAt: NOW - HOUR })], ours: [] });
+  const d = (await post(`/api/items/${key}/draft`, { message: 'booking_confirmed' })).json.item.draft;
+  assert.match(d.reply, /Your inspection of the 2020 Toyota Hiace DX is on \w+day \d{1,2} \w+ at 2 pm\./);
+  assert.doesNotMatch(d.reply, /for on/);
+});
+
+test('Booking confirmed is offered only for a booking still to come that nobody has answered', async () => {
+  const asked = replied(61, 'Gus', { inText: 'Can I come and see it on Saturday?', ours: [] });
+  assert.ok(!(await get(`/api/items/${asked}`)).item.templates.some((t) => t.id === 'booking_confirmed'), 'a question about coming is not a booking');
+  const past = replied(62, 'Hal', { inText: '', inquiries: [bookingInquiry(NOW - 10 * DAY, { bookedAt: NOW - 11 * DAY })], ours: [] });
+  assert.ok(!(await get(`/api/items/${past}`)).item.templates.some((t) => t.id === 'booking_confirmed'), 'a visit already past');
+  const answered = replied(63, 'Ida', { inText: '', inquiries: [bookingInquiry(NOW + DAY, { bookedAt: NOW - 2 * HOUR })], ours: [[NOW - HOUR, 'Hello Ida, your inspection is booked for tomorrow at 2 pm.']] });
+  assert.ok(!(await get(`/api/items/${answered}`)).item.templates.some((t) => t.id === 'booking_confirmed'), 'already answered');
+  const list = (await get('/api/items/c:350')).item.templates;
+  assert.deepEqual([list[0].id, list[0].best], ['booking_confirmed', true], 'still first for a booking just made');
+});
+
+test('a Prompt on the reminder tells the AI the visit is still to come, not to ask how it went', async () => {
+  const key = replied(64, 'Jo', { inText: '', inquiries: [bookingInquiry(tomorrowAt2(), { bookedAt: NOW - 3 * DAY })], ours: [[NOW - 3 * DAY + HOUR, 'Hello Jo, your inspection of the Hiace is booked. See you then.']] });
+  followup.refreshFollowUps({ now: fourToday() + 30 * MIN });
+  const r = openFor(key)[0];
+  assert.equal(r?.kind, 'reminder');
+  const was = config.followUp.reminderHour;
+  config.followUp.reminderHour = 0;
+  ai.behave = echoFit;
+  let out;
+  try { out = await post(`/api/items/${key}/draft`, { followup: r.id, message: 'inspection_reminder', instruction: 'add that parking is on the street' }); } finally { ai.behave = null; config.followUp.reminderHour = was; }
+  assert.equal(out.status, 200);
+  const asked = ai.seen[ai.seen.length - 1].messages[1].content;
+  assert.match(asked, /still to come/);
+  const stray = asked.match(/.{0,80}(as if the visit happened|ask how it went|nder 50 words).{0,40}/);
+  assert.equal(stray, null, stray && stray[0]);
 });

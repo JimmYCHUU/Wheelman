@@ -43,10 +43,10 @@ and versions follow `MAJOR.MINOR.PATCH`.
   through the website (`FOLLOW_UP_REMINDER_HOUR`, Sydney) a reminder with the address is due,
   written word for word from your wording with no AI. None when they booked today for today or
   after the reminder hour, when you have written to them since it, or when they said they cannot
-  come; a text of theirs before the visit does not close it, and a copied reminder never holds
-  back the follow-up after the visit. A booking that has just arrived is answered first with
-  **Booking confirmed** in Which message?, written by code too: the day and time, and the address
-  or the call for an online inspection. A message marked `@fit: no` in the wording file is
+  come; a text of theirs before the reminder hour does not close it, and a copied reminder never
+  holds back the follow-up after the visit. A booking that has just arrived, for a visit still to
+  come and not yet answered, is offered **Booking confirmed** first in Which message?, written by
+  code too: the day and time, and the address or the call for an online inspection. A message marked `@fit: no` in the wording file is
   written word for word; a Prompt or Rewrite still goes to the AI. New facts `{booking_kind}`,
   `{booked_when}`, `{address}`, `{if_onsite}` and `{if_online}`. (The owner's decision of 20 Oct
   2026: "Inspection reminder the day before, with the address, written by code".)

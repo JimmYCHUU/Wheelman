@@ -775,10 +775,16 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
       [/book a time|#inspection=/i, 'a time to come in, with the booking link'],
     ].filter(([re]) => re.test(oursText)).map(([, w]) => w);
     const lastTheirs = [...item.timeline].reverse().find((e) => e.who === 'customer' && (e.text || e.event));
+    const reminder = fu.kind === 'reminder';
     P.push('\n=== FOLLOW-UP ===');
-    P.push(`This is a follow-up our staff asked for, not a reply: the customer has not written since our last message${lastUs ? ` ${ago(now - lastUs.at)} ago` : ''}. Reason: ${fu.reason}${fu.data?.bookedAt ? ` (their ${fu.data.kind === 'test_drive' ? 'test drive' : 'inspection'} was booked for ${formatSydney(fu.data.bookedAt)})` : ''}.`);
-    P.push(`Already offered to this customer in this conversation: ${offered.length ? offered.join(', ') : 'nothing yet'}.`);
-    P.push('Name us in the first sentence ("Team Carbarn here"). Write as if the visit happened: ask how it went, never whether they came or made it. Add nothing they have already been offered; the message carries the one new thing. No urgency beyond the holding deposit when the message carries it. Never "just checking in", "just following up" or "touching base". Under 50 words. If their last message was a no, write nothing and set hold to true.');
+    P.push(`This is a follow-up our staff asked for, not a reply: the customer has not written since our last message${lastUs ? ` ${ago(now - lastUs.at)} ago` : ''}. Reason: ${fu.reason}${fu.data?.bookedAt ? ` (their ${fu.data.kind === 'test_drive' ? 'test drive' : 'inspection'} ${reminder ? 'is' : 'was'} booked for ${formatSydney(fu.data.bookedAt)})` : ''}.`);
+    if (reminder) {
+      // A visit still to come: the message is the reminder; the AI only fits its wording.
+      P.push('This is a reminder of a visit still to come. Name us in the first sentence ("Team Carbarn here"). Keep the day, the time and the address exactly as the message has them. The visit has not happened yet: nothing about how it went, no question whether they are coming, nothing new and no question at all. Never "just checking in", "just following up" or "touching base". If their last message was a no, write nothing and set hold to true.');
+    } else {
+      P.push(`Already offered to this customer in this conversation: ${offered.length ? offered.join(', ') : 'nothing yet'}.`);
+      P.push('Name us in the first sentence ("Team Carbarn here"). Write as if the visit happened: ask how it went, never whether they came or made it. Add nothing they have already been offered; the message carries the one new thing. No urgency beyond the holding deposit when the message carries it. Never "just checking in", "just following up" or "touching base". Under 50 words. If their last message was a no, write nothing and set hold to true.');
+    }
     P.push('\n=== THERE IS NO NEW MESSAGE ===');
     P.push(lastTheirs
       ? `Their last message was:\n<customer_message>\n${mask(lastTheirs.event ? `(${redact(lastTheirs.event, lead)})` : maskCustomerSignOff(redact(lastTheirs.text, lead)))}\n</customer_message>`

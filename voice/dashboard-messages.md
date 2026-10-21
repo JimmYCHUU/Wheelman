@@ -327,11 +327,12 @@ Thank you for letting us know. If you are looking again in future, we would be g
 ===== booking_confirmed =====
 @label: Booking confirmed
 @fits: booking made, inspection_booking
-@not: buyer, car sold
+@needs: booking made
+@not: buyer, car sold, no car
 @fit: no
 {greeting}
 
-Team Carbarn here. Your {booking_kind} of the {car} is booked for {booked_when} at {booked_time}.
+Team Carbarn here. Your {booking_kind} of the {car} is {booked_when} at {booked_time}.
 
 {if_onsite}We are at {address}. If the time no longer suits, let us know and we will find another.
 

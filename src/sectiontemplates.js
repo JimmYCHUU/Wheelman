@@ -67,9 +67,10 @@ export function fitSignals(item) {
   s.add(item.isFirstReply ? 'first reply' : 'later reply');
   // A follow-up in hand: its own messages fit it. A conversation that is merely due one shows nothing of it.
   if (item.followUp) { s.add('follow-up'); if (FOLLOW_UP_WORDS[item.followUp.kind]) s.add(FOLLOW_UP_WORDS[item.followUp.kind]); }
-  // Their newest message is a booking through the website: it is confirmed first.
+  // Their newest message is a booking through the website for a visit still to come, and nobody
+  // has answered it yet: it is confirmed first.
   const newest = [...(item.timeline || [])].reverse().find((e) => e.who === 'customer' && (e.text || e.event || e.media));
-  if (newest?.booking?.at) s.add('booking made');
+  if (newest?.booking?.at > Date.now() && item.state === 'awaiting') s.add('booking made');
   if (item.deal) s.add('buyer');
   const v = item.vehicles?.[0];
   if (!v) s.add('no car');

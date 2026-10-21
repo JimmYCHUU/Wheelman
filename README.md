@@ -766,13 +766,14 @@ under **Follow-ups** in the Dashboard section, the reason on the row. Three reas
   before (by default) a reminder with the address is due, written by code from your wording, no
   AI. None when they booked today for today or after the reminder hour (your confirmation
   serves), when you have written to them since that hour, or when they said they cannot come. A
-  text of theirs before the visit does not close it, and a reminder you copied never holds back
-  the "how did it go" after the visit.
+  text of theirs before the reminder hour does not close it (a question after that hour is
+  answered as usual, and the reminder is dropped), and a reminder you copied never holds back the
+  "how did it go" after the visit.
 
-A booking that has just arrived is answered first with **Booking confirmed** in Which message?,
-written by code too: the day and time, and the address, or the call for an online inspection. A
-message marked `@fit: no` in the wording file is written word for word; a Prompt or Rewrite on it
-still goes to the AI.
+A booking that has just arrived, for a visit still to come and with nobody's reply yet, is
+answered first with **Booking confirmed** in Which message?, written by code too: the day and
+time, and the address, or the call for an online inspection. A message marked `@fit: no` in the
+wording file is written word for word; a Prompt or Rewrite on it still goes to the AI.
 
 A follow-up is never raised for a buyer, after a no or an opt-out, for a conversation you
 dismissed, for a message of ours older than 14 days, while a car has sold, or while another
