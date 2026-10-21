@@ -32,12 +32,13 @@ const state = {
   picked: false,         // whether one was picked for the open conversation ('' then means the reply to what they wrote)
   pickedAnchor: '',      // the customer message it was picked for: once they write again, the pick is dropped
   pasteOpen: false,      // Auction: the box for pasting what the customer wrote is open
+  followUp: null,        // the follow-up in hand for the open conversation (its id), opened from Follow-ups or asked for in the box
   listSeq: 0,            // guards against a slow list response landing in the wrong section
   tab: 'all',            // the list on screen: 'all' (every conversation, newest first) or 'waiting'; Auction has its own three
   q: '',
   list: [],
   everything: [],        // Auction: the rows of all three lists, so a search finds an order wherever it is
-  counts: { waiting: 0, quiet: 0, other: 0 },
+  counts: { waiting: 0, quiet: 0, other: 0, followups: 0 },
   selected: null,
   detail: null,
   edits: new Map(),      // draft id -> what the user has typed
@@ -546,7 +547,7 @@ const retryFor = (item) => (item.channel === 'marketplace' ? state.status?.marke
 
 function composerSignature(item) {
   const d = item.draft;
-  return [item.key, item.state, item.dismissed, d?.id, d?.status, d?.rating, state.busy.has(item.key), !!item.writing, state.rewriteOpen, state.betterOpen, state.promptOpen === item.key, retryFor(item), state.copied === d?.id, item.anchor, item.order?.message, item.order?.handled, item.order?.replying, state.pasteOpen].join('|');
+  return [item.key, item.state, item.dismissed, d?.id, d?.status, d?.rating, state.busy.has(item.key), !!item.writing, state.rewriteOpen, state.betterOpen, state.promptOpen === item.key, retryFor(item), state.copied === d?.id, item.anchor, item.order?.message, item.order?.handled, item.order?.replying, state.pasteOpen, item.followUp?.id, item.followUp?.done, state.followUp].join('|');
 }
 
 /**
@@ -707,6 +708,40 @@ function renderComposer(item, els, { arriving = false } = {}) {
   if (item.templates?.length) {
     box.append(h('div', { class: 'order-bar' }, TemplatePicker({ templates: item.templates, value: item.template || '', first: 'A reply to what they wrote', onPick: (id) => pickMessage(item, id) })));
     if (showsPicked(item, { picked: state.picked, anchor: state.pickedAnchor })) { mountEditor(box, item, d, { arriving }); return; }
+  }
+
+  // A follow-up (a conversation we replied to last, due one for a reason): in hand when opened from
+  // the Follow-ups list, where the box holds the follow-up under its own anchor; merely due when
+  // opened from All. Whatever is written from the "due" box is the follow-up. Copy counts as done,
+  // with Put back; so does Dismiss. Nothing is sent by itself.
+  if (item.followUp) {
+    const fu = item.followUp;
+    const mine = item.anchor === `fu:${fu.id}`;
+    const putBack = h('button', { class: 'btn outline', type: 'button', onclick: () => restoreFollowUp(fu.id) }, t('followup.putBack'));
+    if (fu.done === 'dismissed') {
+      box.append(h('div', { class: 'quiet' }, h('p', { text: t('followup.dismissed') }), putBack));
+      return;
+    }
+    if (fu.done === 'copied') {
+      box.append(h('div', { class: 'quiet' }, icon('check'), h('p', { text: t('followup.copied') }), putBack));
+      if (mine && d && d.status === 'ready') mountEditor(box, item, d, { arriving });
+      return;
+    }
+    if (mine && d && d.status === 'ready') {
+      box.append(h('div', { class: 'draft-head' }, h('span', { class: 'draft-tag', text: t('followup.head', { reason: fu.reason }) })));
+      mountEditor(box, item, d, { arriving });
+      return;
+    }
+    state.followUp = fu.id;
+    state.composerSig = composerSignature(item);
+    const failed = mine && d && d.status === 'failed';
+    const prompt = promptControls(item, { instruction: failed ? d.instruction || '' : '' });
+    box.append(h('div', { class: `quiet ${failed ? 'bad' : ''}`.trim() },
+      h('p', { text: failed ? `The follow-up could not be written. ${d.error}` : t('followup.due', { reason: fu.reason }) }),
+      prompt.button,
+      writeBtn(failed ? 'Try again' : t('followup.write'), 'primary', failed ? state.prompts.get(item.key) || d.instruction || '' : ''),
+      prompt.row));
+    return;
   }
 
   if (item.state === 'optout') {
@@ -982,8 +1017,8 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
     api(`/api/drafts/${d.id}/copied`, { body: { text: chat ? '' : ta.value } })
       .then((out) => {
         if (out.learned && changed) { toast('Copied. Wheelman will use your changes for similar messages.'); refreshStatus(); }
-        // An order's message counts as done once it is copied: the list and the thread show that now.
-        if (order) { refreshList(); refreshDetail(); }
+        // An order's message, or a follow-up, counts as done once it is copied: the list and the box show that now.
+        if (order || out.followUpDone) { refreshList(); refreshDetail(); }
       })
       .catch(() => {});
   }
@@ -994,7 +1029,8 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
     if (!ok) { toast('Copying is blocked by the browser. Select the text and press Ctrl + C.'); return; }
     const left = blanksIn(ta.value).length;
     const chat = item.channel === 'marketplace';
-    toast(left ? `Copied, with ${plural(left, 'blank')} still to fill` : chat ? 'Copied. Paste it into the Marketplace chat to send.' : item.channel === 'email' ? t('composer.copyEmail') : order ? (order.replying && order.replyVia === 'sms' ? 'Copied. Paste it into the dashboard to send.' : `Copied. Paste it into ${order.prefers === 'WhatsApp' || !order.prefers ? 'WhatsApp' : 'your message to them'} to send.`) : 'Copied. Paste it into the dashboard to send.');
+    const followUp = !!item.followUp && item.anchor === `fu:${item.followUp.id}`;
+    toast(left ? `Copied, with ${plural(left, 'blank')} still to fill` : chat ? 'Copied. Paste it into the Marketplace chat to send.' : item.channel === 'email' ? t('composer.copyEmail') : order ? (order.replying && order.replyVia === 'sms' ? 'Copied. Paste it into the dashboard to send.' : `Copied. Paste it into ${order.prefers === 'WhatsApp' || !order.prefers ? 'WhatsApp' : 'your message to them'} to send.`) : followUp ? t('toast.followUpCopied') : 'Copied. Paste it into the dashboard to send.');
     noteCopied();
   }
 
@@ -1326,6 +1362,10 @@ function customerSections(item) {
       h('h4', { text: t('judged.title') }),
       h('p', { class: 'fine', text: rulingWords(item) }),
       h('div', { class: 'rulings' }, ...rulingButtons(item))) : null,
+    item.followUp && !item.followUp.done ? h('section', {},
+      h('h4', { text: t('followup.dismiss.title') }),
+      h('p', { class: 'fine', text: t('followup.dismiss.help') }),
+      h('button', { class: 'btn outline dismiss-btn', type: 'button', onclick: () => dismissFollowUp(item) }, t('followup.dismiss'))) : null,
     item.state === 'awaiting' && !item.dismissed ? h('section', {},
       h('h4', { text: 'Dismiss' }),
       h('p', { class: 'fine', text: item.order
@@ -1734,9 +1774,11 @@ function markRead(item) {
   api(`/api/items/${item.key}/seen`, { body: {} }).catch(() => {});
 }
 
-async function open(key) {
-  if (state.selected === key && state.detail) { $('#app').dataset.view = 'chat'; return; }
+/** Opens a conversation. `followUpId`: opened from the Follow-ups list, so the box holds that follow-up and writes it. */
+async function open(key, followUpId = null) {
+  if (state.selected === key && state.detail && (followUpId || null) === (state.followUp || null)) { $('#app').dataset.view = 'chat'; return; }
   state.selected = key;
+  state.followUp = followUpId || null;
   state.rewriteOpen = false;
   state.betterOpen = false;
   state.copied = null;
@@ -1750,12 +1792,14 @@ async function open(key) {
   $('#app').dataset.view = 'chat';
   repaint();
   try {
-    const { item } = await api(`/api/items/${key}`);
+    const { item } = await api(`/api/items/${key}${followUpId ? `?followup=${followUpId}` : ''}`);
     if (state.selected !== key) return;
     state.detail = item;
     markRead(item);
     if (item.vehicle && (!state.media.has(String(item.vehicle.stockNo)) || state.media.get(String(item.vehicle.stockNo)).status === 'error')) loadMedia(item.vehicle.stockNo);
     renderChat({ toBottom: true });
+    // Opened from the Follow-ups list: the follow-up is written now, unless it already is.
+    if (followUpId && item.followUp && !item.followUp.done && item.anchor === `fu:${followUpId}` && !(item.draft && item.draft.status === 'ready') && !item.writing) write(item, '');
     if (narrow()) $('.thread')?.focus({ preventScroll: true });
   } catch (e) {
     toast(e.message);
@@ -1778,7 +1822,9 @@ async function write(item, instruction) {
   try {
     // The message in hand: an order's, or the template picked or shown for an enquiry ('' a reply to what they wrote).
     const message = item.order ? state.message || item.order.message || '' : item.templates?.length ? (state.picked ? state.message : item.template || '') : '';
-    const out = await api(`/api/items/${item.key}/draft`, { body: { instruction, message } });
+    // A follow-up in hand: written under its own anchor, from its template unless another was picked.
+    const followup = !item.order && state.followUp ? state.followUp : undefined;
+    const out = await api(`/api/items/${item.key}/draft`, { body: { instruction, message, followup } });
     state.busy.delete(item.key);
     // The prompt did its work. A failed try keeps it, for Try again.
     if (out.ok) state.prompts.delete(item.key);
@@ -1806,7 +1852,7 @@ async function pickMessage(item, type) {
   state.rewriteOpen = false;
   try {
     // An order's first choice is its due message; any other conversation's is the reply to what they wrote.
-    const query = item.order ? (type ? `?message=${encodeURIComponent(type)}` : '') : `?message=${encodeURIComponent(type)}`;
+    const query = item.order ? (type ? `?message=${encodeURIComponent(type)}` : '') : `?message=${encodeURIComponent(type)}${state.followUp ? `&followup=${state.followUp}` : ''}`;
     const { item: fresh } = await api(`/api/items/${item.key}${query}`);
     if (state.selected !== item.key) return;
     state.pickedAnchor = fresh.anchor || '';
@@ -1876,6 +1922,43 @@ async function dismissItem(item) {
     if (next && !narrow()) { state.selected = null; state.detail = null; await open(next.key); }
     else { state.selected = null; state.detail = null; repaint(); renderChat(); $('#app').dataset.view = 'list'; }
     refreshList();
+  } catch (e) { toast(e.message); }
+}
+
+/** Dismiss for a follow-up: it leaves Follow-ups (nothing is deleted) and can be put back. */
+async function dismissFollowUp(item) {
+  const fu = item.followUp;
+  if (!fu) return;
+  try {
+    const out = await api(`/api/followups/${fu.id}/dismiss`, { body: {} });
+    state.counts.followups = Math.max(0, (state.counts.followups || 0) - 1);
+    if (state.tab === 'followups') {
+      const rows = visibleRows(state);
+      const i = rows.findIndex((r) => r.key === item.key);
+      const next = rows[i + 1] || rows[i - 1] || null;
+      state.list = state.list.filter((r) => r.key !== item.key);
+      state.listTotal = Math.max(0, state.listTotal - 1);
+      repaint();
+      toast(t('toast.followUpDismissed'), { label: 'Undo', run: () => restoreFollowUp(fu.id, true) });
+      if (next && !narrow()) { state.selected = null; state.detail = null; await open(next.key, next.followUp?.id || null); }
+      else { state.selected = null; state.detail = null; repaint(); renderChat(); $('#app').dataset.view = 'list'; }
+    } else {
+      if (state.selected === item.key && out.item) { state.detail = out.item; renderChat(); }
+      toast(t('toast.followUpDismissed'), { label: 'Undo', run: () => restoreFollowUp(fu.id) });
+    }
+    refreshList();
+  } catch (e) { toast(e.message); }
+}
+
+/** Put back: the follow-up is due again, after Dismiss or after Copy. */
+async function restoreFollowUp(id, reopen = false) {
+  try {
+    const out = await api(`/api/followups/${id}/restore`, { body: {} });
+    await refreshList();
+    const key = out.item?.key;
+    if (key && state.selected === key) { state.followUp = id; state.detail = out.item; renderChat(); }
+    else if (reopen && key && state.section === 'dashboard' && !narrow()) { state.selected = null; state.detail = null; await open(key, id); }
+    toast(t('toast.followUpBack'));
   } catch (e) { toast(e.message); }
 }
 
@@ -1986,14 +2069,17 @@ async function refreshDetail() {
   const key = state.selected;
   if (!key || state.busy.has(key)) return;
   try {
-    // For an auction order, the message that was picked stays picked.
-    let { item } = await api(`/api/items/${key}${state.message && key.startsWith('ao:') ? `?message=${encodeURIComponent(state.message)}` : state.picked && !key.startsWith('ao:') ? `?message=${encodeURIComponent(state.message)}` : ''}`);
+    // For an auction order, the message that was picked stays picked; a follow-up in hand stays in hand.
+    const order = key.startsWith('ao:');
+    const followUpQuery = !order && state.followUp ? `followup=${state.followUp}` : '';
+    const withPick = [state.message && order ? `message=${encodeURIComponent(state.message)}` : state.picked && !order ? `message=${encodeURIComponent(state.message)}` : '', followUpQuery].filter(Boolean);
+    let { item } = await api(`/api/items/${key}${withPick.length ? `?${withPick.join('&')}` : ''}`);
     if (state.selected !== key) return;
     // The customer wrote again since a message was picked: the pick was for what they wrote before,
     // so the box follows the conversation again (the reply written for their new message, if any).
-    if (state.picked && !key.startsWith('ao:') && !pickHolds(state.pickedAnchor, item)) {
+    if (state.picked && !order && !pickHolds(state.pickedAnchor, item)) {
       state.picked = false; state.message = ''; state.pickedAnchor = '';
-      ({ item } = await api(`/api/items/${key}`));
+      ({ item } = await api(`/api/items/${key}${followUpQuery ? `?${followUpQuery}` : ''}`));
       if (state.selected !== key) return;
     }
     const previous = state.detail;
@@ -2029,13 +2115,13 @@ async function showSection(section) {
   state.section = section;
   state.tab = REGISTRY[section].tabs[0].id;
   state.q = '';
-  state.selected = null; state.detail = null; state.rewriteOpen = false; state.betterOpen = false; state.copied = null; state.message = ''; state.picked = false; state.pickedAnchor = ''; state.pasteOpen = false;
+  state.selected = null; state.detail = null; state.rewriteOpen = false; state.betterOpen = false; state.copied = null; state.message = ''; state.picked = false; state.pickedAnchor = ''; state.pasteOpen = false; state.followUp = null;
   state.list = [];
   state.listSize = 20;
   state.listTotal = 0;
   state.listLoading = true;
   state.listError = false;
-  state.counts = { waiting: state.sections[section] || 0, quiet: 0, other: 0 };
+  state.counts = { waiting: state.sections[section] || 0, quiet: 0, other: 0, followups: 0 };
   $('#app').dataset.view = 'list';
   repaint();
   renderChat();

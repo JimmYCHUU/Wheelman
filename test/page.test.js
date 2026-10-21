@@ -116,7 +116,8 @@ test('the section registry names every section, its lists and where a key belong
   assert.equal(sectionOf('mp:abc'), 'marketplace');
   assert.equal(sectionOf('ao:504'), 'auction');
   assert.equal(sectionOf(undefined), 'dashboard');
-  assert.deepEqual(SECTIONS.dashboard.tabs.map((x) => x && x.id), ['all', 'waiting', null], 'every conversation first, Waiting as a filter, no list for non-customers');
+  assert.deepEqual(SECTIONS.dashboard.tabs.map((x) => x && x.id), ['all', 'waiting', 'followups'], 'every conversation first, Waiting as a filter, then the follow-ups that are due; no list for non-customers');
+  assert.deepEqual([SECTIONS.dashboard.tabs[2].label, SECTIONS.dashboard.tabs[2].countOf, SECTIONS.dashboard.empty.followups.length], ['Follow-ups', 'followups', 2]);
   assert.deepEqual(SECTIONS.marketplace.tabs.map((x) => x && x.id), ['all', 'waiting', null]);
   assert.deepEqual(SECTIONS.auction.tabs.map((x) => x.label), ['To do', 'In progress', 'Finished']);
   assert.equal(ORDER_LIST[TAB_STATE.quiet], 'In progress');
@@ -157,6 +158,11 @@ test('a row carries at most two tags, in the settled words and tones', () => {
   assert.deepEqual(rowTags({ section: 'dashboard', state: 'awaiting', flag: 'input' }, state), [{ text: 'Blank to fill', tone: 'warning' }]);
   assert.deepEqual(rowTags({ section: 'marketplace', state: 'awaiting', needsPerson: true, unanswered: 1 }, state), [{ text: 'Needs you', tone: 'info' }]);
   assert.deepEqual(rowTags({ section: 'dashboard', state: 'answered' }, state), []);
+  // A follow-up that is due carries its reason; one that was copied or dismissed carries nothing.
+  assert.deepEqual(rowTags({ section: 'dashboard', state: 'answered', followUp: { reason: 'Inspection passed', done: '' } }, state), [{ text: 'Inspection passed', tone: 'warning' }]);
+  assert.deepEqual(rowTags({ section: 'dashboard', state: 'answered', followUp: { reason: 'Quiet 3 days', done: 'copied' } }, state), []);
+  assert.equal(t('followup.head', { reason: 'Quiet 3 days' }), 'Follow-up: Quiet 3 days');
+  assert.equal(t('followup.putBack'), 'Put back in Follow-ups');
 });
 
 test('the Move menu offers the sections a conversation is not in, in plain words, and the way back to its own', () => {

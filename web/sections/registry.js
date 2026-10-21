@@ -10,11 +10,13 @@ export const SECTIONS = {
     person: 'Customer',
     unknown: 'Unknown number',
     // "All" is every conversation, newest message first whoever wrote it; "Waiting" those that need a
-    // reply. Senders that are not customers (codes, couriers, the ignore list) are never listed.
+    // reply; "Follow-ups" those we replied to last that are due a follow-up (its count is its own,
+    // never the unread number). Senders that are not customers (codes, couriers, the ignore list)
+    // are never listed.
     tabs: [
       { id: 'all', label: 'All' },
       { id: 'waiting', label: 'Waiting', counted: true },
-      null,
+      { id: 'followups', label: 'Follow-ups', countOf: 'followups' },
     ],
     search: { placeholder: 'Search name, number or message', phone: true },
     place: 'the dashboard',
@@ -25,6 +27,7 @@ export const SECTIONS = {
       waiting: ['Nobody is waiting', 'New customer messages appear here with a reply ready to check.'],
       quiet: ['Nothing here', 'Customers who only said thanks, opted out, or are no longer looking, and conversations you dismissed.'],
       other: ['Nothing here', 'Texts from suppliers, couriers and marketers.'],
+      followups: ['No follow-ups due', 'A conversation appears here when an inspection time has passed or a customer has gone quiet after our reply. Open it and the follow-up is written for you to check.'],
       search: ['Nothing matches', 'Try a name, part of a phone number, or a word from the message.'],
     },
     welcome: { pick: 'Pick a customer', check: 'Check the reply', paste: 'and send it from the dashboard.' },

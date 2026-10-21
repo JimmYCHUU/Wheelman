@@ -39,6 +39,21 @@ export const COPY = {
   'tag.needsYou': 'Needs you',
   'tag.dismissed': 'Dismissed',
   'tag.phoneOnly': 'Phone only',
+  'row.due': '{n, one: follow-up due, other: follow-ups due}',
+
+  // Follow-ups: a conversation we replied to last, put in front of you again for a reason.
+  'followup.head': 'Follow-up: {reason}',
+  'followup.due': '{reason}. A follow-up is due. Nothing is sent by itself: write it, check it, then copy it.',
+  'followup.write': 'Write the follow-up',
+  'followup.copied': 'You copied this follow-up. It has left Follow-ups.',
+  'followup.dismissed': 'You dismissed this follow-up.',
+  'followup.putBack': 'Put back in Follow-ups',
+  'followup.dismiss.title': 'Dismiss the follow-up',
+  'followup.dismiss': 'Dismiss this follow-up',
+  'followup.dismiss.help': 'Takes it out of Follow-ups, for example when you phoned them instead. Nothing is deleted: it can be put back.',
+  'toast.followUpCopied': 'Copied. Paste it into the dashboard to send. It leaves Follow-ups.',
+  'toast.followUpDismissed': 'Dismissed. It leaves Follow-ups.',
+  'toast.followUpBack': 'Back in Follow-ups',
 
   'thread.loadOlder': 'Load older messages',
   'thread.older': '{n} more',
