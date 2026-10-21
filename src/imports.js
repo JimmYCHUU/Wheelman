@@ -388,7 +388,6 @@ function askPlan(item, w, instruction) {
       `- the greeting, and thank them for their ${w.car || 'import'} enquiry;`,
       '- if they asked something in their own words, answer it in a sentence or two from the supplied facts;',
       '- ask for the details listed above, in one sentence;',
-      w.given.length ? `- They have already told us: ${wantedLine(w)}. Do not ask for those again, and do not read them back.` : '',
       '- say that if a particular one interests them they can send a target bid or overall budget, and we will work out an estimated landed cost before placing anything;',
       '- say that once we have those details we will keep the search focused and let them know when a suitable one comes up.',
       first ? 'Our address, phone number, opening hours and sign-off are added below your text automatically. Do not write them, and do not point to them.' : '',
@@ -403,7 +402,7 @@ function nonePlan(item, w, searched, why = '') {
       `This customer asked us to find a ${w.car} from the Japan auctions. What they asked for: ${wantedLine(w)}.`,
       why || (searched ? `We searched the live auction: ${searched} ${w.car} are in the coming auctions, but none fits what they asked.` : `We searched the live auction: no ${w.car} is in the coming auctions right now. The auction list changes every day.`),
       'Say that nothing suitable is in the coming auctions at the moment, that we are keeping the search going, and that we will let them know when a suitable one comes up. Do not name or describe any particular car.',
-      w.missing.length > 1 ? `If it helps the search, ask for what we still do not know: ${listOf(w.missing)}.` : '',
+      w.missing.length > 1 ? `If it helps the search, ask for what we still do not know: ${listOf(w.missing)}. Do not ask again for what they have already told us, and do not read it back.` : '',
       item.isFirstReply ? 'Our address, phone number, opening hours and sign-off are added below your text automatically. Do not write them.' : '',
     ].filter(Boolean),
   };

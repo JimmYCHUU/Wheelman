@@ -339,6 +339,7 @@ test('when the customer also wrote something, the AI answers it and still asks, 
   assert.equal(ai().length, 1);
   const asked = JSON.parse(ai()[0].body).messages[1].content;
   assert.match(asked, /=== IMPORT ENQUIRY ===\nThis customer asked us to find a Subaru XV Hybrid from Japan\. Before we search the auctions we need to know: your preferred year range, maximum odometer/);
+  assert.doesNotMatch(asked, /Do not ask again for what they have already told us/, 'the ask plan does not carry the none-plan line');
   assert.ok(!/=== STANDARD FIRST REPLY ===/.test(asked), 'the import closing lines take the place of the standard block');
   assert.ok(d.reply.endsWith(CLOSING), d.reply);
   assert.deepEqual(fails(d), []);
@@ -462,6 +463,7 @@ test('when nothing suitable is in the coming auctions, the reply says so and nam
   const asked = JSON.parse(ai()[0].body).messages[1].content;
   assert.match(asked, /We searched the live auction: no Toyota Century is in the coming auctions right now/);
   assert.match(asked, /Do not name or describe any particular car/);
+  assert.match(asked, /Do not ask again for what they have already told us/);
   assert.equal(feed().filter((c) => c.method === 'POST').length, 0);
   assert.ok(d.reply.endsWith(CLOSING));
   assert.ok(!d.reply.includes('Vehicle details:'));
