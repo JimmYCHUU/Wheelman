@@ -16,7 +16,7 @@ export const config = {
   mediaDir: env.MEDIA_DIR || (env.DB_PATH === ':memory:' ? path.join(os.tmpdir(), `wheelman-media-${process.pid}`) : path.join(path.dirname(env.DB_PATH || path.join(root, 'data', 'app.db')), 'media')),
   // Pictures from this computer itself (http://127.0.0.1): only the tests' stand-ins serve them.
   mediaAllowLocal: env.MEDIA_ALLOW_LOCAL === '1',
-  sessionPath: path.join(root, 'data', '.session.json'),
+  sessionPath: env.SESSION_PATH || path.join(root, 'data', '.session.json'),
   knowledgeDir: path.join(root, 'knowledge'),
   // The website's "import this model" pages, saved by fetch-website. One file per model.
   importPagesDir: path.join(root, 'knowledge', 'website', 'importing'),
