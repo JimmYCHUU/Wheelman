@@ -580,3 +580,21 @@ test('a buyer who is only asking is asked for nothing; a budget is named as thei
   assert.match(flat, /A budget is something they gave us: name it as theirs first/);
   assert.match(flat, /answer that with the full stock list link/);
 });
+
+test('a buyer asking for other cars in their range gets the stock list, not this car\'s price', () => {
+  const text = 'My budget is around 10k\nYou have cars around this range?';
+  const noah = { url: 'https://www.carbarn.com.au/vehicles/toyota/noah/zrr80/1300', price: 23900, soldStatus: 'UnSold', stockIn: 'Online', status: 'PUBLISHED' };
+  const mk = (channel, t) => plain({ channel, situations: ['price_negotiation'], vehicles: [noah], texts: [{ who: 'customer', text: t }] });
+  const mp = selling.saleStage(mk('marketplace', text), { now });
+  assert.equal(mp.askedOtherCars, true);
+  assert.match(mp.moveText, /full stock list link/);
+  assert.doesNotMatch(mp.moveText, /their number/);
+  assert.doesNotMatch(mp.moveText, /\[PRICE\?\]/);
+  const smsItem = mk('sms', text);
+  const sms = selling.saleStage(smsItem, { now });
+  assert.equal(sms.moveText, mp.moveText);
+  assert.equal(promptModule.pricePlan(smsItem, noah, { stage: sms }).on, false);
+  assert.equal(selling.saleStage(mk('marketplace', 'Is the price negotiable?'), { now }).askedOtherCars, false);
+  assert.equal(selling.saleStage(mk('marketplace', 'Do you have any other options for finance?'), { now }).askedOtherCars, false, 'a finance question is not a question about other cars');
+  assert.equal(selling.saleStage(mk('marketplace', 'Does it come in another colour? Any other ones?'), { now }).askedOtherCars, true, 'documented: "any other ones" reads as other cars');
+});

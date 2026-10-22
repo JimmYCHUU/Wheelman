@@ -396,6 +396,7 @@ export function pricePlan(item, vehicle = item.vehicles[0], { gone = false, owne
   // On Marketplace the price is answered in the team's own shape (the figure as [PRICE?], then the
   // buyer's number), under THIS CUSTOMER'S NEXT STEP: no block goes under the lines there.
   if (!item.situation.all.includes('price_negotiation') || item.deal || item.channel === 'email' || item.channel === 'marketplace' || !vehicle?.url || gone || owner) return off;
+  if (stage?.askedOtherCars) return off;
   if (stage && (stage.move === 'answer_offer' || QUIET_MOVES.has(stage.move))) return off;
   // The block answers the first price question only: not a figure already agreed, not a trade-in.
   if (stage && stage.move !== 'invite_before_price') return off;

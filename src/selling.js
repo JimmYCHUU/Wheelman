@@ -37,6 +37,9 @@ export const AIMS = {
 // Situations that mean the customer is working out whether the deal fits.
 // A buyer saying they are only asking, looking or not ready: nothing is asked of them.
 export const BROWSING = /\b(just|only) (asking|looking|browsing|curious|wondering|checking)\b|\bnot (100%|sure|ready)( yet)? (on|about|to) (buy|buying|purchase)\b|\bjust (want|wanna|wanted) to (know|see|check)\b/i;
+// A buyer asking whether we have other cars (in their range): "options" is left out so a finance or colour question does not read as one.
+export const OTHER_CARS = /\b(other|any|more|similar|cheaper) (cars?|vehicles?|ones?)\b|\b(cars?|vehicles?|anything|something) (around|in|within|under|near) (this|that|my|your|the|a) (range|budget|price)\b|\banything (cheaper|else|around)\b/i;
+const OTHER_CARS_MOVE = 'They asked whether we have other cars in their range. Name their figure or budget as theirs, answer with the full stock list link from this request ("Full stock list") on its own line under a short lead-in, and stop: no price line for this car, no number, no visit.';
 const FIT = new Set(['price_negotiation', 'finance', 'trade_in', 'delivery_interstate', 'rego_roadworthy', 'warranty']);
 
 // A customer who has said no, or has bought elsewhere. Nothing is pushed after this.
@@ -338,6 +341,7 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
   else rung = 'interest';
 
   const browsing = BROWSING.test(item.pendingText || '');
+  const askedOtherCars = OTHER_CARS.test(item.pendingText || '');
 
   const vehicle = item.vehicles?.[0] || null;
   const gone = !!vehicle && !item.deal && (availability(vehicle).code === 'sold' || (availability(vehicle).code === 'available' && reservedByAnother(vehicle)));
@@ -369,13 +373,14 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
     label: RUNG_LABELS[rung],
     aim: AIMS[rung],
     move,
-    moveText: (channel === 'marketplace' && ((browsing && CHAT_MOVES_BROWSING[move]) || CHAT_MOVES[move])) || MOVES[move].text,
+    moveText: (askedOtherCars && (move === 'invite_before_price' || move === 'answer_offer')) ? OTHER_CARS_MOVE : (channel === 'marketplace' && ((browsing && CHAT_MOVES_BROWSING[move]) || CHAT_MOVES[move])) || MOVES[move].text,
     question,
     signals,
     told,
     allowsUrgency: rung === 'commit' && !told.deposit,
     askedDeposit: sit.includes('deposit_hold'),
     browsing,
+    askedOtherCars,
     far: far.far && far.source === 'said',
     channel,
   };
