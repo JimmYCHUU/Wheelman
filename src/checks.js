@@ -400,8 +400,9 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   const urgency = String(body).match(URGENCY);
   if (urgency) add('fail', 'urgency', `"${urgency[0]}": never say that other people are interested, that the car is selling fast or that the price will change.`, [urgency[0]]);
   const stays = String(body).match(STAYS_FOR_SALE);
-  if (stays && !stage?.allowsUrgency) add('warn', 'urgency', 'Says the deposit takes the car off the market. Say this only once the customer has accepted our figure, asked to hold the car, or seen it and is ready to commit.', [stays[0]]);
-  if (stage && !instructed && !['commit', 'buyer'].includes(stage.rung) && !situation?.all?.includes('deposit_hold') && !situation?.all?.includes('after_sale')) {
+  // A car not at the showroom yet may be reserved with the deposit (the playbook offers it).
+  if (stays && !stage?.allowsUrgency && !stage?.notAtYard) add('warn', 'urgency', 'Says the deposit takes the car off the market. Say this only once the customer has accepted our figure, asked to hold the car, or seen it and is ready to commit.', [stays[0]]);
+  if (stage && !instructed && !stage.notAtYard && !['commit', 'buyer'].includes(stage.rung) && !situation?.all?.includes('deposit_hold') && !situation?.all?.includes('after_sale')) {
     const early = String(body).match(DEPOSIT_MENTION);
     if (early) add('warn', 'deposit-early', 'Proposes the deposit before the customer has accepted the figure, asked to hold the car or seen it. Answer, and offer the next step instead.', [early[0]]);
   }
@@ -416,8 +417,9 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
     if (stage.move === 'part_well' && markers.length) add('warn', 'quiet-close', 'A buyer leaving over the price is thanked, not quoted: no blank.', markers);
   }
   // A price reply or an invitation under the text is a next step in itself (blockNextStep).
-  // A polite close (a no, or a buyer leaving over the price) offers nothing more.
-  if (stage && !hold && !blockNextStep && stage.rung !== 'buyer' && stage.move !== 'hold' && !QUIET_MOVES.has(stage.move) && !/\?/.test(body) && !findUrls(body).length && !NEXT_STEP_SIGNS.test(body)) {
+  // A polite close (a no, or a buyer leaving over the price) offers nothing more, and a buyer who
+  // is only browsing is asked for nothing.
+  if (stage && !hold && !blockNextStep && !stage.browsing && stage.rung !== 'buyer' && stage.move !== 'hold' && !QUIET_MOVES.has(stage.move) && !/\?/.test(body) && !findUrls(body).length && !NEXT_STEP_SIGNS.test(body)) {
     add('warn', 'next-step', `No next step offered${String(nextStep || '').trim() ? ` (the model called its next step "${String(nextStep).trim().slice(0, 60)}")` : ''}. Aim for: ${stage.aim}.`);
   }
 

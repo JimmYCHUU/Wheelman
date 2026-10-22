@@ -35,11 +35,11 @@ before(async () => {
 
 after(async () => { appServer?.close(); appServer?.closeAllConnections?.(); await standins.close(); });
 
-// A plain item, enough for saleStage: it reads only these fields.
-const plain = ({ situations = ['general'], texts = [], events = [], channel = 'sms', deal = null, vehicles = [], state = 'NSW', pendingText = '' } = {}) => ({
+// A plain item, enough for saleStage: it reads only these fields. clock: when the last text was written, an hour before it.
+const plain = ({ situations = ['general'], texts = [], events = [], channel = 'sms', deal = null, vehicles = [], state = 'NSW', pendingText = '', clock = now } = {}) => ({
   channel, deal, vehicles, lead: { state }, pendingText: pendingText || texts.filter((t) => t.who === 'customer').map((t) => t.text).at(-1) || '',
   situation: { all: situations, primary: situations[0] },
-  timeline: [...texts.map((t, i) => ({ who: t.who, text: t.text, at: now - (texts.length - i) * HOUR })), ...events.map((e) => ({ who: 'customer', event: e, at: now - MIN }))],
+  timeline: [...texts.map((t, i) => ({ who: t.who, text: t.text, at: clock - (texts.length - i) * HOUR })), ...events.map((e) => ({ who: 'customer', event: e, at: clock - MIN }))],
 });
 const stage = (opts) => selling.saleStage(plain(opts), { now });
 
@@ -76,7 +76,9 @@ test('where the customer is: interest, proof, fit, commit, buyer', () => {
   const again = stage({ situations: ['deposit_hold'], texts: [{ who: 'customer', text: 'Can you hold it?' }, { who: 'us', text: 'A $1,000 refundable holding deposit takes it off the market for you.' }, { who: 'customer', text: 'How do I pay the deposit?' }] });
   assert.deepEqual([again.rung, again.move, again.allowsUrgency, again.told.deposit], ['commit', 'confirm_step', false, true]);
 
-  const arranged = stage({ situations: ['general'], texts: [{ who: 'customer', text: 'Can I come Saturday at 10?' }, { who: 'us', text: 'See you Saturday at 10.' }, { who: 'customer', text: 'Great, see you then. Does it have a tow bar?' }] });
+  // A fixed Thursday afternoon, so the Saturday named is still to come whatever day the test runs on.
+  const thursday = Date.parse('2026-10-22T14:00:00+11:00');
+  const arranged = selling.saleStage(plain({ situations: ['general'], clock: thursday, texts: [{ who: 'customer', text: 'Can I come Saturday at 10?' }, { who: 'us', text: 'See you Saturday at 10.' }, { who: 'customer', text: 'Great, see you then. Does it have a tow bar?' }] }), { now: thursday });
   assert.notEqual(arranged.rung, 'commit', 'a visit not yet taken is not a commitment');
   const declined = stage({ situations: ['general'], texts: [{ who: 'customer', text: 'Can I come Saturday?' }, { who: 'us', text: 'See you Saturday at 10.' }, { who: 'customer', text: 'Sorry, we have already bought elsewhere.' }] });
   assert.equal(declined.rung, 'interest', 'a decline after an arranged visit is not a commitment');
@@ -632,4 +634,128 @@ test('a car still in transit may be held, a browsing text gets the price without
   const again = stage({ channel: 'marketplace', situations: ['price_negotiation'], texts: [{ who: 'customer', text: 'Hi, price?' }, { who: 'us', text: 'The lowest we can do on the Noah is $23,000.' }, { who: 'customer', text: 'Would you do 21k? just asking' }] });
   assert.equal(again.move, 'answer_offer');
   assert.doesNotMatch(again.moveText, /their number/);
+});
+
+// ---- the final review: the ladder ----------------------------------------------------------------
+
+test('an advert seen is not the car seen, and a question about seeing it is not either', async () => {
+  const { classify } = await import('../src/situations.js');
+  const at = (text, { channel = 'sms', before = [] } = {}) => stage({ vehicles: car, channel, situations: classify(text).all, texts: [...before, { who: 'customer', text }] });
+  for (const [text, channel] of [['Hi, I saw it on carsales, is it still available?'], ["I've seen it advertised on Facebook"], ['Saw it online, how many kms?', 'marketplace'], ['Have you seen it in person?'], ['My mate drove it past']]) {
+    const s = at(text, { channel });
+    assert.ok(!s.signals.includes('they have seen the car'), `${text}: ${s.signals.join('; ')}`);
+    assert.notEqual(s.rung, 'commit', text);
+    assert.notEqual(s.move, 'propose_deposit', text);
+    assert.equal(s.allowsUrgency, false, text);
+  }
+  const visit = at('Can I come Saturday at 10?', { before: [{ who: 'customer', text: 'Hi, I saw it on carsales' }, { who: 'us', text: 'Good afternoon, yes it is available at our Lidcombe showroom.' }] });
+  assert.equal(visit.move, 'confirm_or_link', 'they want to see it: the visit is the next step, not the deposit');
+  // Their own words that they saw it, drove it or watched its video still count.
+  for (const text of ['Thanks for the test drive yesterday, does it come with two keys?', 'I watched the walkaround video, looks good', 'We saw it yesterday at your yard, love it', 'We saw it yesterday. Can I get finance on it?'])
+    assert.ok(at(text).signals.includes('they have seen the car'), text);
+  // A question or a request about seeing it, in the sentence that holds the words, is asking.
+  for (const text of ['Have you seen it in person? Any scratches?', 'Can I test drive it on Saturday?', 'Could I test drive it on Saturday', "we aren't able to come all the way there to test drive", 'I can come down today after work', 'Hi can I book a test drive for tomorrow'])
+    assert.ok(!at(text).signals.includes('they have seen the car'), text);
+});
+
+test('a hold or an accepted price outranks a deferral', async () => {
+  const { classify } = await import('../src/situations.js');
+  const offered = [{ who: 'customer', text: 'Best price?' }, { who: 'us', text: 'We can do $22,900 for you.' }];
+  for (const [text, before, situations] of [
+    ["Can you hold off selling it until Saturday? I'll bring the deposit", [], ['deposit_hold']],
+    ["Please hold it for me, I'll let you know by Friday", []],
+    ["I'll pay the deposit in the next couple of days", []],
+    ["Deal. I'll come in the next few days to pay", offered],
+    ["That price is fine, I'll let you know when I can come in", offered],
+  ]) {
+    const s = stage({ vehicles: car, situations: situations || classify(text).all, texts: [...before, { who: 'customer', text }] });
+    assert.notEqual(s.move, 'accept_deferral', text);
+    assert.ok(['propose_deposit', 'confirm_step'].includes(s.move), `${text}: ${s.move}`);
+  }
+});
+
+test('"not sure" or "I\'ll think about it" after the deposit is proposed is not a yes, and a polite close never asks for the licence', async () => {
+  const { classify } = await import('../src/situations.js');
+  const proposed = [{ who: 'customer', text: 'Can you hold it?' }, { who: 'us', text: 'A $1,000 refundable holding deposit takes it off the market for you.' }];
+  const after = (text) => stage({ vehicles: car, situations: classify(text).all, texts: [...proposed, { who: 'customer', text }] });
+  for (const text of ["Not sure yet, I'll let you know", "Ok I'll think about it", "I'm not sure about the deposit"]) {
+    const s = after(text);
+    assert.equal(s.told.depositAgreed, false, text);
+    assert.doesNotMatch(selling.stageLines(s).join('\n'), /driver licence/, text);
+  }
+  const yes = after("Yes let's do it, how do I pay?");
+  assert.equal(yes.told.depositAgreed, true);
+  assert.match(selling.stageLines(yes).join('\n'), /ask for a photo of their driver licence/);
+  for (const move of ['accept_deferral', 'accept_no', 'part_well', 'hold'])
+    assert.doesNotMatch(selling.stageLines({ ...yes, move }).join('\n'), /licence/, move);
+});
+
+test('on Marketplace an accepted figure leads to the number and the inspection, never the deposit unless they ask to hold the car', () => {
+  const accepted = [{ who: 'customer', text: 'Best price?' }, { who: 'us', text: 'The lowest we can do on the Noah is $22,500.' }, { who: 'customer', text: "Ok deal, I'll take it" }];
+  const deal = stage({ channel: 'marketplace', vehicles: car, texts: accepted });
+  assert.equal(deal.move, 'propose_deposit');
+  assert.match(deal.moveText, /their number/);
+  assert.doesNotMatch(deal.moveText, /\$1,000/);
+  assert.equal(deal.allowsUrgency, false);
+  assert.match(selling.stageLines(deal).join('\n'), /No urgency of any kind/);
+  assert.doesNotMatch(selling.stageLines(deal).join('\n'), /\$1,000/, 'nothing in the lines points at the deposit, the aim included');
+  const hold = stage({ channel: 'marketplace', vehicles: car, situations: ['deposit_hold'], texts: [{ who: 'customer', text: 'Can you hold it for me until Saturday?' }] });
+  assert.equal(hold.move, 'propose_deposit');
+  assert.match(hold.moveText, /\$1,000 refundable holding deposit/);
+  assert.equal(hold.allowsUrgency, true);
+  const sms = stage({ vehicles: car, texts: accepted });
+  assert.match(sms.moveText, /\$1,000 refundable holding deposit/, 'a text keeps the deposit');
+  assert.equal(sms.allowsUrgency, true);
+});
+
+test('only a buyer who says they are just browsing or just asking is browsing; a buyer after the sale never is', () => {
+  for (const [text, want] of [['Hi, just wondering if this is still available?', false], ['Just checking how many kms', false], ['Just wondering what your best price is?', false], ['Just looking for a family car, does it have 8 seats?', false], ["What's the lowest price, I am just asking", true], ['Just looking at the moment, not ready to buy', true]])
+    assert.equal(stage({ vehicles: car, texts: [{ who: 'customer', text }] }).browsing, want, text);
+  assert.equal(stage({ situations: ['after_sale'], deal: { source: 'lead_status' }, texts: [{ who: 'customer', text: 'Just asking, when will it be ready?' }] }).browsing, false, 'a buyer is never browsing');
+  // A buyer who is only asking is asked for nothing, so no next step is missing.
+  const browsing = { rung: 'interest', move: 'answer_then_invite', told: {}, allowsUrgency: false, aim: 'get them to see the car', browsing: true };
+  const body = 'Yes, the Noah has a tow bar fitted.';
+  const warned = (s) => checks.checkDraft({ reply: body, body, allowedText: 'Vehicle: 2021 Toyota Noah X.', customerText: 'Just looking at the moment, does it have a tow bar?', stage: s, situation: { all: ['vehicle_details'] } }).some((c) => c.code === 'next-step');
+  assert.equal(warned(browsing), false);
+  assert.equal(warned({ ...browsing, browsing: false }), true);
+});
+
+test('an offer that mentions another car it was compared with is an offer, not a question about other cars', async () => {
+  const { classify } = await import('../src/situations.js');
+  const text = 'Would you take 15k? The other one I saw was 14k';
+  const s = stage({ vehicles: car, situations: classify(text).all, texts: [{ who: 'customer', text }] });
+  assert.equal(s.askedOtherCars, false);
+  assert.equal(s.move, 'invite_before_price');
+  assert.doesNotMatch(s.moveText, /full stock list/);
+  assert.equal(stage({ vehicles: car, situations: ['price_negotiation'], texts: [{ who: 'customer', text: 'My budget is around 10k\nYou have cars around this range?' }] }).askedOtherCars, true);
+});
+
+test('"See you Saturday" written on a Saturday afternoon is next Saturday, unless it names a time still ahead', () => {
+  const saturday = (hour) => Date.parse(`2026-10-24T${String(hour).padStart(2, '0')}:00:00+11:00`);
+  const sunday = Date.parse('2026-10-25T10:00:00+11:00');
+  const taken = 'the visit we arranged has taken place and they wrote again';
+  const visit = (ours) => {
+    const item = plain({ vehicles: car });
+    item.timeline = [{ who: 'customer', text: 'Can I come and see it?', at: saturday(14) }, { who: 'us', text: ours, at: saturday(15) }, { who: 'customer', text: 'Great. Does it have a tow bar?', at: saturday(16) }];
+    item.pendingText = 'Great. Does it have a tow bar?';
+    return selling.saleStage(item, { now: sunday });
+  };
+  const next = visit('See you Saturday.');
+  assert.ok(!next.signals.includes(taken), next.signals.join('; '));
+  assert.notEqual(next.rung, 'commit');
+  assert.ok(!visit('See you Saturday at 10.').signals.includes(taken), 'a time already past when we wrote it is next Saturday');
+  assert.ok(visit('See you Saturday at 4 pm.').signals.includes(taken), 'a time still ahead that day is that day');
+});
+
+test('a deferral about a sold car is offered another car', () => {
+  assert.equal(stage({ vehicles: [{ id: 2, soldStatus: 'SOLD', stockIn: 'Sold' }], texts: [{ who: 'customer', text: "I'll let you know" }] }).move, 'offer_alternative');
+});
+
+test('the deposit and "reserves it for you" on a car still on its way are not pointed out', () => {
+  const run = (stage) => checks.checkDraft({ reply: 'x', body: 'The Voxy arrives soon. A $1,000 refundable holding deposit reserves it for you.', allowedText: 'Vehicle: 2020 Toyota Voxy ZS. Holding deposit $1,000.', customerText: "what's the price", stage, situation: { all: ['price_negotiation'] } }).map((c) => `${c.level}:${c.code}`);
+  const transit = { rung: 'fit', move: 'invite_before_price', told: { depositAgreed: false }, allowsUrgency: false, aim: 'x', notAtYard: true };
+  const codes = run(transit);
+  assert.ok(!codes.includes('warn:deposit-early') && !codes.includes('warn:urgency'), codes.join(' '));
+  const atYard = run({ ...transit, notAtYard: false });
+  assert.ok(atYard.includes('warn:deposit-early') && atYard.includes('warn:urgency'), atYard.join(' '));
 });
