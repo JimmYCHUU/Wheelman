@@ -239,6 +239,12 @@ test('every kind of message has its wording, and is written with no AI and nothi
     assert.ok(!/Some Staff/.test(out.text));
   }
   assert.equal(ai().length, 0, 'no AI request for any of them');
+
+  const fe = (await compose(501, 'first_estimate')).text;
+  assert.ok(fe.indexOf('[DEPOSIT LINK?]') < fe.indexOf('Once the deposit is received'), 'the deposit step comes before the process');
+  assert.match(fe, /Your final landed figure will move a little with the winning bid, the exchange rate, shipping timing and the car's condition\./);
+  assert.doesNotMatch(fe, /Please note the final landed price/);
+  assert.match(fe, /We will not place a bid without your confirmation\./);
 });
 
 test('a bid that was lost: your figures fill the blanks, and without them the blanks are marked', async () => {

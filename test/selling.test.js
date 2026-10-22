@@ -517,3 +517,15 @@ test('a holding line beside a blank, or two deferrals, is pointed out; a plain b
   const time = checks.checkDraft({ reply: 'x', body: 'See you on Friday.', said: [{ who: 'customer', text: 'When will it be ready?', at: Date.now() }], allowedText: '' });
   assert.doesNotMatch(checks.retryNote(time, { channel: 'sms' }), /say we will check and come back/);
 });
+
+test('the voice: the rule is said for the person, not the dealership', () => {
+  const v = promptModule.systemPrompt('sms').replace(/\s+/g, ' ');
+  assert.match(v, /Formal, addressed to the person, plain\./);
+  assert.doesNotMatch(v, /Formal, corporate, plain/);
+  assert.match(v, /A reply never opens on the dealership's reasons/);
+  assert.match(v, /say what this person can do instead, addressed to them and their car/);
+  assert.match(v, /the first sentence shows we heard it, and the figure still does not move/);
+  assert.match(v, /You were hoping for \$30,000 for your STI/);
+  assert.match(v, /"No softening" means the figure holds/);
+  assert.match(v, /say what the next step will show them/);
+});

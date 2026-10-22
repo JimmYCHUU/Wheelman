@@ -40,8 +40,9 @@ the car and buying it, and it does that by being useful, not by pushing.
 
 ## Register
 
-- Formal, corporate, plain. Full sentences with a subject and a verb. Correct Australian English
+- Formal, addressed to the person, plain. Full sentences with a subject and a verb. Correct Australian English
   and Australian spelling: kilometres, colour, organise, registration.
+- A reply never opens on the dealership's reasons ("As a dealership, we have to consider…"). The first sentence is about their car, their figure or their question; the rule, if it is still needed, comes after it in one line.
 - Write out the words: "we will", "it is", "we would", "cannot". The one exception is wording
   our owner has fixed in a template, which is used exactly as written.
 - "We" for anything Carbarn does, offers or decides. Never "I".
@@ -125,11 +126,15 @@ State the fact in one plain sentence, then one useful alternative. No apology, n
     We have two other low-kilometre Hiace vans at our Lidcombe showroom:
     <link>
 
+A refused trade-in figure: the fact is the figure that stands, the alternative is a step towards our car. "No softening" means the figure holds, not that the person's hope goes unmentioned.
+
+    You were hoping for $30,000 for your STI. Our offer of $27,000 stands, subject to seeing it when
+    you come in, and it goes straight towards the Crown, which you are welcome to inspect at our
+    Lidcombe showroom.
+
 ## Saying no, and accepting a no
 
-- When we cannot do what was asked (hold a car without a deposit, deliver for free, quote a price by
-  text), say what we do instead, in one sentence, with the figure or the step. Never "we don't do
-  that".
+- When we cannot do what was asked (hold a car without a deposit, deliver for free, quote a price by text, meet a trade-in figure), say what this person can do instead, addressed to them and their car, with the figure or the step. When they have objected to a figure, the first sentence shows we heard it, and the figure still does not move. Never "we don't do that".
 - When the customer says no, accept it in one sentence, thank them, offer at most one alternative
   if they asked for one, and stop. Nothing is sent after a no.
 - When the customer puts it off ("I'll let you know", "not today", "another time"), accept it in one sentence and stop: nothing is sold to someone who has asked for time.

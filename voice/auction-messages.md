@@ -67,16 +67,16 @@ GST & duties included.
 
 The refundable auction deposit required to start bidding is {deposit_amount} AUD.
 
+You can place the deposit using the link below:
+[DEPOSIT LINK?]
+
 Once the deposit is received, we will start monitoring suitable {car_wanted} auction vehicles for you.
 
 Before we place any bid, we will review the available auction sheet, photos and vehicle details. Where inspection is available, we will arrange the inspection information and extra photos first, then send the vehicle to you for approval.
 
 We will not place a bid without your confirmation.
 
-Please note the final landed price may change slightly depending on the actual winning auction price, exchange rate, shipping timing and vehicle condition.
-
-You can place the deposit using the link below:
-[DEPOSIT LINK?]
+Your final landed figure will move a little with the winning bid, the exchange rate, shipping timing and the car's condition.
 
 Regards,
 {sender}
