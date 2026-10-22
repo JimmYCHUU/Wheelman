@@ -97,7 +97,7 @@ function cleanReply(texts, lead) {
   for (const raw of texts) {
     let own = String(raw).replace(/\r/g, '').replace(UNUSUAL_BREAKS, '\n');
     // An auction offer: everything from the car's details down belongs to that customer's deal.
-    const offerAt = /\/live-auction\//i.test(own) ? own.search(/(^|\n)\s*Vehicle details:/i) : -1;
+    const offerAt = /\/live-auction\//i.test(own) ? own.search(/(^|\n)\s*(Vehicle details:|Based on a [^\n]*\bbid\b)/i) : -1;
     if (offerAt !== -1) { own = own.slice(0, offerAt); hadOffer = true; }
     const block = /📍/.test(own);
     hadBlock = hadBlock || block;

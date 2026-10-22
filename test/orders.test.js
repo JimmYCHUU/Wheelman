@@ -314,10 +314,13 @@ test('a car found at auction: the bid comes from the three closest sold cars, an
   assert.equal(noDeposit.status, 'ready', noDeposit.error);
   // Sold: 401,000, 388,000 and 178,000 are the three closest. Their average is 322,333, rounded up to 350,000.
   assert.equal(feed().find((c) => c.method === 'POST').body, '{"bidYen":350000}');
-  assert.ok(noDeposit.reply.startsWith(`Hello Nina,\n\nWe found this 2015 Subaru XV Hybrid in tomorrow's auction.\n\nVehicle details:\n2015 Subaru XV Hybrid 2.0i EyeSight\n121,000 km\nAuction Grade 3.5\n2.0L Hybrid\n4WD\n5 seats\n\n`), noDeposit.reply.slice(0, 200));
+  assert.ok(noDeposit.reply.startsWith(`Hello Nina,\n\nWe found this 2015 Subaru XV Hybrid in tomorrow's auction.\n\nBased on a ¥350,000 bid, the estimated landed and complied cost is approximately AUD $11,410.\nIt has 121,000 km and auction grade 3.5.\n\n`), noDeposit.reply.slice(0, 200));
   assert.ok(noDeposit.reply.includes('https://www.carbarn.com.au/live-auction/subaru/xv-hybrid/gpe/1992541'));
   assert.ok(noDeposit.reply.includes("The website's suggested bid is ¥253,590. We usually suggest around ¥350,000 to improve the chance of winning."));
-  assert.ok(noDeposit.reply.includes('Based on a ¥350,000 bid, the current estimated landed and complied cost is approximately AUD $11,410, including:'));
+  assert.ok(noDeposit.reply.indexOf('Based on a') < noDeposit.reply.indexOf('Vehicle details:'));
+  assert.ok(noDeposit.reply.includes('\n\nVehicle details:\n2015 Subaru XV Hybrid 2.0i EyeSight\n121,000 km\nAuction Grade 3.5\n2.0L Hybrid\n4WD\n5 seats\n\n'));
+  assert.ok(!noDeposit.reply.includes('including:') && !/^- /m.test(noDeposit.reply) && !noDeposit.reply.includes('preferred bid amount'));
+  assert.ok(noDeposit.reply.includes('We do not bid blindly.'));
   assert.ok(noDeposit.reply.includes('If you would like us to proceed, you can use the deposit link below:\n[DEPOSIT LINK?]'));
   assert.ok(noDeposit.factsUsed.some((f) => /^Bid from the 3 closest sold cars, averaged and rounded up: grade 3\.5, 120,000 km, sold ¥401,000/.test(f)));
   assert.deepEqual(noDeposit.checks.filter((c) => c.level === 'input').map((c) => c.tokens), [['[DEPOSIT LINK?]']]);

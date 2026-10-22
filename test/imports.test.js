@@ -141,18 +141,16 @@ const conv = (id, leadId, name) => db.upsertConversation({ id, phone: `+61491570
 const msg = (conversationId, direction, body, agoMs) => db.upsertMessage({ id: mid++, conversationId, direction, body, sentBy: direction === 'OUT' ? 'Dana' : null, status: 'SENT', mediaType: null, at: now - agoMs, importedAt: now - agoMs });
 
 const CLOSING = '📍 136 Frances Street, Lidcombe NSW 2141\n📞 0423 840 130\n🕛 Open 7 days, 8 AM–5 PM\n\nRegards,\nTeam Carbarn';
-const OFFER = (bidSentence, bid, total, lines) => [
+const OFFER = (bidSentence, bid, total) => [
+  `Based on a ${bid} bid, the estimated landed and complied cost is approximately AUD ${total}.\nIt has 121,000 km and auction grade 3.5.`,
+  bidSentence,
   'Vehicle details:\n2015 Subaru XV Hybrid 2.0i EyeSight\n121,000 km\nAuction Grade 3.5\n2.0L Hybrid\n4WD\n5 seats',
   'You can view the vehicle and photos here:\nhttps://www.carbarn.com.au/live-auction/subaru/xv-hybrid/gpe/1992541',
-  bidSentence,
-  `Based on a ${bid} bid, the current estimated landed and complied cost is approximately AUD ${total}, including:`,
-  lines,
   'If you would like us to proceed, you can use the deposit link below:\n[DEPOSIT LINK?]',
   'We do not bid blindly. Our Japan-side team will inspect the vehicle first and share the photos, auction sheet and inspection feedback. We will only place the final bid once you are happy and confirm us to proceed.',
   'Kind regards,\nTeam Carbarn',
 ].join('\n\n');
-const SUGGESTED = "The website's suggested bid is ¥253,590. We usually suggest around ¥300,000 to improve the chance of winning. However, if you have your own preferred bid amount, please let us know and we can proceed with that amount.";
-const COSTS_300K = '- Auction price: $2,741 AUD\n- Japan agent fee: $822 AUD\n- Carbarn agent fee: $1,500 AUD\n- Shipping, logistics, duty & import charges: $3,426 AUD\n- Compliance package: $1,540 AUD\n- GST: $989 AUD';
+const SUGGESTED = "The website's suggested bid is ¥253,590. We usually suggest around ¥300,000 to improve the chance of winning.";
 
 // ---- reading the enquiries -------------------------------------------------------------------------
 
@@ -365,7 +363,7 @@ test('once the customer says what they want, the live auction is searched and th
   // The website lists no sold prices for this car here, so its own suggested bid is rounded up.
   assert.deepEqual(feed().map((c) => `${c.method} ${c.path.split('/').slice(5).join('/') || 'list'}`), ['GET list', 'GET 1992541', 'GET 1992541/sold-comparables', 'POST 1992541/price-estimate']);
   assert.equal(feed()[3].body, '{"bidYen":300000}');
-  assert.equal(d.reply, `${opening.replace('{{NAME}}', 'Nina')}\n\n${OFFER(SUGGESTED, '¥300,000', '$11,019', COSTS_300K)}`);
+  assert.equal(d.reply, `${opening.replace('{{NAME}}', 'Nina')}\n\n${OFFER(SUGGESTED, '¥300,000', '$11,019')}`);
   assert.deepEqual(fails(d), [], JSON.stringify(d.checks));
   assert.ok(d.checks.some((c) => c.level === 'input' && c.code === 'marker' && c.tokens.includes('[DEPOSIT LINK?]')), 'the deposit link is a blank for a person');
   assert.match(d.checks.find((c) => c.code === 'auction').message, /^Auction car 1992541, auction on 7 Oct 2026 at MIRIVE Saitama\. The bid and costs were read from the live auction at /);
@@ -399,7 +397,7 @@ test('an opening that states a price is replaced by the standard one, and an off
   aiScript = [priced, priced].map((reply) => ({ reply, needs_human: [], facts_used: [], hold: false }));
   const d = await drafter.draftFor(it, { save: false, now });
   assert.equal(ai().length, 2, 'asked once more, then the standard opening is used');
-  assert.ok(d.reply.startsWith('Hello Nina,\n\nWe’ve found a 2015 Subaru XV Hybrid that may be worth considering.\n\nVehicle details:'), d.reply.slice(0, 120));
+  assert.ok(d.reply.startsWith('Hello Nina,\n\nWe’ve found a 2015 Subaru XV Hybrid that may be worth considering.\n\nBased on a'), d.reply.slice(0, 120));
   assert.deepEqual(fails(d), []);
 
   // With the owner's Prompt the layout rule steps aside: an opening that states the landed cost they asked for is kept.
@@ -413,7 +411,10 @@ test('an opening that states a price is replaced by the standard one, and an off
   const without = await quickly(() => drafter.draftFor(it, { save: false, now }));
   assert.equal(without.status, 'ready');
   assert.equal(without.model, 'standard wording');
-  assert.ok(without.reply.includes('Based on a ¥300,000 bid, the current estimated landed and complied cost is approximately AUD $11,019'));
+  assert.ok(without.reply.includes('Based on a ¥300,000 bid, the estimated landed and complied cost is approximately AUD $11,019.\nIt has 121,000 km and auction grade 3.5.'));
+  assert.ok(without.reply.indexOf('Based on a') < without.reply.indexOf('Vehicle details:'));
+  assert.ok(!without.reply.includes('including:') && !/^- /m.test(without.reply) && !without.reply.includes('preferred bid amount'));
+  assert.ok(without.reply.includes('We do not bid blindly.') && without.reply.includes('[DEPOSIT LINK?]'));
 });
 
 test('Rewrite can name the bid or the car, and a bid the customer names is called their own', async () => {
@@ -435,7 +436,7 @@ test('Rewrite can name the bid or the car, and a bid the customer names is calle
   assert.ok(car.reply.includes('73,000 km\nAuction Grade 4'));
 
   // The customer answers our offer with a bid of their own: same car, their figure.
-  msg(904, 'OUT', `Hi Nina,\n\nWe’ve found a 2015 Subaru XV Hybrid.\n\n${OFFER(SUGGESTED, '¥300,000', '$11,019', COSTS_300K)}`, 3 * MIN);
+  msg(904, 'OUT', `Hi Nina,\n\nWe’ve found a 2015 Subaru XV Hybrid.\n\n${OFFER(SUGGESTED, '¥300,000', '$11,019')}`, 3 * MIN);
   msg(904, 'IN', 'Looks good. Can we bid ¥260,000 instead?', 1 * MIN);
   calls.length = 0;
   aiScript = [opening];
@@ -503,4 +504,17 @@ test('an offer the team sent teaches only its opening: the car, the bid and the 
   assert.ok(row, JSON.stringify(rows.map((r) => r.reply.slice(0, 40))));
   assert.equal(row.reply, 'Hi {{NAME}},\n\nWe’ve found a 2015 Subaru XV Hybrid.\n[then the auction car: its details, link, bid and cost breakdown]');
   assert.ok(!/¥|\$|live-auction|1992541/.test(row.reply));
+});
+
+test('an offer the team sent in the landed-figure-first shape teaches only its opening', async () => {
+  lead(9010, 910, 'Opal');
+  conv(910, 9010, 'Opal Test');
+  msg(910, 'OUT', `Hi Opal,\n\nWe’ve found a 2015 Subaru XV Hybrid.\n\n${OFFER(SUGGESTED, '¥300,000', '$11,019')}`, 3 * MIN);
+  const practice = await import('../src/practice.js');
+  practice.resetPractice();
+  const rows = practice.recentPractice({ now });
+  const row = rows.find((r) => r.itemKey === 'c:910' && /We’ve found/.test(r.reply));
+  assert.ok(row, JSON.stringify(rows.map((r) => r.reply.slice(0, 40))));
+  assert.ok(row.reply.startsWith('Hi {{NAME}},\n\nWe’ve found a 2015 Subaru XV Hybrid.'), row.reply);
+  assert.ok(!/¥|\$|live-auction|1992541|Based on|km/.test(row.reply), row.reply);
 });

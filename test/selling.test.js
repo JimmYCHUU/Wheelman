@@ -43,6 +43,14 @@ const plain = ({ situations = ['general'], texts = [], events = [], channel = 's
 });
 const stage = (opts) => selling.saleStage(plain(opts), { now });
 
+test('an import email names one model; the landed-figure line gives only the facts that decide it', async () => {
+  assert.match(promptModule.systemPrompt('email'), /name one, the closest to what they asked about/);
+  const { decidesLine } = await import('../src/imports.js');
+  assert.equal(decidesLine({ km: 128000, grade: 'R' }), 'It has 128,000 km and auction grade R.');
+  assert.equal(decidesLine({ km: 0, grade: '' }), '');
+  assert.equal(decidesLine({ km: 53000 }), 'It has 53,000 km.');
+});
+
 test('where the customer is: interest, proof, fit, commit, buyer', () => {
   const first = stage({ situations: ['availability'], texts: [{ who: 'customer', text: 'Is the Noah still available?' }] });
   assert.deepEqual([first.rung, first.move, first.allowsUrgency], ['interest', 'invite_inspection', false]);

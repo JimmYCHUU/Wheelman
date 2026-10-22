@@ -247,6 +247,14 @@ export function vehicleLines(lot) {
   return [lot.title, lot.km ? `${lot.km.toLocaleString('en-AU')} km` : '', lot.grade ? `Auction Grade ${lot.grade}` : '', engine.trim(), lot.drive, lot.seats ? `${lot.seats} seats` : ''].filter(Boolean);
 }
 
+/** The two facts that decide whether the car suits: kilometres and auction grade, as one sentence ('' when the lot gives neither). */
+export function decidesLine(lot) {
+  const parts = [];
+  if (lot.km) parts.push(`${lot.km.toLocaleString('en-AU')} km`);
+  if (lot.grade) parts.push(`auction grade ${lot.grade}`);
+  return parts.length ? `It has ${parts.join(' and ')}.` : '';
+}
+
 export const costLines = (estimate) => estimate.lines.map((l) => `- ${l.label}: ${money(l.aud)} AUD`).join('\n');
 
 /**
@@ -269,7 +277,7 @@ export function offerBlock(lot, estimate, bidBy = 'suggested', { websiteBidYen =
     bid_sentence: fill(t.snippets[which] || '', { bid, website_bid: yen(websiteBidYen) }),
     bid,
     total: money(estimate.totalAud),
-    cost_lines: costLines(estimate),
+    decides: decidesLine(lot),
     if_deposit: !depositPaid,
     sender: config.firstReplySender,
   });
