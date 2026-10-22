@@ -554,3 +554,14 @@ test('the voice: the rule is said for the person, not the dealership', () => {
   assert.match(v, /"No softening" means the figure holds/);
   assert.match(v, /say what the next step will show them/);
 });
+
+test('below commitment the holding deposit is not mentioned; it is when they asked about it or are committing', () => {
+  const interest = stage({ situations: ['general'], texts: [{ who: 'customer', text: 'Thx I would want to see in flesh' }] });
+  assert.match(selling.stageLines(interest).join('\n'), /Do not propose or mention the holding deposit/);
+  const commit = stage({ situations: ['deposit_hold'], texts: [{ who: 'customer', text: 'Can you hold it for me until Saturday?' }] });
+  assert.doesNotMatch(selling.stageLines(commit).join('\n'), /Do not propose or mention the holding deposit/);
+  const asked = stage({ situations: ['deposit_hold', 'price_negotiation'], texts: [{ who: 'customer', text: 'How much is the deposit?' }] });
+  assert.equal(asked.askedDeposit, true);
+  assert.doesNotMatch(selling.stageLines(asked).join('\n'), /Do not propose or mention the holding deposit/);
+});
+

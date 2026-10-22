@@ -364,6 +364,7 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
     signals,
     told,
     allowsUrgency: rung === 'commit' && !told.deposit,
+    askedDeposit: sit.includes('deposit_hold'),
     far: far.far && far.source === 'said',
     channel,
   };
@@ -392,6 +393,10 @@ export function stageLines(stage) {
     L.push('Urgency, once, and only as a fact about how we work: a $1,000 refundable holding deposit is what takes the car off the market, and until one is paid the car stays for sale. Never say that other people are interested, that it is selling fast, or that the price will change.');
   } else {
     L.push('No urgency of any kind: nothing about other buyers, nothing about selling fast, and nothing about the deposit taking the car off the market.');
+    // Below commitment the deposit is not the next step, unless the customer raised it themselves.
+    if (stage.rung !== 'commit' && stage.rung !== 'buyer' && stage.move !== 'propose_deposit' && !stage.askedDeposit) {
+      L.push('Do not propose or mention the holding deposit: it is not the next step for this customer yet.');
+    }
   }
   if (stage.told.deposit) L.push('We have already proposed the deposit to this customer: do not propose it again.');
   if (stage.told.deposit) L.push(stage.told.depositAgreed ? 'They have said yes to the deposit: ask for a photo of their driver licence and their email address, so the invoice can be sent.' : 'They have not yet said yes to the deposit: do not ask for their licence or email.');
