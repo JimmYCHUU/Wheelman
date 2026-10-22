@@ -37,6 +37,7 @@
     "check-login": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/check-login.js",
     "check-model": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/check-model.js",
     "replay": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/replay.js",
+    "tone-redraft": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/tone-redraft.js",
     "review": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/review.js",
     "report": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/report.js",
     "backup": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/backup.js",
