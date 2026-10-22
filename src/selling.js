@@ -195,8 +195,12 @@ export const MOVES = {
     question: 'What is your postcode, so we can quote the delivery?',
   },
   invite_before_price: {
-    text: 'The price question. Our standard price reply is added under your text by code (see PRICE REPLY): what the price includes, that government charges are extra, that we may offer a small discount to a serious buyer, and the invitation with the booking link. Write only the greeting when one is due and one or two sentences that answer anything else asked and place the vehicle. Do not repeat the advertised price, name no figure, and neither accept nor refuse an offer: a figure is [PRICE?] for a person.',
+    text: 'The price question. Our standard price reply is added under your text by code (see PRICE REPLY), and the block says the inclusions, the discount and the invitation: do not write them. Write only the greeting when one is due and one or two sentences whose first names what the customer gave us and answers it: their offer, their budget or their question. Their own figure may be named as theirs ("Thank you for your offer of $15,000"), never a figure of ours. Never open on the car being available for inspection. Do not repeat the advertised price, and neither accept nor refuse an offer: a figure is [PRICE?] for a person.',
     question: '',
+  },
+  price_with_trade: {
+    text: 'They asked the price with a trade-in. Write the sentence with [PRICE?] for this car\'s figure, and ask for what we need to value their car (the rego number and state, the kilometres, the condition and a few clear photos); its value is [TRADE-IN VALUE?] if they asked for it.',
+    question: 'Could you send the rego, the kilometres and a few photos?',
   },
   answer_offer: {
     text: 'We have already answered the price in this conversation, and they came back with an offer or a view of their own. Thank them for their offer in a few words. Neither accept nor refuse it: if they named a figure, write "Regarding your offer, [PRICE?]." for a person to complete (list it under needs_human); if they named none, acknowledge their view in one courteous sentence. Never say that their offer is too low or below what we accept, never argue about what the car is worth, and do not repeat what the price includes. Invite them to see the car only if we have not invited them in this conversation.',
@@ -291,6 +295,7 @@ const CHAT_MOVES = {
   answer_offer: 'We have already answered the price in this chat, and they came back with an offer or a view of their own. Thank them for the offer in a few words and neither accept nor refuse it: if they named a figure, write "The lowest we can do is [PRICE?]." for a person to complete (list it under needs_human), then their number and the day and time that suit them, if that works for them. Never say that their offer is too low or below what we accept, and never argue about what the car is worth.',
   send_finance_link: 'Say "Yes, we do." and give the finance form on the car\'s page from VEHICLE FACTS ("Start a finance application") on its own line, asking them to let us know once it is done. Never a rate, a repayment or a likelihood of approval.',
   ask_trade_in_details: 'Say we take trade-ins against a car from our stock, and give the trade-in form on the car\'s page from VEHICLE FACTS ("Start a trade-in request") on its own line, with what to put in it: the rego number and state, the kilometres, the condition, a few clear photos and their number. The value is a person\'s: [TRADE-IN VALUE?] if a figure is asked for.',
+  price_with_trade: 'They asked the price with a trade-in. Write the sentence with [PRICE?] for this car\'s figure, and give the trade-in form on the car\'s page from VEHICLE FACTS ("Start a trade-in request") on its own line, with what to put in it: the rego number and state, the kilometres, the condition, a few clear photos and their number; its value is [TRADE-IN VALUE?] if they asked for it.',
   // Only when they have not asked to hold the car: a buyer who asks to hold it is proposed the deposit, as on a text.
   propose_deposit: 'They accept our figure. Thank them, and ask them to send us their number and the day and time that suit them, so we can get the inspection booked and confirm it by text. No deposit unless they ask to hold the car.',
 };
@@ -422,6 +427,8 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
   // A car that is gone is said so, even to someone who means to come back to it later.
   else if (gone) move = 'offer_alternative';
   else if (deferred) move = 'accept_deferral';
+  // A price asked with a trade-in: this car's figure and what we need to value theirs; no price reply block.
+  else if (price.open && sit.includes('trade_in')) move = 'price_with_trade';
   // Our price reply goes once; after that an offer is answered for a person to decide.
   else if (price.open) move = price.answered ? 'answer_offer' : 'invite_before_price';
   else if (rung === 'commit') move = told.deposit ? 'confirm_step' : 'propose_deposit';
@@ -431,7 +438,7 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
   }
 
   // On Marketplace a trade-in is sent to the form on the car's page, so nothing is asked.
-  let question = channel === 'marketplace' && move === 'ask_trade_in_details' ? '' : MOVES[move].question;
+  let question = channel === 'marketplace' && (move === 'ask_trade_in_details' || move === 'price_with_trade') ? '' : MOVES[move].question;
   // Do not ask what the customer has already answered.
   if (move === 'invite_before_price' && sit.includes('finance')) question = '';
   if (move === 'offer_online_inspection' && /\b\d{4}\b/.test(item.pendingText || '')) question = '';

@@ -747,6 +747,57 @@ test('"See you Saturday" written on a Saturday afternoon is next Saturday, unles
   assert.ok(visit('See you Saturday at 4 pm.').signals.includes(taken), 'a time still ahead that day is that day');
 });
 
+// ---- the final review: the price prompt ------------------------------------------------------------
+
+test('the price question has one rule for the opening line in every place: what they gave, never the showroom line', () => {
+  const flat = promptModule.systemPrompt('sms').replace(/\s+/g, ' ');
+  const section = flat.slice(flat.indexOf('## The price question'), flat.indexOf('## Inviting an inspection'));
+  const row = flat.match(/\| They ask about price \|[^|]*\|/)[0];
+  const lines = selling.stageLines(stage({ vehicles: car, situations: ['price_negotiation'], texts: [{ who: 'customer', text: 'What is your best price?' }] })).join(' ');
+  assert.doesNotMatch(flat, /place the vehicle/i);
+  assert.doesNotMatch(flat, /do not name any figure/i);
+  for (const [where, text] of [['the price section', section], ['the moves row', row], ['the stage lines', lines]]) {
+    assert.doesNotMatch(text, /place the vehicle|do not name any figure|name no figure/i, where);
+    assert.doesNotMatch(text, /available for inspection at our Lidcombe showroom/i, where);
+    assert.match(text, /Thank you for your offer of \$15,000/, where);
+    assert.match(text, /never a figure of ours/, where);
+    assert.match(text, /Never open on the car being available for inspection/, where);
+  }
+});
+
+test('a price question with a trade-in gets its own move, and no price reply is promised', () => {
+  const text = "What's your best price if I trade in my 2015 Corolla?";
+  const sms = stage({ vehicles: car, situations: ['price_negotiation', 'trade_in'], texts: [{ who: 'customer', text }] });
+  assert.equal(sms.move, 'price_with_trade');
+  assert.match(sms.moveText, /\[PRICE\?\] for this car's figure/);
+  assert.match(sms.moveText, /the rego number and state, the kilometres, the condition and a few clear photos/);
+  assert.match(sms.moveText, /\[TRADE-IN VALUE\?\]/);
+  const chat = stage({ channel: 'marketplace', vehicles: car, situations: ['price_negotiation', 'trade_in'], texts: [{ who: 'customer', text }] });
+  assert.equal(chat.move, 'price_with_trade');
+  assert.match(chat.moveText, /trade-in form on the car's page/);
+  assert.equal(chat.question, '', 'on Marketplace the form asks for it');
+
+  lead(71, 81, 'Tom', '0491 570 171', { stocks: ['1300'] });
+  conv(81, 71, 'Tom Test', '+61491570171');
+  msg(81, 'IN', 'Is the Noah still available?', 3 * HOUR);
+  msg(81, 'OUT', 'Good afternoon Tom, yes it is available.', 170 * MIN);
+  msg(81, 'IN', text, 5 * MIN);
+  const asked = promptModule.buildPrompt(items.buildItem({ conversationId: 81 }), { now });
+  assert.equal(asked.stage.move, 'price_with_trade');
+  assert.equal(asked.price.on, false);
+  assert.doesNotMatch(asked.user, /Our standard price reply is added under your text/i);
+  assert.match(asked.user, /They asked the price with a trade-in/);
+});
+
+test('the price reply for a buyer who is only asking says the block carries no invitation', () => {
+  const noah = { url: 'https://www.carbarn.com.au/vehicles/toyota/noah/zrr80/1300', price: 23900, soldStatus: 'UnSold', stockIn: 'Online', status: 'PUBLISHED' };
+  const plan = (t) => { const item = plain({ situations: ['price_negotiation'], vehicles: [noah], texts: [{ who: 'customer', text: t }] }); return promptModule.pricePlan(item, noah, { stage: selling.saleStage(item, { now }) }); };
+  const asking = plan("What's your best price, just asking").lines.join('\n');
+  assert.doesNotMatch(asking, /the invitation with the booking link/);
+  assert.match(asking, /no invitation/);
+  assert.match(plan("What's your best price").lines[0], /the invitation with the booking link/);
+});
+
 test('a deferral about a sold car is offered another car', () => {
   assert.equal(stage({ vehicles: [{ id: 2, soldStatus: 'SOLD', stockIn: 'Sold' }], texts: [{ who: 'customer', text: "I'll let you know" }] }).move, 'offer_alternative');
 });
