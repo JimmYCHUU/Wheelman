@@ -243,6 +243,8 @@ test('similarity is high for near-identical text and low for unrelated text', ()
 // ---- situations ------------------------------------------------------------
 
 test('common enquiries are classified', () => {
+  for (const t of ['15k', '$17000', 'I have15000k', '24 will do', '17,500', 'I have 15000', '31000', '$17,500', '15000']) assert.ok(classify(t).all.includes('price_negotiation'), t);
+  for (const t of ['2017 model', '22', 'see you at 1030', 'Rego 4 months', '2150', '2026']) assert.ok(!classify(t).all.includes('price_negotiation'), t);
   assert.equal(classify('Is this still available?').primary, 'availability');
   assert.equal(classify('What is your best price?').primary, 'price_negotiation');
   assert.equal(classify('Would you take 20k for it').primary, 'price_negotiation');

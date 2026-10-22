@@ -12,7 +12,9 @@ export const wordCount = (s) => (squash(s).match(/\S+/g) || []).length;
 
 /** iMessage-style reactions arrive as text, e.g. Liked “…”. They are not messages. */
 export function isReaction(body) {
-  return /^\s*(Liked|Loved|Emphasi[sz]ed|Laughed at|Disliked|Questioned|Reacted)\b.{0,12}[“"']/i.test(String(body || ''));
+  const s = String(body || '').replace(/[\u200B-\u200D\u2060\uFEFF\uFE0E\uFE0F]/g, '');
+  return /^\s*(Liked|Loved|Emphasi[sz]ed|Laughed at|Disliked|Questioned|Reacted)\b.{0,12}[“"']/i.test(s)
+    || /^\s*[\p{Extended_Pictographic}]+\s*(to|on)\s+['"‘“]/u.test(s);
 }
 
 /** Customer asked not to be contacted. */
@@ -23,7 +25,7 @@ export function isOptOut(body) {
 }
 
 const ACK_WORDS = new Set(('ok okay k kk thanks thank you thankyou thanku thanx thnx tks tysm thx ty cheers great perfect awesome cool nice good lovely excellent '
-  + 'noted received sure yep yes yeah yup no worries problem sounds all will do got it that that\'s thats is fine '
+  + 'noted received sure yep yes yeah yup no worries problem sounds works all will do got it that that\'s thats is fine '
   + 'see ya then soon there tomorrow much so very heaps alot a lot again mate bro brother buddy sir team legend champ '
   + 'appreciate appreciated appreciate it for the info information update reply response help getting back to me us '
   + 'carbarn have had day night weekend one too and you\'re youre welcome bye talk later '
@@ -43,10 +45,14 @@ const ACK_PHRASES = [
 ];
 const LAUGHTER = /\b(a?(ha){2,}h?|he(he)+|lo+l|lmao|rofl)\b/g;
 
+// A figure on its own or beside a money word: an offer, never a thank-you ("15k", "$17000", "17,500", "24 will do"); a time ("10:30", "4 pm") is not.
+const MONEY_LIKE = /\$\s?\d|\b\d+(?:[.,]\d+)?\s?k\b|\b\d{1,3},\d{3}\b|\b\d{4,6}\b(?!\s?(am|pm|:))|\b\d{1,3}\s+(will do|is my (max|limit|best|offer)|tops|max|cash|ono|neg)\b/i;
+
 /** A short "thanks / ok / see you" that does not need a reply. */
 export function isAcknowledgement(body) {
   const raw = String(body || '');
   if (/\?/.test(raw)) return false;
+  if (MONEY_LIKE.test(raw)) return false;
   let t = squash(stripEmoji(raw)).toLowerCase().replace(/[’‘`]/g, "'").replace(/[^a-z' ]+/g, ' ').replace(/\s+/g, ' ').trim();
   if (!t) return hasEmoji(raw); // emoji only, e.g. a thumbs up
   if (t.split(' ').length > 12) return false;

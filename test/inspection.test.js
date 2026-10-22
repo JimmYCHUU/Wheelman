@@ -37,6 +37,7 @@ before(async () => {
   customer(3, 'Ana', 'QLD', '1159', 'Can I inspect the car before buying?');
   customer(4, 'Ken', 'NSW', '1300', 'Can I come and see the Hiace tomorrow?');
   customer(5, 'Max', 'NSW', '1159', 'How many seats does it have?');
+  customer(6, 'Sam', 'NSW', '1159', 'Can I come Saturday?');
 });
 
 after(() => standins.close());
@@ -117,6 +118,19 @@ test('a car that is not at the yard yet gets no booking link', async () => {
   assert.equal(plan.kind, null);
   assert.match(plan.lines.join(' '), /cannot be inspected in person or by video yet/);
   assert.ok(!buildPrompt(it, { now }).user.includes('#inspection='), 'no booking link is supplied for a car in transit');
+});
+
+test('a customer who names a day but no time still gets the invitation, once', async () => {
+  const { d } = await draft(106, 'Saturday is fine to see the Noah at Lidcombe.');
+  assert.equal((d.reply.match(/#inspection=onsite/g) || []).length, 1, d.reply);
+  assert.ok(d.reply.includes('book an inspection'), d.reply);
+  assert.equal(note(d), undefined);
+});
+
+test('a time is confirmed only by an agreement and a time in one sentence that is not about our hours', async () => {
+  const { confirmsTime } = await import('../src/checks.js');
+  for (const t of ['See you Saturday.', 'Yes, Saturday at 10:30 am is fine.', 'We will have the Noah ready for you.']) assert.equal(confirmsTime(t), true, t);
+  for (const t of ['Saturday is fine.', 'Saturday is fine, we are open 9am to 5pm.', 'Saturday is fine. We are open until 5:00 pm.', 'You are welcome to come on Saturday.']) assert.equal(confirmsTime(t), false, t);
 });
 
 test('nothing about inspections is added when the customer did not ask to see the car', async () => {

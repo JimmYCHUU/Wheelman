@@ -6,7 +6,7 @@ import { restore, leftoverPlaceholders, NAME_TOKEN } from './redact.js';
 import { findUrls, untagged, hasEmoji, wordCount, stripEmoji, similarity } from './text.js';
 import { sydneyHour } from './time.js';
 import { promiseChecks } from './promises.js';
-import { FILLER, URGENCY, STAYS_FOR_SALE, CLAIM, NEXT_STEP_SIGNS, SLANG, SERVILE, QUIET_MOVES } from './selling.js';
+import { FILLER, URGENCY, STAYS_FOR_SALE, CLAIM, NEXT_STEP_SIGNS, SLANG, SERVILE, QUIET_MOVES, DEPOSIT_MENTION, LICENCE_ASK, RATING } from './selling.js';
 import { oldAddressIn, CURRENT_ADDRESS } from './address.js';
 
 export const MARKERS = ['[PRICE?]', '[TRADE-IN VALUE?]', '[DELIVERY COST?]', '[DATE?]', '[CHECK?]', '[DEPOSIT LINK?]', '[ELIGIBILITY?]', '[LANDED COST?]', '[DEPOSIT?]', '[TIMELINE?]'];
@@ -20,7 +20,6 @@ const MARKER_RE = new RegExp(BLANK_PATTERN, 'g');
 // Filler, pressure, slang and unbacked claims have their own checks (filler, urgency, register, claim); these are the rest.
 // The fourth field marks a rule of our voice rather than a fact or the law: a Prompt sets it aside.
 const BANNED = [
-  [/\b(amazing|stunning|incredible|unbeatable|fantastic|awesome|perfect choice|great choice|excellent choice)\b/i, 'uses marketing wording', 'warn', 'voice'],
   [/\b(as an ai|language model|i am an ai|i'?m an ai)\b/i, 'mentions being an AI', 'fail'],
   [/\b\d+(\.\d+)?\s?% ?(p\.?a\.?|per annum|interest|comparison)/i, 'quotes an interest rate', 'fail'],
   // The law wants one price with what it includes; "plus on-roads" is the wording it forbids.
@@ -31,7 +30,10 @@ const BANNED = [
 
 // The checks that hold a reply to the section's own rules on length, tone and layout, rather than
 // to the facts. A reply written from the owner's Prompt is not held to them.
-const SECTION_RULES = new Set(['emoji', 'exclaim', 'long', 'questions', 'filler', 'register', 'next-step', 'price']);
+const SECTION_RULES = new Set(['holding-blank', 'two-deferrals', 'emoji', 'exclaim', 'long', 'questions', 'filler', 'register', 'next-step', 'price', 'opener', 'unasked-link', 'deposit-early', 'quiet-close', 'rating', 'soft-promise']);
+
+/** A refund, a waiver or compensation offered softly ("we can look at refunding your deposit"): our staff's to offer. */
+const SOFT_PROMISE = /\bwe (can|could|may|might) (look at|look into|consider|arrange|offer)? ?(refund|waiv|compensat|cover)\w*/i;
 
 // What our records say about a customer, said to them. Shape the reply by it; never state it.
 const INSIDER_LEAK = /\b(lead score|your (engagement )?score|scored (as|at)|(hot|warm|cold) lead|our (dashboard|system|records?) (shows?|says?|notes?|records?|tells? us)|came to us (from|via|through)|found us (on|through|via)|(enquir|inquir|look|shopp)\w* (at|with|about|around) other (dealers?|cars|vehicles)|other dealers?|your (finance )?application (was|has been|got|is) (declined|rejected|knocked back|approved|unsuccessful)|finance (was|has been|is|got) (declined|rejected|knocked back|approved)|you (have |'ve )?(watched|viewed|seen) (the|our) (video|walkaround))\b/i;
@@ -43,6 +45,16 @@ const SIGN_OFF_LINES = [
   /^(regards|thanks|cheers),?\s*(the )?(team )?carbarn( team)?\.?$/i,
   /^\[?(your name|name|sender)\]?$/i,
 ];
+
+// A reply that confirms a visit at a time. One definition, used both to leave the invitation off
+// and to excuse a missing link. "Saturday is fine" alone is a day agreed, not a time confirmed.
+export const CONFIRMS = /\bsee you\b|\bready for you\b|look forward to seeing you|\bcome straight in\b|\b(booked|confirmed) for\b|\bwe (will|'ll) have (it|the \w+( \w+)?) (ready|out)\b/i;
+export const AGREES = /\b(is|are|would be|sounds) (fine|good|great|perfect|no problem)\b|\bsuits? (us|well|fine|perfectly)\b/i;
+export const CLOCK = /\b\d{1,2}([:.]\d{2})?\s?(am|pm)\b|\b\d{1,2}[:.]\d{2}\b/i;
+// An opening-hours sentence names clock times without confirming a visit.
+export const HOURS = /\b(open|opening|hours|close[sd]?|closing|until|till)\b/i;
+// The agreement and the time must sit in one sentence that is not about our hours.
+export const confirmsTime = (body) => CONFIRMS.test(body) || sentences(body).some((x) => AGREES.test(x) && CLOCK.test(x) && !HOURS.test(x));
 
 /** Removes any sign-off the model added, so the configured one can be attached once. */
 export function stripModelSignOff(text) {
@@ -151,6 +163,24 @@ export function numbersIn(text) {
 }
 
 /**
+ * The words right before a figure that name it as the customer's own ("your offer of $15,000",
+ * "hoping for $30,000", "a budget of about $10,000"). Judged on each mention of the figure, on the
+ * words just before it in its sentence: "Our offer of", "an offer of" or "a figure of" is ours.
+ */
+export const OWNED_BY_CUSTOMER = /(\byour (offer|budget|figure|price|limit|max(imum)?)( of)?|\byou (offered|mentioned|proposed|suggested|named|said)|\b(were |are )?hoping (for|to get)|\ba budget of)( about| around| roughly| approximately| up to)?\s*$/i;
+/** Beside the customer's figure these mean we took it: still refused. */
+const TAKES_FIGURE = /\b(accept\w*|agree\w*|a deal|deal\b|done|match\w*|meet\w*|confirm\w*|take it|we can do|can do that|(is|would be|sounds) (fine|ok(ay)?|good|acceptable|enough)|works? for us|we('ll| will) (take|accept|do|sell)|sell (it|the \w+) (at|for))\b/i;
+/**
+ * An acceptance in any sentence of the reply that is about the figure: then no figure only the
+ * customer gave is theirs to name. "we can do" is left out, so "The lowest we can do on the Noah is
+ * [PRICE?]." may follow their offer; a bare "deal" ("deal with the transfer") is not one.
+ */
+const ACCEPTS_OFFER = /\b(accept(ed|ing)? (that|it|this|your offer|the offer)|we (can|will|'ll) accept|happy (with|to accept) (that|it|this|your offer|the offer)|(is|are) approved|go ahead (with|at)|it'?s a deal|that'?s a deal|deal done|have it for (\$?\d[\d,.]*k?|your offer|that price|that figure)|(it'?s|it is) yours|yours (for|at)|works for us)\b/i;
+/** What makes a sentence about the figure: a dollar or k figure, or the words offer, price, figure, that or it. */
+const ABOUT_FIGURE = /\$\s?\d|\b\d+(\.\d+)?\s?k\b|\b(offer|price|figure|that|it)\b/i;
+const acceptsOffer = (body) => sentences(body).some((s) => ACCEPTS_OFFER.test(s) && ABOUT_FIGURE.test(s));
+
+/**
  * Figures in a reply that cannot be traced to a source.
  * - trustedText: the dealership's records, our own past messages, staff notes and instructions.
  * - customerText: what the customer wrote.
@@ -190,6 +220,19 @@ function figureProblems(replyBody, trustedText, customerText = '', policyText = 
   const customerOnly = [];
   const body = plainTimes(String(replyBody || '').replace(/https?:\/\/\S+/g, ' '));
   const bodySentences = sentences(body);
+  // The sentence that holds the character at `index`, so a figure said twice is judged each time in its own sentence.
+  const spans = [];
+  for (let from = 0, i = 0; i < bodySentences.length; i++) {
+    const start = body.indexOf(bodySentences[i], from);
+    spans.push({ start, end: start + bodySentences[i].length, text: bodySentences[i] });
+    from = start + bodySentences[i].length;
+  }
+  const spanAt = (index) => spans.find((s) => index >= s.start && index < s.end) || { start: 0, end: body.length, text: body };
+  const sentenceAt = (index) => spanAt(index).text;
+  // The words just before a figure, inside its own sentence: is it named there as the customer's?
+  const namedAsTheirs = (index) => OWNED_BY_CUSTOMER.test(body.slice(Math.max(spanAt(index).start, index - 40), index));
+  // A reply that accepts their offer in any sentence about it names none of their figures as theirs.
+  const accepts = acceptsOffer(body);
 
   for (const m of body.matchAll(NUMBER)) {
     const raw = m[0].trim();
@@ -209,7 +252,11 @@ function figureProblems(replyBody, trustedText, customerText = '', policyText = 
         const sentence = bodySentences.find((s) => s.includes(m[0].trim())) || body;
         if (usedInContext(n, sentence, policyText)) continue;
       }
-      if (fromCustomer.has(n)) { customerOnly.push(raw); continue; }
+      if (fromCustomer.has(n)) {
+        if (!accepts && namedAsTheirs(m.index) && !TAKES_FIGURE.test(sentenceAt(m.index))) continue;
+        customerOnly.push(raw);
+        continue;
+      }
       problems.push(raw);
       continue;
     }
@@ -224,6 +271,15 @@ function figureProblems(replyBody, trustedText, customerText = '', policyText = 
 }
 
 // ---- main ------------------------------------------------------------------
+
+// "We will check and get back to you", in its many forms.
+const HOLDING_LINE = /\b(?:(?:we|i)(?:'ll| will| shall|'d| would| am going to| are going to| can)\s+(?:(?:have|take) a (?:closer )?look|look (?:into|up|at)|check(?:ing)?(?: on| into| with| this| that| it| the)?|find out|confirm(?: this| that| it| the details?| the exact| with)?|verify|chase(?: this| that| it)?(?: up)?|get back to you|come back to you|revert|update you|let you know|be in touch|keep you (?:posted|updated|informed)|advise(?: you)?)|(?:updat|lett)ing you know shortly|get back to you (?:shortly|soon|asap)|once (?:we|i) (?:have )?(?:checked|confirmed|looked|verified|heard)|after (?:we|i) (?:check|confirm|look)|in due course|as soon as (?:we|i) (?:know|hear|can confirm))\b/i;
+// What our website itself promises about the process: these are ours to say.
+const PROCESS_LINE = /\b(?:before (?:any|a|the|we|placing)\b[^.]{0,40}\bbid|after your approval|inspect\w*|photos?|auction sheet|inspector|once (?:the|your) deposit|after (?:the|your) deposit|progress updates?|\bVIA\b|complian\w*|shipping|lodge|customs|biosecurity|deliver\w*|arriv\w*|vessel|\bport\b)\b/i;
+// The only process wording that excuses a holding line beside a blank: what the website itself promises.
+const WEBSITE_PROCESS = /\b(auction sheet|before (?:any|a|the|we|placing)\b[^.]{0,40}\bbid|after your approval|once (?:the|your) deposit|after (?:the|your) deposit|progress updates?)\b/i;
+const BLANK_IN = new RegExp(BLANK_PATTERN);
+const sentencesOf = (t) => String(t || '').split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
 
 /**
  * @param {object} p
@@ -281,7 +337,10 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   if (bangs > 1) add('warn', 'exclaim', `Contains ${bangs} exclamation marks.`);
 
   const words = wordCount(String(body).replace(/https?:\/\/\S+/g, ''));
-  if (channel === 'marketplace') { if (words > 90) add('warn', 'long', `Long for a Marketplace chat (${words} words). Up to about 90 words, in short lines.`); }
+  if (channel === 'marketplace') {
+    if (words > 90) add('warn', 'long', `Long for a Marketplace chat (${words} words). Up to about 90 words, in short lines.`);
+    if (/^\s*thank(s| you) for (your|the) (message|enquiry|inquiry|interest)\b/i.test(body)) add('warn', 'opener', 'Opens on a thank-you for the message. On Marketplace the first line is the answer, or names what they gave us (their offer, their number, a time).');
+  }
   else if (channel === 'email') {
     // An email has room, and a cost breakdown (one line per part) may run longer still.
     const breakdown = (String(body).match(/^.*\$\d[\d,]*/gm) || []).length >= 4;
@@ -308,11 +367,41 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   // Selling: no filler, no pressure, no claim the records cannot back, and a next step.
   const filler = String(body).match(FILLER);
   if (filler) add('warn', 'filler', `"${filler[0]}" reads as a reply for the sake of replying. Say the next step instead.`, [filler[0]]);
+  // A blank is already the hand-over: no holding line beside it, and never two deferrals.
+  if (channel !== 'email' && !instructed) {
+    const sentences = sentencesOf(body);
+    const beside = sentences.find((s) => BLANK_IN.test(s) && (HOLDING_LINE.test(s) || /\bshortly\b/i.test(s)) && !WEBSITE_PROCESS.test(s));
+    if (beside) {
+      const match = (beside.match(HOLDING_LINE) || beside.match(/\bshortly\b/i))[0];
+      add('warn', 'holding-blank', `"${match}" beside a blank. The blank is already the hand-over: write the answer with its blank, then the step the customer can take now.`, [match]);
+    }
+    if (sentences.filter((s) => HOLDING_LINE.test(s) && !PROCESS_LINE.test(s)).length >= 2) add('warn', 'two-deferrals', 'Two deferrals in one reply. Give the answer, or one sentence with its blank, and the step they can take now.');
+  }
   // The brand register: no slang, and no apologising for existing or asking permission to be useful.
   const slang = String(body).match(SLANG);
   if (slang) add('warn', 'register', `"${slang[0]}" is not in the brand register. Hospitality phrasing instead: Certainly, Of course, With pleasure, Thank you for your patience.`, [slang[0]]);
   const servile = String(body).match(SERVILE);
   if (servile) add('warn', 'register', `"${servile[0]}" reads as apologising or asking permission. State the fact or the next step instead.`, [servile[0]]);
+  // A word that rates the car or the deal. The auction grade scale ("4.5 is excellent") is a fact, not a rating.
+  {
+    const text = String(body);
+    let from = 0;
+    const spans = sentencesOf(text).map((s) => { const start = text.indexOf(s, from); from = start + s.length; return { start, end: from, text: s }; });
+    for (const r of text.matchAll(new RegExp(RATING.source, 'gi'))) {
+      const m = r[0];
+      const own = (spans.find((s) => r.index >= s.start && r.index < s.end) || { text: '' }).text;
+      if (/^(excellent|good)$/i.test(m) && /grade/i.test(own)) continue;
+      add('warn', 'rating', `"${m}" rates the car or the deal. A fact is a figure with its unit; the one meaning you may add is what an inclusion saves the buyer doing.`, [m]);
+      break;
+    }
+  }
+  // A refund, a waiver or compensation, even softened, only when our staff raised it (the
+  // instruction, or our earlier messages).
+  const soft = String(body).match(SOFT_PROMISE);
+  if (soft) {
+    const ours = (said || []).filter((e) => e.who === 'us').map((e) => e.text || '').join('\n');
+    if (!/refund|waiv|compensat/i.test(`${instruction}\n${allowedText}\n${ours}`)) add('warn', 'soft-promise', `"${soft[0]}": a refund, a waiver or compensation is offered only when our staff said so. Write the sentence with [CHECK?] for what we will do.`, [soft[0]]);
+  }
   const claim = String(body).match(CLAIM);
   if (claim) add('fail', 'claim', `"${claim[0]}" is a claim the records cannot back. Say only what the vehicle facts and business facts state, in their words.`, [claim[0]]);
   // What our records show about a customer is never said to them, unless they said it first.
@@ -325,10 +414,26 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   const urgency = String(body).match(URGENCY);
   if (urgency) add('fail', 'urgency', `"${urgency[0]}": never say that other people are interested, that the car is selling fast or that the price will change.`, [urgency[0]]);
   const stays = String(body).match(STAYS_FOR_SALE);
-  if (stays && !stage?.allowsUrgency) add('warn', 'urgency', 'Says the deposit takes the car off the market. Say this only once the customer has shown real interest and agreed the price: booked to see it, seen it, asked to hold it, or accepted our figure.', [stays[0]]);
+  // A car not at the showroom yet may be reserved with the deposit (the playbook offers it).
+  if (stays && !stage?.allowsUrgency && !stage?.notAtYard) add('warn', 'urgency', 'Says the deposit takes the car off the market. Say this only once the customer has accepted our figure, asked to hold the car, or seen it and is ready to commit.', [stays[0]]);
+  if (stage && !instructed && !stage.notAtYard && !['commit', 'buyer'].includes(stage.rung) && !situation?.all?.includes('deposit_hold') && !situation?.all?.includes('after_sale')) {
+    const early = String(body).match(DEPOSIT_MENTION);
+    if (early) add('warn', 'deposit-early', 'Proposes the deposit before the customer has accepted the figure, asked to hold the car or seen it. Answer, and offer the next step instead.', [early[0]]);
+  }
+  if (stage && !instructed && stage.rung !== 'buyer' && !stage.told?.depositAgreed) {
+    const licence = String(body).match(LICENCE_ASK);
+    if (licence) add('warn', 'deposit-early', 'Asks for a driver licence or email address before the customer has said yes to the deposit.', [licence[0]]);
+  }
+  if (stage && !instructed && QUIET_MOVES.has(stage.move)) {
+    const sold = String(body).match(DEPOSIT_MENTION) || String(body).match(LICENCE_ASK);
+    if (sold) add('warn', 'quiet-close', `"${sold[0]}": they are leaving or waiting. Thank them, and sell nothing more.`, [sold[0]]);
+    if (findUrls(body).length && !/\b(link|url)\b/i.test(String(customerText || ''))) add('warn', 'quiet-close', 'A link in a polite close. They are leaving or waiting: thank them and stop.', findUrls(body));
+    if (stage.move === 'part_well' && markers.length) add('warn', 'quiet-close', 'A buyer leaving over the price is thanked, not quoted: no blank.', markers);
+  }
   // A price reply or an invitation under the text is a next step in itself (blockNextStep).
-  // A polite close (a no, or a buyer leaving over the price) offers nothing more.
-  if (stage && !hold && !blockNextStep && stage.rung !== 'buyer' && stage.move !== 'hold' && !QUIET_MOVES.has(stage.move) && !/\?/.test(body) && !findUrls(body).length && !NEXT_STEP_SIGNS.test(body)) {
+  // A polite close (a no, or a buyer leaving over the price) offers nothing more, and a buyer who
+  // is only browsing is asked for nothing.
+  if (stage && !hold && !blockNextStep && !stage.browsing && stage.rung !== 'buyer' && stage.move !== 'hold' && !QUIET_MOVES.has(stage.move) && !/\?/.test(body) && !findUrls(body).length && !NEXT_STEP_SIGNS.test(body)) {
     add('warn', 'next-step', `No next step offered${String(nextStep || '').trim() ? ` (the model called its next step "${String(nextStep).trim().slice(0, 60)}")` : ''}. Aim for: ${stage.aim}.`);
   }
 
@@ -363,7 +468,7 @@ export function retryNote(checks, { channel = 'sms' } = {}) {
     + '\nWrite it again, in your own words for this customer. Use only figures and links that appear in the supplied material. A dollar amount that only the customer mentioned is their figure, not ours: do not state or accept it. Where a figure is not supplied, use the matching marker such as [PRICE?], [DELIVERY COST?], [DATE?] or [CHECK?].'
     + (fails.some((c) => TIME_CODES.has(c.code)) ? (email
       ? '\nDo not swap one day or time for another. Where the day or time of something we will do is not given by our staff, write the sentence with [DATE?] or [TIMELINE?]. Never say we will check and come back.'
-      : '\nDo not swap one day or time for another. Where the day or time of something we will do is not given by our staff, write "shortly" or use [DATE?]. Where nobody on our side agreed to do something, say we will check and come back to them.') : '')
+      : '\nDo not swap one day or time for another. Where the day or time of something we will do is not given by our staff, write "shortly" or use [DATE?]. Where nobody on our side agreed to do something, write the sentence with its blank ([CHECK?]) and the step the customer can take now.') : '')
     + (fails.some((c) => c.code === 'vague-answer' || c.code === 'model-unanswered') ? '\nNever write that we will check, look into, confirm, get back to them or update them later. Give the answer from RESEARCH FOR THIS IMPORT QUESTION. Where RESEARCH has no answer, write the sentence anyway with the matching blank ([ELIGIBILITY?], [LANDED COST?], [DEPOSIT?], [TIMELINE?] or [CHECK?]) and say what it stands for. Every model code the customer named must be answered: eligible or not, with its figure or its blank.' : '')
     + (fails.some((c) => c.code === 'urgency') ? '\nDo not say or imply that other people are interested, that the car is selling fast, or that the price will change. If the request allows urgency, the one true fact is that a $1,000 refundable holding deposit takes the car off the market; otherwise say nothing about urgency.' : '')
     + (fails.some((c) => c.code === 'price-floor') ? '\nNever name a figure below the advertised price. The standard price reply is added under your text; a counter-offer is [PRICE?] for a person.' : '')
@@ -411,13 +516,7 @@ const TIME_CODES = new Set(['time-passed', 'day-mismatch', 'promise']);
 
 // ---- an import email: the exact answer, never a holding line ----------------------------------
 
-// "We will check and get back to you", in its many forms.
-const HOLDING_LINE = /\b(?:(?:we|i)(?:'ll| will| shall|'d| would| am going to| are going to| can)\s+(?:(?:have|take) a (?:closer )?look|look (?:into|up|at)|check(?:ing)?(?: on| into| with| this| that| it| the)?|find out|confirm(?: this| that| it| the details?| the exact| with)?|verify|chase(?: this| that| it)?(?: up)?|get back to you|come back to you|revert|update you|let you know|be in touch|keep you (?:posted|updated|informed)|advise(?: you)?)|(?:updat|lett)ing you know shortly|get back to you (?:shortly|soon|asap)|once (?:we|i) (?:have )?(?:checked|confirmed|looked|verified|heard)|after (?:we|i) (?:check|confirm|look)|in due course|as soon as (?:we|i) (?:know|hear|can confirm))\b/i;
-// What our website itself promises about the process: these are ours to say.
-const PROCESS_LINE = /\b(?:before (?:any|a|the|we|placing)\b[^.]{0,40}\bbid|after your approval|inspect\w*|photos?|auction sheet|inspector|once (?:the|your) deposit|after (?:the|your) deposit|progress updates?|\bVIA\b|complian\w*|shipping|lodge|customs|biosecurity|deliver\w*|arriv\w*|vessel|\bport\b)\b/i;
 const ELIGIBILITY_WORDS = /eligib|approved|can be imported|import(?:ed)? (?:to|into) australia|sevs|not eligible|cannot be imported|25.year|build (?:range|date)/i;
-const BLANK_IN = new RegExp(BLANK_PATTERN);
-const sentencesOf = (t) => String(t || '').split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
 
 /**
  * The checks only an import email gets. research: the record from importquery.js (or null).

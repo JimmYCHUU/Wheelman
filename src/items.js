@@ -253,11 +253,16 @@ export function isIgnoredSender(name) {
   return config.ignoredSenders.some((s) => { const w = String(s).toLowerCase().replace(/[^a-z0-9]/g, ''); return w && flat.includes(w); });
 }
 
-/** Texts from suppliers, couriers and marketers arrive on the same phone. They have no lead record. */
-function looksLikeNonCustomer(pending) {
+/**
+ * Texts from suppliers, couriers and marketers arrive on the same phone. They have no lead record.
+ * strict: only the wording no customer would type (a marketing footer, a courier notice, a login
+ * code), for a number that has a lead record: "I left you a message" from a customer is a customer.
+ */
+export function looksLikeNonCustomer(pending, { strict = false } = {}) {
   const text = pending.map((e) => e.text).join('\n');
-  const foreignLink = findUrls(text).some((u) => !/carbarn\.com\.au|carsales\.com\.au|autotrader|photos\.app\.goo\.gl|maps\.app\.goo\.gl/i.test(u));
   const marketing = /(unsubscribe|opt[\s-]?out|reply stop|quick review|leave (us )?a review|your (order|parcel|delivery|tyres|invoice) (is|has|should|will)|verification code|do not reply|no[\s-]?reply)/i.test(text);
+  if (strict) return marketing || isAutomatedNotice(pending);
+  const foreignLink = findUrls(text).some((u) => !/carbarn\.com\.au|carsales\.com\.au|autotrader|photos\.app\.goo\.gl|maps\.app\.goo\.gl/i.test(u));
   // Looser signs of a machine, safe only for a number with no customer record.
   const automated = /(\b(your|the) (login |verification |security |access )?code\b|left you a message|voice ?mail)/i.test(text);
   return marketing || automated || isAutomatedNotice(pending) || (foreignLink && /(review|track|order|code|offer|sale|deal)/i.test(text));

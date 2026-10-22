@@ -67,16 +67,16 @@ GST & duties included.
 
 The refundable auction deposit required to start bidding is {deposit_amount} AUD.
 
+You can place the deposit using the link below:
+[DEPOSIT LINK?]
+
 Once the deposit is received, we will start monitoring suitable {car_wanted} auction vehicles for you.
 
 Before we place any bid, we will review the available auction sheet, photos and vehicle details. Where inspection is available, we will arrange the inspection information and extra photos first, then send the vehicle to you for approval.
 
 We will not place a bid without your confirmation.
 
-Please note the final landed price may change slightly depending on the actual winning auction price, exchange rate, shipping timing and vehicle condition.
-
-You can place the deposit using the link below:
-[DEPOSIT LINK?]
+Your final landed figure will move a little with the winning bid, the exchange rate, shipping timing and the car's condition.
 
 Regards,
 {sender}
@@ -111,11 +111,10 @@ We have {lot_count} {car_wanted} vehicles coming up {auction_when} that match yo
 You can place your bid through our Live Auction platform:
 {model_url}
 
-Our experienced bidding and inspection team in Japan carefully inspects every vehicle before the final purchase. We will provide you with up-to-date photos and a detailed condition report so you can review everything before confirming the purchase.
+Our inspection team in Japan inspects every vehicle before the final purchase. We will provide you with up-to-date photos and a condition report so you can review everything before confirming the purchase.
 
 We look forward to helping you secure the right {model}.
 
-Happy bidding!
 Kind regards,
 {sender}
 

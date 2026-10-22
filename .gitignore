@@ -45,3 +45,11 @@ Auction.txt
 knowledge/website/
 
 *.log
+
+# The tone judgement of October 2026: real customer messages (redacted) and the findings read
+# from them stay on this computer
+eval/tone/
+docs/tone-judgement.md
+docs/tone-upgrade-brief.md
+docs/tone-codebook.md
+docs/tone-dashboard.html

@@ -3,7 +3,7 @@
 import { buildPrompt, writtenToday } from './prompt.js';
 import { complete, LlmError } from './llm.js';
 import { logLine } from './log.js';
-import { finishReply, fixGreeting, checkDraft, retryNote, stripModelSignOff, worst, chatStyle, dropGreeting, emailChecks, followUpChecks } from './checks.js';
+import { finishReply, fixGreeting, checkDraft, retryNote, stripModelSignOff, confirmsTime, worst, chatStyle, dropGreeting, emailChecks, followUpChecks } from './checks.js';
 import { researchFor, renderResearch } from './importquery.js';
 import { config } from './config.js';
 import { redact, restore } from './redact.js';
@@ -15,6 +15,7 @@ import { BLANK_PATTERN } from '../web/lib/blank.js';
 import { sydneyHour } from './time.js';
 import { standardBlock, inviteBlock, repeatsBlock, tidyOpening } from './firstreply.js';
 import { priceBlock } from './pricereply.js';
+import { untagged } from './text.js';
 import { LEFTOVER_LABEL } from './practice.js';
 import { tagMarketplaceLinks } from './marketplace.js';
 import { mediaForReply } from './vehiclemedia.js';
@@ -56,6 +57,18 @@ function listingPriceCheck(item) {
   return { level: 'warn', code: 'listing-price', message: `The Facebook listing shows ${fmt(listed)} but the dashboard price is ${fmt(ours)}. Check which is right before talking about price.`, tokens: [] };
 }
 
+// What a buyer says when they want the car's page, photos or details: a link is then an answer.
+const ASKS_FOR_DETAILS = /\b(details?|photos?|pics?|pictures?|images?|link|url|info|information|specs?|listing|page|website)\b/i;
+
+/** Marketplace only: a "More details" line or the page link the buyer did not ask for is pointed out. */
+function unaskedLinkCheck(item, body) {
+  if (ASKS_FOR_DETAILS.test(item.pendingText || '')) return null;
+  const page = item.vehicles[0]?.url ? untagged(item.vehicles[0].url).toLowerCase().replace(/\/$/, '') : '';
+  const lines = String(body).split('\n').map((l) => l.trim());
+  const found = lines.some((l) => /^more details:?$/i.test(l) || (page && !l.includes('#') && untagged(l).toLowerCase().replace(/\/$/, '') === page));
+  return found ? { level: 'warn', code: 'unasked-link', tokens: [], message: "The buyer did not ask for details, photos or a link: leave the car's page link out and end on the next step." } : null;
+}
+
 /**
  * When the customer asked to see the car, the reply should carry the right booking link.
  * A reply with no link at all is sent back once when the customer asked now, or our staff asked
@@ -76,7 +89,7 @@ function inspectionCheck(plan, body, block = '') {
     return { level: missing, code: 'inspection-link', tokens: [], message: 'The customer wants to see the car and seems to be far away, but the reply has no online video inspection link. Add the link given in the INSPECTION section.' };
   }
   // In-person was expected. A confirmed time ("See you at ...") or the online link is also a fair answer.
-  if (givesOnline || /see you/i.test(body)) return null;
+  if (givesOnline || confirmsTime(body)) return null;
   return { level: missing, code: 'inspection-link', tokens: [], message: 'The customer wants to see the car, but the reply has no inspection booking link. Add the link given in the INSPECTION section.' };
 }
 
@@ -183,9 +196,9 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   // The owner's blocks under the AI's lines: the price reply when the price was asked about, else
   // the invitation when the customer wants to see the car (not when the AI confirmed a time in
   // words, and not on a first reply, where the standard block carries it).
-  const price = !plan && !hold && prompt.price?.on ? priceBlock({ vehicle: item.vehicles[0], inspectionUrl: prompt.price.inspectionUrl, online: prompt.price.online, chat, withStandard: prompt.standard.on }) : '';
-  const confirmedTime = /\bsee you\b|\bready for you\b|look forward to seeing you/i.test(text);
-  const invite = !price && !plan && !hold && prompt.inspection?.block && prompt.inspection.url && !prompt.standard.on && !confirmedTime
+  const price = !plan && !hold && prompt.price?.on ? priceBlock({ vehicle: item.vehicles[0], inspectionUrl: prompt.price.inspectionUrl, online: prompt.price.online, chat, withStandard: prompt.standard.on, asked: item.pendingText }) : '';
+  const confirmedTime = confirmsTime(text);
+  const invite = !price && !plan && !hold && prompt.inspection?.block && prompt.inspection.url && !prompt.standard.on && !confirmedTime && !prompt.inspection.booked
     ? inviteBlock(prompt.inspection.url, { online: prompt.inspection.kind === 'online', chat, tail: true }) : '';
   const owned = [price, invite].filter(Boolean).join('\n\n');
   // The links the customer asked for (a video, the auction sheet, the export certificate, the
@@ -195,7 +208,7 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   const block = plan ? (hold ? '' : plan.tail || '') : prompt.standard.on && !hold ? standardBlock({ vehicleUrl, inspectionUrl, online: !!prompt.standard.online }) : '';
   if (plan?.tokens) text = restoreAmounts(text, plan.tokens);
   if (plan?.stage === 'template') return assessTemplate(item, text, json, { plan, allowed, said, staffSaid, instructed, now });
-  if (block || owned || asked) text = tidyOpening(text, vehicleUrl, inspectionUrl, prompt.price?.inspectionUrl || '', invite ? prompt.inspection.url : '', ...(asked ? asked.links.map((l) => l.url) : []));
+  if (block || owned || asked) text = tidyOpening(text, vehicleUrl, inspectionUrl, prompt.price?.inspectionUrl || '', invite ? prompt.inspection.url : '', (invite || price) ? (item.vehicles[0]?.url || '') : '', ...(asked ? asked.links.map((l) => l.url) : []));
   // A link the AI wrote out with its own words around it stays there, once.
   const links = asked ? asked.links.filter((l) => !text.includes(l.url)).map((l) => `${l.label}: ${l.url}`).join('\n') : '';
   const extras = [links, owned].filter(Boolean).join('\n\n');
@@ -253,6 +266,8 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   if (pasted) checks = [...checks.filter((c) => c.level !== 'ok'), { level: 'fail', code: 'coaching-copied', tokens: [], message: `The reply repeats the owner's coaching word for word ("${pasted} …"). The note says how to handle the message. Say it to the customer in your own words, or leave it out if it was a line to avoid.` }];
   const listing = chat ? listingPriceCheck(item) : null;
   if (listing) checks = [...checks.filter((c) => c.level !== 'ok'), listing];
+  const unasked = chat ? unaskedLinkCheck(item, body) : null;
+  if (unasked) checks = [...checks.filter((c) => c.level !== 'ok'), unasked];
   // An import email: the exact answer or a blank, never a holding line, and every model asked about answered.
   const mail = email ? emailChecks({ body, research, hold: !!json.hold, instructed }) : [];
   if (mail.length) checks = [...checks.filter((c) => c.level !== 'ok'), ...mail];

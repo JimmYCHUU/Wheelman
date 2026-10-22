@@ -23,6 +23,7 @@ import { renderResearch } from './importquery.js';
 import { mailPracticeFor } from './mailpractice.js';
 import { replyLinks } from './vehiclemedia.js';
 import { listOf } from '../web/lib/copy.js';
+import { looksLikeNonCustomer } from './items.js';
 
 const read = (name) => fs.readFileSync(path.join(config.voiceDir, name), 'utf8').replace(/\r/g, '').trim();
 
@@ -30,16 +31,16 @@ const read = (name) => fs.readFileSync(path.join(config.voiceDir, name), 'utf8')
 // 20 Oct 2026: the engine's own first reply to every buyer, and the replies a person typed).
 const MARKETPLACE_RULES = `=== THIS CHANNEL: FACEBOOK MARKETPLACE CHAT ===
 The buyer is chatting with us on Facebook Marketplace, not by SMS. Our team's replies there have a shape of their own, learned from what they send; where the VOICE section describes SMS greetings, length, layout or what to leave out, these rules replace it:
-- Our first reply to a buyer asking whether the car is available, when it is, is these three short paragraphs, a blank line between them, and nothing else:
+- Our first reply to a buyer asking whether the car is available, when it is, is these three short paragraphs, a blank line between them, and nothing else apart from the one line described at the end of this bullet:
   Hi {{NAME}}, yes it's still available, $<price> with only <km> km.
   It's a grade <grade> Japanese import, km verified against the auction documents, and the price includes <inclusions>.
   Keen to see it? Send me your number and I'll give you a call.
-  The price, the kilometres and the auction grade come from VEHICLE FACTS. Write "only" before the kilometres only under 60,000 km. Without a grade in VEHICLE FACTS write "It's a Japanese import". <inclusions> is "6 months rego, a fresh roadworthy and a 5-year warranty", keeping only what the car's Included list has, in that order. Without a name: "Hi, yes it's still available". No link and no other sentence. When a message marked AUTO-REPLY has already said this, the buyer has read it: answer what they asked next instead.
+  The price, the kilometres and the auction grade come from VEHICLE FACTS. Write "only" before the kilometres only under 60,000 km. Without a grade in VEHICLE FACTS write "It's a Japanese import". <inclusions> is "6 months rego, a fresh roadworthy and a 5-year warranty", keeping only what the car's Included list has, in that order. Without a name: "Hi, yes it's still available". No link and no other sentence beyond that one line. When the buyer's message gives something of theirs to pick up (a family on the way, a suburb or a state, a trade, what the car is for, a deadline), one short line above the three paragraphs reflects it in plain words ("Congratulations on the twins." / "Adelaide is no trouble: we deliver Australia-wide."); nothing is added when it gives nothing to pick up ("Rego include?" gives nothing). When a message marked AUTO-REPLY has already said this, the buyer has read it: answer what they asked next instead.
 - Later replies. Start with the answer, in short lines. No greeting line of its own, no "Hi" line, no sign-off, and no opening thank-you. "Thank you, {{NAME}}." or "Thank you for letting us know." only when they gave us something: their number, a day and time, photos, an offer. Otherwise the name stays out.
-- Short and direct: usually 20 to 50 words in two to four short lines, and up to about ninety words only when they asked several things. A buyer who writes one line gets one or two sentences. Plain, friendly and confident, in correct English; "we" for the business. No hype (amazing, stunning, unbeatable, don't miss out), no pressure or other buyers, no emoji, no slang, at most one exclamation mark.
+- Short and direct: usually 20 to 50 words in two to four short lines, and up to about ninety words only when they asked several things. A buyer who writes one line gets one or two sentences. Plain, friendly and confident, in correct English; "we" for the business. No adjective or adverb that rates the car or the deal (amazing, stunning, unbeatable, excellent, exceptional, superb, rare, ideal, remarkably, perfect), and no feeling hung on an inclusion ("peace of mind", "ready to drive away"): a fact is a figure with its unit. Register under VOICE still applies here. No pressure or other buyers, no emoji, no slang, at most one exclamation mark.
 - The next step is their phone number, not a booking link. When they want to see the car, or accept our figure, ask them to send us their number and the day and time that suit them, and say we will get the inspection booked for them and confirm it by text. When they say they are coming, end with our location and hours on two lines, "Location: <our address>" and "Hours: <our opening hours>", from BUSINESS FACTS. Once they have sent their number, thank them and say we will give them a call shortly to book it in. Ask for the number once in a chat: after that, end on the answer.
 - The booking link only when the buyer asks for a link, or the INSPECTION section says our staff asked for it. The car's page ("Vehicle page" in VEHICLE FACTS) only when they ask for details or photos, under "You will find all the details here:". Finance: "Yes, we do." and the finance form on the car's page ("Start a finance application" in VEHICLE FACTS), asking them to let us know once it is done. A trade-in: we take trade-ins against a car from our stock; give the trade-in form on the car's page and what to put in it (the rego number and state, the kilometres, the condition, a few clear photos and their number). Links go each on its own line under a short lead-in that ends with a colon; a link line does not count towards the words. Never a link that is not in this request.
-- Price: a figure is a person's decision. On a price question or an offer, write the team's shape with the blank: "The lowest we can do on the <car> is [PRICE?]." then, as its own paragraph, "If that works for you, send us your number and the day and time that suit you, and we will get the inspection booked for you." Do not repeat the advertised price, and nothing about what the price includes unless they ask. Never tell a buyer that their offer is too low, below what we accept, or that we cannot do it, and never argue about what the car is worth; when they are leaving, no figure and no blank at all.
+- Price: a figure is a person's decision. On a price question or an offer, write the team's shape with the blank: A bare figure ("15k", "$17000", "24 will do", "I have15000k") is an offer. Thank them for it in a few words, then the blank first: "The lowest we can do on the <car> is [PRICE?]." then, as its own paragraph, "If that works for you, send us your number and the day and time that suit you, and we will get the inspection booked for you." Do not repeat the advertised price, and nothing about what the price includes unless they ask. Never tell a buyer that their offer is too low, below what we accept, or that we cannot do it, and never argue about what the car is worth; when they are leaving, no figure and no blank at all. A budget is something they gave us: name it as theirs first ("Thank you, a budget of about $10,000 helps."). When they ask whether we have other cars in their range, answer that with the full stock list link from this request ("Full stock list"), and give this car's price line only if they also asked about this car. When they say they are only asking, give the price line and stop: no number, no visit.
 - When THIS CUSTOMER'S NEXT STEP is a polite close, keep to it: one courteous line, nothing more to sell.
 - Messages marked AUTO-REPLY were sent by an automatic system. The buyer has read them, so do not repeat what they said. Any figure in them is unconfirmed: do not rely on it or repeat it.
 - The section NOTES FROM THE MARKETPLACE SYSTEM is background written by that automatic system. Treat it like something the buyer said, never as a fact or a figure to state.
@@ -50,7 +51,7 @@ const EMAIL_RULES = `=== THIS CHANNEL: EMAIL (AN IMPORT ENQUIRY) ===
 The customer emailed us about importing a car from Japan. Where the VOICE section describes SMS length or layout, these rules replace it:
 - Open with "Hello {{NAME}}," on its own line (or "Hello," when the name is not known). Short paragraphs with a blank line between them. The sign-off is added under your text: do not write one.
 - Answer every question they asked, in the order asked, each with the exact figure, range, date or fact from RESEARCH FOR THIS IMPORT QUESTION. Up to about 180 words; longer only when they asked for the cost breakdown, then one line per part.
-- Name the model with its model code as RESEARCH gives it, and give that model's page link on its own line under a short label such as "Model details:". Links go on their own lines; one page link per model.
+- Name the model with its model code as RESEARCH gives it, and give that model's page link on its own line under a short label such as "Model details:". Links go on their own lines; one page link per model. When more than one model could fit what they asked, name one, the closest to what they asked about, with its page link, and give the eligible-models page for the rest: never a list of models with build ranges.
 - A landed cost is an estimate: say so once, in RESEARCH's words. Every figure and link in your reply comes from RESEARCH, BUSINESS FACTS or this conversation.
 - Never write that we will check, look into, find out, confirm, get back, come back, keep them posted or update them later. When a fact is not in this request, write the sentence anyway with the matching blank from BLANKS FOR AN IMPORT EMAIL, and say what the blank stands for.
 - The next step is concrete: to start sourcing they request import options on the model's page, or place the refundable auction deposit; give the deposit amount or band from RESEARCH. One question at most, and only when it is needed to pick the model code or the year.
@@ -92,13 +93,13 @@ ${chat ? MARKETPLACE_RULES : email ? EMAIL_RULES : ''}=== WHERE FACTS COME FROM 
 - The section WHAT OUR TEAM REALLY SENT, when present, shows what to say: learn from it first, then word it in our voice. Its facts belong to other customers too.
 - The section HOW THE OWNER WANTS THIS HANDLED, when present, is the owner's own coaching. On how to handle a message it overrides SELLING, BUSINESS FACTS and every example.
 - If a fact you need is not supplied, do not guess. Use the matching marker from the hand-over table.
-- You cannot see photos or attachments. Where the conversation shows [sent a photo], do not describe it or judge what it shows. If the reply depends on it, thank them and say we will take a look, and use [CHECK?].
+- You cannot see photos or attachments. Where the conversation shows [sent a photo], do not describe it or judge what it shows. If the reply depends on it, thank them and write the sentence with its blank for what the photo decides (a trade-in: "From those, the trade-in value we can offer is [TRADE-IN VALUE?]."), then the step they can take now.
 - Every number, price, date and link in your reply must appear in the supplied material.
 
 === PROMISES AND TIMES ===
 ${email
     ? '- Promise an action (sending, calling, booking, holding, fixing, delivering) only if our staff said we would, in the instruction for this draft or earlier in this conversation. Otherwise give the answer itself, or the sentence with its blank. Never a holding line: no "we will check", no "we will get back to you".'
-    : '- Promise an action (sending, calling, booking, holding, fixing, delivering) only if our staff said we would, in the instruction for this draft or earlier in this conversation. Otherwise write "We will check and come back to you shortly."'}
+    : '- Promise an action (sending, calling, booking, holding, fixing, delivering) only if our staff said we would, in the instruction for this draft or earlier in this conversation. Otherwise give the answer itself, or the sentence with its blank ([CHECK?], [PRICE?], [DATE?], [TRADE-IN VALUE?]) and the one step the customer can take now. Never a holding line beside a blank: no "we will check", "we will confirm" or "shortly" in the same sentence as a blank. At most one deferral in a reply, never two.'}
 - Name a day or a time for something we will do only if our staff gave it. Otherwise write "shortly", or use [DATE?].
 - A day or time the customer gave is theirs: keep it. If they wrote "this morning", do not answer "see you tomorrow". Each message shows when it was written; work out which day they meant from that, and compare it with NOW.
 - Never name a part of today that has already passed (see NOW). After midday there is no "this morning". In the evening there is no "this afternoon".
@@ -234,7 +235,7 @@ function whoThisIs(item) {
     L.push('An existing buyer, not a new enquiry. Our sales record shows this customer is buying, or has bought, the vehicle described under VEHICLE FACTS.');
     L.push(`Stage: ${d.stageText}.${d.soldAt ? ` The sale was recorded on ${formatDay(sydneyDay(d.soldAt))}.` : ''}`);
     if (d.onFile.length) L.push(`On file: ${d.onFile.map((p) => p.text).join('; ')}.`);
-    if (d.notOnFile.length) L.push(`Not on file: ${d.notOnFile.join(', ')}. That does not mean it has not happened. Do not say it is done and do not say it is not done: say we will check, and use [CHECK?].`);
+    if (d.notOnFile.length) L.push(`Not on file: ${d.notOnFile.join(', ')}. That does not mean it has not happened. Do not say it is done and do not say it is not done: write the sentence with [CHECK?] for it ("Your registration is [CHECK?].").`);
     if (d.others.length) L.push(`They have also bought from us: ${d.others.map((o) => o.title || `stock ${o.stockNo}`).join('; ')}.`);
   } else if (d.source === 'lead_status') {
     L.push(`An existing buyer, not a new enquiry: ${d.stageText}.`);
@@ -248,7 +249,7 @@ function whoThisIs(item) {
   L.push('- Never ask which vehicle they mean. Never thank them for an enquiry or treat them as someone still deciding.');
   L.push('- Do not call their vehicle "sold" or "available", do not offer other vehicles, and do not give an inspection booking link.');
   L.push('- State no amount paid or owing: use [CHECK?]. For a date when something will be ready, picked up or delivered, use [DATE?] unless our staff gave one in this conversation.');
-  L.push('- If they ask for a document or a photo (invoice, blue slip, registration papers, export certificate), do not say it has been sent. Say we will check and send it, with [CHECK?] where a person has to find it, unless LINKS THEY ASKED FOR says its link is added under your text: then it needs no [CHECK?].');
+  L.push('- If they ask for a document or a photo (invoice, blue slip, registration papers, export certificate), do not say it has been sent. Write the sentence with [CHECK?] where a person has to find it ("Your invoice is [CHECK?]."), unless LINKS THEY ASKED FOR says its link is added under your text: then it needs no [CHECK?].');
   return L;
 }
 
@@ -299,6 +300,8 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
   const where = farAway(said, item.lead?.state, item.lead?.signals?.postcode);
   const saidFar = where.far && where.source === 'said';
 
+  const bookedNow = (item.events || []).some((e) => /booked (an inspection|a test drive)/i.test(e));
+  if (bookedNow) return { ...none, booked: true, lines: ['The customer has booked an inspection through the website (the booking, with its day and time, is in the conversation). Confirm it in one sentence and say the vehicle will be ready for them. No invitation or booking link is added under your text; do not ask for a date or time.'] };
   const asksNow = item.situation.all.includes('inspection_booking');
   const staffAsked = !asksNow && STAFF_WANTS_BOOKING.test(instruction);
   const earlier = !asksNow && !staffAsked && askedEarlier(item, now, saidFar);
@@ -393,7 +396,11 @@ export function pricePlan(item, vehicle = item.vehicles[0], { gone = false, owne
   // On Marketplace the price is answered in the team's own shape (the figure as [PRICE?], then the
   // buyer's number), under THIS CUSTOMER'S NEXT STEP: no block goes under the lines there.
   if (!item.situation.all.includes('price_negotiation') || item.deal || item.channel === 'email' || item.channel === 'marketplace' || !vehicle?.url || gone || owner) return off;
+  if (stage?.askedOtherCars) return off;
   if (stage && (stage.move === 'answer_offer' || QUIET_MOVES.has(stage.move))) return off;
+  // The block answers the first price question only: not a figure already agreed, not a trade-in.
+  if (stage && stage.move !== 'invite_before_price') return off;
+  if (item.situation.all.includes('trade_in')) return off;
   const a = availability(vehicle);
   if (a.code === 'sold') return off;
   const canInspect = a.code === 'available' && !reservedByAnother(vehicle);
@@ -401,11 +408,13 @@ export function pricePlan(item, vehicle = item.vehicles[0], { gone = false, owne
   const where = farAway(said, item.lead?.state, item.lead?.signals?.postcode);
   const online = where.far && where.source === 'said';
   const links = inspectionLinks(vehicle);
+  // A buyer who is only asking gets the price without the booking invitation.
+  const browsing = !!stage?.browsing;
   return {
-    on: true, online, inspectionUrl: canInspect ? (online ? links.online : links.onsite) : '',
+    on: true, online, inspectionUrl: canInspect && !browsing ? (online ? links.online : links.onsite) : '',
     lines: [
-      'The customer asked about the price: the best price, a discount, or an offer. Our standard price reply is added under your text automatically, in our own words: what the price includes, that government charges are extra, that we may offer a small discount to a serious buyer, and the invitation with the booking link and how to arrange a time.',
-      'Write only the greeting, when one is due, and one or two sentences that answer anything else they asked and place the vehicle: that it is available for inspection at Lidcombe, with one fact that matters. Do not repeat the advertised price, do not name any figure, and do not accept or refuse an offer. Do not write inclusions, a discount, an invitation or a link: the block says them.',
+      `The customer asked about the price: the best price, a discount, or an offer. Our standard price reply is added under your text automatically, in our own words: what the price includes, that government charges are extra, ${browsing ? 'and that we may offer a small discount to a serious buyer. They said they are only asking, so it carries no invitation and no booking link.' : 'that we may offer a small discount to a serious buyer, and the invitation with the booking link and how to arrange a time.'}`,
+      `Write only the greeting, when one is due, and one or two sentences whose first names what this customer gave us and answers it in their terms: their offer ("Thank you for your offer of $15,000": their figure may be named as theirs, ours never), their budget, or the question they asked. When the block's first line answers it (a "drive away" question), the greeting alone is enough. Never open on the car being available for inspection${browsing ? '' : ': the block invites them'}. Do not repeat the advertised price, do not name a figure of ours, and do not accept or refuse an offer. Do not write inclusions, a discount, an invitation or a link${browsing ? '' : ': the block says them'}.`,
       'If they named a figure of their own, thank them for the offer and neither accept nor refuse it: write "Regarding your offer, [PRICE?]." for a person to complete, and list it under needs_human. Never say that it is too low or that we cannot accept it.',
       canInspect ? '' : 'This vehicle cannot be inspected yet, so the price reply carries no booking link. Say we will let them know as soon as it can be seen.',
     ].filter(Boolean),
@@ -443,6 +452,14 @@ export function writtenToday(item, now = Date.now()) {
   return item.timeline.some((e) => e.who === 'us' && !e.internal && e.at && e.at <= now && sydneyDay(e.at) === today);
 }
 
+// How Google Messages shows an audio message when the phone add-on reads it.
+const AUDIO_ONLY = /^\s*(audio clip|voice (message|note|clip)|audio message)\s*$/i;
+
+/** Every pending message is an audio clip or other non-picture media with no text, or the add-on's words for one. */
+function mediaOnly(pending) {
+  return !!pending?.length && pending.every((e) => (!e.text && e.media && !/image|photo|picture/i.test(e.media)) || (AUDIO_ONLY.test(e.text || '') && !e.event));
+}
+
 /**
  * The standard first reply: on a brand-new dashboard enquiry the AI writes only the opening
  * lines, and our block (the car's page, the booking link, address, hours, phone) is
@@ -451,6 +468,11 @@ export function writtenToday(item, now = Date.now()) {
  */
 export function standardPlan(item, vehicle, { gone = false, owner = false, inspection = null } = {}) {
   if (!item.isNewEnquiry || item.channel === 'marketplace') return { on: false, vehicleUrl: '', inspectionUrl: '', lines: [] };
+  // A spam pitch, a newsletter or an audio clip with no text is not an enquiry: no block goes under
+  // the reply. For a customer with a lead record only the strict reading counts: the looser one
+  // ("left you a message", "voicemail") is for a number nobody has a record of.
+  const strict = !!(item.hasLeadRecord || item.lead);
+  if (looksLikeNonCustomer(item.pending, { strict }) || mediaOnly(item.pending)) return { on: false, vehicleUrl: '', inspectionUrl: '', lines: [] };
   const vehicleUrl = vehicle?.url && !gone && !owner ? vehicle.url : '';
   const inspectionUrl = inspection?.url && blockCarries('inspection_invite') ? inspection.url : '';
   const holds = [vehicleUrl ? "this vehicle's page link" : '', inspectionUrl ? 'the inspection invitation and its booking link' : '', 'our address', 'the opening hours', 'our phone number'].filter(Boolean);
@@ -460,7 +482,7 @@ export function standardPlan(item, vehicle, { gone = false, owner = false, inspe
     `${holds.slice(0, -1).join(', ')} and ${holds[holds.length - 1]}.`,
     'So write only:',
     '- the greeting line, then',
-    "- one or two short sentences that answer what the customer asked, then one sentence that offers the next step named under THIS CUSTOMER'S NEXT STEP, in words. Under 70 words in all.",
+    "- one or two short sentences: the first names what this customer gave us (their question, their figure, their car, their situation) and answers it, then one sentence that offers the next step named under THIS CUSTOMER'S NEXT STEP, in words. Under 70 words in all.",
     `Do not write ${item.situation.all.includes('location_hours') ? '' : 'the address, the suburb, the opening hours, '}a map link${vehicleUrl ? ", the vehicle's page link" : ''}${inspectionUrl ? ', the booking link' : ''} or a phone number: the block gives them. Do not add a closing line after the next step: no "let us know", no "feel free", no "any questions".`,
     'Never point at the block: no "below", "see below" or "details are below". Each sentence must stand on its own.',
     item.situation.all.includes('location_hours')
@@ -538,6 +560,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   const part = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
   P.push(`NOW: ${sydneyWeekday(now)} ${part} (${formatSydney(now)}), Sydney time. The greeting line for this hour, when one is due, is "${greetingFor(hour)} {{NAME}}," (or "${greetingFor(hour)}," when the name is not known); never "Hi".`);
   P.push(`SITUATION: ${item.situation.label}${item.situation.all.length > 1 ? `. Also touches: ${item.situation.all.slice(1).map(labelFor).join('; ')}` : ''}.`);
+  if (mediaOnly(item.pending)) P.push('The customer sent an audio clip and no text. We cannot hear it here: say so courteously in one sentence and ask them to text what they need. No block is added under your text.');
   // Fitting one of our own messages is not writing a reply: the message settles what it says.
   const fitting = importPlan?.stage === 'template';
   P.push(fitting

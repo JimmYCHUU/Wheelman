@@ -908,11 +908,20 @@ test("a best-price question mid-conversation gets the standard price reply under
   msg(260, 'IN', "What's your best price on it?", 5 * MIN);
   const { d, asked } = await draft(260, 'The Vellfire is available for inspection at our Lidcombe showroom, with 60,000 km on the export certificate.');
   assert.match(asked, /=== PRICE REPLY ===/);
-  assert.match(asked, /Do not repeat the advertised price, do not name any figure/);
+  assert.match(asked, /Do not repeat the advertised price, do not name a figure of ours/);
   assert.equal(d.reply, 'The Vellfire is available for inspection at our Lidcombe showroom, with 60,000 km on the export certificate.\n\n'
     + `${PRICE_LINES}\n\n`
     + `${INVITE(`${VELL}#inspection=onsite`)}\nPlease call or text before visiting.`);
   assert.deepEqual(fails(d), [], JSON.stringify(d.checks));
+
+  // A customer who asks only whether it is drive away gets the inclusions that answer it.
+  lead(140, 2600, 'Dara', '0421 000 140', { stocks: ['1800'] });
+  conv(2600, 140, 'Dara Test', '+61421000140');
+  msg(2600, 'IN', 'Is the Vellfire still available?', 3 * HOUR);
+  msg(2600, 'OUT', 'Hi Dara, yes it is.', 170 * MIN);
+  msg(2600, 'IN', 'Is that drive away?', 5 * MIN);
+  const drive = await draft(2600, 'The Vellfire is available for inspection at our Lidcombe showroom.');
+  assert.ok(drive.d.reply.includes('The price includes 6 months NSW registration, CTP insurance and a fresh roadworthy certificate.'), drive.d.reply);
 
   // An AI line that writes the block's own words is sent back; a figure below the price is refused.
   const repeats = 'Yes, it is available. Government charges are extra, and we may offer a small discount.';
@@ -949,4 +958,58 @@ test("a later request to see the car gets the invitation under the AI's lines, i
   const confirmed = await draft(262, 'See you on Saturday. The Noah will be out the front for you.');
   assert.ok(!confirmed.d.reply.includes('book an inspection'), confirmed.d.reply);
   assert.deepEqual(fails(confirmed.d), [], JSON.stringify(confirmed.d.checks));
+  // The AI wrote the page link itself: the line goes, the invitation is added once.
+  const doubled = await draft(262, `Yes, Saturday is fine to inspect the Noah at Lidcombe.
+You can arrange the inspection here:
+${NOAH}`);
+  assert.equal((doubled.d.reply.match(/#inspection=onsite/g) || []).length, 1, doubled.d.reply);
+  assert.ok(!doubled.d.reply.includes(`${NOAH}
+`), 'the bare page link line is dropped');
+  // They named a time and the AI confirmed it in words: no invitation under it.
+  msg(262, 'IN', 'Is it ok to visit tomorrow around 9 am?', 2 * MIN);
+  const timed = await draft(262, 'Yes, tomorrow at 9:00 am suits well. We will have the Noah ready for you.');
+  assert.ok(!timed.d.reply.includes('book an inspection'), timed.d.reply);
+  assert.deepEqual(fails(timed.d), [], JSON.stringify(timed.d.checks));
+});
+
+test('a booking made on the website is confirmed in words, with no invitation under it', async () => {
+  lead(43, 263, 'Mira', '0421 000 043', { stocks: ['1300'], inquiries: [{ id: 9431, type: 'Book Inspection', text: 'Preferred inspection: Wednesday 21 October at 2:00 pm.', stockNo: '1300', at: now - 10 * MIN }] });
+  conv(263, 43, 'Mira Test', '+61421000043');
+  msg(263, 'OUT', 'Hi Mira, thanks for your interest in the Noah.', 3 * HOUR);
+  msg(263, 'IN', 'Is the Noah still available?', 5 * MIN);
+  assert.match(ask(263), /has booked an inspection through the website/);
+  const { d } = await draft(263, 'Your inspection of the Noah is booked for Wednesday 21 October at 2:00 pm.');
+  assert.ok(!d.reply.includes('book an inspection here'), d.reply);
+  assert.ok(!d.checks.some((c) => c.code === 'inspection-link'), JSON.stringify(d.checks));
+  assert.deepEqual(fails(d), [], JSON.stringify(d.checks));
+});
+
+test('a spam pitch, a newsletter or an audio clip gets no address block', async () => {
+  lead(50, 270, 'Seo', '0421 000 050'); conv(270, 50, 'Seo Test', '+61421000050');
+  msg(270, 'IN', 'Get High-Quality SEO Services to Boost Your Website Ranking. Reply STOP to unsubscribe.', 5 * MIN);
+  assert.doesNotMatch(ask(270), /=== STANDARD FIRST REPLY ===/);
+  const { d } = await draft(270, 'Hello {{NAME}},\nThank you, we do not need SEO services at this time.');
+  assert.ok(!d.reply.includes('📍'), d.reply);
+  lead(51, 271, 'Audio', '0421 000 051'); conv(271, 51, 'Audio Test', '+61421000051');
+  msg(271, 'IN', '', 5 * MIN, { mediaType: 'audio' });
+  assert.equal(item(271).state, 'awaiting');
+  assert.doesNotMatch(ask(271), /=== STANDARD FIRST REPLY ===/);
+  assert.match(ask(271), /sent an audio clip/);
+  // The phone add-on reads an audio message as the plain words "Audio clip".
+  lead(52, 272, 'Words', '0421 000 052'); conv(272, 52, 'Words Test', '+61421000052');
+  msg(272, 'IN', 'Audio clip', 5 * MIN);
+  assert.equal(item(272).state, 'awaiting');
+  assert.doesNotMatch(ask(272), /=== STANDARD FIRST REPLY ===/);
+  assert.match(ask(272), /sent an audio clip/);
+  // A real sentence that mentions a clip is not audio only.
+  lead(53, 273, 'Engine', '0421 000 053'); conv(273, 53, 'Engine Test', '+61421000053');
+  msg(273, 'IN', 'Audio clip of the engine noise attached, can you check it?', 5 * MIN);
+  assert.doesNotMatch(ask(273), /sent an audio clip/);
+  // A customer with a lead record who mentions a message they left is a customer: the block stays.
+  lead(54, 274, 'Lena', '0491 570 154', { stocks: ['1300'] }); conv(274, 54, 'Lena Test', '+61491570154');
+  msg(274, 'IN', 'Hi, I left you a message about the Noah, is it still available?', 5 * MIN);
+  assert.equal(item(274).isNewEnquiry, true);
+  assert.match(ask(274), /=== STANDARD FIRST REPLY ===/);
+  assert.equal(items.looksLikeNonCustomer(item(274).pending, { strict: true }), false);
+  assert.equal(items.looksLikeNonCustomer(item(274).pending), true, 'the looser reading is for a number with no lead record');
 });

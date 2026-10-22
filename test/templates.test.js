@@ -27,6 +27,14 @@ const ai = aiBehaviour({ behave: (req) => {
   let reply = m ? m[1] : 'Hello {{NAME}},\nThank you.';
   if (fitting === 'keep') reply = reply.replace('Thank you for your', 'Many thanks for your');
   if (fitting === 'lose') reply = reply.replace(/\{\{K1\}\}/, 'your car');
+  // A reflection line: one plain sentence after the greeting line (or first, with no greeting).
+  if (fitting === 'reflect') {
+    const line = 'Adelaide is no trouble: we deliver Australia-wide.';
+    const rows = reply.split('\n');
+    const at = rows.findIndex((r) => r.startsWith('Hello {{NAME}},'));
+    rows.splice(at + 1, 0, ...(at >= 0 ? ['', line] : [line, '']));
+    reply = rows.join('\n');
+  }
   if (fitting === 'invent') reply = reply.replace('\n\n', '\n\nIt can be yours for only $9,999.\n\n');
   // A blank of its own: every blank the message needs is already a marker.
   if (fitting === 'blank') reply = reply.replace('\n\n', '\n\nWe will confirm the date: [DATE?].\n\n');
@@ -161,6 +169,37 @@ test('an auction message is fitted to the customer by the AI, with every figure 
   for (const secret of ['226,000', '10,277', '1,650', 'Nina', 'Halvorsen']) assert.ok(!sent.includes(secret), `"${secret}" reached the AI`);
   assert.equal(d.template, 'first_estimate');
   assert.notEqual(d.provider, 'none');
+});
+
+test('the fitting may add one line that reflects the customer, after the greeting; it is accepted and the figures are as before', async () => {
+  const tpl = { id: 'x', label: 'X', masked: fitter.maskTemplate({ part: 'Hello {{NAME}},\n\nThank you.', values: {} }), wordChecks: [], factsUsed: [] };
+  assert.match(fitter.templatePlan(tpl).lines.join('\n'), /one short line directly after the greeting line/);
+  config.auction.fit = true;
+  fitting = 'reflect';
+  // The customer says where they are, so there is something to pick up (and the place is theirs).
+  await post('/api/items/ao:502/paste', { direction: 'in', text: "I'm in Adelaide. Any news on the car?" });
+  try {
+    const out = await post('/api/items/ao:502/draft', { message: 'search_update' });
+    const d = out.json.item.draft;
+    assert.equal(d.status, 'ready', JSON.stringify(d.checks));
+    assert.notEqual(d.provider, 'none', JSON.stringify(d.checks));
+    const line = 'Adelaide is no trouble: we deliver Australia-wide.';
+    assert.equal(d.reply.split(line).length - 1, 1, 'the line, once');
+    assert.match(d.reply, /^Hello Remy,\n\nAdelaide is no trouble: we deliver Australia-wide\.\n\nJust an update on your Honda N-Box\./, 'the line after the greeting, the fact as before');
+    // A message that carries figures: every line with a digit comes through the fitting unchanged.
+    const fitted = (await post('/api/items/ao:502/draft', { message: 'first_estimate' })).json.item.draft;
+    assert.notEqual(fitted.provider, 'none', JSON.stringify(fitted.checks));
+    assert.equal(fitted.reply.split(line).length - 1, 1, 'the line, once');
+    db.openDb().prepare("DELETE FROM drafts WHERE item_key = 'ao:502' AND template = 'first_estimate'").run();
+    config.auction.fit = false;
+    const plain = (await post('/api/items/ao:502/draft', { message: 'first_estimate' })).json.item.draft;
+    config.auction.fit = true;
+    assert.equal(plain.provider, 'none');
+    const figureLines = plain.reply.split('\n').filter((l) => /\d/.test(l));
+    assert.ok(figureLines.length >= 2, `figures to compare: ${plain.reply}`);
+    const fittedLines = fitted.reply.split('\n');
+    for (const l of figureLines) assert.ok(fittedLines.includes(l), `"${l}" unchanged in the fitted reply`);
+  } finally { fitting = 'keep'; config.auction.fit = true; db.openDb().prepare("DELETE FROM drafts WHERE item_key = 'ao:502' AND template = 'first_estimate'").run(); }
 });
 
 test('a fitting that loses a fact or adds a figure is tried once more, then the template is used word for word', async () => {

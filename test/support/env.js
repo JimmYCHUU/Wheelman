@@ -24,6 +24,8 @@ export const BASE_ENV = {
   // The AI price file and the month's budget: a scratch file, never data/, and the usual budget.
   AI_PRICES_PATH: path.join(os.tmpdir(), `wheelman-test-prices-${process.pid}.json`),
   AI_MONTHLY_BUDGET_AUD: '50',
+  // The stand-in dashboard session is a scratch file, never data/.session.json.
+  SESSION_PATH: path.join(os.tmpdir(), `wheelman-test-session-${process.pid}.json`),
   // Review runs go to a scratch folder, never data/review.
   REVIEW_DIR: path.join(os.tmpdir(), `wheelman-test-review-${process.pid}`),
   GEMINI_MODEL: 'model-a',

@@ -247,6 +247,14 @@ export function vehicleLines(lot) {
   return [lot.title, lot.km ? `${lot.km.toLocaleString('en-AU')} km` : '', lot.grade ? `Auction Grade ${lot.grade}` : '', engine.trim(), lot.drive, lot.seats ? `${lot.seats} seats` : ''].filter(Boolean);
 }
 
+/** The two facts that decide whether the car suits: kilometres and auction grade, as one sentence ('' when the lot gives neither). */
+export function decidesLine(lot) {
+  const parts = [];
+  if (lot.km) parts.push(`${lot.km.toLocaleString('en-AU')} km`);
+  if (lot.grade) parts.push(`auction grade ${lot.grade}`);
+  return parts.length ? `It has ${parts.join(' and ')}.` : '';
+}
+
 export const costLines = (estimate) => estimate.lines.map((l) => `- ${l.label}: ${money(l.aud)} AUD`).join('\n');
 
 /**
@@ -269,7 +277,7 @@ export function offerBlock(lot, estimate, bidBy = 'suggested', { websiteBidYen =
     bid_sentence: fill(t.snippets[which] || '', { bid, website_bid: yen(websiteBidYen) }),
     bid,
     total: money(estimate.totalAud),
-    cost_lines: costLines(estimate),
+    decides: decidesLine(lot),
     if_deposit: !depositPaid,
     sender: config.firstReplySender,
   });
@@ -402,7 +410,7 @@ function nonePlan(item, w, searched, why = '') {
       `This customer asked us to find a ${w.car} from the Japan auctions. What they asked for: ${wantedLine(w)}.`,
       why || (searched ? `We searched the live auction: ${searched} ${w.car} are in the coming auctions, but none fits what they asked.` : `We searched the live auction: no ${w.car} is in the coming auctions right now. The auction list changes every day.`),
       'Say that nothing suitable is in the coming auctions at the moment, that we are keeping the search going, and that we will let them know when a suitable one comes up. Do not name or describe any particular car.',
-      w.missing.length > 1 ? `If it helps the search, ask for what we still do not know: ${listOf(w.missing)}.` : '',
+      w.missing.length > 1 ? `If it helps the search, ask for what we still do not know: ${listOf(w.missing)}. Do not ask again for what they have already told us, and do not read it back.` : '',
       item.isFirstReply ? 'Our address, phone number, opening hours and sign-off are added below your text automatically. Do not write them.' : '',
     ].filter(Boolean),
   };

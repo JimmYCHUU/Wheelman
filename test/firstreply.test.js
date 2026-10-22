@@ -79,3 +79,13 @@ test("an AI line that repeats a block is caught, a bare link line is dropped, an
   const sent = `Hi Priya,\nYes, it is here.\n\nVehicle details:\n${URL}\n\n${INVITE}\n\nOur location:\n📍 136 Frances Street, Lidcombe NSW 2141\n\n🕛 Open 7 days, 8 AM–5 PM.\nPlease call or text before visiting.`;
   assert.equal(stripLocationBlock(sent), 'Hi Priya,\nYes, it is here.');
 });
+
+test("the inclusions a price reply names are the ones this customer asked about, the full list when they named nothing", () => {
+  const car = { outline: ['6 Months NSW Registration', '5-Year Extended Warranty', '1 Year Roadside Assistance', 'CTP Insurance', 'Fresh Roadworthy Certificate', 'Doorstep Delivery (Greater Sydney)', '3 Month Dealer Warranty'] };
+  assert.equal(inclusionsSentence(car, { asked: 'Is that drive away?' }), '6 months NSW registration, CTP insurance and a fresh roadworthy certificate');
+  assert.equal(inclusionsSentence(car, { asked: 'does the warranty cover the hybrid battery, it is an import' }), 'a 5-year extended warranty, 1 year roadside assistance and a 3-month dealer warranty');
+  assert.equal(inclusionsSentence(car, { asked: 'rego and warranty included?' }), '6 months NSW registration, a 5-year extended warranty, 1 year roadside assistance, CTP insurance, a fresh roadworthy certificate and a 3-month dealer warranty');
+  assert.equal(inclusionsSentence(car, { asked: 'best price?' }), inclusionsSentence(car), 'nothing named: the full list');
+  assert.equal(inclusionsSentence({ outline: ['Doorstep Delivery (Greater Sydney)'] }, { asked: 'drive away?' }), 'Greater Sydney delivery', 'nothing matches: the full list, never an empty sentence');
+  assert.ok(priceBlock({ vehicle: car, inspectionUrl: '', asked: 'Is that drive away?' }).startsWith('The price includes 6 months NSW registration, CTP insurance and a fresh roadworthy certificate. Government charges are extra.'));
+});

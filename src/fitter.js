@@ -147,6 +147,7 @@ export function templatePlan(tpl, { orderPlan = null, followUp = null } = {}) {
       'Fit this message to this customer:',
       '- Keep what each part says, in the same order and layout: its lines, paragraphs and lists stay as they are.',
       '- Change the wording only where it makes the message read naturally for this customer and for what they last wrote. If they asked something the message does not answer, you may add a sentence or two answering it from the facts given here.',
+      '- When what the customer wrote, or their notes on the order, gives something of theirs to pick up (their suburb or state, a deadline, what the car is for, towing), you may add one short line directly after the greeting line that reflects it, with no figure, link or promise in it. Add nothing when there is nothing to pick up. This is the one exception to keeping the layout.',
       '- Keep every marker exactly once, written exactly as shown, where it belongs. Never write a figure, link, phone number or blank yourself, and never make up a marker.',
       '- Keep the greeting and the closing lines the message has, with {{NAME}} where it is. Add no other greeting or sign-off.',
       ...(orderPlan ? ['', 'About this order, for context only (the message above is what to send):', ...orderPlan.lines] : []),
