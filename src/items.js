@@ -254,7 +254,7 @@ export function isIgnoredSender(name) {
 }
 
 /** Texts from suppliers, couriers and marketers arrive on the same phone. They have no lead record. */
-function looksLikeNonCustomer(pending) {
+export function looksLikeNonCustomer(pending) {
   const text = pending.map((e) => e.text).join('\n');
   const foreignLink = findUrls(text).some((u) => !/carbarn\.com\.au|carsales\.com\.au|autotrader|photos\.app\.goo\.gl|maps\.app\.goo\.gl/i.test(u));
   const marketing = /(unsubscribe|opt[\s-]?out|reply stop|quick review|leave (us )?a review|your (order|parcel|delivery|tyres|invoice) (is|has|should|will)|verification code|do not reply|no[\s-]?reply)/i.test(text);

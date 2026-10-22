@@ -23,6 +23,7 @@ import { renderResearch } from './importquery.js';
 import { mailPracticeFor } from './mailpractice.js';
 import { replyLinks } from './vehiclemedia.js';
 import { listOf } from '../web/lib/copy.js';
+import { looksLikeNonCustomer } from './items.js';
 
 const read = (name) => fs.readFileSync(path.join(config.voiceDir, name), 'utf8').replace(/\r/g, '').trim();
 
@@ -448,6 +449,11 @@ export function writtenToday(item, now = Date.now()) {
   return item.timeline.some((e) => e.who === 'us' && !e.internal && e.at && e.at <= now && sydneyDay(e.at) === today);
 }
 
+/** Every pending message is media with no text, and none of it is a picture: an audio clip or a file we cannot read. */
+function mediaOnly(pending) {
+  return !!pending?.length && pending.every((e) => !e.text && e.media && !/image|photo|picture/i.test(e.media));
+}
+
 /**
  * The standard first reply: on a brand-new dashboard enquiry the AI writes only the opening
  * lines, and our block (the car's page, the booking link, address, hours, phone) is
@@ -456,6 +462,8 @@ export function writtenToday(item, now = Date.now()) {
  */
 export function standardPlan(item, vehicle, { gone = false, owner = false, inspection = null } = {}) {
   if (!item.isNewEnquiry || item.channel === 'marketplace') return { on: false, vehicleUrl: '', inspectionUrl: '', lines: [] };
+  // A spam pitch, a newsletter or an audio clip with no text is not an enquiry: no block goes under the reply.
+  if (looksLikeNonCustomer(item.pending) || mediaOnly(item.pending)) return { on: false, vehicleUrl: '', inspectionUrl: '', lines: [] };
   const vehicleUrl = vehicle?.url && !gone && !owner ? vehicle.url : '';
   const inspectionUrl = inspection?.url && blockCarries('inspection_invite') ? inspection.url : '';
   const holds = [vehicleUrl ? "this vehicle's page link" : '', inspectionUrl ? 'the inspection invitation and its booking link' : '', 'our address', 'the opening hours', 'our phone number'].filter(Boolean);
@@ -543,6 +551,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   const part = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
   P.push(`NOW: ${sydneyWeekday(now)} ${part} (${formatSydney(now)}), Sydney time. The greeting line for this hour, when one is due, is "${greetingFor(hour)} {{NAME}}," (or "${greetingFor(hour)}," when the name is not known); never "Hi".`);
   P.push(`SITUATION: ${item.situation.label}${item.situation.all.length > 1 ? `. Also touches: ${item.situation.all.slice(1).map(labelFor).join('; ')}` : ''}.`);
+  if (mediaOnly(item.pending)) P.push('The customer sent an audio clip and no text. We cannot hear it here: say so courteously in one sentence and ask them to text what they need. No block is added under your text.');
   // Fitting one of our own messages is not writing a reply: the message settles what it says.
   const fitting = importPlan?.stage === 'template';
   P.push(fitting

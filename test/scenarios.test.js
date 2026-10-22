@@ -983,3 +983,16 @@ test('a booking made on the website is confirmed in words, with no invitation un
   assert.ok(!d.checks.some((c) => c.code === 'inspection-link'), JSON.stringify(d.checks));
   assert.deepEqual(fails(d), [], JSON.stringify(d.checks));
 });
+
+test('a spam pitch, a newsletter or an audio clip gets no address block', async () => {
+  lead(50, 270, 'Seo', '0421 000 050'); conv(270, 50, 'Seo Test', '+61421000050');
+  msg(270, 'IN', 'Get High-Quality SEO Services to Boost Your Website Ranking. Reply STOP to unsubscribe.', 5 * MIN);
+  assert.doesNotMatch(ask(270), /=== STANDARD FIRST REPLY ===/);
+  const { d } = await draft(270, 'Hello {{NAME}},\nThank you, we do not need SEO services at this time.');
+  assert.ok(!d.reply.includes('📍'), d.reply);
+  lead(51, 271, 'Audio', '0421 000 051'); conv(271, 51, 'Audio Test', '+61421000051');
+  msg(271, 'IN', '', 5 * MIN, { mediaType: 'audio' });
+  assert.equal(item(271).state, 'awaiting');
+  assert.doesNotMatch(ask(271), /=== STANDARD FIRST REPLY ===/);
+  assert.match(ask(271), /sent an audio clip/);
+});
