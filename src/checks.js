@@ -44,14 +44,17 @@ const SIGN_OFF_LINES = [
   /^\[?(your name|name|sender)\]?$/i,
 ];
 
-/** Removes any sign-off the model added, so the configured one can be attached once. */
 // A reply that confirms a visit at a time. One definition, used both to leave the invitation off
 // and to excuse a missing link. "Saturday is fine" alone is a day agreed, not a time confirmed.
 export const CONFIRMS = /\bsee you\b|\bready for you\b|look forward to seeing you|\bcome straight in\b|\b(booked|confirmed) for\b|\bwe (will|'ll) have (it|the \w+( \w+)?) (ready|out)\b/i;
 export const AGREES = /\b(is|are|would be|sounds) (fine|good|great|perfect|no problem)\b|\bsuits? (us|well|fine|perfectly)\b/i;
 export const CLOCK = /\b\d{1,2}([:.]\d{2})?\s?(am|pm)\b|\b\d{1,2}[:.]\d{2}\b/i;
-export const confirmsTime = (body) => CONFIRMS.test(body) || (AGREES.test(body) && CLOCK.test(body));
+// An opening-hours sentence names clock times without confirming a visit.
+export const HOURS = /\b(open|opening|hours|close[sd]?|closing|until|till)\b/i;
+// The agreement and the time must sit in one sentence that is not about our hours.
+export const confirmsTime = (body) => CONFIRMS.test(body) || sentences(body).some((x) => AGREES.test(x) && CLOCK.test(x) && !HOURS.test(x));
 
+/** Removes any sign-off the model added, so the configured one can be attached once. */
 export function stripModelSignOff(text) {
   const lines = String(text || '').replace(/\r/g, '').split('\n');
   while (lines.length) {

@@ -127,6 +127,12 @@ test('a customer who names a day but no time still gets the invitation, once', a
   assert.equal(note(d), undefined);
 });
 
+test('a time is confirmed only by an agreement and a time in one sentence that is not about our hours', async () => {
+  const { confirmsTime } = await import('../src/checks.js');
+  for (const t of ['See you Saturday.', 'Yes, Saturday at 10:30 am is fine.', 'We will have the Noah ready for you.']) assert.equal(confirmsTime(t), true, t);
+  for (const t of ['Saturday is fine.', 'Saturday is fine, we are open 9am to 5pm.', 'Saturday is fine. We are open until 5:00 pm.', 'You are welcome to come on Saturday.']) assert.equal(confirmsTime(t), false, t);
+});
+
 test('nothing about inspections is added when the customer did not ask to see the car', async () => {
   const { inspectionPlan, buildPrompt } = await import('../src/prompt.js');
   const it = await item(105);
