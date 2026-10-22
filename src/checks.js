@@ -257,6 +257,8 @@ function figureProblems(replyBody, trustedText, customerText = '', policyText = 
 const HOLDING_LINE = /\b(?:(?:we|i)(?:'ll| will| shall|'d| would| am going to| are going to| can)\s+(?:(?:have|take) a (?:closer )?look|look (?:into|up|at)|check(?:ing)?(?: on| into| with| this| that| it| the)?|find out|confirm(?: this| that| it| the details?| the exact| with)?|verify|chase(?: this| that| it)?(?: up)?|get back to you|come back to you|revert|update you|let you know|be in touch|keep you (?:posted|updated|informed)|advise(?: you)?)|(?:updat|lett)ing you know shortly|get back to you (?:shortly|soon|asap)|once (?:we|i) (?:have )?(?:checked|confirmed|looked|verified|heard)|after (?:we|i) (?:check|confirm|look)|in due course|as soon as (?:we|i) (?:know|hear|can confirm))\b/i;
 // What our website itself promises about the process: these are ours to say.
 const PROCESS_LINE = /\b(?:before (?:any|a|the|we|placing)\b[^.]{0,40}\bbid|after your approval|inspect\w*|photos?|auction sheet|inspector|once (?:the|your) deposit|after (?:the|your) deposit|progress updates?|\bVIA\b|complian\w*|shipping|lodge|customs|biosecurity|deliver\w*|arriv\w*|vessel|\bport\b)\b/i;
+// The only process wording that excuses a holding line beside a blank: what the website itself promises.
+const WEBSITE_PROCESS = /\b(auction sheet|before (?:any|a|the|we|placing)\b[^.]{0,40}\bbid|after your approval|once (?:the|your) deposit|after (?:the|your) deposit|progress updates?)\b/i;
 const BLANK_IN = new RegExp(BLANK_PATTERN);
 const sentencesOf = (t) => String(t || '').split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
 
@@ -349,7 +351,7 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   // A blank is already the hand-over: no holding line beside it, and never two deferrals.
   if (channel !== 'email' && !instructed) {
     const sentences = sentencesOf(body);
-    const beside = sentences.find((s) => BLANK_IN.test(s) && (HOLDING_LINE.test(s) || /\bshortly\b/i.test(s)) && !PROCESS_LINE.test(s));
+    const beside = sentences.find((s) => BLANK_IN.test(s) && (HOLDING_LINE.test(s) || /\bshortly\b/i.test(s)) && !WEBSITE_PROCESS.test(s));
     if (beside) {
       const match = (beside.match(HOLDING_LINE) || beside.match(/\bshortly\b/i))[0];
       add('warn', 'holding-blank', `"${match}" beside a blank. The blank is already the hand-over: write the answer with its blank, then the step the customer can take now.`, [match]);

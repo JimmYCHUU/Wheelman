@@ -505,6 +505,11 @@ test('a holding line beside a blank, or two deferrals, is pointed out; a plain b
   assert.ok(!run('Before we bid, our team in Japan inspects the car. We will send the auction sheet once it is listed.').includes('warn:two-deferrals'), 'what we do as a process is not a deferral');
   assert.ok(!run('Thank you for letting us know. We are looking into this and will come back to you shortly.').includes('warn:two-deferrals'), 'the one complaint holding line stays');
   assert.ok(!checks.checkDraft({ reply: 'x', body: 'We will check and confirm: [CHECK?].', instructed: true }).some((c) => c.code === 'holding-blank'));
+  assert.ok(run('We will confirm the delivery date shortly: [DATE?].').includes('warn:holding-blank'));
+  assert.ok(run('We will check the photos and confirm shortly: [TRADE-IN VALUE?].').includes('warn:holding-blank'));
+  assert.ok(!run('We will send the auction sheet shortly once it is listed: [CHECK?].').includes('warn:holding-blank'));
+  const workshop = run('We will check with the workshop. The fitting cost is [CHECK?].');
+  assert.ok(!workshop.includes('warn:holding-blank') && !workshop.includes('warn:two-deferrals'));
   const voice = promptModule.systemPrompt('sms');
   assert.match(voice, /Never a holding line beside a blank/);
   assert.doesNotMatch(voice, /Otherwise write "We will check and come back to you shortly\."/);
