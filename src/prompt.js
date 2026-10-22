@@ -449,9 +449,12 @@ export function writtenToday(item, now = Date.now()) {
   return item.timeline.some((e) => e.who === 'us' && !e.internal && e.at && e.at <= now && sydneyDay(e.at) === today);
 }
 
-/** Every pending message is media with no text, and none of it is a picture: an audio clip or a file we cannot read. */
+// How Google Messages shows an audio message when the phone add-on reads it.
+const AUDIO_ONLY = /^\s*(audio clip|voice (message|note|clip)|audio message)\s*$/i;
+
+/** Every pending message is an audio clip or other non-picture media with no text, or the add-on's words for one. */
 function mediaOnly(pending) {
-  return !!pending?.length && pending.every((e) => !e.text && e.media && !/image|photo|picture/i.test(e.media));
+  return !!pending?.length && pending.every((e) => (!e.text && e.media && !/image|photo|picture/i.test(e.media)) || (AUDIO_ONLY.test(e.text || '') && !e.event));
 }
 
 /**

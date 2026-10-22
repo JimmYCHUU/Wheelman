@@ -995,4 +995,14 @@ test('a spam pitch, a newsletter or an audio clip gets no address block', async 
   assert.equal(item(271).state, 'awaiting');
   assert.doesNotMatch(ask(271), /=== STANDARD FIRST REPLY ===/);
   assert.match(ask(271), /sent an audio clip/);
+  // The phone add-on reads an audio message as the plain words "Audio clip".
+  lead(52, 272, 'Words', '0421 000 052'); conv(272, 52, 'Words Test', '+61421000052');
+  msg(272, 'IN', 'Audio clip', 5 * MIN);
+  assert.equal(item(272).state, 'awaiting');
+  assert.doesNotMatch(ask(272), /=== STANDARD FIRST REPLY ===/);
+  assert.match(ask(272), /sent an audio clip/);
+  // A real sentence that mentions a clip is not audio only.
+  lead(53, 273, 'Engine', '0421 000 053'); conv(273, 53, 'Engine Test', '+61421000053');
+  msg(273, 'IN', 'Audio clip of the engine noise attached, can you check it?', 5 * MIN);
+  assert.doesNotMatch(ask(273), /sent an audio clip/);
 });
