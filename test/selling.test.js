@@ -412,6 +412,10 @@ test('on Marketplace an opening thank-you and an unasked link are pointed out', 
   assert.match(promptModule.systemPrompt('marketplace'), /A bare figure \("15k", "\$17000", "24 will do", "I have15000k"\) is an offer/);
   assert.match(promptModule.systemPrompt('marketplace'), /one short line above the three paragraphs reflects it/);
   assert.match(promptModule.systemPrompt('marketplace'), /"Rego include\?" gives nothing/);
+  const flatMarketplace = promptModule.systemPrompt('marketplace').replace(/\s+/g, ' ');
+  assert.match(flatMarketplace, /and nothing else apart from the one line described at the end of this bullet/);
+  assert.match(flatMarketplace, /No link and no other sentence beyond that one line\./);
+  assert.match(promptModule.systemPrompt('sms').replace(/\s+/g, ' '), /one short line above the paragraphs may reflect it/);
 });
 
 test('the deposit waits for the buyer: a booking, a finance application or a visit still to come is not a commitment; seeing the car, holding it or accepting the figure is', () => {

@@ -167,7 +167,7 @@ October 2026). A Marketplace buyer writes casually and expects a person, and our
 in a few plain lines and moves them to a phone call or a booked visit.
 
 The first reply to a buyer who asks whether the car is available, when it is, is these three
-short paragraphs with this car's own figures, and nothing else: no link, no sign-off. "only"
+short paragraphs with this car's own figures, and nothing else: no link, no sign-off. When the buyer's message gives something of theirs to pick up (a family on the way, a suburb or a state, a trade, a deadline), one short line above the paragraphs may reflect it in plain words; nothing is added when it gives nothing. "only"
 before the kilometres under 60,000 km; "a Japanese import" without the grade when none is
 recorded; the inclusions are "6 months rego, a fresh roadworthy and a 5-year warranty", keeping
 only what the car's Included list has.
