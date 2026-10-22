@@ -381,6 +381,8 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
     askedDeposit: sit.includes('deposit_hold'),
     browsing,
     askedOtherCars,
+    // A car still in transit or in Japan cannot be inspected: the playbook offers the holding deposit for it.
+    notAtYard: !!vehicle && !['available', 'sold'].includes(availability(vehicle).code),
     far: far.far && far.source === 'said',
     channel,
   };
@@ -410,7 +412,7 @@ export function stageLines(stage) {
   } else {
     L.push('No urgency of any kind: nothing about other buyers, nothing about selling fast, and nothing about the deposit taking the car off the market.');
     // Below commitment the deposit is not the next step, unless the customer raised it themselves.
-    if (stage.rung !== 'commit' && stage.rung !== 'buyer' && stage.move !== 'propose_deposit' && !stage.askedDeposit) {
+    if (stage.rung !== 'commit' && stage.rung !== 'buyer' && stage.move !== 'propose_deposit' && !stage.askedDeposit && !stage.notAtYard) {
       L.push('Do not propose or mention the holding deposit: it is not the next step for this customer yet.');
     }
   }

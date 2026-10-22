@@ -409,7 +409,8 @@ export function pricePlan(item, vehicle = item.vehicles[0], { gone = false, owne
   const online = where.far && where.source === 'said';
   const links = inspectionLinks(vehicle);
   return {
-    on: true, online, inspectionUrl: canInspect ? (online ? links.online : links.onsite) : '',
+    // A buyer who is only asking gets the price without the booking invitation.
+    on: true, online, inspectionUrl: canInspect && !stage?.browsing ?(online ? links.online : links.onsite) : '',
     lines: [
       'The customer asked about the price: the best price, a discount, or an offer. Our standard price reply is added under your text automatically, in our own words: what the price includes, that government charges are extra, that we may offer a small discount to a serious buyer, and the invitation with the booking link and how to arrange a time.',
       'Write only the greeting, when one is due, and one or two sentences whose first names what this customer gave us and answers it in their terms: their offer ("Thank you for your offer of $15,000": their figure may be named as theirs, ours never), their budget, or the question they asked. When the block\'s first line answers it (a "drive away" question), the greeting alone is enough. Never open on the car being available for inspection: the block invites them. Do not repeat the advertised price, do not name a figure of ours, and do not accept or refuse an offer. Do not write inclusions, a discount, an invitation or a link: the block says them.',

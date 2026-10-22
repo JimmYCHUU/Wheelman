@@ -598,3 +598,20 @@ test('a buyer asking for other cars in their range gets the stock list, not this
   assert.equal(selling.saleStage(mk('marketplace', 'Do you have any other options for finance?'), { now }).askedOtherCars, false, 'a finance question is not a question about other cars');
   assert.equal(selling.saleStage(mk('marketplace', 'Does it come in another colour? Any other ones?'), { now }).askedOtherCars, true, 'documented: "any other ones" reads as other cars');
 });
+
+test('a car still in transit may be held, a browsing text gets the price without the invitation, and a browsing offer reply asks for no number', () => {
+  const car = (stockIn) => ({ url: 'https://www.carbarn.com.au/vehicles/toyota/noah/zrr80/1300', price: 23900, soldStatus: 'UnSold', stockIn, status: 'PUBLISHED' });
+  const interest = (stockIn) => selling.stageLines(selling.saleStage(plain({ situations: ['general'], vehicles: [car(stockIn)], texts: [{ who: 'customer', text: 'Thx I would want to see in flesh' }] }), { now })).join('\n');
+  assert.match(interest('Online'), /Do not propose or mention the holding deposit/);
+  assert.doesNotMatch(interest('Transit'), /Do not propose or mention the holding deposit/);
+  assert.doesNotMatch(interest('Japan'), /Do not propose or mention the holding deposit/);
+  const noah = car('Online');
+  const sms = (t) => { const item = plain({ situations: ['price_negotiation'], vehicles: [noah], texts: [{ who: 'customer', text: t }] }); return promptModule.pricePlan(item, noah, { stage: selling.saleStage(item, { now }) }); };
+  const asking = sms("What's your best price, just asking");
+  assert.equal(asking.on, true);
+  assert.equal(asking.inspectionUrl, '');
+  assert.match(sms("What's your best price").inspectionUrl, /#inspection=/);
+  const again = stage({ channel: 'marketplace', situations: ['price_negotiation'], texts: [{ who: 'customer', text: 'Hi, price?' }, { who: 'us', text: 'The lowest we can do on the Noah is $23,000.' }, { who: 'customer', text: 'Would you do 21k? just asking' }] });
+  assert.equal(again.move, 'answer_offer');
+  assert.doesNotMatch(again.moveText, /their number/);
+});
