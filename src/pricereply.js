@@ -19,7 +19,7 @@ const DELIVERY = /\bdelivery\b/i;
 const DEALER = /\b(\d+)[\s-]*months?\b[^\n]*\bdealer\s+warranty\b|\bdealer\s+warranty\b/i;
 
 /** "6 months NSW registration, a 5-year extended warranty, 1 year roadside assistance and CTP insurance", from the car's Included list. '' when none of them is listed. */
-export function inclusionsSentence(vehicle) {
+export function inclusionsSentence(vehicle, { asked = '' } = {}) {
   const lines = (vehicle?.outline || []).map((l) => String(l || ''));
   const find = (re) => { for (const l of lines) { const m = l.match(re); if (m) return { m, line: l }; } return null; };
   const out = [];
@@ -41,7 +41,19 @@ export function inclusionsSentence(vehicle) {
   const dealer = find(DEALER);
   if (dealer) out.push(`a ${dealer.m[1] || 3}-month dealer warranty`);
   if (!out.length) return '';
-  return list(out);
+  return list(pickInclusions(out, asked));
+}
+
+const ASKS_ON_ROAD = /drive.?away|on.?road|\brego\b|registration|\bctp\b|roadworthy|blue slip|pink slip|stamp duty|government charges|transfer fee/i;
+const ASKS_COVER = /warrant|\bimport|japan|reliab|cover|roadside|breakdown|mechanical/i;
+/** The inclusions that answer what the customer asked; all of them when they asked about nothing in particular, or none of theirs is listed. */
+export function pickInclusions(items, asked) {
+  const text = String(asked || '');
+  const onRoad = ASKS_ON_ROAD.test(text);
+  const cover = ASKS_COVER.test(text);
+  if (!onRoad && !cover) return items;
+  const picked = items.filter((i) => (onRoad && /registration|CTP|roadworthy/.test(i)) || (cover && /warranty|roadside/.test(i)));
+  return picked.length ? picked : items;
 }
 
 /**
@@ -70,10 +82,10 @@ const list = (out) => (out.length === 1 ? out[0] : `${out.slice(0, -1).join(', '
  * Marketplace wording where the two differ; withStandard: the first-reply block follows, so the
  * invitation's last line ("Please call or text before visiting.") is left to the block.
  */
-export function priceBlock({ vehicle = null, inspectionUrl = '', online = false, chat = false, withStandard = false } = {}) {
+export function priceBlock({ vehicle = null, inspectionUrl = '', online = false, chat = false, withStandard = false, asked = '' } = {}) {
   const t = template('price-reply.md');
   if (!t) return '';
-  const inclusions = inclusionsSentence(vehicle);
+  const inclusions = inclusionsSentence(vehicle, { asked });
   let text = fill(t.text, { inclusions, inspection_invite: inspectionUrl ? inviteBlock(inspectionUrl, { online, chat, tail: !withStandard }) : '' });
   if (!inclusions) text = text.replace(/^The price includes[^\n]*/m, t.snippets.no_inclusions || 'The advertised price excludes government charges.');
   return text.replace(/\n{3,}/g, '\n\n').trim();

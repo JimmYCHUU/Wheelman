@@ -368,6 +368,18 @@ test('a buyer leaving over the price gets no price reply and no invitation; a se
   assert.equal(again.stage.move, 'answer_offer');
   assert.equal(again.price.on, false, 'the price reply was sent already');
   assert.match(again.user, /\[PRICE\?\]/);
+
+  // The block goes only to the first price question, and never to a trade-in.
+  const noah = { url: 'https://www.carbarn.com.au/vehicles/toyota/noah/zrr80/1300', price: 23900, soldStatus: 'UnSold', stockIn: 'Online', status: 'PUBLISHED' };
+  const priceItem = plain({ situations: ['price_negotiation'], vehicles: [noah], texts: [{ who: 'customer', text: 'What is your best price?' }] });
+  const first = promptModule.pricePlan(priceItem, noah, { stage: { move: 'invite_before_price' } });
+  assert.equal(first.on, true);
+  const lines = first.lines.join('\n');
+  assert.match(lines, /names what this customer gave us/);
+  assert.doesNotMatch(lines, /place the vehicle: that it is available for inspection at Lidcombe/);
+  const tradeIn = plain({ situations: ['price_negotiation', 'trade_in'], vehicles: [noah], texts: [{ who: 'customer', text: 'I have an offer of $31,000 for my van from Carsales, is the Noah hybrid?' }] });
+  assert.equal(promptModule.pricePlan(tradeIn, noah, { stage: { move: 'invite_before_price' } }).on, false, 'a trade-in is not answered with the price block');
+  assert.equal(promptModule.pricePlan(priceItem, noah, { stage: { move: 'propose_deposit' } }).on, false, 'an accepted figure is not answered with the price block');
 });
 
 test('on Marketplace an opening thank-you and an unasked link are pointed out', () => {

@@ -196,7 +196,7 @@ export function assessReply(item, prompt, json, { plan = null, chat = false, ema
   // The owner's blocks under the AI's lines: the price reply when the price was asked about, else
   // the invitation when the customer wants to see the car (not when the AI confirmed a time in
   // words, and not on a first reply, where the standard block carries it).
-  const price = !plan && !hold && prompt.price?.on ? priceBlock({ vehicle: item.vehicles[0], inspectionUrl: prompt.price.inspectionUrl, online: prompt.price.online, chat, withStandard: prompt.standard.on }) : '';
+  const price = !plan && !hold && prompt.price?.on ? priceBlock({ vehicle: item.vehicles[0], inspectionUrl: prompt.price.inspectionUrl, online: prompt.price.online, chat, withStandard: prompt.standard.on, asked: item.pendingText }) : '';
   const confirmedTime = confirmsTime(text);
   const invite = !price && !plan && !hold && prompt.inspection?.block && prompt.inspection.url && !prompt.standard.on && !confirmedTime && !prompt.inspection.booked
     ? inviteBlock(prompt.inspection.url, { online: prompt.inspection.kind === 'online', chat, tail: true }) : '';

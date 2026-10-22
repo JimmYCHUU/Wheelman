@@ -4,9 +4,11 @@
 #
 # Lines starting with # are notes and are never sent. Edit the rest freely.
 #   {inclusions}         built by code from that vehicle's own Included list, in this order and these
-#                        words: 6 months NSW registration, a 5-year extended warranty, 1 year roadside
+#                        words (6 months NSW registration, a 5-year extended warranty, 1 year roadside
 #                        assistance, CTP insurance, a fresh roadworthy certificate, Greater Sydney
-#                        delivery, a 3-month dealer warranty. What the car's list lacks is left out.
+#                        delivery, a 3-month dealer warranty); when the customer's words ask about
+#                        something in particular (drive away, rego, the warranty, an import), only the
+#                        items that answer it; the full list otherwise. What the car's list lacks is left out.
 #   @no_inclusions       the first line instead, when the car's list has none of them
 #   {inspection_invite}  the invitation from inspection-invite.md with the booking link; left out when
 #                        the car cannot be inspected yet

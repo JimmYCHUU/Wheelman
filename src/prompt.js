@@ -396,6 +396,9 @@ export function pricePlan(item, vehicle = item.vehicles[0], { gone = false, owne
   // buyer's number), under THIS CUSTOMER'S NEXT STEP: no block goes under the lines there.
   if (!item.situation.all.includes('price_negotiation') || item.deal || item.channel === 'email' || item.channel === 'marketplace' || !vehicle?.url || gone || owner) return off;
   if (stage && (stage.move === 'answer_offer' || QUIET_MOVES.has(stage.move))) return off;
+  // The block answers the first price question only: not a figure already agreed, not a trade-in.
+  if (stage && stage.move !== 'invite_before_price') return off;
+  if (item.situation.all.includes('trade_in')) return off;
   const a = availability(vehicle);
   if (a.code === 'sold') return off;
   const canInspect = a.code === 'available' && !reservedByAnother(vehicle);
@@ -407,7 +410,7 @@ export function pricePlan(item, vehicle = item.vehicles[0], { gone = false, owne
     on: true, online, inspectionUrl: canInspect ? (online ? links.online : links.onsite) : '',
     lines: [
       'The customer asked about the price: the best price, a discount, or an offer. Our standard price reply is added under your text automatically, in our own words: what the price includes, that government charges are extra, that we may offer a small discount to a serious buyer, and the invitation with the booking link and how to arrange a time.',
-      'Write only the greeting, when one is due, and one or two sentences that answer anything else they asked and place the vehicle: that it is available for inspection at Lidcombe, with one fact that matters. Do not repeat the advertised price, do not name any figure, and do not accept or refuse an offer. Do not write inclusions, a discount, an invitation or a link: the block says them.',
+      'Write only the greeting, when one is due, and one or two sentences whose first names what this customer gave us and answers it in their terms: their offer ("Thank you for your offer of $15,000": their figure may be named as theirs, ours never), their budget, or the question they asked. When the block\'s first line answers it (a "drive away" question), the greeting alone is enough. Never open on the car being available for inspection: the block invites them. Do not repeat the advertised price, do not name a figure of ours, and do not accept or refuse an offer. Do not write inclusions, a discount, an invitation or a link: the block says them.',
       'If they named a figure of their own, thank them for the offer and neither accept nor refuse it: write "Regarding your offer, [PRICE?]." for a person to complete, and list it under needs_human. Never say that it is too low or that we cannot accept it.',
       canInspect ? '' : 'This vehicle cannot be inspected yet, so the price reply carries no booking link. Say we will let them know as soon as it can be seen.',
     ].filter(Boolean),

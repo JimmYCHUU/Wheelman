@@ -908,11 +908,20 @@ test("a best-price question mid-conversation gets the standard price reply under
   msg(260, 'IN', "What's your best price on it?", 5 * MIN);
   const { d, asked } = await draft(260, 'The Vellfire is available for inspection at our Lidcombe showroom, with 60,000 km on the export certificate.');
   assert.match(asked, /=== PRICE REPLY ===/);
-  assert.match(asked, /Do not repeat the advertised price, do not name any figure/);
+  assert.match(asked, /Do not repeat the advertised price, do not name a figure of ours/);
   assert.equal(d.reply, 'The Vellfire is available for inspection at our Lidcombe showroom, with 60,000 km on the export certificate.\n\n'
     + `${PRICE_LINES}\n\n`
     + `${INVITE(`${VELL}#inspection=onsite`)}\nPlease call or text before visiting.`);
   assert.deepEqual(fails(d), [], JSON.stringify(d.checks));
+
+  // A customer who asks only whether it is drive away gets the inclusions that answer it.
+  lead(140, 2600, 'Dara', '0421 000 140', { stocks: ['1800'] });
+  conv(2600, 140, 'Dara Test', '+61421000140');
+  msg(2600, 'IN', 'Is the Vellfire still available?', 3 * HOUR);
+  msg(2600, 'OUT', 'Hi Dara, yes it is.', 170 * MIN);
+  msg(2600, 'IN', 'Is that drive away?', 5 * MIN);
+  const drive = await draft(2600, 'The Vellfire is available for inspection at our Lidcombe showroom.');
+  assert.ok(drive.d.reply.includes('The price includes 6 months NSW registration, CTP insurance and a fresh roadworthy certificate.'), drive.d.reply);
 
   // An AI line that writes the block's own words is sent back; a figure below the price is refused.
   const repeats = 'Yes, it is available. Government charges are extra, and we may offer a small discount.';
