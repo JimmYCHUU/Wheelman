@@ -1005,4 +1005,11 @@ test('a spam pitch, a newsletter or an audio clip gets no address block', async 
   lead(53, 273, 'Engine', '0421 000 053'); conv(273, 53, 'Engine Test', '+61421000053');
   msg(273, 'IN', 'Audio clip of the engine noise attached, can you check it?', 5 * MIN);
   assert.doesNotMatch(ask(273), /sent an audio clip/);
+  // A customer with a lead record who mentions a message they left is a customer: the block stays.
+  lead(54, 274, 'Lena', '0491 570 154', { stocks: ['1300'] }); conv(274, 54, 'Lena Test', '+61491570154');
+  msg(274, 'IN', 'Hi, I left you a message about the Noah, is it still available?', 5 * MIN);
+  assert.equal(item(274).isNewEnquiry, true);
+  assert.match(ask(274), /=== STANDARD FIRST REPLY ===/);
+  assert.equal(items.looksLikeNonCustomer(item(274).pending, { strict: true }), false);
+  assert.equal(items.looksLikeNonCustomer(item(274).pending), true, 'the looser reading is for a number with no lead record');
 });

@@ -162,6 +162,15 @@ function oldLabels(file) {
   } catch { return new Map(); }
 }
 
+/**
+ * True for the live layout: a file named app.db in a folder named data, the database the app keeps
+ * open. The script runs on a copy only.
+ */
+export function isLiveDatabase(dbPath) {
+  const full = path.resolve(String(dbPath || ''));
+  return path.basename(full).toLowerCase() === 'app.db' && path.basename(path.dirname(full)).toLowerCase() === 'data';
+}
+
 function idsFrom(args) {
   const after = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] || '' : null; };
   const list = after('--ids');
@@ -182,6 +191,10 @@ async function main() {
   // The app keeps its database open and opening one runs its changes: this works on a copy only.
   if (!process.env.DB_PATH) {
     console.log('Set DB_PATH to a copy of the database first: this script never runs on the one the app has open.');
+    process.exit(1);
+  }
+  if (isLiveDatabase(process.env.DB_PATH)) {
+    console.log(`DB_PATH points at the live database (${process.env.DB_PATH}). Use a copy: copy app.db to another folder, or give the copy another name, and set DB_PATH to it. This script never runs on the one the app has open.`);
     process.exit(1);
   }
   console.log(`Database: ${config.dbPath}`);

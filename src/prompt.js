@@ -468,8 +468,11 @@ function mediaOnly(pending) {
  */
 export function standardPlan(item, vehicle, { gone = false, owner = false, inspection = null } = {}) {
   if (!item.isNewEnquiry || item.channel === 'marketplace') return { on: false, vehicleUrl: '', inspectionUrl: '', lines: [] };
-  // A spam pitch, a newsletter or an audio clip with no text is not an enquiry: no block goes under the reply.
-  if (looksLikeNonCustomer(item.pending) || mediaOnly(item.pending)) return { on: false, vehicleUrl: '', inspectionUrl: '', lines: [] };
+  // A spam pitch, a newsletter or an audio clip with no text is not an enquiry: no block goes under
+  // the reply. For a customer with a lead record only the strict reading counts: the looser one
+  // ("left you a message", "voicemail") is for a number nobody has a record of.
+  const strict = !!(item.hasLeadRecord || item.lead);
+  if (looksLikeNonCustomer(item.pending, { strict }) || mediaOnly(item.pending)) return { on: false, vehicleUrl: '', inspectionUrl: '', lines: [] };
   const vehicleUrl = vehicle?.url && !gone && !owner ? vehicle.url : '';
   const inspectionUrl = inspection?.url && blockCarries('inspection_invite') ? inspection.url : '';
   const holds = [vehicleUrl ? "this vehicle's page link" : '', inspectionUrl ? 'the inspection invitation and its booking link' : '', 'our address', 'the opening hours', 'our phone number'].filter(Boolean);

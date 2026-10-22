@@ -798,6 +798,21 @@ test('the price reply for a buyer who is only asking says the block carries no i
   assert.match(plan("What's your best price").lines[0], /the invitation with the booking link/);
 });
 
+// ---- the final review: the first reply and the soft promise ----------------------------------------
+
+test('the Privacy Act line leaves room for what the customer told us themselves', () => {
+  assert.match(promptModule.systemPrompt('sms').replace(/\s+/g, ' '), /nothing about health, family, finances or background that they did not tell us themselves\./);
+});
+
+test('a refund, a waiver or compensation offered without our staff saying so is pointed out', () => {
+  const body = 'Thank you for letting us know. If your insurer will not cover it, we can look at the next step together, or we can look at refunding your holding deposit.';
+  const run = (extra = {}) => checks.checkDraft({ reply: body, body, allowedText: 'Vehicle: 2021 Toyota Noah X.', customerText: 'My insurer will not cover it', ...extra }).map((c) => `${c.level}:${c.code}`);
+  assert.ok(run().includes('warn:soft-promise'), run().join(' '));
+  assert.ok(!run({ instruction: 'Offer to refund the holding deposit.' }).includes('warn:soft-promise'), 'our staff said so');
+  assert.ok(!run({ said: [{ who: 'us', text: 'We can waive the transfer fee for you.', at: now - HOUR }] }).some((c) => c === 'warn:soft-promise'), 'our earlier message said so');
+  assert.ok(!run({ instructed: true }).includes('warn:soft-promise'), 'a Prompt sets it aside');
+});
+
 test('a deferral about a sold car is offered another car', () => {
   assert.equal(stage({ vehicles: [{ id: 2, soldStatus: 'SOLD', stockIn: 'Sold' }], texts: [{ who: 'customer', text: "I'll let you know" }] }).move, 'offer_alternative');
 });

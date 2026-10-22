@@ -2,10 +2,30 @@
 // tokens, is found again among the stored suggestions. No AI, no database. Every text is invented.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
+import os from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { applyTestEnv } from './support/env.js';
 
 applyTestEnv();
-const { matchTurnToDraft } = await import('../scripts/tone-redraft.js');
+const { matchTurnToDraft, isLiveDatabase } = await import('../scripts/tone-redraft.js');
+
+test('the re-draft script never runs on the live database: a file named app.db in a folder named data', () => {
+  assert.equal(isLiveDatabase(path.join(os.tmpdir(), 'somewhere', 'data', 'app.db')), true);
+  assert.equal(isLiveDatabase(path.join('data', 'app.db')), true, 'a relative path is resolved first');
+  assert.equal(isLiveDatabase(path.join(os.tmpdir(), 'somewhere', 'Data', 'APP.DB')), true, 'Windows ignores case');
+  assert.equal(isLiveDatabase(path.join(os.tmpdir(), 'copies', 'app-copy.db')), false);
+  assert.equal(isLiveDatabase(path.join(os.tmpdir(), 'copies', 'data', 'app-2026-10-21.db')), false);
+  assert.equal(isLiveDatabase(path.join(os.tmpdir(), 'copies', 'app.db')), false);
+  // The script itself refuses before it opens anything.
+  const script = fileURLToPath(new URL('../scripts/tone-redraft.js', import.meta.url));
+  const live = path.join(os.tmpdir(), `wheelman-redraft-${process.pid}`, 'data', 'app.db');
+  const run = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', script, '--ids', 'WM-001', '--dry-run'], { env: { ...process.env, DB_PATH: live }, encoding: 'utf8' });
+  assert.equal(run.status, 1, run.stdout + run.stderr);
+  assert.match(run.stdout, /live database/);
+  assert.match(run.stdout, /copy/);
+});
 
 test('a turn finds the stored suggestion its redacted words came from', () => {
   const drafts = [{ reply: 'Hello Priya,\nYes, the Noah is here.' }, { reply: 'Hello Priya,\nNo.' }];
