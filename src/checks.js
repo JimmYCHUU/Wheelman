@@ -159,10 +159,19 @@ export function numbersIn(text) {
   return out;
 }
 
-/** A sentence that names a figure as the customer's own ("your offer of $15,000", "hoping for $30,000"), not as ours. */
-export const OWNED_BY_CUSTOMER = /\b(your (offer|budget|figure|proposal|limit|max(imum)?|price)|(offer|budget|figure) of|you (mentioned|offered|proposed|suggested|named|have|are offering|can do|hoped|were hoping)|hoping (for|to get))\b/i;
+/**
+ * The words right before a figure that name it as the customer's own ("your offer of $15,000",
+ * "hoping for $30,000", "a budget of about $10,000"). Judged on each mention of the figure, on the
+ * words just before it in its sentence: "Our offer of", "an offer of" or "a figure of" is ours.
+ */
+export const OWNED_BY_CUSTOMER = /(\byour (offer|budget|figure|price|limit|max(imum)?)( of)?|\byou (offered|mentioned|proposed|suggested|named|said)|\b(were |are )?hoping (for|to get)|\ba budget of)( about| around| roughly| approximately| up to)?\s*$/i;
 /** Beside the customer's figure these mean we took it: still refused. */
 const TAKES_FIGURE = /\b(accept\w*|agree\w*|a deal|deal\b|done|match\w*|meet\w*|confirm\w*|take it|we can do|can do that|(is|would be|sounds) (fine|ok(ay)?|good|acceptable|enough)|works? for us|we('ll| will) (take|accept|do|sell)|sell (it|the \w+) (at|for))\b/i;
+/**
+ * An acceptance anywhere in the reply: then no figure only the customer gave is theirs to name.
+ * "we can do" is left out, so "The lowest we can do on the Noah is [PRICE?]." may follow their offer.
+ */
+const ACCEPTS_OFFER = /\b(accept(ed|ing)? (that|it|this|your offer|the offer)|we (can|will|'ll) accept|happy (with|to accept) (that|it|this|your offer|the offer)|(is|are) approved|go ahead (with|at)|it'?s a deal|that'?s a deal|\bdeal\b|have it for|(it'?s|it is) yours|yours (for|at)|works for us)\b/i;
 
 /**
  * Figures in a reply that cannot be traced to a source.
@@ -211,7 +220,12 @@ function figureProblems(replyBody, trustedText, customerText = '', policyText = 
     spans.push({ start, end: start + bodySentences[i].length, text: bodySentences[i] });
     from = start + bodySentences[i].length;
   }
-  const sentenceAt = (index) => (spans.find((s) => index >= s.start && index < s.end) || { text: body }).text;
+  const spanAt = (index) => spans.find((s) => index >= s.start && index < s.end) || { start: 0, end: body.length, text: body };
+  const sentenceAt = (index) => spanAt(index).text;
+  // The words just before a figure, inside its own sentence: is it named there as the customer's?
+  const namedAsTheirs = (index) => OWNED_BY_CUSTOMER.test(body.slice(Math.max(spanAt(index).start, index - 40), index));
+  // A reply that accepts their offer anywhere names none of their figures as theirs.
+  const accepts = ACCEPTS_OFFER.test(body);
 
   for (const m of body.matchAll(NUMBER)) {
     const raw = m[0].trim();
@@ -232,8 +246,7 @@ function figureProblems(replyBody, trustedText, customerText = '', policyText = 
         if (usedInContext(n, sentence, policyText)) continue;
       }
       if (fromCustomer.has(n)) {
-        const sentence = sentenceAt(m.index);
-        if (OWNED_BY_CUSTOMER.test(sentence) && !TAKES_FIGURE.test(sentence)) continue;
+        if (!accepts && namedAsTheirs(m.index) && !TAKES_FIGURE.test(sentenceAt(m.index))) continue;
         customerOnly.push(raw);
         continue;
       }

@@ -219,6 +219,24 @@ test('a figure the customer gave may be named as theirs, never as ours', () => {
   assert.ok(run('Your $15,000 offer is a deal.', 'can do 15k').includes('fail:customer-figure'));
   assert.ok(run('Thank you for your offer of $15,000. We can do $15,000 for you.', 'can do 15k').includes('fail:customer-figure'), 'the same figure stated as ours in a second sentence still fails');
   for (const plain of ['Your offer of $15,000 works for us.', 'Your offer of $15,000 is fine.', 'As you have asked, we will sell it at $15,000.']) assert.ok(run(plain, 'can do 15k').includes('fail:customer-figure'), plain);
+  // Theirs only right after "your offer" and its kin; an acceptance anywhere in the reply still fails.
+  for (const [body, said] of [
+    ['Our offer of $19,000 stands.', 'would you take 19k'],
+    ['We are able to make an offer of $19,000 for the Noah.', 'would you take 19k'],
+    ['The Noah is yours at a figure of $19,000.', 'would you take 19k'],
+    ['You have it for $19,000.', 'would you take 19k'],
+    ['You can have it for your offer of $19,000.', 'would you take 19k'],
+    ["We're happy with your offer of $19,000.", 'would you take 19k'],
+    ['Your offer of $19,000 is approved.', 'would you take 19k'],
+    ['Thank you for your offer of $19,000. We can accept that.', 'would you take 19k'],
+    ['Within your budget of $19,000, the Noah is $19,000 drive away.', 'my budget is 19k'],
+  ]) assert.ok(run(body, said).includes('fail:customer-figure'), body);
+  for (const [body, said, extra] of [
+    ['Thank you for your offer of $15,000. Regarding your offer, [PRICE?].', 'can do 15k if you are neg'],
+    ['Thank you for your offer of $15,000. The lowest we can do on the Noah is [PRICE?].', 'can do 15k if you are neg'],
+    ['You were hoping for $30,000 for your STI. Our offer of $27,000 stands.', 'I was hoping to get a minimum of $30,000', { allowedText: `${facts}\nWe can offer you $27,000 for your STI.` }],
+    ['Thank you, a budget of about $10,000 helps.', 'my budget is about 10k'],
+  ]) assert.ok(!run(body, said, extra).includes('fail:customer-figure'), body);
 });
 
 test('the voice: the first sentence names what the person gave, and a form is already read', () => {
