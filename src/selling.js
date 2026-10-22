@@ -55,12 +55,13 @@ export const CANNOT_COME = /\b(can'?t|cannot|can not|unable to|not able to|won'?
 export const DEFERRED = /\b(i'?ll|i will|we'?ll|we will|let me|(i |we )?need to|(i|we) have to|i'?d like to|i want to) (let you know|get back to you|be in touch|think about it|have a think|think it over|think on it|come back to you|sleep on it)\b|\b(i'?ll|i will|we'?ll|we will|let me) decide\b|\b(discuss|talk|speak|chat|check|run) (it |this |that )?(over |through |past )?(to |with )?(my|our|the) (partner|wife|husband|missus|family|parents|dad|mum|mother|father|son|daughter|bank|accountant|mechanic|boss)\b|\b(not (coming|today|this week|right now|ready)|can'?t (come|make it|do) today|another (time|day)|some other (time|day)|still (deciding|thinking)|need (some |more |a bit of )?time|maybe later|hold off|leave it with me|in (the next )?(couple|few) (of )?(days|weeks))\b/i;
 
 /**
- * The customer says they have seen or driven the car, or watched its video: in person or at a time,
- * never on an advert ("I saw it on carsales" is the listing, not the car).
+ * The customer says they have seen or driven the car, or watched its video: in the past tense, in
+ * person or at a time, never on an advert ("I saw it on carsales" is the listing, not the car). "I
+ * want a test drive" or "Happy to come in today" asks for a visit; it does not report one.
  */
-export const SEEN_WORDS = /\b(test[\s-]?dr(ove|ive|iving)|(came|come|popped|dropped) (in|by|down|past)\b[^.?!]{0,30}\b(yesterday|today|this (morning|afternoon)|on (mon|tues|wednes|thurs|fri|satur|sun)day|last)|(saw|seen|inspected|looked at|checked out) (it|the (car|van|vehicle))\b(?![^.?!]{0,25}\b(on|online|advertised|listed|ad|advert|listing|carsales|facebook|marketplace|gumtree|website|site)\b)[^.?!]{0,25}\b(yesterday|today|in person|at your|on (mon|tues|wednes|thurs|fri|satur|sun)day|last week|the other day)|after (the|my|our) (inspection|visit|test[\s-]?drive)|thanks for (showing|the test[\s-]?drive|your time (yesterday|today|the other day))|(watched|seen|saw) the (walkaround|video)\b)/i;
+export const SEEN_WORDS = /\b(test[\s-]?(drove|driven)|(had|did|took|done) (a|the|our|my) test[\s-]?drive|(came|popped|dropped) (in|by|down|past)\b[^.?!]{0,30}\b(yesterday|today|this (morning|afternoon)|on (mon|tues|wednes|thurs|fri|satur|sun)day|last)|(saw|seen|inspected|looked at|checked out) (it|the (car|van|vehicle))\b(?![^.?!]{0,25}\b(on|online|advertised|listed|ad|advert|listing|carsales|facebook|marketplace|gumtree|website|site)\b)[^.?!]{0,25}\b(yesterday|today|in person|at your|on (mon|tues|wednes|thurs|fri|satur|sun)day|last week|the other day)|after (the|my|our) (inspection|visit|test[\s-]?drive)|thanks for (showing (us|me) the (car|van|vehicle)|the test[\s-]?drive|your time (yesterday|today|the other day))|(watched|seen|saw) the (walkaround|video)\b)/i;
 
-// Words before "test drive" or "come in" that ask for it or plan it, rather than report it.
+// Words before the seen words that ask or plan, rather than report ("Could I come in…", "I'd like to…").
 const ASKS_OR_PLANS = /\b(can|could|may|might|would|will|shall|wanna|gonna|able to|like to|love to|want to|keen to|going to|hoping to|plan(ning)? to|book(ing)?|arrange)\b|['’]ll\b/i;
 
 /**
@@ -88,9 +89,18 @@ export const LICENCE_ASK = /\b(driver'?s? licen[cs]e|licen[cs]e photo|photo of y
 /** Yes to the deposit we proposed. */
 export const AGREES_DEPOSIT = /\b(yes|ok(ay)?|sure|let'?s do (it|that)|i can do that|go ahead|sounds good|happy to|i'?ll (pay|put|place|send|transfer) (the |a )?deposit|how do i pay|send (me |through )?the invoice|(bank|account) details|where do i pay)\b/i;
 
-/** A yes to the deposit, not one after "not", "n't" or "unsure" ("Not sure yet", "I'm not sure about the deposit"). */
-function agreesDeposit(text) {
+/** Paying the deposit, said outright: a yes even with a later day ("I'll pay the deposit in the next couple of days"). */
+const PAYS_DEPOSIT = /\b(i'?ll|i will|we'?ll|we will) (pay|transfer|send|put down|place) (the |a |my )?deposit\b|\btransferr?(ed|ing) the deposit\b|\bhow do i pay\b|\b(send|email) (me |us )?the invoice\b|\bbank details\b/i;
+/** Still weighing it: an "ok" beside these is not a yes ("Ok I'll think about the deposit"). */
+const WEIGHING = /\b(think (about|it over|on it)|not sure|unsure|decide|let you know)\b/i;
+
+/**
+ * A plain yes to the deposit: a yes word not after "not", "n't" or "unsure" ("Not sure yet", "I'm
+ * not sure about the deposit"), in a message that is not still weighing it.
+ */
+function saysYesToDeposit(text) {
   const s = String(text || '');
+  if (WEIGHING.test(s)) return false;
   for (const m of s.matchAll(new RegExp(AGREES_DEPOSIT.source, 'gi'))) {
     if (!/(\bnot\b|n['’]t\b|\bunsure\b)/i.test(s.slice(Math.max(0, m.index - 12), m.index))) return true;
   }
@@ -296,7 +306,8 @@ const CHAT_MOVES = {
   send_finance_link: 'Say "Yes, we do." and give the finance form on the car\'s page from VEHICLE FACTS ("Start a finance application") on its own line, asking them to let us know once it is done. Never a rate, a repayment or a likelihood of approval.',
   ask_trade_in_details: 'Say we take trade-ins against a car from our stock, and give the trade-in form on the car\'s page from VEHICLE FACTS ("Start a trade-in request") on its own line, with what to put in it: the rego number and state, the kilometres, the condition, a few clear photos and their number. The value is a person\'s: [TRADE-IN VALUE?] if a figure is asked for.',
   price_with_trade: 'They asked the price with a trade-in. Write the sentence with [PRICE?] for this car\'s figure, and give the trade-in form on the car\'s page from VEHICLE FACTS ("Start a trade-in request") on its own line, with what to put in it: the rego number and state, the kilometres, the condition, a few clear photos and their number; its value is [TRADE-IN VALUE?] if they asked for it.',
-  // Only when they have not asked to hold the car: a buyer who asks to hold it is proposed the deposit, as on a text.
+  // Only when accepting our price is their one sign: a buyer who asks to hold the car, has seen it or
+  // started buying is proposed the deposit, as on a text.
   propose_deposit: 'They accept our figure. Thank them, and ask them to send us their number and the day and time that suit them, so we can get the inspection booked and confirm it by text. No deposit unless they ask to hold the car.',
 };
 
@@ -401,9 +412,11 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
   const putOff = DEFERRED.test(item.pendingText || '') || CANNOT_COME.test(item.pendingText || '');
   const deferred = !item.deal && !declined && !parting && !sit.includes('inspection_booking') && !price.open && !sit.includes('deposit_hold') && !price.agreed && putOff;
 
-  // Yes to the deposit we proposed (not a price complaint, a "not sure", a wait, a no or a parting):
-  // only then are the licence and email asked for.
-  told.depositAgreed = told.deposit && !putOff && !declined && !parting && agreesDeposit(item.pendingText) && !PRICE_OBJECTION.test(item.pendingText || '');
+  // Yes to the deposit we proposed (not a price complaint, a no or a parting): paying it said
+  // outright, even on a later day, or a plain yes that does not put it off. Only then are the
+  // licence and email asked for.
+  const pending = item.pendingText || '';
+  told.depositAgreed = told.deposit && !declined && !parting && !PRICE_OBJECTION.test(pending) && (PAYS_DEPOSIT.test(pending) || (!putOff && saysYesToDeposit(pending)));
 
   let rung;
   if (item.deal) rung = 'buyer';
@@ -427,8 +440,9 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
   // A car that is gone is said so, even to someone who means to come back to it later.
   else if (gone) move = 'offer_alternative';
   else if (deferred) move = 'accept_deferral';
-  // A price asked with a trade-in: this car's figure and what we need to value theirs; no price reply block.
-  else if (price.open && sit.includes('trade_in')) move = 'price_with_trade';
+  // A price first asked with a trade-in: this car's figure and what we need to value theirs; no
+  // price reply block. Once our price is given, an offer with a trade-in is answered as an offer.
+  else if (price.open && sit.includes('trade_in') && !price.answered) move = 'price_with_trade';
   // Our price reply goes once; after that an offer is answered for a person to decide.
   else if (price.open) move = price.answered ? 'answer_offer' : 'invite_before_price';
   else if (rung === 'commit') move = told.deposit ? 'confirm_step' : 'propose_deposit';
@@ -444,11 +458,13 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
   if (move === 'offer_online_inspection' && /\b\d{4}\b/.test(item.pendingText || '')) question = '';
   if (move === 'send_finance_link' && events.some((e) => /finance application/i.test(e))) question = '';
 
-  // On Marketplace an accepted figure leads to the number and the inspection; the deposit only when
-  // they ask to hold the car. The aim says so too, so no line points at the deposit.
+  // On Marketplace a buyer whose only sign is accepting our price is asked for their number and the
+  // inspection, never the deposit. One who asked to hold the car, has seen it or started buying gets
+  // the ordinary deposit move. The aim says so too, so no line points at the deposit.
   const asksToHold = sit.includes('deposit_hold');
-  const chatMove = channel === 'marketplace' && !(move === 'propose_deposit' && asksToHold) && ((browsing && CHAT_MOVES_BROWSING[move]) || CHAT_MOVES[move]);
-  const chatInspection = channel === 'marketplace' && move === 'propose_deposit' && !asksToHold;
+  const priceAlone = signals.length === 1 && signals[0] === 'accepted our price';
+  const chatInspection = channel === 'marketplace' && move === 'propose_deposit' && !asksToHold && priceAlone;
+  const chatMove = channel === 'marketplace' && (move !== 'propose_deposit' || chatInspection) && ((browsing && CHAT_MOVES_BROWSING[move]) || CHAT_MOVES[move]);
 
   return {
     rung,
@@ -459,7 +475,7 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
     question,
     signals,
     told,
-    allowsUrgency: rung === 'commit' && !told.deposit && (channel !== 'marketplace' || asksToHold),
+    allowsUrgency: rung === 'commit' && !told.deposit && !chatInspection,
     askedDeposit: sit.includes('deposit_hold'),
     browsing,
     askedOtherCars,

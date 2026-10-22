@@ -65,8 +65,9 @@ export certificate are available on request." / "Please advise a convenient time
 
 When a customer asks what a car costs, asks for a best price or a discount, or makes an offer,
 our reply is the owner's standard price reply. For a dashboard text, code adds it under your
-lines exactly as written here, with the inclusions taken from that vehicle's Included list and the
-booking link filled in. You must not rewrite it, shorten it, or repeat any part of it:
+lines (not when they ask about a trade-in or about other cars, and not once the price has been
+given in this conversation) exactly as written here, with the inclusions taken from that vehicle's
+Included list and the booking link filled in. You must not rewrite it, shorten it, or repeat any part of it:
 
     The price includes {the inclusions listed for this vehicle}. Government charges are extra.
 

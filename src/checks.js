@@ -171,10 +171,14 @@ export const OWNED_BY_CUSTOMER = /(\byour (offer|budget|figure|price|limit|max(i
 /** Beside the customer's figure these mean we took it: still refused. */
 const TAKES_FIGURE = /\b(accept\w*|agree\w*|a deal|deal\b|done|match\w*|meet\w*|confirm\w*|take it|we can do|can do that|(is|would be|sounds) (fine|ok(ay)?|good|acceptable|enough)|works? for us|we('ll| will) (take|accept|do|sell)|sell (it|the \w+) (at|for))\b/i;
 /**
- * An acceptance anywhere in the reply: then no figure only the customer gave is theirs to name.
- * "we can do" is left out, so "The lowest we can do on the Noah is [PRICE?]." may follow their offer.
+ * An acceptance in any sentence of the reply that is about the figure: then no figure only the
+ * customer gave is theirs to name. "we can do" is left out, so "The lowest we can do on the Noah is
+ * [PRICE?]." may follow their offer; a bare "deal" ("deal with the transfer") is not one.
  */
-const ACCEPTS_OFFER = /\b(accept(ed|ing)? (that|it|this|your offer|the offer)|we (can|will|'ll) accept|happy (with|to accept) (that|it|this|your offer|the offer)|(is|are) approved|go ahead (with|at)|it'?s a deal|that'?s a deal|\bdeal\b|have it for|(it'?s|it is) yours|yours (for|at)|works for us)\b/i;
+const ACCEPTS_OFFER = /\b(accept(ed|ing)? (that|it|this|your offer|the offer)|we (can|will|'ll) accept|happy (with|to accept) (that|it|this|your offer|the offer)|(is|are) approved|go ahead (with|at)|it'?s a deal|that'?s a deal|deal done|have it for (\$?\d[\d,.]*k?|your offer|that price|that figure)|(it'?s|it is) yours|yours (for|at)|works for us)\b/i;
+/** What makes a sentence about the figure: a dollar or k figure, or the words offer, price, figure, that or it. */
+const ABOUT_FIGURE = /\$\s?\d|\b\d+(\.\d+)?\s?k\b|\b(offer|price|figure|that|it)\b/i;
+const acceptsOffer = (body) => sentences(body).some((s) => ACCEPTS_OFFER.test(s) && ABOUT_FIGURE.test(s));
 
 /**
  * Figures in a reply that cannot be traced to a source.
@@ -227,8 +231,8 @@ function figureProblems(replyBody, trustedText, customerText = '', policyText = 
   const sentenceAt = (index) => spanAt(index).text;
   // The words just before a figure, inside its own sentence: is it named there as the customer's?
   const namedAsTheirs = (index) => OWNED_BY_CUSTOMER.test(body.slice(Math.max(spanAt(index).start, index - 40), index));
-  // A reply that accepts their offer anywhere names none of their figures as theirs.
-  const accepts = ACCEPTS_OFFER.test(body);
+  // A reply that accepts their offer in any sentence about it names none of their figures as theirs.
+  const accepts = acceptsOffer(body);
 
   for (const m of body.matchAll(NUMBER)) {
     const raw = m[0].trim();
