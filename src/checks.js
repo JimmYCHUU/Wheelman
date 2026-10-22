@@ -365,10 +365,12 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   // A word that rates the car or the deal. The auction grade scale ("4.5 is excellent") is a fact, not a rating.
   {
     const text = String(body);
-    const own = sentencesOf(text);
+    let from = 0;
+    const spans = sentencesOf(text).map((s) => { const start = text.indexOf(s, from); from = start + s.length; return { start, end: from, text: s }; });
     for (const r of text.matchAll(new RegExp(RATING.source, 'gi'))) {
       const m = r[0];
-      if (/^(excellent|good)$/i.test(m) && own.some((s) => s.includes(m) && /grade/i.test(s))) continue;
+      const own = (spans.find((s) => r.index >= s.start && r.index < s.end) || { text: '' }).text;
+      if (/^(excellent|good)$/i.test(m) && /grade/i.test(own)) continue;
       add('warn', 'rating', `"${m}" rates the car or the deal. A fact is a figure with its unit; the one meaning you may add is what an inclusion saves the buyer doing.`, [m]);
       break;
     }

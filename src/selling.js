@@ -405,8 +405,9 @@ export function stageLines(stage) {
 /** Slang and chat shorthand: not in the brand register. */
 export const SLANG = /\b(no worries|no problem|no probs|no dramas?|too easy|all good|cheers|mate|heaps|arvo|yep|yeah|nope|nah|awesome|cool|guys|gonna|wanna|kinda|sorta|okay|ok|lol|btw|asap|pls|thx)\b/i;
 /** Apologising for existing, or asking permission to be useful: servile, not courteous. */
+export const SERVILE = /\b(sorry to (bother|trouble|disturb)|if that('s| is) (okay|ok|alright|fine) with you|if that works for you|apologies for|so sorry|i apologi[sz]e|just (checking|wondering|following)|hope you don'?t mind|whenever you get a chance|no rush|no pressure)\b/i;
+/** A word that rates the car or the deal, or a feeling hung on an inclusion: a fact with its unit does the selling. */
 export const RATING = /\b(amazing|stunning|incredible|unbeatable|fantastic|awesome|outstanding|exceptional|superb|excellent|perfect|immaculate|pristine|gorgeous|beautiful|lovely|rare|ideal|remarkabl[ey]|great (choice|buy|value|car|deal)|don'?t miss (out|it)|hurry|limited (time|offer|stock|number)|peace of mind|no surprises|ready to drive away)\b/i;
-export const SERVILE =/\b(sorry to (bother|trouble|disturb)|if that('s| is) (okay|ok|alright|fine) with you|if that works for you|apologies for|so sorry|i apologi[sz]e|just (checking|wondering|following)|hope you don'?t mind|whenever you get a chance|no rush|no pressure)\b/i;
 
 const words = (s) => String(s || '').replace(/https?:\/\/\S+/g, ' ').split(/\s+/).filter(Boolean).length;
 

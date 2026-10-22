@@ -307,7 +307,7 @@ test('a reply that invents interest from other buyers is rejected and written ag
 
 test('a word that rates the car or the deal is pointed out; the grade scale and a variant name are not', () => {
   const run = (body) => checks.checkDraft({ reply: body, body, allowedText: 'Vehicle: 1995 Mitsubishi GTO. Odometer 18,052 km. Auction grade 4.5. Variant G Limited.' }).map((c) => `${c.level}:${c.code}`);
-  for (const b of ['The GTO is an exceptional classic with only 18,052 km.', 'It is a superb luxury hybrid sedan.', 'An excellent 8-seater family van, so it is ready to drive away.', 'A rare 4WD classic.', 'The 5-year warranty is there for your peace of mind.', 'Remarkably efficient at 5.0 L/100 km.', 'What an amazing car.'])
+  for (const b of ['The GTO is an exceptional classic with only 18,052 km.', 'It is a superb luxury hybrid sedan.', 'An excellent 8-seater family van, so it is ready to drive away.', 'A rare 4WD classic.', 'The 5-year warranty is there for your peace of mind.', 'Remarkably efficient at 5.0 L/100 km.', 'What an amazing car.', 'Auction grade 4.5 is excellent. An excellent van.'])
     assert.ok(run(b).includes('warn:rating'), b);
   for (const b of ['Auction grade 4.5 is excellent with minor marks.', 'The G Limited has 18,052 km on the export certificate.', 'The price includes 6 months NSW registration.'])
     assert.ok(!run(b).includes('warn:rating'), b);
