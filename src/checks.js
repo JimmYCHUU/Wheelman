@@ -31,7 +31,7 @@ const BANNED = [
 
 // The checks that hold a reply to the section's own rules on length, tone and layout, rather than
 // to the facts. A reply written from the owner's Prompt is not held to them.
-const SECTION_RULES = new Set(['emoji', 'exclaim', 'long', 'questions', 'filler', 'register', 'next-step', 'price', 'opener', 'unasked-link', 'deposit-early', 'quiet-close']);
+const SECTION_RULES = new Set(['holding-blank', 'two-deferrals', 'emoji', 'exclaim', 'long', 'questions', 'filler', 'register', 'next-step', 'price', 'opener', 'unasked-link', 'deposit-early', 'quiet-close']);
 
 // What our records say about a customer, said to them. Shape the reply by it; never state it.
 const INSIDER_LEAK = /\b(lead score|your (engagement )?score|scored (as|at)|(hot|warm|cold) lead|our (dashboard|system|records?) (shows?|says?|notes?|records?|tells? us)|came to us (from|via|through)|found us (on|through|via)|(enquir|inquir|look|shopp)\w* (at|with|about|around) other (dealers?|cars|vehicles)|other dealers?|your (finance )?application (was|has been|got|is) (declined|rejected|knocked back|approved|unsuccessful)|finance (was|has been|is|got) (declined|rejected|knocked back|approved)|you (have |'ve )?(watched|viewed|seen) (the|our) (video|walkaround))\b/i;
@@ -253,6 +253,13 @@ function figureProblems(replyBody, trustedText, customerText = '', policyText = 
 
 // ---- main ------------------------------------------------------------------
 
+// "We will check and get back to you", in its many forms.
+const HOLDING_LINE = /\b(?:(?:we|i)(?:'ll| will| shall|'d| would| am going to| are going to| can)\s+(?:(?:have|take) a (?:closer )?look|look (?:into|up|at)|check(?:ing)?(?: on| into| with| this| that| it| the)?|find out|confirm(?: this| that| it| the details?| the exact| with)?|verify|chase(?: this| that| it)?(?: up)?|get back to you|come back to you|revert|update you|let you know|be in touch|keep you (?:posted|updated|informed)|advise(?: you)?)|(?:updat|lett)ing you know shortly|get back to you (?:shortly|soon|asap)|once (?:we|i) (?:have )?(?:checked|confirmed|looked|verified|heard)|after (?:we|i) (?:check|confirm|look)|in due course|as soon as (?:we|i) (?:know|hear|can confirm))\b/i;
+// What our website itself promises about the process: these are ours to say.
+const PROCESS_LINE = /\b(?:before (?:any|a|the|we|placing)\b[^.]{0,40}\bbid|after your approval|inspect\w*|photos?|auction sheet|inspector|once (?:the|your) deposit|after (?:the|your) deposit|progress updates?|\bVIA\b|complian\w*|shipping|lodge|customs|biosecurity|deliver\w*|arriv\w*|vessel|\bport\b)\b/i;
+const BLANK_IN = new RegExp(BLANK_PATTERN);
+const sentencesOf = (t) => String(t || '').split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+
 /**
  * @param {object} p
  *   reply        finished text (name restored, sign-off attached)
@@ -339,6 +346,16 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   // Selling: no filler, no pressure, no claim the records cannot back, and a next step.
   const filler = String(body).match(FILLER);
   if (filler) add('warn', 'filler', `"${filler[0]}" reads as a reply for the sake of replying. Say the next step instead.`, [filler[0]]);
+  // A blank is already the hand-over: no holding line beside it, and never two deferrals.
+  if (channel !== 'email' && !instructed) {
+    const sentences = sentencesOf(body);
+    const beside = sentences.find((s) => BLANK_IN.test(s) && (HOLDING_LINE.test(s) || /\bshortly\b/i.test(s)) && !PROCESS_LINE.test(s));
+    if (beside) {
+      const match = (beside.match(HOLDING_LINE) || beside.match(/\bshortly\b/i))[0];
+      add('warn', 'holding-blank', `"${match}" beside a blank. The blank is already the hand-over: write the answer with its blank, then the step the customer can take now.`, [match]);
+    }
+    if (sentences.filter((s) => HOLDING_LINE.test(s) && !PROCESS_LINE.test(s)).length >= 2) add('warn', 'two-deferrals', 'Two deferrals in one reply. Give the answer, or one sentence with its blank, and the step they can take now.');
+  }
   // The brand register: no slang, and no apologising for existing or asking permission to be useful.
   const slang = String(body).match(SLANG);
   if (slang) add('warn', 'register', `"${slang[0]}" is not in the brand register. Hospitality phrasing instead: Certainly, Of course, With pleasure, Thank you for your patience.`, [slang[0]]);
@@ -408,7 +425,7 @@ export function retryNote(checks, { channel = 'sms' } = {}) {
     + '\nWrite it again, in your own words for this customer. Use only figures and links that appear in the supplied material. A dollar amount that only the customer mentioned is their figure, not ours: do not state or accept it. Where a figure is not supplied, use the matching marker such as [PRICE?], [DELIVERY COST?], [DATE?] or [CHECK?].'
     + (fails.some((c) => TIME_CODES.has(c.code)) ? (email
       ? '\nDo not swap one day or time for another. Where the day or time of something we will do is not given by our staff, write the sentence with [DATE?] or [TIMELINE?]. Never say we will check and come back.'
-      : '\nDo not swap one day or time for another. Where the day or time of something we will do is not given by our staff, write "shortly" or use [DATE?]. Where nobody on our side agreed to do something, say we will check and come back to them.') : '')
+      : '\nDo not swap one day or time for another. Where the day or time of something we will do is not given by our staff, write "shortly" or use [DATE?]. Where nobody on our side agreed to do something, write the sentence with its blank ([CHECK?]) and the step the customer can take now.') : '')
     + (fails.some((c) => c.code === 'vague-answer' || c.code === 'model-unanswered') ? '\nNever write that we will check, look into, confirm, get back to them or update them later. Give the answer from RESEARCH FOR THIS IMPORT QUESTION. Where RESEARCH has no answer, write the sentence anyway with the matching blank ([ELIGIBILITY?], [LANDED COST?], [DEPOSIT?], [TIMELINE?] or [CHECK?]) and say what it stands for. Every model code the customer named must be answered: eligible or not, with its figure or its blank.' : '')
     + (fails.some((c) => c.code === 'urgency') ? '\nDo not say or imply that other people are interested, that the car is selling fast, or that the price will change. If the request allows urgency, the one true fact is that a $1,000 refundable holding deposit takes the car off the market; otherwise say nothing about urgency.' : '')
     + (fails.some((c) => c.code === 'price-floor') ? '\nNever name a figure below the advertised price. The standard price reply is added under your text; a counter-offer is [PRICE?] for a person.' : '')
@@ -456,13 +473,7 @@ const TIME_CODES = new Set(['time-passed', 'day-mismatch', 'promise']);
 
 // ---- an import email: the exact answer, never a holding line ----------------------------------
 
-// "We will check and get back to you", in its many forms.
-const HOLDING_LINE = /\b(?:(?:we|i)(?:'ll| will| shall|'d| would| am going to| are going to| can)\s+(?:(?:have|take) a (?:closer )?look|look (?:into|up|at)|check(?:ing)?(?: on| into| with| this| that| it| the)?|find out|confirm(?: this| that| it| the details?| the exact| with)?|verify|chase(?: this| that| it)?(?: up)?|get back to you|come back to you|revert|update you|let you know|be in touch|keep you (?:posted|updated|informed)|advise(?: you)?)|(?:updat|lett)ing you know shortly|get back to you (?:shortly|soon|asap)|once (?:we|i) (?:have )?(?:checked|confirmed|looked|verified|heard)|after (?:we|i) (?:check|confirm|look)|in due course|as soon as (?:we|i) (?:know|hear|can confirm))\b/i;
-// What our website itself promises about the process: these are ours to say.
-const PROCESS_LINE = /\b(?:before (?:any|a|the|we|placing)\b[^.]{0,40}\bbid|after your approval|inspect\w*|photos?|auction sheet|inspector|once (?:the|your) deposit|after (?:the|your) deposit|progress updates?|\bVIA\b|complian\w*|shipping|lodge|customs|biosecurity|deliver\w*|arriv\w*|vessel|\bport\b)\b/i;
 const ELIGIBILITY_WORDS = /eligib|approved|can be imported|import(?:ed)? (?:to|into) australia|sevs|not eligible|cannot be imported|25.year|build (?:range|date)/i;
-const BLANK_IN = new RegExp(BLANK_PATTERN);
-const sentencesOf = (t) => String(t || '').split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
 
 /**
  * The checks only an import email gets. research: the record from importquery.js (or null).

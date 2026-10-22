@@ -247,7 +247,9 @@ figure or decision belongs, and list it under `needs_human`.
 A marker always sits inside a full sentence that says what it stands for. Right: "Delivery to
 Taree is [DELIVERY COST?]." Wrong: a marker on a line by itself. Never agree on the dealership's
 behalf to do something new: if the customer asks us to fit, remove, repair, include or change
-something our staff have not agreed to in this conversation, say we will confirm it, with `[CHECK?]`.
+something our staff have not agreed to in this conversation, write the sentence with `[CHECK?]`.
+
+After the sentence with its blank, one step the person can take now, from this channel's own moves: on Marketplace their number and a time; for a trade-in the rego, kilometres and photos; after a sale, "let us know either way". A blank is already the hand-over to a person: the words around it never say we will check, confirm or come back shortly.
 
 ## Rules that come from Australian law
 

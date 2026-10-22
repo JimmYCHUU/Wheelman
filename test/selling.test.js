@@ -493,3 +493,22 @@ test('a deposit, a link or a blank in a polite close is pointed out', () => {
   assert.ok(!run('Thank you for the offer, and all the best with your search.', parting).includes('warn:quiet-close'));
   assert.ok(!checks.checkDraft({ reply: 'x', body: 'A $1,000 holding deposit secures it.', stage: deferral, instructed: true }).some((c) => c.code === 'quiet-close'));
 });
+
+test('a holding line beside a blank, or two deferrals, is pointed out; a plain blank with a step is not', () => {
+  const run = (body, extra = {}) => checks.checkDraft({ reply: body, body, allowedText: 'Vehicle: 2021 Toyota Noah X.', ...extra }).map((c) => `${c.level}:${c.code}`);
+  assert.ok(run('Regarding your offer, we will confirm whether that figure is possible: [PRICE?].').includes('warn:holding-blank'));
+  assert.ok(run('We will check on the deposit and confirm with you shortly: [CHECK?].').includes('warn:holding-blank'));
+  assert.ok(run('We will have our team review them and come back to you shortly with a trade-in value: [TRADE-IN VALUE?].').includes('warn:holding-blank'));
+  assert.ok(!run('If you decide not to go ahead, the deposit is [CHECK?]. Let us know either way.').includes('warn:holding-blank'));
+  assert.ok(!run('From those, the trade-in value we can offer is [TRADE-IN VALUE?]. If that works for you, let us know a time to see the Noah.').includes('warn:holding-blank'));
+  assert.ok(run('We will check the progress on the registration [CHECK?]. We will confirm shortly so you can collect the vehicle.').includes('warn:two-deferrals'));
+  assert.ok(!run('Before we bid, our team in Japan inspects the car. We will send the auction sheet once it is listed.').includes('warn:two-deferrals'), 'what we do as a process is not a deferral');
+  assert.ok(!run('Thank you for letting us know. We are looking into this and will come back to you shortly.').includes('warn:two-deferrals'), 'the one complaint holding line stays');
+  assert.ok(!checks.checkDraft({ reply: 'x', body: 'We will check and confirm: [CHECK?].', instructed: true }).some((c) => c.code === 'holding-blank'));
+  const voice = promptModule.systemPrompt('sms');
+  assert.match(voice, /Never a holding line beside a blank/);
+  assert.doesNotMatch(voice, /Otherwise write "We will check and come back to you shortly\."/);
+  assert.match(voice, /After the sentence with its blank, one step the person can take now/);
+  const time = checks.checkDraft({ reply: 'x', body: 'See you on Friday.', said: [{ who: 'customer', text: 'When will it be ready?', at: Date.now() }], allowedText: '' });
+  assert.doesNotMatch(checks.retryNote(time, { channel: 'sms' }), /say we will check and come back/);
+});

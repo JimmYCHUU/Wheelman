@@ -93,13 +93,13 @@ ${chat ? MARKETPLACE_RULES : email ? EMAIL_RULES : ''}=== WHERE FACTS COME FROM 
 - The section WHAT OUR TEAM REALLY SENT, when present, shows what to say: learn from it first, then word it in our voice. Its facts belong to other customers too.
 - The section HOW THE OWNER WANTS THIS HANDLED, when present, is the owner's own coaching. On how to handle a message it overrides SELLING, BUSINESS FACTS and every example.
 - If a fact you need is not supplied, do not guess. Use the matching marker from the hand-over table.
-- You cannot see photos or attachments. Where the conversation shows [sent a photo], do not describe it or judge what it shows. If the reply depends on it, thank them and say we will take a look, and use [CHECK?].
+- You cannot see photos or attachments. Where the conversation shows [sent a photo], do not describe it or judge what it shows. If the reply depends on it, thank them and write the sentence with its blank for what the photo decides (a trade-in: "From those, the trade-in value we can offer is [TRADE-IN VALUE?]."), then the step they can take now.
 - Every number, price, date and link in your reply must appear in the supplied material.
 
 === PROMISES AND TIMES ===
 ${email
     ? '- Promise an action (sending, calling, booking, holding, fixing, delivering) only if our staff said we would, in the instruction for this draft or earlier in this conversation. Otherwise give the answer itself, or the sentence with its blank. Never a holding line: no "we will check", no "we will get back to you".'
-    : '- Promise an action (sending, calling, booking, holding, fixing, delivering) only if our staff said we would, in the instruction for this draft or earlier in this conversation. Otherwise write "We will check and come back to you shortly."'}
+    : '- Promise an action (sending, calling, booking, holding, fixing, delivering) only if our staff said we would, in the instruction for this draft or earlier in this conversation. Otherwise give the answer itself, or the sentence with its blank ([CHECK?], [PRICE?], [DATE?], [TRADE-IN VALUE?]) and the one step the customer can take now. Never a holding line beside a blank: no "we will check", "we will confirm" or "shortly" in the same sentence as a blank. At most one deferral in a reply, never two.'}
 - Name a day or a time for something we will do only if our staff gave it. Otherwise write "shortly", or use [DATE?].
 - A day or time the customer gave is theirs: keep it. If they wrote "this morning", do not answer "see you tomorrow". Each message shows when it was written; work out which day they meant from that, and compare it with NOW.
 - Never name a part of today that has already passed (see NOW). After midday there is no "this morning". In the evening there is no "this afternoon".
@@ -235,7 +235,7 @@ function whoThisIs(item) {
     L.push('An existing buyer, not a new enquiry. Our sales record shows this customer is buying, or has bought, the vehicle described under VEHICLE FACTS.');
     L.push(`Stage: ${d.stageText}.${d.soldAt ? ` The sale was recorded on ${formatDay(sydneyDay(d.soldAt))}.` : ''}`);
     if (d.onFile.length) L.push(`On file: ${d.onFile.map((p) => p.text).join('; ')}.`);
-    if (d.notOnFile.length) L.push(`Not on file: ${d.notOnFile.join(', ')}. That does not mean it has not happened. Do not say it is done and do not say it is not done: say we will check, and use [CHECK?].`);
+    if (d.notOnFile.length) L.push(`Not on file: ${d.notOnFile.join(', ')}. That does not mean it has not happened. Do not say it is done and do not say it is not done: write the sentence with [CHECK?] for it ("Your registration is [CHECK?].").`);
     if (d.others.length) L.push(`They have also bought from us: ${d.others.map((o) => o.title || `stock ${o.stockNo}`).join('; ')}.`);
   } else if (d.source === 'lead_status') {
     L.push(`An existing buyer, not a new enquiry: ${d.stageText}.`);
@@ -249,7 +249,7 @@ function whoThisIs(item) {
   L.push('- Never ask which vehicle they mean. Never thank them for an enquiry or treat them as someone still deciding.');
   L.push('- Do not call their vehicle "sold" or "available", do not offer other vehicles, and do not give an inspection booking link.');
   L.push('- State no amount paid or owing: use [CHECK?]. For a date when something will be ready, picked up or delivered, use [DATE?] unless our staff gave one in this conversation.');
-  L.push('- If they ask for a document or a photo (invoice, blue slip, registration papers, export certificate), do not say it has been sent. Say we will check and send it, with [CHECK?] where a person has to find it, unless LINKS THEY ASKED FOR says its link is added under your text: then it needs no [CHECK?].');
+  L.push('- If they ask for a document or a photo (invoice, blue slip, registration papers, export certificate), do not say it has been sent. Write the sentence with [CHECK?] where a person has to find it ("Your invoice is [CHECK?]."), unless LINKS THEY ASKED FOR says its link is added under your text: then it needs no [CHECK?].');
   return L;
 }
 
