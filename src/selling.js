@@ -35,6 +35,8 @@ export const AIMS = {
 };
 
 // Situations that mean the customer is working out whether the deal fits.
+// A buyer saying they are only asking, looking or not ready: nothing is asked of them.
+export const BROWSING = /\b(just|only) (asking|looking|browsing|curious|wondering|checking)\b|\bnot (100%|sure|ready)( yet)? (on|about|to) (buy|buying|purchase)\b|\bjust (want|wanna|wanted) to (know|see|check)\b/i;
 const FIT = new Set(['price_negotiation', 'finance', 'trade_in', 'delivery_interstate', 'rego_roadworthy', 'warranty']);
 
 // A customer who has said no, or has bought elsewhere. Nothing is pushed after this.
@@ -251,6 +253,12 @@ const CHAT_MOVES = {
   ask_trade_in_details: 'Say we take trade-ins against a car from our stock, and give the trade-in form on the car\'s page from VEHICLE FACTS ("Start a trade-in request") on its own line, with what to put in it: the rego number and state, the kilometres, the condition, a few clear photos and their number. The value is a person\'s: [TRADE-IN VALUE?] if a figure is asked for.',
 };
 
+/** The same two price moves for a buyer who is only asking: the number clause becomes "then stop". */
+const CHAT_MOVES_BROWSING = {
+  invite_before_price: CHAT_MOVES.invite_before_price.replace(/; then their number as the next step[^"]*"[^"]*"/, '; then stop: they are only asking.'),
+  answer_offer: CHAT_MOVES.answer_offer.replace(/, then their number and the day and time that suit them, if that works for them\./, ', then stop: they are only asking.'),
+};
+
 // ---- the rung and the move ---------------------------------------------------------------------
 
 /**
@@ -329,6 +337,8 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
   else if (sit.includes('history_kms') || sit.includes('photos_video') || (far.far && sit.includes('inspection_booking'))) rung = 'proof';
   else rung = 'interest';
 
+  const browsing = BROWSING.test(item.pendingText || '');
+
   const vehicle = item.vehicles?.[0] || null;
   const gone = !!vehicle && !item.deal && (availability(vehicle).code === 'sold' || (availability(vehicle).code === 'available' && reservedByAnother(vehicle)));
 
@@ -359,12 +369,13 @@ export function saleStage(item, { now = Date.now(), videoViewed = false } = {}) 
     label: RUNG_LABELS[rung],
     aim: AIMS[rung],
     move,
-    moveText: (channel === 'marketplace' && CHAT_MOVES[move]) || MOVES[move].text,
+    moveText: (channel === 'marketplace' && ((browsing && CHAT_MOVES_BROWSING[move]) || CHAT_MOVES[move])) || MOVES[move].text,
     question,
     signals,
     told,
     allowsUrgency: rung === 'commit' && !told.deposit,
     askedDeposit: sit.includes('deposit_hold'),
+    browsing,
     far: far.far && far.source === 'said',
     channel,
   };
@@ -398,6 +409,7 @@ export function stageLines(stage) {
       L.push('Do not propose or mention the holding deposit: it is not the next step for this customer yet.');
     }
   }
+  if (stage.browsing) L.push('They said they are only asking: answer what they asked, and ask for nothing (no number, no visit, no deposit).');
   if (stage.told.deposit) L.push('We have already proposed the deposit to this customer: do not propose it again.');
   if (stage.told.deposit) L.push(stage.told.depositAgreed ? 'They have said yes to the deposit: ask for a photo of their driver licence and their email address, so the invoice can be sent.' : 'They have not yet said yes to the deposit: do not ask for their licence or email.');
   if (stage.told.video) L.push('We have already offered a video: do not offer it again.');

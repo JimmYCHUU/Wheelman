@@ -565,3 +565,18 @@ test('below commitment the holding deposit is not mentioned; it is when they ask
   assert.doesNotMatch(selling.stageLines(asked).join('\n'), /Do not propose or mention the holding deposit/);
 });
 
+test('a buyer who is only asking is asked for nothing; a budget is named as theirs', () => {
+  const asking = stage({ channel: 'marketplace', situations: ['price_negotiation'], texts: [{ who: 'customer', text: "What's the lowest price, I am just asking" }] });
+  assert.equal(asking.browsing, true);
+  assert.match(asking.moveText, /\[PRICE\?\]/);
+  assert.doesNotMatch(asking.moveText, /their number/);
+  assert.match(selling.stageLines(asking).join('\n'), /ask for nothing/);
+  const sms = stage({ channel: 'sms', situations: ['price_negotiation'], texts: [{ who: 'customer', text: "What's the lowest price, I am just asking" }] });
+  assert.match(selling.stageLines(sms).join('\n'), /ask for nothing/);
+  const negotiable = stage({ channel: 'marketplace', situations: ['price_negotiation'], texts: [{ who: 'customer', text: 'Is the price negotiable?' }] });
+  assert.equal(negotiable.browsing, false);
+  assert.match(negotiable.moveText, /their number/);
+  const flat = promptModule.systemPrompt('marketplace').replace(/\s+/g, ' ');
+  assert.match(flat, /A budget is something they gave us: name it as theirs first/);
+  assert.match(flat, /answer that with the full stock list link/);
+});
