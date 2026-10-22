@@ -6,7 +6,7 @@ import { restore, leftoverPlaceholders, NAME_TOKEN } from './redact.js';
 import { findUrls, untagged, hasEmoji, wordCount, stripEmoji, similarity } from './text.js';
 import { sydneyHour } from './time.js';
 import { promiseChecks } from './promises.js';
-import { FILLER, URGENCY, STAYS_FOR_SALE, CLAIM, NEXT_STEP_SIGNS, SLANG, SERVILE, QUIET_MOVES, DEPOSIT_MENTION, LICENCE_ASK } from './selling.js';
+import { FILLER, URGENCY, STAYS_FOR_SALE, CLAIM, NEXT_STEP_SIGNS, SLANG, SERVILE, QUIET_MOVES, DEPOSIT_MENTION, LICENCE_ASK, RATING } from './selling.js';
 import { oldAddressIn, CURRENT_ADDRESS } from './address.js';
 
 export const MARKERS = ['[PRICE?]', '[TRADE-IN VALUE?]', '[DELIVERY COST?]', '[DATE?]', '[CHECK?]', '[DEPOSIT LINK?]', '[ELIGIBILITY?]', '[LANDED COST?]', '[DEPOSIT?]', '[TIMELINE?]'];
@@ -20,7 +20,6 @@ const MARKER_RE = new RegExp(BLANK_PATTERN, 'g');
 // Filler, pressure, slang and unbacked claims have their own checks (filler, urgency, register, claim); these are the rest.
 // The fourth field marks a rule of our voice rather than a fact or the law: a Prompt sets it aside.
 const BANNED = [
-  [/\b(amazing|stunning|incredible|unbeatable|fantastic|awesome|perfect choice|great choice|excellent choice)\b/i, 'uses marketing wording', 'warn', 'voice'],
   [/\b(as an ai|language model|i am an ai|i'?m an ai)\b/i, 'mentions being an AI', 'fail'],
   [/\b\d+(\.\d+)?\s?% ?(p\.?a\.?|per annum|interest|comparison)/i, 'quotes an interest rate', 'fail'],
   // The law wants one price with what it includes; "plus on-roads" is the wording it forbids.
@@ -31,7 +30,7 @@ const BANNED = [
 
 // The checks that hold a reply to the section's own rules on length, tone and layout, rather than
 // to the facts. A reply written from the owner's Prompt is not held to them.
-const SECTION_RULES = new Set(['holding-blank', 'two-deferrals', 'emoji', 'exclaim', 'long', 'questions', 'filler', 'register', 'next-step', 'price', 'opener', 'unasked-link', 'deposit-early', 'quiet-close']);
+const SECTION_RULES = new Set(['holding-blank', 'two-deferrals', 'emoji', 'exclaim', 'long', 'questions', 'filler', 'register', 'next-step', 'price', 'opener', 'unasked-link', 'deposit-early', 'quiet-close', 'rating']);
 
 // What our records say about a customer, said to them. Shape the reply by it; never state it.
 const INSIDER_LEAK = /\b(lead score|your (engagement )?score|scored (as|at)|(hot|warm|cold) lead|our (dashboard|system|records?) (shows?|says?|notes?|records?|tells? us)|came to us (from|via|through)|found us (on|through|via)|(enquir|inquir|look|shopp)\w* (at|with|about|around) other (dealers?|cars|vehicles)|other dealers?|your (finance )?application (was|has been|got|is) (declined|rejected|knocked back|approved|unsuccessful)|finance (was|has been|is|got) (declined|rejected|knocked back|approved)|you (have |'ve )?(watched|viewed|seen) (the|our) (video|walkaround))\b/i;
@@ -363,6 +362,17 @@ export function checkDraft({ reply, body, needsHuman = [], allowedText = '', pol
   if (slang) add('warn', 'register', `"${slang[0]}" is not in the brand register. Hospitality phrasing instead: Certainly, Of course, With pleasure, Thank you for your patience.`, [slang[0]]);
   const servile = String(body).match(SERVILE);
   if (servile) add('warn', 'register', `"${servile[0]}" reads as apologising or asking permission. State the fact or the next step instead.`, [servile[0]]);
+  // A word that rates the car or the deal. The auction grade scale ("4.5 is excellent") is a fact, not a rating.
+  {
+    const text = String(body);
+    const own = sentencesOf(text);
+    for (const r of text.matchAll(new RegExp(RATING.source, 'gi'))) {
+      const m = r[0];
+      if (/^(excellent|good)$/i.test(m) && own.some((s) => s.includes(m) && /grade/i.test(s))) continue;
+      add('warn', 'rating', `"${m}" rates the car or the deal. A fact is a figure with its unit; the one meaning you may add is what an inclusion saves the buyer doing.`, [m]);
+      break;
+    }
+  }
   const claim = String(body).match(CLAIM);
   if (claim) add('fail', 'claim', `"${claim[0]}" is a claim the records cannot back. Say only what the vehicle facts and business facts state, in their words.`, [claim[0]]);
   // What our records show about a customer is never said to them, unless they said it first.

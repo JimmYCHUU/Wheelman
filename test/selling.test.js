@@ -305,6 +305,17 @@ test('a reply that invents interest from other buyers is rejected and written ag
   assert.match(shown.draft.rungLabel, /interested/);
 });
 
+test('a word that rates the car or the deal is pointed out; the grade scale and a variant name are not', () => {
+  const run = (body) => checks.checkDraft({ reply: body, body, allowedText: 'Vehicle: 1995 Mitsubishi GTO. Odometer 18,052 km. Auction grade 4.5. Variant G Limited.' }).map((c) => `${c.level}:${c.code}`);
+  for (const b of ['The GTO is an exceptional classic with only 18,052 km.', 'It is a superb luxury hybrid sedan.', 'An excellent 8-seater family van, so it is ready to drive away.', 'A rare 4WD classic.', 'The 5-year warranty is there for your peace of mind.', 'Remarkably efficient at 5.0 L/100 km.', 'What an amazing car.'])
+    assert.ok(run(b).includes('warn:rating'), b);
+  for (const b of ['Auction grade 4.5 is excellent with minor marks.', 'The G Limited has 18,052 km on the export certificate.', 'The price includes 6 months NSW registration.'])
+    assert.ok(!run(b).includes('warn:rating'), b);
+  assert.ok(!checks.checkDraft({ reply: 'x', body: 'A superb car.', instructed: true }).some((c) => c.code === 'rating'));
+  assert.match(promptModule.systemPrompt('sms'), /No adjective or adverb that rates the car or the deal/);
+  assert.match(promptModule.systemPrompt('marketplace'), /Register under VOICE still applies here/);
+});
+
 test('the register: slang and apologies are pointed out, "plus on-roads" is refused, and the length bands fit the voice', () => {
   const facts = 'Vehicle: 2021 Toyota Noah X. Advertised price $28,900.';
   const run = (body, extra = {}) => checks.checkDraft({ reply: body, body, allowedText: facts, ...extra });

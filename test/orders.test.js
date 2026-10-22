@@ -238,6 +238,10 @@ test('every kind of message has its wording, and is written with no AI and nothi
     assert.ok(/Team Carbarn$/.test(out.text) || ['lot_short'].includes(type), `${type}: not signed Team Carbarn`);
     assert.ok(!/Some Staff/.test(out.text));
   }
+  const lc = (await compose(501, 'lots_coming')).text;
+  assert.ok(!lc.includes('!'), lc);
+  assert.match(lc, /Our inspection team in Japan inspects every vehicle before the final purchase\./);
+  assert.doesNotMatch(lc, /experienced|carefully|detailed|Happy bidding/);
   assert.equal(ai().length, 0, 'no AI request for any of them');
 
   const fe = (await compose(501, 'first_estimate')).text;

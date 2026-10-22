@@ -111,11 +111,10 @@ We have {lot_count} {car_wanted} vehicles coming up {auction_when} that match yo
 You can place your bid through our Live Auction platform:
 {model_url}
 
-Our experienced bidding and inspection team in Japan carefully inspects every vehicle before the final purchase. We will provide you with up-to-date photos and a detailed condition report so you can review everything before confirming the purchase.
+Our inspection team in Japan inspects every vehicle before the final purchase. We will provide you with up-to-date photos and a condition report so you can review everything before confirming the purchase.
 
 We look forward to helping you secure the right {model}.
 
-Happy bidding!
 Kind regards,
 {sender}
 
