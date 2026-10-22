@@ -410,6 +410,8 @@ test('on Marketplace an opening thank-you and an unasked link are pointed out', 
   assert.ok(!checks.checkDraft({ reply: 'Thank you for your message.', body: 'Thank you for your message.', channel: 'sms' }).some((c) => c.code === 'opener'), 'SMS keeps its own rules');
   assert.ok(run('Thank you for your message. Yes.', { instructed: true }).every((c) => c !== 'warn:opener'), 'a Prompt sets it aside');
   assert.match(promptModule.systemPrompt('marketplace'), /A bare figure \("15k", "\$17000", "24 will do", "I have15000k"\) is an offer/);
+  assert.match(promptModule.systemPrompt('marketplace'), /one short line above the three paragraphs reflects it/);
+  assert.match(promptModule.systemPrompt('marketplace'), /"Rego include\?" gives nothing/);
 });
 
 test('the deposit waits for the buyer: a booking, a finance application or a visit still to come is not a commitment; seeing the car, holding it or accepting the figure is', () => {
