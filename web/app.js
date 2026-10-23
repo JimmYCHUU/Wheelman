@@ -15,7 +15,7 @@ import { Avatar } from './components/avatar.js';
 import { IconButton } from './components/iconButton.js';
 import { Segmented } from './components/segmented.js';
 import { mountTopBar } from './views/TopBar.js';
-import { mountListColumn, visibleRows } from './views/ListColumn.js';
+import { mountListColumn, visibleRows, rowToOpen } from './views/ListColumn.js';
 import { CarTab, viewerGroups, replyLabel, pictureSrc } from './views/CarPanel.js';
 import { openViewer } from './views/Viewer.js';
 import { MoveMenu } from './views/MoveMenu.js';
@@ -1780,7 +1780,14 @@ function markRead(item) {
  * the owner did not choose it, so no request is spent until they press Write).
  */
 async function open(key, followUpId = null, { write: writeNow = true } = {}) {
-  if (state.selected === key && state.detail && (followUpId || null) === (state.followUp || null)) { $('#app').dataset.view = 'chat'; return; }
+  // Already open and holding that follow-up (or none): nothing to read again. A follow-up held but
+  // not yet written (the row that opened after a Dismiss) is written now that it was clicked.
+  const holding = !followUpId || state.detail?.anchor === `fu:${followUpId}`;
+  if (state.selected === key && state.detail && (followUpId || null) === (state.followUp || null) && holding) {
+    $('#app').dataset.view = 'chat';
+    if (writeNow && followUpId && followUpToWrite(state.detail)) write(state.detail, '');
+    return;
+  }
   state.selected = key;
   state.followUp = followUpId || null;
   state.rewriteOpen = false;
@@ -1804,7 +1811,7 @@ async function open(key, followUpId = null, { write: writeNow = true } = {}) {
     if (item.vehicle && (!state.media.has(String(item.vehicle.stockNo)) || state.media.get(String(item.vehicle.stockNo)).status === 'error')) loadMedia(item.vehicle.stockNo);
     renderChat({ toBottom: true });
     // Opened from the Follow-ups list: the follow-up is written now, unless it already is.
-    if (writeNow && state.followUp && item.followUp && !item.followUp.done && !(item.draft && item.draft.status === 'ready') && !item.writing) write(item, '');
+    if (writeNow && state.followUp && followUpToWrite(item)) write(item, '');
     if (narrow()) $('.thread')?.focus({ preventScroll: true });
   } catch (e) {
     toast(e.message);
@@ -1817,6 +1824,11 @@ async function open(key, followUpId = null, { write: writeNow = true } = {}) {
  */
 function followUpInHand(item) {
   if (state.followUp && !(item.followUp && item.anchor === `fu:${state.followUp}`)) state.followUp = null;
+}
+
+/** A follow-up the box holds that is still to be written: open, nothing ready, nothing on its way. */
+function followUpToWrite(item) {
+  return !!item.followUp && !item.followUp.done && !(item.draft && item.draft.status === 'ready') && !item.writing;
 }
 
 function closeChat() {
@@ -2174,7 +2186,14 @@ let searchTimer = null;
 mountTopBar($('#topbar'), store, { sync: syncNow, aiModel: openAiPanel, showSection, findCar: openCar });
 mountListColumn($('#side'), store, {
   open,
-  setTab: async (tab) => { if (state.tab === tab) return; state.tab = tab; state.listSize = 20; repaint(); await refreshList(); },
+  setTab: async (tab) => {
+    if (state.tab === tab) return;
+    state.tab = tab; state.listSize = 20; repaint();
+    const ok = await refreshList();
+    // Follow-ups: the first one opens and is written straight away; the others when they are clicked.
+    const first = ok && state.tab === tab ? rowToOpen(state, tab, { narrow: narrow() }) : null;
+    if (first) await open(first.key, first.followUpId);
+  },
   setSearch: (q) => { state.q = q; state.listSize = 20; repaint(); clearTimeout(searchTimer); searchTimer = setTimeout(refreshList, 250); },
   loadMore,
 });
