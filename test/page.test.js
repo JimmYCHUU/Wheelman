@@ -7,7 +7,7 @@ import { clock, dayLabel, listTime, ago, initials, hue, money, km, plural } from
 import { newCount, totalNew } from '../web/lib/counts.js';
 import { createStore } from '../web/lib/store.js';
 import { SECTIONS, SECTION_IDS, sectionOf, TAB_STATE, ORDER_LIST } from '../web/sections/registry.js';
-import { visibleRows, rowTags } from '../web/views/ListColumn.js';
+import { visibleRows, rowTags, rowToOpen, followUpIdOf } from '../web/views/ListColumn.js';
 import { moveChoices } from '../web/views/MoveMenu.js';
 import { pickerOptions, showsPicked, pickHolds, fillsIn } from '../web/views/TemplatePicker.js';
 
@@ -163,6 +163,23 @@ test('a row carries at most two tags, in the settled words and tones', () => {
   assert.deepEqual(rowTags({ section: 'dashboard', state: 'answered', followUp: { reason: 'Quiet 3 days', done: 'copied' } }, state), []);
   assert.equal(t('followup.head', { reason: 'Quiet 3 days' }), 'Follow-up: Quiet 3 days');
   assert.equal(t('followup.putBack'), 'Put back in Follow-ups');
+});
+
+test('choosing Follow-ups opens its first row with the follow-up in hand, so it is written straight away', () => {
+  const rows = [
+    { key: 'c:1', name: 'Pia', preview: {}, followUp: { id: 7, reason: 'Quiet 3 days', done: '' } },
+    { key: 'c:2', name: 'Tom', preview: {}, followUp: { id: 8, reason: 'Inspection passed', done: '' } },
+  ];
+  const state = { section: 'dashboard', q: '', list: rows, everything: [] };
+  assert.deepEqual(rowToOpen(state, 'followups'), { key: 'c:1', followUpId: 7 }, 'the first follow-up, held under its own id');
+  assert.equal(rowToOpen(state, 'followups', { narrow: true }), null, 'a phone-sized screen keeps the list in view');
+  assert.equal(rowToOpen(state, 'all'), null, 'the other lists open nothing by themselves');
+  assert.equal(rowToOpen({ ...state, list: [] }, 'followups'), null, 'nothing due, nothing opens');
+  assert.equal(rowToOpen({ ...state, q: 'tom' }, 'followups').key, 'c:2', 'a search narrows the list first');
+  // A row holds its follow-up only while it is still due.
+  assert.equal(followUpIdOf(rows[1]), 8);
+  assert.equal(followUpIdOf({ key: 'c:3', followUp: { id: 9, done: 'copied' } }), null);
+  assert.equal(followUpIdOf({ key: 'c:4' }), null);
 });
 
 test('the Move menu offers the sections a conversation is not in, in plain words, and the way back to its own', () => {

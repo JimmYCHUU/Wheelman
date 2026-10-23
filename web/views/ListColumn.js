@@ -25,6 +25,20 @@ export function visibleRows(state) {
   return rows.filter((r) => rowMatches(r, q));
 }
 
+/** The follow-up a row is opened with: its own, while it is still due. */
+export const followUpIdOf = (r) => (r?.followUp && !r.followUp.done ? r.followUp.id : null);
+
+/**
+ * The row that opens by itself when a list is chosen: on Follow-ups, the first one, held under its
+ * follow-up, so it is written straight away (the others are written when they are clicked). The
+ * other lists open nothing, and nor does a phone-sized screen, where the list fills it.
+ */
+export function rowToOpen(state, tab, { narrow = false } = {}) {
+  if (tab !== 'followups' || narrow) return null;
+  const r = visibleRows(state)[0];
+  return r ? { key: r.key, followUpId: followUpIdOf(r) } : null;
+}
+
 /** The one or two tags on a row, in the settled words, from what the server says about it. */
 export function rowTags(r, state) {
   const tags = [];
@@ -132,7 +146,7 @@ export function mountListColumn(root, store, actions) {
       const row = Row({
         key: r.key, name: r.name, title: r.phone || r.email || sec.unknown, time: r.lastAt, car: (state.section !== 'dashboard') ? r.car : '',
         tags: rowTags(r, state), prefix: !order && r.preview.who === 'us' ? t('row.you') : '', preview, unread,
-        selected: r.key === state.selected, onOpen: (key) => actions.open(key, r.followUp && !r.followUp.done ? r.followUp.id : null),
+        selected: r.key === state.selected, onOpen: (key) => actions.open(key, followUpIdOf(r)),
       });
       if (!state.selected && i === 0) row.tabIndex = 0;
       return row;

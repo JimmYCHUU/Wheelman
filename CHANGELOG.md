@@ -6,6 +6,15 @@ and versions follow `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Changed
+- **Choosing Follow-ups opens the first follow-up and writes it straight away.** Until now the
+  Follow-ups list showed only why each customer was due ("Quiet 12 days") and kept the conversation
+  that was already open, so no follow-up was written until a row was clicked. The first row now
+  opens with its follow-up in hand and the message is written at once; the others are written when
+  they are clicked, as before. A phone-sized screen keeps the list in view, and the other lists
+  still open nothing by themselves. Clicking the row that is already open writes its follow-up
+  if it is not written yet (the row that opens after a Dismiss, say), where that click did nothing
+  before. (The owner, 23 Oct 2026: "On the follow up section, it doesn't write any suggestions. It
+  just shows that a follow up is needed. But I wanted the follow up suggestion as well.")
 - **Marketplace replies have the shape the team sends there.** Learned from every reply sent on
   Facebook Marketplace over 18 to 20 Oct 2026: the content engine's own first reply to each buyer
   (now written for it by an AI, with the buyer's name and the car's figures) and the 68 replies a
