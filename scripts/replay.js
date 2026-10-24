@@ -30,19 +30,11 @@ if (!styles.length) { console.log('--styles must name full, compact or both.'); 
 if (flag('--gap') !== undefined) config.llm.secondsBetween = Math.max(0, Number(flag('--gap')) || 0);
 
 const REQUEST_TOKENS = { full: 15500, compact: 4000 };
-const requestsFor = (style) => (style === 'full' && sampleFull !== undefined ? Math.min(sampleFull, wanted) : wanted);
 
-if (!has('--confirm')) {
-  const estimate = styles.map((s) => ({ style: s, requests: requestsFor(s), tokens: requestsFor(s) * REQUEST_TOKENS[s] }));
-  console.log(`Replay of up to ${wanted} past exchanges (the case count is known once the database is read).`);
-  for (const e of estimate) console.log(`  ${e.style}: ${e.requests} requests, about ${e.tokens.toLocaleString('en-AU')} tokens in`);
-  console.log(`  total: ${estimate.reduce((s, e) => s + e.requests, 0)} requests, about ${estimate.reduce((s, e) => s + e.tokens, 0).toLocaleString('en-AU')} tokens in`);
-  console.log('\nNothing was sent. Add --confirm to run it, with DB_PATH pointing at a copy of the database.');
-  process.exit(0);
-}
-
+// Both the dry run and the real run read the database copy, so both refuse the live one.
 try { requireCopy(config.dbPath); } catch (e) { console.log(e.message); process.exit(1); }
-config.offline = true;
+const confirmed = has('--confirm');
+if (confirmed) config.offline = true;
 
 const { openDb, closeDb } = await import('../src/db.js');
 const { buildItem } = await import('../src/items.js');
@@ -54,9 +46,29 @@ const { pairStats } = await import('../src/replaystats.js');
 const { displayOfVoice } = await import('../src/people.js');
 const { formatSydney } = await import('../src/time.js');
 
-if (!providers().length) {
+if (confirmed && !providers().length) {
   console.log('No AI key is filled in yet, so the replay test cannot run. Fill in GEMINI_API_KEY in .env first.');
   process.exit(1);
+}
+
+const readLines = (file) => (fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
+const before = resumeDir ? readLines(path.join(resumeDir, 'results.jsonl')) : [];
+
+const db = openDb();
+const cases = spread(collectCases(db, {}), wanted);
+if (!confirmed) {
+  // Dry run: the database copy is read, nothing is sent. With --resume only the cases not yet done count.
+  const done = new Set(before.filter((r) => !r.error && r.worst !== 'fail').map((r) => `${r.key}|${r.style}`));
+  const estimate = styles.map((s) => {
+    const requests = cases.filter((c, i) => !(s === 'full' && sampleFull !== undefined && i >= sampleFull) && !done.has(`${caseKey(c)}|${s}`)).length;
+    return { style: s, requests, tokens: requests * REQUEST_TOKENS[s] };
+  });
+  console.log(`Found ${cases.length} cases to replay (up to ${wanted} asked for).${resumeDir ? ' Cases already done are not counted below.' : ''}`);
+  for (const e of estimate) console.log(`  ${e.style}: ${e.requests} requests, about ${e.tokens.toLocaleString('en-AU')} tokens in`);
+  console.log(`  total: ${estimate.reduce((s, e) => s + e.requests, 0)} requests, about ${estimate.reduce((s, e) => s + e.tokens, 0).toLocaleString('en-AU')} tokens in`);
+  console.log('\nNothing was sent. Add --confirm to run it.');
+  closeDb();
+  process.exit(0);
 }
 
 // Offline is enforced: only the AI providers' hosts may be reached.
@@ -64,23 +76,20 @@ const aiHosts = ['gemini', 'openai', 'openrouter'].map((p) => { try { return new
 const guard = offlineFetch(aiHosts, globalThis.fetch);
 globalThis.fetch = guard.fetch;
 
-const db = openDb();
-const cases = spread(collectCases(db, {}), wanted);
 console.log(`Found ${cases.length} cases to replay (styles: ${styles.join(', ')}).`);
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const runDir = resumeDir || path.join(config.root, 'eval', 'out', `replay-${stamp}`);
 fs.mkdirSync(runDir, { recursive: true });
 fs.writeFileSync(path.join(runDir, 'run.json'), JSON.stringify({ n: wanted, styles, sampleFull: sampleFull ?? null }));
-const readLines = (file) => (fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
 const resultsFile = path.join(runDir, 'results.jsonl');
 const repliesFile = path.join(runDir, 'replies.jsonl');
-const before = readLines(resultsFile);
 if (before.length) console.log(`Resuming: ${before.length} results already in ${runDir}.`);
 
 // The reply text of each draft, kept beside the numbers for the side-by-side page.
 const lastReply = new Map();
 const draft = async (item, opts) => {
+  lastReply.delete(opts.style); // a draft that throws must not leave the last case's reply behind
   const d = await draftFor(item, opts);
   lastReply.set(opts.style, { reply: d.reply || '', error: d.error || '', checks: d.checks || [] });
   return d;
@@ -90,7 +99,7 @@ const { stopped } = await runReplay({
   cases, styles, sampleFull, resumeFrom: before, draft,
   onResult: (r) => {
     fs.appendFileSync(resultsFile, `${JSON.stringify(r)}\n`);
-    fs.appendFileSync(repliesFile, `${JSON.stringify({ key: r.key, style: r.style, ...lastReply.get(r.style) })}\n`);
+    fs.appendFileSync(repliesFile, `${JSON.stringify({ key: r.key, style: r.style, ...(lastReply.get(r.style) ?? { reply: '', error: r.error || '', checks: [] }) })}\n`);
     landed++;
     process.stdout.write(`  ${String(landed).padStart(4)} ${r.style.padEnd(7)} similarity ${r.similarity.toFixed(2)}  ${r.worst}\n`);
   },
@@ -105,7 +114,7 @@ const stats = pairStats(results);
 fs.writeFileSync(path.join(runDir, 'summary.json'), JSON.stringify({ ...stats, stopped, cases: cases.length, blocked: guard.blocked }, null, 1));
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
-const sim = (key, style) => results.find((r) => r.key === key && r.style === style)?.similarity;
+const sim = (key, style) => results.findLast((r) => r.key === key && r.style === style)?.similarity;
 const cell = (key, style) => {
   const r = replies.get(`${key}|${style}`);
   if (!r) return '<em>not run</em>';

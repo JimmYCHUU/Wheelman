@@ -47,7 +47,8 @@ const sales = (item, body, d) => salesScore({
  * 'error' (a draft failed or threw; everything before it is kept).
  */
 export async function runReplay({ cases, styles, sampleFull, resumeFrom = [], draft, onResult }) {
-  const done = new Set(resumeFrom.map((r) => `${r.key}|${r.style}`));
+  // A failed result does not count as done: a resume runs that case again. The newest line for a key and style wins.
+  const done = new Set(resumeFrom.filter((r) => !r.error && r.worst !== 'fail').map((r) => `${r.key}|${r.style}`));
   const results = [];
   let threwRun = 0, downRun = 0;
   for (const [index, c] of cases.entries()) {

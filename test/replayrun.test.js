@@ -163,3 +163,37 @@ test('the token ceiling is 6,000: 5,900 passes, 6,100 fails naming 6,000', () =>
   assert.ok(bad.gate.reasons.some((r) => r.includes('6,000') || r.includes('6000')));
   assert.equal(bad.targetTokensIn, 4000);
 });
+
+test('a resume re-runs a case whose earlier result had an error, and pairStats uses the newer result', async () => {
+  const bad = { key: `${cases[0].conversationId}:${cases[0].cut}`, style: 'compact', similarity: 0, salesOurs: 0, salesTheirs: 0, worst: 'fail', tokensIn: 0, tokensOut: 0, model: '', ms: 1, error: 'threw: boom' };
+  const good = row(bad.key, 'compact', 0.6);
+  const { results } = await runReplay({ cases: [cases[0], cases[1]], styles: ['compact'], draft: async () => ready(), resumeFrom: [bad, good].slice(0, 1) });
+  assert.equal(results.length, 2, 'the failed case runs again, the other is new');
+  const kept = await runReplay({ cases: [cases[0]], styles: ['compact'], draft: async () => ready(), resumeFrom: [{ ...bad, error: undefined, worst: 'ok' }] });
+  assert.equal(kept.results.length, 0, 'a good result is not run again');
+  const s = pairStats([row(bad.key, 'full', 0.6), bad, row(bad.key, 'compact', 0.6)]);
+  assert.equal(s.compact.medianSimilarity, 0.6, 'the last line for a key and style wins');
+});
+
+test('close80 may be up to 3 points below full: 2 points passes, 4 points fails with the reason', () => {
+  const mk = (compactClose) => {
+    const rows = [];
+    for (let i = 0; i < 100; i++) {
+      rows.push(row(`k${i}`, 'full', i < 30 ? 0.9 : 0.1));
+      rows.push(row(`k${i}`, 'compact', i < compactClose ? 0.9 : 0.1));
+    }
+    return pairStats(rows);
+  };
+  assert.ok(!mk(28).gate.reasons.some((r) => /close to sent/.test(r)), '2 points below passes this check');
+  const four = mk(26);
+  assert.ok(four.gate.reasons.includes('compact share close to sent (0.8+) 26% is more than 3 points below full 30%'));
+});
+
+test('failed rows do not pull the token median down', () => {
+  const rows = [];
+  for (let i = 0; i < 4; i++) {
+    rows.push(row(`k${i}`, 'full', 0.6));
+    rows.push(i < 2 ? row(`k${i}`, 'compact', 0.6, { tokensIn: 5000 }) : row(`k${i}`, 'compact', 0, { tokensIn: 0, worst: 'fail', error: 'x' }));
+  }
+  assert.equal(pairStats(rows).compact.medianTokensIn, 5000);
+});

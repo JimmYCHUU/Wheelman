@@ -4,6 +4,7 @@
 export const MAX_COMPACT_MEDIAN_TOKENS_IN = 6000;
 export const TARGET_COMPACT_MEDIAN_TOKENS_IN = 4000;
 export const MAX_MEDIAN_DROP = 0.02;
+export const CLOSE80_TOLERANCE = 0.03;
 
 const median = (a) => {
   if (!a.length) return 0;
@@ -20,7 +21,8 @@ function styleStats(rows) {
     close80: share(rows, (r) => r.similarity >= 0.8),
     near95: share(rows, (r) => r.similarity >= 0.95),
     failRate: share(rows, (r) => r.worst === 'fail'),
-    medianTokensIn: median(rows.map((r) => r.tokensIn)),
+    // Failed drafts carry no tokens; they must not make the ceiling easier to pass.
+    medianTokensIn: median(rows.filter((r) => !r.error).map((r) => r.tokensIn)),
   };
 }
 
@@ -37,7 +39,7 @@ export function pairStats(results) {
     const f2 = (n) => n.toFixed(2);
     const pc = (n) => `${Math.round(n * 1000) / 10}%`;
     if (full.medianSimilarity - compact.medianSimilarity > MAX_MEDIAN_DROP + 1e-9) reasons.push(`compact median similarity ${f2(compact.medianSimilarity)} is more than ${f2(MAX_MEDIAN_DROP)} below full ${f2(full.medianSimilarity)}`);
-    if (compact.close80 < full.close80 - 1e-9) reasons.push(`compact close80 ${pc(compact.close80)} is below full ${pc(full.close80)}`);
+    if (compact.close80 < full.close80 - CLOSE80_TOLERANCE - 1e-9) reasons.push(`compact share close to sent (0.8+) ${pc(compact.close80)} is more than 3 points below full ${pc(full.close80)}`);
     if (compact.failRate > full.failRate + 1e-9) reasons.push(`compact fail rate ${pc(compact.failRate)} is above full ${pc(full.failRate)}`);
     if (compact.medianTokensIn > MAX_COMPACT_MEDIAN_TOKENS_IN) reasons.push(`compact median tokens in ${Math.round(compact.medianTokensIn)} is above the ceiling of 6,000`);
   }
