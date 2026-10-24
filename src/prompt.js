@@ -9,7 +9,7 @@ import { redact } from './redact.js';
 import { maskCustomerSignOff, stripLocationBlock } from './voice.js';
 import { reservedByAnother } from './deal.js';
 import { labelFor, farAway, SITUATIONS } from './situations.js';
-import { businessFactsForPrompt, relevantWebsite, vehicleFacts, alternatives, operationsGuide, inspectionLinks, importPagesFor, formatMoney as money } from './knowledge.js';
+import { businessFactsForPrompt, relevantFacts, relevantOperations, relevantWebsite, vehicleFacts, alternatives, operationsGuide, inspectionLinks, importPagesFor, formatMoney as money } from './knowledge.js';
 import { availability } from './normalize.js';
 import { pickExamples } from './examples.js';
 import { learnedExamples, corrections, ownerGuidance } from './learn.js';
@@ -630,12 +630,13 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     excludeItemKey: holdOutConversation ? item.itemKey : null,
   };
   // Replies our own team recently used come first; our salespeople's genuine past replies fill the rest.
-  const recent = learnedExamples(want, 2, now);
-  const examples = [...recent, ...pickExamples(want, 6 - recent.length, now)];
-  const fixes = corrections(want, 2, now);
+  // The compact style sends 3 examples (1 learned, 2 from the bank) and 1 correction.
+  const recent = learnedExamples(want, compact ? 1 : 2, now);
+  const examples = [...recent, ...pickExamples(want, (compact ? 3 : 6) - recent.length, now)];
+  const fixes = corrections(want, compact ? 1 : 2, now);
 
   // For an email the research record carries the website's passages, chosen for the question.
-  const website = email ? [] : relevantWebsite(item.pendingText + ' ' + item.situation.all.map(labelFor).join(' '));
+  const website = email ? [] : relevantWebsite(item.pendingText + ' ' + item.situation.all.map(labelFor).join(' '), compact ? 2 : 3);
   const lastUs = [...item.timeline].reverse().find((e) => e.who === 'us' && !e.internal);
 
   const P = [];
@@ -778,14 +779,16 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   }
 
   P.push('\n=== BUSINESS FACTS ===');
-  P.push(facts.text);
+  // Compact: the core topics and those this message touches, not every topic.
+  const waitingText = pendingRedacted.join('\n');
+  P.push(compact ? relevantFacts(waitingText + ' ' + item.situation.all.map(labelFor).join(' ')) : facts.text);
   if (facts.unanswered.length) {
     P.push('\n=== TOPICS WITH NO CONFIRMED ANSWER ===');
     P.push('State nothing about these. If the reply needs one, use [CHECK?] and list it under needs_human.');
     P.push(facts.unanswered.map((t) => `- ${t}`).join('\n'));
   }
 
-  const guide = operationsGuide();
+  const guide = compact ? relevantOperations(waitingText) : operationsGuide();
   if (guide) {
     P.push('\n=== HOW CARBARN WORKS ===');
     P.push(guide);
@@ -818,7 +821,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
 
   if (website.length) {
     P.push('\n=== WEBSITE EXTRACTS ===');
-    for (const w of website) P.push(`From ${w.source} — ${w.heading}:\n${w.text}`);
+    for (const w of website) P.push(`From ${w.source} — ${w.heading}:\n${compact ? w.text.slice(0, 900) : w.text}`);
   }
 
   if (examples.length) {
@@ -842,7 +845,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
 
   // What to say is learned from what the team really sent for similar messages; how to say it
   // comes from the voice. Dashboard conversations only, and never for a Marketplace chat's own text.
-  const sent = email ? [] : practiceFor(want, 3, now);
+  const sent = email ? [] : practiceFor(want, compact ? 2 : 3, now);
   // An import email learns what to say from the email threads the owner sent from Gmail: what the
   // team really wrote back to similar enquiries. Nothing from texts, and never the other way round.
   const mailSent = email ? mailPracticeFor({ ...want, codes: research?.asked?.codes?.known || [], families: (research?.asked?.families || []).map((f) => f.toLowerCase()) }, 3, now) : [];
@@ -861,7 +864,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     P.push('They were typed quickly and contain slips. Take what they say, not their exact words, and where this request gives a rule (INSPECTION, STANDARD FIRST REPLY, WHO THIS IS), the rule comes first.');
     if (chat) P.push('They were SMS replies. On Marketplace keep to the chat rules above for length and layout.');
     sent.forEach((s, n) => {
-      P.push(`Sent ${n + 1}${s.firstReply ? ' (a first reply)' : ''}\n  Customer: ${s.customer.replace(/\s*\n\s*/g, ' / ').slice(0, 300)}\n  We sent: ${s.reply.replace(/\n+/g, ' / ')}`);
+      P.push(`Sent ${n + 1}${s.firstReply ? ' (a first reply)' : ''}\n  Customer: ${s.customer.replace(/\s*\n\s*/g, ' / ').slice(0, 300)}\n  We sent: ${(compact ? s.reply.slice(0, 500) : s.reply).replace(/\n+/g, ' / ')}`);
     });
   }
 
