@@ -118,6 +118,9 @@ export const config = {
     maxOutputTokens: 1500,
     dailyLimit: num(env.DAILY_DRAFT_LIMIT, 200),
     secondsBetween: num(env.SECONDS_BETWEEN_DRAFTS, 8),
+    // How much each request carries (src/prompt.js): 'full', the whole voice file and sales
+    // playbook, unless PROMPT_STYLE is 'compact', a short voice card and the advice for that message.
+    promptStyle: env.PROMPT_STYLE === 'compact' ? 'compact' : 'full',
   },
 
   // Facebook Marketplace chats, read from the content engine. Read-only.

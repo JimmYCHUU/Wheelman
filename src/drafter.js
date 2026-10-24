@@ -317,7 +317,8 @@ export function draftFor(item, opts = {}) {
   return flight.promise;
 }
 
-async function writeDraft(item, { instruction = '', coaching = null, template: tpl = null, save = true, holdOutConversation = true, now = Date.now(), pin = null } = {}, flight) {
+// style: 'full' or 'compact', the prompt style (src/prompt.js); PROMPT_STYLE in .env unless given.
+async function writeDraft(item, { instruction = '', coaching = null, template: tpl = null, save = true, holdOutConversation = true, now = Date.now(), pin = null, style = config.llm.promptStyle } = {}, flight) {
   // Keeps the finished draft, unless it is a plain write that finished after a reply from the
   // owner's own words was written for the same message: then the owner's stands and this one goes,
   // whether it came out ready or failed.
@@ -413,7 +414,7 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
       asked = maskInstruction(instruction, plan.markers);
       if (plan.mask) asked = plan.mask(asked);
     }
-    const prompt = buildPrompt(item, { instruction: asked, coaching, importPlan: plan, research, media, holdOutConversation, now });
+    const prompt = buildPrompt(item, { instruction: asked, coaching, importPlan: plan, research, media, holdOutConversation, now, style });
     // Where the customer was on the way to a sale, and the move asked for, so the report can read it later.
     context.rung = prompt.stage?.rung || null;
     context.insider = prompt.insider || [];

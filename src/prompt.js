@@ -24,8 +24,19 @@ import { mailPracticeFor } from './mailpractice.js';
 import { replyLinks } from './vehiclemedia.js';
 import { listOf } from '../web/lib/copy.js';
 import { looksLikeNonCustomer } from './items.js';
+import { playbookFor } from './playbook.js';
 
 const read = (name) => fs.readFileSync(path.join(config.voiceDir, name), 'utf8').replace(/\r/g, '').trim();
+
+// The voice card (voice/compact/voice-card.md): house-voice.md in short, for the compact style.
+// Read again after a minute. Its opening comment is for whoever edits the file, not for the AI.
+let card = { at: 0, file: '', text: '' };
+export function voiceCard() {
+  const file = path.join(config.voiceDir, 'compact', 'voice-card.md');
+  if (card.text && card.file === file && Date.now() - card.at < 60 * 1000) return card.text;
+  card = { at: Date.now(), file, text: fs.readFileSync(file, 'utf8').replace(/\r/g, '').replace(/<!--[\s\S]*?-->/g, '').trim() };
+  return card.text;
+}
 
 // The shape of a Marketplace reply, learned from what our team sends there (the two days to
 // 20 Oct 2026: the engine's own first reply to every buyer, and the replies a person typed).
@@ -67,15 +78,23 @@ A blank stands inside a full sentence that says what it is for, and is listed un
 - [TIMELINE?]: a timeframe that is not on our pages.
 - [CHECK?]: anything else a person must confirm.`;
 
-export function systemPrompt(channel = 'sms', { replyVia = '' } = {}) {
+/**
+ * The rules every request carries. style 'full' (the default) sends the whole house-voice file and
+ * the whole sales playbook; 'compact' sends the voice card, shorter fixed sections with the same
+ * rules, and no playbook (buildPrompt adds the sections for the message instead).
+ */
+export function systemPrompt(channel = 'sms', { replyVia = '', style = 'full' } = {}) {
   const chat = channel === 'marketplace';
   const order = channel === 'auction';
   const email = channel === 'email';
   // An auction customer who texted is answered by text; one who wrote on WhatsApp, there.
   const orderBy = replyVia === 'sms' ? { where: 'by text message (SMS)', what: 'SMS text' } : { where: 'on WhatsApp', what: 'WhatsApp message' };
+  const writes = chat ? 'replies to buyers on Facebook Marketplace chat' : order ? `replies ${orderBy.where} to customers who have an auction order with us` : email ? 'replies by email to customers asking about importing a car from Japan' : 'SMS replies';
+  const output = outputRules({ chat, order, email, orderBy });
+  if (style === 'compact') return compactSystemPrompt({ chat, email, writes, output });
   return `You are Wheelman, the customer representative for Carbarn, a used-car dealer in Lidcombe, Sydney, that mostly sells vehicles imported from Japan. You know how the business runs and you write in Carbarn's own voice, described under VOICE. The replies our team sent show what to say, never how to say it.
 
-You write suggested ${chat ? 'replies to buyers on Facebook Marketplace chat' : order ? `replies ${orderBy.where} to customers who have an auction order with us` : email ? 'replies by email to customers asking about importing a car from Japan' : 'SMS replies'}. A staff member reads your suggestion, edits it if needed, and sends it from their own system. You never speak to the customer directly, and nothing you write is sent automatically. Never mention Wheelman, an assistant, or AI in a reply: the reply is from Carbarn.
+You write suggested ${writes}. A staff member reads your suggestion, edits it if needed, and sends it from their own system. You never speak to the customer directly, and nothing you write is sent automatically. Never mention Wheelman, an assistant, or AI in a reply: the reply is from Carbarn.
 
 === VOICE ===
 ${read('house-voice.md')}
@@ -108,7 +127,12 @@ ${email
 === WHEN OUR STAFF GIVE AN INSTRUCTION ===
 When the request carries INSTRUCTION FROM OUR STAFF FOR THIS DRAFT, it outranks VOICE, SELLING, the channel's rules and THIS CUSTOMER'S NEXT STEP on what the reply says, how long it is, its tone, its layout and its greeting: write what our staff asked for, as long as it needs to be. Only WHERE FACTS COME FROM and PROMISES AND TIMES still bind: every figure, link, date and promise comes from this request or from the instruction, and nothing the records cannot back is claimed.
 
-=== OUTPUT ===
+${output}`;
+}
+
+/** The answer's JSON shape, the same in both styles: the drafter reads it. */
+function outputRules({ chat, order, email, orderBy }) {
+  return `=== OUTPUT ===
 Return one JSON object and nothing else:
 {
   "reply": "the ${chat ? 'chat message' : order ? orderBy.what : email ? 'body of the email' : 'SMS text'}. Use {{NAME}} where the customer's first name belongs. Use \\n for line breaks. No sign-off and no sender name.",
@@ -120,6 +144,36 @@ Return one JSON object and nothing else:
 }
 Set "hold" to true only for complaints, disputes and refund requests: a person decides those before anything is sent.${!chat && !email && !order ? '\nSet "import_enquiry" to true only when the customer wants a car found and brought from Japan for them, not one we have on the yard.' : ''}
 "needs_human" must list every marker that appears in "reply". Use an empty list when there are none.`;
+}
+
+/**
+ * The compact style's rules: the same rules as the full style's fixed sections, with the
+ * explanations and the repetition taken out, and the voice card in place of house-voice.md.
+ * The channel rules and OUTPUT are the full style's, word for word.
+ */
+function compactSystemPrompt({ chat, email, writes, output }) {
+  return `You are Wheelman. You write suggested ${writes} for Carbarn, a used-car dealer in Lidcombe, Sydney, selling cars imported from Japan. Our staff read, edit and send them; nothing is sent automatically. Never mention Wheelman or AI.
+
+=== VOICE ===
+${voiceCard()}
+
+${chat ? MARKETPLACE_RULES : email ? EMAIL_RULES : ''}=== WHERE FACTS COME FROM ===
+- Vehicle facts only from VEHICLE FACTS; how we work only from BUSINESS FACTS (it wins), HOW CARBARN WORKS and WEBSITE EXTRACTS; and what was said in this conversation.
+- Every number, price, date and link must be in this request; a missing one is its blank (${email ? 'BLANKS FOR AN IMPORT EMAIL' : '[PRICE?], [TRADE-IN VALUE?], [DELIVERY COST?], [DATE?], else [CHECK?]'}), never a guess.
+- "Not written off", never "accident-free" or "no accidents". From the listing, facts only.
+- Examples and what our team sent show what to say, never the wording or their facts.
+- You cannot see photos: describe none; use the blank for what one decides.
+
+=== PROMISES AND TIMES ===
+- Promise an action (sending, calling, booking, holding, fixing, delivering), or its day or time, only if our staff did, in the instruction or this conversation. Otherwise the answer, or the sentence with its blank${email ? '' : ' and one step they can take now'}; for a time, "shortly" or [DATE?].
+- ${email ? 'Never a holding line: no "we will check", no "we will get back to you".' : 'No "we will check", "we will confirm" or "shortly" beside a blank; one deferral at most.'}
+- The customer's day or time is theirs: keep it, read from when they wrote, against NOW. Never a part of today that has passed.
+- Never say or guess where the customer lives unless they wrote it.
+
+=== WHEN OUR STAFF GIVE AN INSTRUCTION ===
+INSTRUCTION FROM OUR STAFF FOR THIS DRAFT outranks VOICE, SELLING, the channel's rules and THIS CUSTOMER'S NEXT STEP on what the reply says, its length, tone, layout and greeting. Only WHERE FACTS COME FROM and PROMISES AND TIMES still bind.
+
+${output}`;
 }
 
 function ago(ms) {
@@ -505,11 +559,40 @@ function modelStock(vehicle, all) {
   return { name: `${make} ${vehicle.model}`, count: same.length, url: `${config.site.baseUrl}/used-cars/${slug(vehicle.make)}/${slug(vehicle.model)}` };
 }
 
+// The moves (src/selling.js) that answer a price question, and those that propose or confirm the deposit.
+const PRICE_MOVES = new Set(['invite_before_price', 'answer_offer', 'price_with_trade']);
+const DEPOSIT_MOVES = new Set(['propose_deposit', 'confirm_step']);
+
+/**
+ * Which situation picks the playbook's section for this message (src/playbook.js SECTION_FOR), from
+ * what buildPrompt has already worked out. The first that applies wins, in the playbook table's
+ * order with a complaint first. The selling situations (price to not at the showroom) are for a
+ * customer still buying who is not closing the conversation; the far-away one, for a car on offer.
+ */
+function sellingSituation(item, { stage, deal, importPlan, email, primary, primaryGone, inspection }) {
+  const sit = item.situation.all;
+  const closing = !!stage && QUIET_MOVES.has(stage.move);
+  const selling = !deal && !closing;
+  if (sit.includes('complaint')) return 'complaint';
+  if (selling && PRICE_MOVES.has(stage?.move)) return 'price';
+  if (selling && inspection.kind) return 'inspection';
+  if (selling && stage?.far && !primaryGone) return 'far';
+  if (selling && DEPOSIT_MOVES.has(stage?.move)) return 'hold';
+  if (selling && primaryGone) return 'gone';
+  if (selling && primary && !['available', 'sold'].includes(availability(primary).code)) return 'not_at_showroom';
+  if (deal) return 'after_sale';
+  if (closing) return 'no';
+  if (importPlan || email || sit.includes('import_sourcing') || sit.includes('history_kms')) return 'import';
+  return '';
+}
+
 /**
  * @param importPlan  for an import or auction enquiry: what the reply should be (see imports.js).
  *                    Its lines are given to the AI; what it adds under the AI's text is put on by the drafter.
+ * @param style       'full' or 'compact' (see systemPrompt); PROMPT_STYLE in .env unless given.
  */
-export function buildPrompt(item, { instruction = '', coaching = null, importPlan = null, research = null, media = null, now = Date.now(), holdOutConversation = true } = {}) {
+export function buildPrompt(item, { instruction = '', coaching = null, importPlan = null, research = null, media = null, now = Date.now(), holdOutConversation = true, style = config.llm.promptStyle } = {}) {
+  const compact = style === 'compact';
   const lead = item.lead;
   const chat = item.channel === 'marketplace';
   // An import enquiry by email: the research record carries the facts, and the SMS-only sections are off.
@@ -653,6 +736,13 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
       P.push(`Shape the reply by these, never state them: ${insider.lines.join(' ')}`);
       P.push('These are from our own records, not from the customer. Never mention a score, a status, where they came from, other dealers, or a finance decision.');
     }
+  }
+
+  // The compact style: the sales playbook's sections for this message, in place of the whole playbook.
+  if (compact) {
+    const situation = sellingSituation(item, { stage, deal, importPlan, email, primary, primaryGone, inspection });
+    P.push('\n=== SELLING FOR THIS MESSAGE ===');
+    P.push(playbookFor({ situation, rung: stage?.rung || '', channel: item.channel || 'sms' }));
   }
 
   // An import enquiry has its own closing lines, added by the drafter, in place of the standard block.
@@ -868,7 +958,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
 
   P.push(`\nWrite the reply now as the JSON object described.${owner.lessons.length ? ' Before you answer, check it against each of the owner\'s lessons above.' : ''}`);
   return {
-    system: systemPrompt(item.channel, { replyVia: item.orderStatus?.replyVia }),
+    system: systemPrompt(item.channel, { replyVia: item.orderStatus?.replyVia, style }),
     // Which of our records' notes on the customer shaped the request: labels only, for the details panel.
     insider: insider.labels,
     unconfirmedText,
