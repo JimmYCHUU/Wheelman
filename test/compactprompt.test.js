@@ -57,15 +57,24 @@ const customer = (n, first, history) => {
 // The owner's confirmed rules, as the compact style must still carry them.
 const CONFIRMED = ['never "Hi"', 'first reply of the day', 'No worries', 'emoji', 'one exclamation mark', 'deposit is the only urgency', 'selling fast', 'one question', 'never stated', 'lower', 'only if our staff', '[PRICE?]', 'Answer first'];
 
-test('the compact system prompt for a text is 4,000 characters or fewer and keeps every confirmed rule', () => {
+test('the compact system prompt for a text is 4,400 characters or fewer and keeps every confirmed rule', () => {
   const rules = promptModule.systemPrompt('sms', { style: 'compact' });
-  assert.ok(rules.length <= 4000, `${rules.length} characters`);
+  // 4,400, up from 4,000: the rule on fact markers ({{F3}}) and the hospitality line on the voice
+  // card (Thank you, You are welcome to) did not fit in the 21 characters left. The token gate
+  // for the whole request still governs the total.
+  assert.ok(rules.length <= 4400, `${rules.length} characters`);
   for (const phrase of CONFIRMED) assert.ok(rules.includes(phrase), `missing: ${phrase}`);
   // The card itself keeps them all, inside its own limit, with no editor's comment sent.
   const card = promptModule.voiceCard();
   assert.ok(card.length <= 2400, `${card.length} characters`);
   for (const phrase of CONFIRMED) assert.ok(card.includes(phrase), `card missing: ${phrase}`);
   assert.ok(!card.includes('<!--'));
+});
+
+test('the compact system prompt keeps the formal hospitality words: Thank you, You are welcome to', () => {
+  const rules = promptModule.systemPrompt('sms', { style: 'compact' });
+  assert.ok(rules.includes('Thank you'), 'Thank you');
+  assert.ok(rules.includes('You are welcome to'), 'You are welcome to');
 });
 
 test('the compact system prompt has its sections in order, and the playbook is not among them', () => {

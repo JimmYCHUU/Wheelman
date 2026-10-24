@@ -25,6 +25,7 @@ import { replyLinks } from './vehiclemedia.js';
 import { listOf } from '../web/lib/copy.js';
 import { looksLikeNonCustomer } from './items.js';
 import { playbookFor } from './playbook.js';
+import { maskTrusted } from './factmarkers.js';
 
 const read = (name) => fs.readFileSync(path.join(config.voiceDir, name), 'utf8').replace(/\r/g, '').trim();
 
@@ -159,6 +160,7 @@ ${voiceCard()}
 
 ${chat ? MARKETPLACE_RULES : email ? EMAIL_RULES : ''}=== WHERE FACTS COME FROM ===
 - Vehicle facts only from VEHICLE FACTS; how we work only from BUSINESS FACTS (it wins), HOW CARBARN WORKS and WEBSITE EXTRACTS; and what was said in this conversation.
+- Prices, distances, dates, phone numbers and links in our records appear as markers such as {{F3}}. Write the marker where the fact goes; never write the figure yourself.
 - Every number, price, date and link must be in this request; a missing one is its blank (${email ? 'BLANKS FOR AN IMPORT EMAIL' : '[PRICE?], [TRADE-IN VALUE?], [DELIVERY COST?], [DATE?], else [CHECK?]'}), never a guess.
 - "Not written off", never "accident-free" or "no accidents". From the listing, facts only.
 - Examples and what our team sent show what to say, never the wording or their facts.
@@ -586,6 +588,32 @@ function sellingSituation(item, { stage, deal, importPlan, email, primary, prima
   return '';
 }
 
+// The sections of the request that hold our records, whose figures and links the compact style
+// gives the AI only as markers (src/factmarkers.js). The stock lines ("Full stock list: ...") have
+// no heading of their own: they sit in VEHICLE FACTS, or in SIMILAR VEHICLES AVAILABLE NOW. The
+// conversation, the examples, what the team sent and the instruction keep their own words.
+const TRUSTED_SECTIONS = new Set(['VEHICLE FACTS', 'SIMILAR VEHICLES AVAILABLE NOW', 'INSPECTION', 'PRICE REPLY', 'STANDARD FIRST REPLY', 'LINKS THEY ASKED FOR', 'BUSINESS FACTS', 'HOW CARBARN WORKS', 'WEBSITE EXTRACTS', 'RESEARCH FOR THIS IMPORT QUESTION', 'IMPORTING PAGES ON OUR WEBSITE']);
+
+/**
+ * The compact style: masks the trusted sections of the request in place and returns the markers.
+ * `P` is the request's lines as buildPrompt pushed them. A line that starts with a heading opens a
+ * section, so a heading a customer typed inside their message never counts as one.
+ */
+function maskTrustedSections(P) {
+  const runs = [];
+  let open = null;
+  P.forEach((line, i) => {
+    const heading = String(line).match(/^\n?=== (.+) ===(?:\n|$)/);
+    if (heading) {
+      open = TRUSTED_SECTIONS.has(heading[1]) ? { key: heading[1], from: i, to: i + 1 } : null;
+      if (open) { if (runs.some((r) => r.key === open.key)) open.key = `${open.key} (${i})`; runs.push(open); }
+    } else if (open) open.to = i + 1;
+  });
+  const { masked, markers } = maskTrusted(Object.fromEntries(runs.map((r) => [r.key, P.slice(r.from, r.to).join('\n')])));
+  for (const r of [...runs].reverse()) P.splice(r.from, r.to - r.from, masked[r.key]);
+  return markers;
+}
+
 /**
  * @param importPlan  for an import or auction enquiry: what the reply should be (see imports.js).
  *                    Its lines are given to the AI; what it adds under the AI's text is put on by the drafter.
@@ -960,6 +988,8 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   }
 
   P.push(`\nWrite the reply now as the JSON object described.${owner.lessons.length ? ' Before you answer, check it against each of the owner\'s lessons above.' : ''}`);
+  // The compact style: our records' figures and links go to the AI as markers; code puts them back.
+  const factMarkers = compact ? maskTrustedSections(P) : null;
   return {
     system: systemPrompt(item.channel, { replyVia: item.orderStatus?.replyVia, style }),
     // Which of our records' notes on the customer shaped the request: labels only, for the details panel.
@@ -971,6 +1001,8 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     price,
     stage,
     user: P.join('\n'),
+    // The compact style's markers for our records' facts, [{ name: 'F1', value }]; null in the full style.
+    factMarkers,
     exampleIds: examples.map((e) => e.id),
     // The past emails join the examples here so a reply lifted from one is caught as copied.
     exampleReplies: [...examples.map((e) => e.reply), ...mailSent.map((s) => s.reply)],

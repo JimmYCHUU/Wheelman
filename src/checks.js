@@ -478,7 +478,9 @@ export function retryNote(checks, { channel = 'sms' } = {}) {
     + (fails.some((c) => c.code === 'old-address') ? `\nNever write our old address or a map link. Our address is ${CURRENT_ADDRESS}. The block gives it on a first reply; write it yourself only when the customer asked where we are.` : '')
     + (fails.some((c) => c.code === 'claim') ? '\nSay nothing about accidents, condition, approval, cooling-off or warranty beyond what VEHICLE FACTS and BUSINESS FACTS state, in their words.' : '')
     + (fails.some((c) => c.code === 'followup-identify') ? '\nName Carbarn in the first sentence: "Team Carbarn here, …". The customer did not write first and must see at once who this is from.' : '')
-    + (fails.some((c) => c.code === 'followup-banned') ? '\nNever "just checking in", "just following up" or "touching base", and never ask whether they came or made it: write as if the visit happened and ask how it went, or offer the one new thing.' : '');
+    + (fails.some((c) => c.code === 'followup-banned') ? '\nNever "just checking in", "just following up" or "touching base", and never ask whether they came or made it: write as if the visit happened and ask how it went, or offer the one new thing.' : '')
+    // The compact style: our records' figures and links reach the AI as markers (src/factmarkers.js).
+    + (fails.some((c) => c.code === 'figure-raw' || c.code === 'marker-unknown') ? '\nWrite facts only as their markers.' : '');
 }
 
 // ---- a follow-up: Carbarn named, nothing filler, never "did you come" ---------------------------

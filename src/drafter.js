@@ -19,6 +19,7 @@ import { untagged } from './text.js';
 import { LEFTOVER_LABEL } from './practice.js';
 import { tagMarketplaceLinks } from './marketplace.js';
 import { mediaForReply } from './vehiclemedia.js';
+import { inventedLiterals, unknownMarkers, restoreAnswer, maskFacts, hasFactMarker } from './factmarkers.js';
 
 /**
  * What a reply may legitimately quote, split by how far it can be trusted.
@@ -180,13 +181,49 @@ function assessTemplate(item, text, json, { plan, allowed, said, staffSaid, inst
 }
 
 /**
+ * What the AI may repeat as written in the compact style: what the customer and our team wrote in
+ * this conversation (the same messages buildPrompt shows), and what our staff typed for this draft.
+ */
+function writtenHere(item, staffSaid) {
+  const say = (e) => [e.text, e.event].filter(Boolean).join(' ');
+  return [...item.timeline.map(say), ...(item.pending || []).map(say), staffSaid].filter(Boolean).join('\n');
+}
+
+/**
+ * The compact style's own checks, on the AI's text as it wrote it: before its markers are put
+ * back, and before code adds anything under it. A figure or link it typed itself (figure-raw), and
+ * a marker that is not one of ours (marker-unknown), both fail.
+ */
+function factChecks(item, prompt, json, staffSaid) {
+  const text = String(json.reply || '').replace(/\\n/g, '\n');
+  const out = [];
+  const typed = inventedLiterals(text, { allowedText: writtenHere(item, staffSaid) });
+  if (typed.length) out.push({ level: 'fail', code: 'figure-raw', tokens: typed, message: typed.length === 1 ? `Check this figure: ${typed[0]} was written by the AI itself, not taken from your records or this conversation.` : `Check these figures: ${typed.join(', ')} were written by the AI itself, not taken from your records or this conversation.` });
+  const made = unknownMarkers(text, prompt.factMarkers);
+  if (made.length) out.push({ level: 'fail', code: 'marker-unknown', tokens: [], message: `${made.join(', ')} ${made.length === 1 ? 'is not one of the markers' : 'are not among the markers'} given for our records' facts, so ${made.length === 1 ? 'it is' : 'they are'} shown as [CHECK?]. Use only the markers given, written exactly as shown.` });
+  return out;
+}
+
+/**
  * Turns what the model answered (or a reply written by hand) into the finished suggestion and
  * runs every check on it. plan: an import or auction-order plan, when there is one.
  * instructed: written from the owner's Prompt (or Rewrite). The section's own rules on length,
  * tone, layout and greeting step aside: the reply is not trimmed to them and they are not
  * checked. The facts are checked as always.
+ * In the compact style (prompt.factMarkers) the AI wrote our records' facts as markers: what it
+ * typed itself is checked first, then every marker in its answer is put back, then everything
+ * else runs as in the full style. byCode: the answer is code's own wording (the standard opening
+ * of an auction offer, a template word for word), not the AI's, so it has nothing typed to check.
  */
-export function assessReply(item, prompt, json, { plan = null, chat = false, email = false, research = null, again = false, staffSaid = '', instructed = false, allowed, said, coaching = null, now = Date.now() }) {
+export function assessReply(item, prompt, json, opts) {
+  if (!prompt.factMarkers) return assessAnswer(item, prompt, json, opts);
+  const own = opts.byCode ? [] : factChecks(item, prompt, json, opts.staffSaid || '');
+  const out = assessAnswer(item, prompt, restoreAnswer(json, prompt.factMarkers), opts);
+  if (own.length) out.checks = [...own, ...out.checks.filter((c) => c.level !== 'ok')];
+  return out;
+}
+
+function assessAnswer(item, prompt, json, { plan = null, chat = false, email = false, research = null, again = false, staffSaid = '', instructed = false, allowed, said, coaching = null, now = Date.now() }) {
   // A brand-new enquiry gets the team's standard block in place of the sign-off. A holding
   // reply (a complaint, say) does not.
   const { vehicleUrl, inspectionUrl } = prompt.standard;
@@ -433,17 +470,18 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
     if (email && prompt.researchText) said.push({ who: 'us', text: prompt.researchText, at: now });
 
     // The Prompt line and Rewrite: the owner's words come first. A Could be better note is a lesson, not a Prompt.
-    const assess = (json) => assessReply(item, prompt, json, { plan, chat, email, research, again, staffSaid, instructed: !!String(instruction || '').trim(), allowed, said, coaching, now });
+    // byCode: code's own wording, not the AI's (see assessReply).
+    const assess = (json, byCode = false) => assessReply(item, prompt, json, { plan, chat, email, research, again, staffSaid, instructed: !!String(instruction || '').trim(), allowed, said, coaching, now, byCode });
     const failures = (checks) => checks.filter((c) => c.level === 'fail').length;
 
     // An offer does not depend on the AI: its figures come from the auction. If no model can
     // answer, or it will not keep figures out of its lines, the opening is the standard one.
-    const standardOpening = () => ({ json: { reply: plan.opening, needs_human: [], facts_used: [], hold: false }, provider: 'none', model: 'standard wording' });
+    const standardOpening = () => ({ json: { reply: plan.opening, needs_human: [], facts_used: [], hold: false }, provider: 'none', model: 'standard wording', byCode: true });
     // A template never depends on the AI either: if no model can answer, or what it wrote loses a
     // fact, the template is used word for word (always a reply, never a refusal).
     const fit = plan?.stage === 'template';
     // Why: 'unavailable' (no AI could be asked: fitted again later, while untouched) or 'facts' (the fitting lost a fact).
-    const wordForWord = (why) => ({ json: { reply: plan.masked, needs_human: [], facts_used: [], hold: false }, provider: 'none', model: 'your wording', wordForWord: why });
+    const wordForWord = (why) => ({ json: { reply: plan.masked, needs_human: [], facts_used: [], hold: false }, provider: 'none', model: 'your wording', wordForWord: why, byCode: true });
     const usable = (e) => (plan?.stage === 'offer' && e instanceof LlmError && e.status !== 401 && e.status !== 403) || (fit && e instanceof LlmError);
     // Marketplace chats are the Marketplace job: the small model, so the better ones stay with dashboard customers.
     // A script (the review) may pin one model; otherwise the job's own list.
@@ -459,14 +497,16 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
         result = fit ? wordForWord('unavailable') : standardOpening();
       }
     }
-    let best = assess(result.json);
+    let best = assess(result.json, result.byCode);
 
     // What goes back to the AI with a second request hides what the first one hid: the customer's
-    // details, a template's facts (as their markers again) and an order's amounts (as theirs). The
-    // reasons for the rejection quote the reply, so they are hidden the same way.
+    // details, a template's facts (as their markers again), our records' facts in the compact
+    // style (as theirs) and an order's amounts (as theirs). The reasons for the rejection quote the
+    // reply, so they are hidden the same way.
     const forAi = (text) => {
       let t = String(text || '');
       if (fit) for (const m of [...plan.markers].sort((a, b) => b.value.length - a.value.length)) if (m.value.trim().length >= 3) t = t.split(m.value).join(`{{${m.name}}}`);
+      if (prompt.factMarkers) t = maskFacts(t, prompt.factMarkers);
       t = redact(t, item.lead);
       return plan?.mask ? plan.mask(t) : t;
     };
@@ -479,35 +519,39 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
         const second = assess(again.json);
         if (failures(second.checks) < failures(best.checks)) { result = again; best = second; }
       } catch (e) { if (!usable(e)) throw e; }
-      if (plan?.stage === 'offer' && worst(best.checks) === 'fail') { result = standardOpening(); best = assess(result.json); }
-      if (fit && worst(best.checks) === 'fail') { result = wordForWord('facts'); best = assess(result.json); }
+      if (plan?.stage === 'offer' && worst(best.checks) === 'fail') { result = standardOpening(); best = assess(result.json, true); }
+      if (fit && worst(best.checks) === 'fail') { result = wordForWord('facts'); best = assess(result.json, true); }
     }
     if (fit && result.wordForWord) best.checks = [...best.checks.filter((c) => c.level !== 'ok'), { level: 'warn', code: 'template-word-for-word', tokens: [], message: result.wordForWord === 'unavailable'
       ? `Written word for word from your template "${plan.label}": the AI was not available just now. ${item.order ? 'While you leave it unchanged it is fitted to the customer on a later check.' : 'Press Rewrite to fit it to the customer once the AI is back.'}`
       : `Written word for word from your template "${plan.label}": the AI could not fit it to this customer without changing a fact.` }];
     // What the AI made of the template, with its markers: written again with new facts, it is used again.
-    if (fit) { context.masked = plan.masked; context.fitted = result.wordForWord ? null : String(result.json.reply || ''); context.fitLater = result.wordForWord === 'unavailable'; context.asked = tpl.asked || ''; }
+    // One with our records' fact markers in it (the compact style) is not: those are numbered afresh in every request.
+    if (fit) { context.masked = plan.masked; context.fitted = result.wordForWord || (prompt.factMarkers && hasFactMarker(result.json.reply)) ? null : String(result.json.reply || ''); context.fitLater = result.wordForWord === 'unavailable'; context.asked = tpl.asked || ''; }
 
+    // The compact style: what the AI wrote beside the reply (its facts, its next step, what a
+    // person must decide) gets our records' facts back too.
+    const answer = prompt.factMarkers ? restoreAnswer(result.json, prompt.factMarkers) : result.json;
     // The AI's own reading of an ordinary enquiry: it may think the customer wants a car found in
     // Japan. The page then offers to treat it as an import enquiry; nothing changes by itself.
-    context.aiImport = !chat && !email && !item.order && !item.imports && result.json.import_enquiry === true;
+    context.aiImport = !chat && !email && !item.order && !item.imports && answer.import_enquiry === true;
     const draft = {
       ...base,
       status: 'ready',
       // On Marketplace, links to our website say they came from Facebook. Added after the checks,
       // which compare links without the tag.
       reply: chat ? tagMarketplaceLinks(best.reply) : best.reply,
-      needsHuman: Array.isArray(result.json.needs_human) ? result.json.needs_human : [],
+      needsHuman: Array.isArray(answer.needs_human) ? answer.needs_human : [],
       // What was looked up for an import email, for the page's research notes.
       research: rendered ? rendered.panel : null,
       factsUsed: [
         ...(rendered ? rendered.panel.found.slice(0, 6) : []),
         ...(plan?.stage === 'offer' ? [`Auction car ${plan.lot.id}: ${plan.lot.title}, ${plan.lot.km.toLocaleString('en-AU')} km, grade ${plan.lot.grade}`, `The website's suggested bid ¥${plan.lot.benchmarkYen.toLocaleString('en-AU')}; bid used ¥${plan.bidYen.toLocaleString('en-AU')} (${plan.bidBy === 'suggested' ? 'ours' : plan.bidBy === 'staff' ? 'yours' : "the customer's"})`, ...(plan.pick ? [bidBasisLine(plan.pick)] : []), `Estimated landed and complied $${plan.estimate.totalAud.toLocaleString('en-AU')} from the website's calculator`] : []),
         ...(plan?.stage === 'template' ? plan.factsUsed : []),
-        ...(Array.isArray(result.json.facts_used) ? result.json.facts_used.map(String).slice(0, 12) : []),
+        ...(Array.isArray(answer.facts_used) ? answer.facts_used.map(String).slice(0, 12) : []),
       ],
-      nextStep: String(result.json.next_step || ''),
-      rung: String(result.json.rung || prompt.stage?.rung || ''),
+      nextStep: String(answer.next_step || ''),
+      rung: String(answer.rung || prompt.stage?.rung || ''),
       checks: best.checks,
       provider: result.provider,
       model: result.model,
