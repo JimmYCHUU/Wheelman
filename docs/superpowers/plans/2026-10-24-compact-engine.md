@@ -239,7 +239,7 @@ No new code. This task spends the AI requests Jim approved, and it does not chan
 - [ ] **Step 1: Copy the git-ignored files** the tests and prompts need into the worktree: `.env`, `voice/people.json`, `voice/examples.json`, `knowledge/*.md`, `knowledge/website/`. Run `npm.cmd test`. Expected: PASS.
 - [ ] **Step 2: Make a fresh copy of the database** with the stage 1 script (`VACUUM INTO`, live file opened read-only) at `eval/out/replay-db/app-copy.db`. Set `DB_PATH` to it.
 - [ ] **Step 3: Measure without AI.** Run `npm.cmd run prompt-size -- --n 30 --style full` and then with `--style compact`. Expected: compact median total at most 6,000 tokens, target 4,000. If it is over, trim the largest section the meter shows, commit, and measure again before spending anything.
-- [ ] **Step 4: Dry run.** Run `npm.cmd run replay -- --n 400 --styles full,compact --sample-full <n chosen by Jim> --gap 3`. It prints the case count and the estimate; check that it matches what Jim approved.
+- [ ] **Step 4: Dry run.** Run `npm.cmd run replay -- --n 400 --styles full,compact --sample-full 400 --gap 3`. Jim chose on 24 Oct 2026 to run today's prompt on all 400 too, about 9 to 10 days of his normal AI token spend. It prints the case count and the estimate; check that it matches.
 - [ ] **Step 5: Run with `--confirm`.** If it stops early, continue with `--resume <run dir>`.
 - [ ] **Step 6: Report.** Add a "Stage 2 replay" section to the PRD with:
   - the `summary.json` numbers and the gate result with its reasons;
