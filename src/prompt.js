@@ -594,10 +594,11 @@ function sellingSituation(item, { stage, deal, importPlan, email, primary, prima
 // conversation, the examples, what the team sent and the instruction keep their own words.
 const TRUSTED_SECTIONS = new Set(['VEHICLE FACTS', 'SIMILAR VEHICLES AVAILABLE NOW', 'INSPECTION', 'PRICE REPLY', 'STANDARD FIRST REPLY', 'LINKS THEY ASKED FOR', 'BUSINESS FACTS', 'HOW CARBARN WORKS', 'WEBSITE EXTRACTS', 'RESEARCH FOR THIS IMPORT QUESTION', 'IMPORTING PAGES ON OUR WEBSITE']);
 
-// The learning material in a request: replies to other customers, whose figures belong to other
-// cars or are out of date. In the owner's guidance, the replies the owner approved or coached on
-// (each with its "Customer:" lines under it) are learning too; the owner's own lessons are not.
-const LEARNING_SECTIONS = new Set(['EXAMPLES OF HOW WE REPLY', 'HOW OUR STAFF CHANGED EARLIER SUGGESTIONS', 'WHAT OUR TEAM REALLY SENT FOR SIMILAR MESSAGES', 'HOW WE ANSWERED SIMILAR IMPORT EMAILS']);
+// What in a request is not ours to repeat as written. The learning material: replies to other
+// customers, whose figures belong to other cars or are out of date. In the owner's guidance, the
+// replies the owner approved or coached on (each with its "Customer:" lines under it) are learning
+// too; the owner's own lessons are not. And the Marketplace system's notes: unconfirmed.
+const LEARNING_SECTIONS = new Set(['EXAMPLES OF HOW WE REPLY', 'HOW OUR STAFF CHANGED EARLIER SUGGESTIONS', 'WHAT OUR TEAM REALLY SENT FOR SIMILAR MESSAGES', 'HOW WE ANSWERED SIMILAR IMPORT EMAILS', 'NOTES FROM THE MARKETPLACE SYSTEM (UNCONFIRMED)']);
 const OWNER_SECTION = 'HOW THE OWNER WANTS THIS HANDLED';
 const OTHER_CUSTOMERS_REPLY = /^(Corrected by the owner and approved|Approved as written|A coaching note on a similar message)\b/;
 

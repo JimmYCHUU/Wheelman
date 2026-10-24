@@ -464,7 +464,8 @@ export function retryNote(checks, { channel = 'sms' } = {}) {
   if (!fails.length) return '';
   const email = channel === 'email';
   return 'Your previous draft was rejected for these reasons:\n'
-    + fails.map((c) => `- ${c.message}`).join('\n')
+    // A check may have its own words for the AI (retry): the compact style's fact checks do.
+    + fails.map((c) => `- ${c.retry || c.message}`).join('\n')
     + '\nWrite it again, in your own words for this customer. Use only figures and links that appear in the supplied material. A dollar amount that only the customer mentioned is their figure, not ours: do not state or accept it. Where a figure is not supplied, use the matching marker such as [PRICE?], [DELIVERY COST?], [DATE?] or [CHECK?].'
     + (fails.some((c) => TIME_CODES.has(c.code)) ? (email
       ? '\nDo not swap one day or time for another. Where the day or time of something we will do is not given by our staff, write the sentence with [DATE?] or [TIMELINE?]. Never say we will check and come back.'

@@ -271,6 +271,92 @@ test('compact: a figure from the coaching draft our staff commented on may be re
   assert.ok(!codes(d.checks).includes('figure-raw'), JSON.stringify(d.checks));
 });
 
+// Fix round 1 of the review.
+const F_SHAPED = /\{\{?\s*F/i;
+const SHAPES = ['{{F1', '{{F1a}}', '{{F-1}}', '{{F1.}}', '{{F1,F2}}', '{{F}}', '{{FACT1}}', '{{f1}}', '{ F1 }'];
+
+test('no text shaped like a fact marker survives restoring, and each is found (item 1)', () => {
+  const { markers } = facts.maskTrusted({ 'VEHICLE FACTS': 'Price: $36,990 · 41,200 km · harbour.example/cars/T14' });
+  for (const shape of SHAPES) {
+    const text = `It is ${shape} today.`;
+    const back = facts.restoreFacts(text, markers);
+    assert.ok(!F_SHAPED.test(back), `${shape}: ${back}`);
+    assert.equal(back, 'It is [CHECK?] today.', shape);
+    assert.deepEqual(facts.unknownMarkers(text, markers), [shape.trim()], shape);
+  }
+});
+
+test('compact: every damaged marker fails marker-unknown, shows [CHECK?], and never reaches the reply (item 1)', () => {
+  const item = customer(11, 'Gwendolyn', [['IN', 'Hello, is the Noah still at your yard?', 2 * DAY], ['OUT', 'Good morning Gwendolyn, yes it is.', 2 * DAY - HOUR], ['IN', 'Is it still available?', 5 * MIN]])();
+  const prompt = promptModule.buildPrompt(item, { now, style: 'compact' });
+  for (const shape of SHAPES) {
+    const d = assessWith(item, prompt, `It is ${shape} today.`);
+    assert.ok(fails(d.checks).includes('marker-unknown'), `${shape}: ${JSON.stringify(d.checks)}`);
+    assert.ok(!F_SHAPED.test(d.reply) && !F_SHAPED.test(d.body), `${shape}: ${d.reply}`);
+    assert.ok(d.reply.includes('[CHECK?]'), shape);
+  }
+  // The last safety net: F-shaped text left after the markers are put back is a blank, and fails.
+  const odd = { ...prompt, factMarkers: [...prompt.factMarkers, { name: 'F99', value: '{{F7' }] };
+  const netted = assessWith(item, odd, 'It is {{F99}} today.');
+  assert.ok(!F_SHAPED.test(netted.reply), netted.reply);
+  assert.ok(netted.reply.includes('It is [CHECK?] today.'), netted.reply);
+  assert.ok(fails(netted.checks).includes('marker-unknown'), JSON.stringify(netted.checks));
+});
+
+test('compact: the page says it in plain words; the AI is told which figure it typed and which marker to write (items 2 and 5)', () => {
+  const item = customer(12, 'Barnaby', [['IN', 'Hello, is the Noah still at your yard?', 2 * DAY], ['OUT', 'Good morning Barnaby, yes it is.', 2 * DAY - HOUR], ['IN', 'Is it still available?', 5 * MIN]])();
+  const prompt = promptModule.buildPrompt(item, { now, style: 'compact' });
+  const odo = markerFor(prompt, '41,200');
+  const typed = assessWith(item, prompt, 'It has 41,200 km and costs $31,990.').checks.find((c) => c.code === 'figure-raw');
+  assert.equal(typed.message, 'Wheelman wrote 41,200, $31,990 itself instead of taking them from your records or this conversation. Check them before sending.');
+  assert.equal(typed.retry, `You typed the figure 41,200 yourself; write its marker ${odo} instead. You typed the figure $31,990 yourself; it is not in our records.`);
+  const made = assessWith(item, prompt, 'It is {{F999}}.').checks.find((c) => c.code === 'marker-unknown');
+  assert.equal(made.message, 'Wheelman wrote a fact placeholder it could not fill; it is shown as [CHECK?]. Check this part before sending.');
+  assert.ok(!/\{\{/.test(typed.message) && !/\{\{/.test(made.message));
+  assert.match(made.retry, /\{\{F999\}\} is not one of the markers/);
+  // The second request uses the AI's words; the page's stay on the page.
+  const note = checks.retryNote([typed, made]);
+  assert.ok(note.includes(typed.retry) && note.includes(made.retry) && !note.includes(typed.message), note);
+});
+
+test('compact draft: the second request names the typed figure and its marker, and shows the draft as the AI wrote it (item 2)', async () => {
+  const item = customer(13, 'Clementine', [['IN', 'Hello, is the Noah still at your yard?', 2 * DAY], ['OUT', 'Good morning Clementine, yes it is.', 2 * DAY - HOUR], ['IN', 'Is it still available?', 5 * MIN]]);
+  const prompt = promptModule.buildPrompt(item(), { now, style: 'compact' });
+  const odo = markerFor(prompt, '41,200');
+  script(answer('Yes, it has 41,200 km on it.'), answer(`Yes, it has ${odo} km on it.`));
+  const d = await drafter.draftFor(item(), { now, save: false, style: 'compact' });
+  assert.equal(seen.length, 2);
+  const retry = seen[1].messages[1].content;
+  assert.ok(retry.includes(`You typed the figure 41,200 yourself; write its marker ${odo} instead.`), retry.slice(-900));
+  assert.ok(!retry.includes(`You typed the figure ${odo}`) && !retry.includes(`${odo} was written`), 'never told its right marker is wrong');
+  assert.ok(retry.includes('Your rejected draft was:\nYes, it has 41,200 km on it.'), retry.slice(-300));
+  assert.ok(d.reply.startsWith('Yes, it has 41,200 km on it.'), d.reply);
+  assert.ok(!codes(d.checks).includes('figure-raw'), JSON.stringify(d.checks));
+});
+
+test('a typed phone number must match a phone number written in the allowed text, not digits scattered through it (item 3)', () => {
+  assert.deepEqual(facts.inventedLiterals('Call us on 0412 345 678.', { allowedText: 'Codes: 04, then 1234, then 5678.' }), ['0412 345 678']);
+  assert.deepEqual(facts.inventedLiterals('Call us on 0412 345 678.', { allowedText: 'You can ring me on 0412-345-678' }), []);
+  assert.deepEqual(facts.inventedLiterals('Call us on 0412 345 678.', { allowedText: 'or +61 412 345 678' }), []);
+});
+
+test('a money value never keeps a trailing comma (item 4)', () => {
+  const line = 'A $1,000, refundable holding deposit, or $36,990, drive away.';
+  const { masked, markers } = facts.maskTrusted({ 'BUSINESS FACTS': line });
+  assert.deepEqual(markers.map((m) => m.value), ['$1,000', '$36,990']);
+  assert.equal(masked['BUSINESS FACTS'], 'A {{F1}}, refundable holding deposit, or {{F2}}, drive away.');
+  assert.equal(facts.restoreFacts(masked['BUSINESS FACTS'], markers), line);
+  assert.equal(facts.restoreFacts('A {{F1}} holding deposit.', markers), 'A $1,000 holding deposit.');
+});
+
+test('compact: a figure only in the Marketplace system\'s unconfirmed notes fails figure-raw (item 6)', () => {
+  const item = customer(14, 'Leontyne', [['IN', 'Hello, is the Noah still at your yard?', 2 * DAY], ['OUT', 'Good morning Leontyne, yes it is.', 2 * DAY - HOUR], ['IN', 'Is it still available?', 5 * MIN]])();
+  const prompt = promptModule.buildPrompt(item, { now, style: 'compact' });
+  const notes = { ...prompt, user: prompt.user.replace('\n=== CONVERSATION SO FAR ===', '\n=== NOTES FROM THE MARKETPLACE SYSTEM (UNCONFIRMED) ===\nAn automatic system made these notes while chatting with the buyer.\n- the buyer was told $28,750\n\n=== CONVERSATION SO FAR ===') };
+  assert.ok(notes.user.includes('$28,750'));
+  assert.ok(fails(assessWith(item, notes, 'It is $28,750.').checks).includes('figure-raw'));
+});
+
 test('the second request says to write facts as markers only when a fact check fired', () => {
   const line = 'Write facts only as their markers.';
   assert.ok(checks.retryNote([{ level: 'fail', code: 'figure-raw', message: 'x' }]).includes(line));

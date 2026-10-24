@@ -35,14 +35,26 @@ const BLANK = new RegExp(`^${BLANK_PATTERN}$`, 'i');
 const YEAR = /^(?:19[89]\d|20[0-2]\d|203[0-5])$/;
 /** What is left as plain text: a blank, or a model year. */
 const plain = (lit) => BLANK.test(lit) || YEAR.test(lit);
-// A marker, written exactly ({{F12}}) or damaged ({F12}, {{ F12 }}, {{f12}}}).
-const MARKER_LIKE = /([$¥]\s?)?\{+\s*[Ff]\s*\d+\s*\}+/g;
+// A marker, written exactly ({{F12}}) or in any damaged form, in any case: a brace or two, an F,
+// then whatever stands before the closing braces ({F12}, {{ F12 }}, {{f12}}}, {{F1a}}, {{F-1}},
+// {{F1,F2}}, {{F}}, {{FACT1}}), or up to the next space when it is never closed ({{F1).
+const MARKER_LIKE = /([$¥]\s?)?\{+\s*F(?:[^{}\n]{0,24}?\}+|[^\s{}]*)/gi;
 const EXACT = /^\{\{(F\d+)\}\}$/;
+// The last safety net, after the facts are back: anything still shaped like a marker, a brace
+// (or two), maybe a space, then an F.
+const F_SHAPED = /\{\{?\s*F[^\s{}]*\}*/gi;
 // What a marker the AI made up becomes: a blank for a person, never the marker itself.
 const MADE_UP = '[CHECK?]';
 
-/** A fact's value and what follows it: "9 am." at the end of a sentence keeps its full stop out. */
-const split = (lit) => (/\d\s?[AaPp][Mm]\.$/.test(lit) ? [lit.slice(0, -1), '.'] : [lit, '']);
+/**
+ * A fact's value and what follows it. "9 am." at the end of a sentence keeps its full stop out,
+ * and an amount keeps out the comma after it ("$1,000, refundable" is "$1,000").
+ */
+function split(lit) {
+  if (/\d\s?[AaPp][Mm]\.$/.test(lit)) return [lit.slice(0, -1), '.'];
+  const comma = lit.match(/,+$/);
+  return comma ? [lit.slice(0, -comma[0].length), comma[0]] : [lit, ''];
+}
 
 /** Every fact in a text, in order, without the blanks and the model years. */
 function factsIn(text) {
@@ -78,18 +90,27 @@ export function maskTrusted(sections) {
 /**
  * Puts every fact back where its marker is. A currency sign written in front of a marker whose
  * value has one already is not written twice. A marker that is not one of ours, or is damaged,
- * becomes [CHECK?], a blank for a person: no marker is ever left in the text.
+ * becomes [CHECK?], a blank for a person, and then so does anything still shaped like a marker
+ * (net: false leaves that last step out, to see whether it would be needed): no marker is ever
+ * left in the text.
  */
-export function restoreFacts(text, markers) {
+export function restoreFacts(text, markers, { net = true } = {}) {
   const byName = new Map((markers || []).map((m) => [m.name, m.value]));
-  return String(text ?? '').replace(MARKER_LIKE, (whole, sign = '') => {
+  const back = String(text ?? '').replace(MARKER_LIKE, (whole, sign = '') => {
     const marker = whole.slice(sign.length);
     const exact = marker.match(EXACT);
     if (!exact || !byName.has(exact[1])) return MADE_UP;
     const value = byName.get(exact[1]);
     return sign && value.replace(/^AUD\s?/, '').startsWith(sign.trim()) ? value : `${sign}${value}`;
   });
+  return net ? netFacts(back) : back;
 }
+
+/** Whether anything in a text is still shaped like a fact marker. */
+export const factShaped = (text) => new RegExp(F_SHAPED.source, 'i').test(String(text ?? ''));
+
+/** The last safety net: anything shaped like a fact marker becomes [CHECK?]. */
+export const netFacts = (text) => String(text ?? '').replace(F_SHAPED, MADE_UP);
 
 /** restoreFacts on every text in the AI's answer: the reply, its next step, its facts and its notes for a person. */
 export function restoreAnswer(json, markers) {
@@ -101,7 +122,7 @@ export function restoreAnswer(json, markers) {
 }
 
 /** Whether a text has a fact marker in it, written exactly or damaged. */
-export const hasFactMarker = (text) => new RegExp(MARKER_LIKE.source).test(String(text ?? ''));
+export const hasFactMarker = (text) => new RegExp(MARKER_LIKE.source, 'i').test(String(text ?? ''));
 
 /** The markers in the AI's text that are not ours: one with a number we never gave, or one written damaged. */
 export function unknownMarkers(aiText, markers) {
@@ -118,7 +139,27 @@ export function unknownMarkers(aiText, markers) {
 const linkKey = (link) => untagged(link).toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
 const isLink = (lit) => /^https?:\/\//i.test(lit) || /^[^\s/]+\.[A-Za-z]{2,}\//.test(lit);
 const PHONE = /^(?:\+?61\s?|0)4\d{2}\s?\d{3}\s?\d{3}$|^\(?0[2378]\)?\s?\d{4}\s?\d{4}$/;
+// A phone number written in a text, with spaces, dashes or +61, as src/redact.js reads them.
+const PHONE_IN_TEXT = /(?<![\d$.,])(?:\+?61[\s-]?|0)[2-478](?:[\s-]?\d){8}(?!\d)/g;
 const phoneDigits = (lit) => { const d = lit.replace(/\D/g, ''); return d.startsWith('61') ? `0${d.slice(2)}` : d; };
+// The words of a fact apart from its figures, for telling "7 days" from "7 weeks".
+const unitOf = (lit) => lit.toLowerCase().replace(/\b(aud|jpy)\b/g, '').replace(/[^a-z]/g, '').replace(/s$/, '');
+
+/** Whether two facts are the same: the same link, the same phone number, or the same figures in the same unit. */
+function sameFact(a, b) {
+  if (isLink(a) || isLink(b)) return isLink(a) && isLink(b) && linkKey(a) === linkKey(b);
+  if (PHONE.test(a) || PHONE.test(b)) return PHONE.test(a) && PHONE.test(b) && phoneDigits(a) === phoneDigits(b);
+  const x = [...numbersIn(a)];
+  const y = numbersIn(b);
+  return x.length > 0 && x.length === y.size && x.every((n) => y.has(n)) && unitOf(a) === unitOf(b);
+}
+
+/** The marker for a figure the AI typed, when it is one of our records' values; '' when it is not. */
+export function markerForFigure(lit, markers) {
+  const list = markers || [];
+  const m = list.find((x) => x.value === lit) || list.find((x) => sameFact(lit, x.value));
+  return m ? m.name : '';
+}
 
 /**
  * The facts in the AI's text, before the markers are put back, that it typed itself: outside the
@@ -132,12 +173,13 @@ export function inventedLiterals(aiText, { allowedText = '' } = {}) {
   if (!typed.length) return [];
   const allowed = String(allowedText ?? '');
   const links = new Set(factsIn(allowed).filter(isLink).map(linkKey));
-  // Phone numbers by their digits, with or without the +61.
-  const digits = allowed.replace(/\D/g, '');
+  // Phone numbers by their digits, with or without the +61: only phone numbers written as such,
+  // never digits that happen to sit near each other.
+  const phones = new Set((allowed.match(PHONE_IN_TEXT) || []).map(phoneDigits));
   const numbers = numbersIn(allowed);
   const found = (lit) => {
     if (isLink(lit)) return links.has(linkKey(lit));
-    if (PHONE.test(lit)) { const d = phoneDigits(lit); return digits.includes(d) || digits.includes(`61${d.slice(1)}`); }
+    if (PHONE.test(lit)) return phones.has(phoneDigits(lit));
     const ns = [...numbersIn(lit)];
     return ns.length > 0 && ns.every((n) => numbers.has(n));
   };

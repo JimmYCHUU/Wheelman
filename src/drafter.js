@@ -19,7 +19,7 @@ import { untagged } from './text.js';
 import { LEFTOVER_LABEL } from './practice.js';
 import { tagMarketplaceLinks } from './marketplace.js';
 import { mediaForReply } from './vehiclemedia.js';
-import { inventedLiterals, unknownMarkers, restoreAnswer, maskFacts, hasFactMarker } from './factmarkers.js';
+import { inventedLiterals, unknownMarkers, restoreAnswer, restoreFacts, maskFacts, hasFactMarker, markerForFigure, factShaped, netFacts } from './factmarkers.js';
 
 /**
  * What a reply may legitimately quote, split by how far it can be trusted.
@@ -199,13 +199,33 @@ function writtenHere(item, prompt, staffSaid, coaching) {
  */
 function factChecks(item, prompt, json, staffSaid, coaching) {
   const text = String(json.reply || '').replace(/\\n/g, '\n');
+  const markers = prompt.factMarkers;
   const out = [];
   const typed = inventedLiterals(text, { allowedText: writtenHere(item, prompt, staffSaid, coaching) });
-  if (typed.length) out.push({ level: 'fail', code: 'figure-raw', tokens: typed, message: typed.length === 1 ? `Check this figure: ${typed[0]} was written by the AI itself, not taken from your records or this conversation.` : `Check these figures: ${typed.join(', ')} were written by the AI itself, not taken from your records or this conversation.` });
-  const made = unknownMarkers(text, prompt.factMarkers);
-  if (made.length) out.push({ level: 'fail', code: 'marker-unknown', tokens: [], message: `${made.join(', ')} ${made.length === 1 ? 'is not one of the markers' : 'are not among the markers'} given for our records' facts, so ${made.length === 1 ? 'it is' : 'they are'} shown as [CHECK?]. Use only the markers given, written exactly as shown.` });
+  if (typed.length) {
+    const it = typed.length === 1 ? 'it' : 'them';
+    out.push({
+      level: 'fail', code: 'figure-raw', tokens: typed,
+      message: `Wheelman wrote ${typed.join(', ')} itself instead of taking ${it} from your records or this conversation. Check ${it} before sending.`,
+      // The second request: each figure it typed, and the marker to write instead when it is one of ours.
+      retry: typed.map((lit) => {
+        const name = markerForFigure(lit, markers);
+        return name ? `You typed the figure ${lit} yourself; write its marker {{${name}}} instead.` : `You typed the figure ${lit} yourself; it is not in our records.`;
+      }).join(' '),
+    });
+  }
+  // A marker that is not one of ours, or anything still shaped like one once the facts are back.
+  const made = unknownMarkers(text, markers);
+  if (made.length || factShaped(restoreFacts(text, markers, { net: false }))) out.push(unknownMarkerCheck(made));
   return out;
 }
+
+/** marker-unknown: plain words on the page; the markers named for the AI's second request. */
+const unknownMarkerCheck = (made) => ({
+  level: 'fail', code: 'marker-unknown', tokens: [],
+  message: 'Wheelman wrote a fact placeholder it could not fill; it is shown as [CHECK?]. Check this part before sending.',
+  retry: `${made.length ? `${made.join(', ')} ${made.length === 1 ? 'is not one of the markers' : 'are not among the markers'}` : 'A marker you wrote is not one of the markers'} given for our records' facts. Use only the markers given, written exactly as shown.`,
+});
 
 /**
  * Turns what the model answered (or a reply written by hand) into the finished suggestion and
@@ -222,6 +242,12 @@ export function assessReply(item, prompt, json, opts) {
   if (!prompt.factMarkers) return assessAnswer(item, prompt, json, opts);
   const own = opts.byCode ? [] : factChecks(item, prompt, json, opts.staffSaid || '', opts.coaching);
   const out = assessAnswer(item, prompt, restoreAnswer(json, prompt.factMarkers), opts);
+  // The last safety net: nothing shaped like a fact marker is ever shown.
+  if (factShaped(out.reply) || factShaped(out.body)) {
+    out.reply = netFacts(out.reply);
+    out.body = netFacts(out.body);
+    if (!own.some((c) => c.code === 'marker-unknown')) own.push(unknownMarkerCheck([]));
+  }
   if (own.length) out.checks = [...own, ...out.checks.filter((c) => c.level !== 'ok')];
   return out;
 }
@@ -506,19 +532,29 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
     // details, a template's facts (as their markers again), our records' facts in the compact
     // style (as theirs) and an order's amounts (as theirs). The reasons for the rejection quote the
     // reply, so they are hidden the same way.
-    const forAi = (text) => {
+    // facts: false leaves our records' values as they are (a figure the AI typed stays as it typed it).
+    const forAi = (text, { facts = true } = {}) => {
       let t = String(text || '');
       if (fit) for (const m of [...plan.markers].sort((a, b) => b.value.length - a.value.length)) if (m.value.trim().length >= 3) t = t.split(m.value).join(`{{${m.name}}}`);
-      if (prompt.factMarkers) t = maskFacts(t, prompt.factMarkers);
+      if (prompt.factMarkers && facts) t = maskFacts(t, prompt.factMarkers);
       t = redact(t, item.lead);
       return plan?.mask ? plan.mask(t) : t;
+    };
+    // The reasons for the rejection, for the AI. The compact style's fact checks have their own
+    // words for it (retry), naming each figure it typed and the marker to write instead: those are
+    // kept out of forAi's masking, which would turn the figure into that very marker.
+    const reasonsForAi = (checks) => {
+      const own = [];
+      const note = forAi(retryNote(checks.map((c) => (c.retry ? { ...c, retry: `\u0000${String.fromCharCode(97 + own.push(c.retry) - 1)}\u0000` } : c)), { channel: item.channel }));
+      return note.replace(/\u0000([a-z])\u0000/g, (m, k) => redact(own[k.charCodeAt(0) - 97], item.lead));
     };
     // One second attempt when a hard check fails.
     if (worst(best.checks) === 'fail' && result.provider !== 'none') {
       try {
-        // A template's rejected draft goes back as the AI wrote it, with its markers: never with the facts put in.
-        const rejected = fit ? String(result.json.reply || '') : forAi(best.body);
-        const again = await complete(prompt.system, `${prompt.user}\n\n${forAi(retryNote(best.checks, { channel: item.channel }))}\n\nYour rejected draft was:\n${rejected}`, which);
+        // A template's rejected draft goes back as the AI wrote it, with its markers: never with the
+        // facts put in. So does one in the compact style: with its markers, and the figures it typed.
+        const rejected = fit ? String(result.json.reply || '') : prompt.factMarkers ? forAi(String(result.json.reply || '').replace(/\\n/g, '\n'), { facts: false }) : forAi(best.body);
+        const again = await complete(prompt.system, `${prompt.user}\n\n${reasonsForAi(best.checks)}\n\nYour rejected draft was:\n${rejected}`, which);
         const second = assess(again.json);
         if (failures(second.checks) < failures(best.checks)) { result = again; best = second; }
       } catch (e) { if (!usable(e)) throw e; }
