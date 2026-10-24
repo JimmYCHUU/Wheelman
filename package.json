@@ -42,6 +42,7 @@
     "report": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/report.js",
     "backup": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/backup.js",
     "restore": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/restore.js",
+    "prompt-size": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/prompt-size.js",
     "check-private": "node --disable-warning=ExperimentalWarning scripts/check-private.js",
     "check-css": "node scripts/check-css-budget.js",
     "check-deps": "node scripts/check-deps.js",
