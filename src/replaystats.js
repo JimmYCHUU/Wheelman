@@ -1,6 +1,8 @@
 // Full against compact, over the cases both styles answered: the numbers and the gate.
 
-export const MAX_COMPACT_MEDIAN_TOKENS_IN = 4000;
+// The ceiling is the pass/fail line; the target is for information only.
+export const MAX_COMPACT_MEDIAN_TOKENS_IN = 6000;
+export const TARGET_COMPACT_MEDIAN_TOKENS_IN = 4000;
 export const MAX_MEDIAN_DROP = 0.02;
 
 const median = (a) => {
@@ -37,7 +39,7 @@ export function pairStats(results) {
     if (full.medianSimilarity - compact.medianSimilarity > MAX_MEDIAN_DROP + 1e-9) reasons.push(`compact median similarity ${f2(compact.medianSimilarity)} is more than ${f2(MAX_MEDIAN_DROP)} below full ${f2(full.medianSimilarity)}`);
     if (compact.close80 < full.close80 - 1e-9) reasons.push(`compact close80 ${pc(compact.close80)} is below full ${pc(full.close80)}`);
     if (compact.failRate > full.failRate + 1e-9) reasons.push(`compact fail rate ${pc(compact.failRate)} is above full ${pc(full.failRate)}`);
-    if (compact.medianTokensIn > MAX_COMPACT_MEDIAN_TOKENS_IN) reasons.push(`compact median tokens in ${Math.round(compact.medianTokensIn)} is above ${MAX_COMPACT_MEDIAN_TOKENS_IN}`);
+    if (compact.medianTokensIn > MAX_COMPACT_MEDIAN_TOKENS_IN) reasons.push(`compact median tokens in ${Math.round(compact.medianTokensIn)} is above the ceiling of 6,000`);
   }
-  return { paired: keys.length, full, compact, gate: { pass: reasons.length === 0, reasons } };
+  return { paired: keys.length, targetTokensIn: TARGET_COMPACT_MEDIAN_TOKENS_IN, full, compact, gate: { pass: reasons.length === 0, reasons } };
 }

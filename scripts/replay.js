@@ -49,7 +49,7 @@ const { buildItem } = await import('../src/items.js');
 const { collectCases, spread, itemAt } = await import('../src/replaycases.js');
 const { draftFor } = await import('../src/drafter.js');
 const { providers } = await import('../src/llm.js');
-const { runReplay, caseKey } = await import('../src/replayrun.js');
+const { runReplay, caseKey, offlineFetch } = await import('../src/replayrun.js');
 const { pairStats } = await import('../src/replaystats.js');
 const { displayOfVoice } = await import('../src/people.js');
 const { formatSydney } = await import('../src/time.js');
@@ -58,6 +58,11 @@ if (!providers().length) {
   console.log('No AI key is filled in yet, so the replay test cannot run. Fill in GEMINI_API_KEY in .env first.');
   process.exit(1);
 }
+
+// Offline is enforced: only the AI providers' hosts may be reached.
+const aiHosts = ['gemini', 'openai', 'openrouter'].map((p) => { try { return new URL(config.llm[p].url).host; } catch { return ''; } }).filter(Boolean);
+const guard = offlineFetch(aiHosts, globalThis.fetch);
+globalThis.fetch = guard.fetch;
 
 const db = openDb();
 const cases = spread(collectCases(db, {}), wanted);
@@ -97,7 +102,7 @@ if (stopped === 'error') console.log('\nA draft failed. Stopped; the results so 
 const results = readLines(resultsFile);
 const replies = new Map(readLines(repliesFile).map((r) => [`${r.key}|${r.style}`, r]));
 const stats = pairStats(results);
-fs.writeFileSync(path.join(runDir, 'summary.json'), JSON.stringify({ ...stats, stopped, cases: cases.length }, null, 1));
+fs.writeFileSync(path.join(runDir, 'summary.json'), JSON.stringify({ ...stats, stopped, cases: cases.length, blocked: guard.blocked }, null, 1));
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const sim = (key, style) => results.find((r) => r.key === key && r.style === style)?.similarity;
@@ -127,6 +132,8 @@ fs.writeFileSync(path.join(runDir, 'cases.html'), `<!doctype html><html lang="en
 <p>${stats.paired} cases answered in both styles. Median overlap: full ${f(stats.full.medianSimilarity)}, compact ${f(stats.compact.medianSimilarity)}. Gate: ${stats.gate.pass ? 'pass' : `fail (${esc(stats.gate.reasons.join('; '))})`}. Contains real customer text: keep this file on this computer.</p>
 ${rows}</main></body></html>`);
 
+const blockedList = Object.entries(guard.blocked);
+console.log(blockedList.length ? `\nBlocked requests (offline): ${blockedList.map(([h, n]) => `${h} x${n}`).join(', ')}` : '\nBlocked requests (offline): none');
 console.log(`\nPaired cases: ${stats.paired}. Median similarity: full ${f(stats.full.medianSimilarity)}, compact ${f(stats.compact.medianSimilarity)}.`);
 console.log(`Gate: ${stats.gate.pass ? 'pass' : `fail. ${stats.gate.reasons.join('; ')}`}`);
 console.log(`\nOpen this file in your browser to compare side by side:\n  ${path.join(runDir, 'cases.html')}`);

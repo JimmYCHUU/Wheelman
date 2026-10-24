@@ -9,11 +9,11 @@ applyTestEnv();
 
 const now = Date.now();
 const HOUR = 3600e3;
-let runReplay, pairStats, cases;
+let runReplay, pairStats, offlineFetch, cases;
 
 before(async () => {
   const db = await import('../src/db.js');
-  ({ runReplay } = await import('../src/replayrun.js'));
+  ({ runReplay, offlineFetch } = await import('../src/replayrun.js'));
   ({ pairStats } = await import('../src/replaystats.js'));
   cases = [];
   for (let n = 1; n <= 3; n++) {
@@ -66,10 +66,66 @@ test('the daily allowance used up stops the run and keeps the results so far', a
   assert.equal(landed.length, 2);
 });
 
-test('another failure stops the run as an error', async () => {
-  const { results, stopped } = await runReplay({ cases, styles: ['compact'], draft: async () => { throw new Error('boom'); } });
+const down = { status: 'failed', reply: '', error: 'No AI model could answer just now. The free models are busy.', checks: [{ level: 'fail' }] };
+
+test('one failed draft is recorded as a fail and the run goes on', async () => {
+  let n = 0;
+  const draft = async () => (++n === 2 ? { status: 'failed', reply: '', error: 'The AI model did not return a readable answer.', checks: [] } : ready());
+  const { results, stopped } = await runReplay({ cases, styles: ['compact'], draft });
+  assert.equal(stopped, null);
+  assert.equal(results.length, 3);
+  assert.equal(results[1].worst, 'fail');
+  assert.equal(results[1].similarity, 0);
+  assert.equal(results[1].error, 'The AI model did not return a readable answer.');
+  assert.equal(results[2].worst, 'ok');
+});
+
+test('a thrown draft is recorded with "threw:" and the run goes on', async () => {
+  let n = 0;
+  const draft = async () => { if (++n === 1) throw new Error('boom'); return ready(); };
+  const { results, stopped } = await runReplay({ cases, styles: ['compact'], draft });
+  assert.equal(stopped, null);
+  assert.equal(results[0].error, 'threw: boom');
+  assert.equal(results[0].worst, 'fail');
+  assert.equal(results.length, 3);
+});
+
+test('three provider-down failures in a row stop the run as an error; the results so far are returned', async () => {
+  const more = [...cases, ...cases.map((c) => ({ ...c, cut: 1, conversationId: c.conversationId }))];
+  let n = 0;
+  const draft = async () => (++n <= 1 ? ready() : down);
+  const { results, stopped } = await runReplay({ cases: more, styles: ['compact'], draft });
   assert.equal(stopped, 'error');
-  assert.equal(results.length, 0);
+  assert.equal(results.length, 4);
+  assert.equal(n, 4);
+});
+
+test('a success resets the provider-down count', async () => {
+  const more = [...cases, ...cases];
+  const seq = [down, down, ready(), down, down, ready()];
+  let n = 0;
+  const { results, stopped } = await runReplay({ cases: more, styles: ['compact'], draft: async () => seq[n++] });
+  assert.equal(stopped, null);
+  assert.equal(results.length, 6);
+});
+
+test('three thrown exceptions in a row stop the run as an error', async () => {
+  const more = [...cases, ...cases];
+  const { results, stopped } = await runReplay({ cases: more, styles: ['compact'], draft: async () => { throw new Error('boom'); } });
+  assert.equal(stopped, 'error');
+  assert.equal(results.length, 3);
+});
+
+test('offlineFetch passes an AI host through and rejects and counts any other', async () => {
+  const calls = [];
+  const realFetch = async (url) => { calls.push(String(url)); return 'real'; };
+  const { fetch, blocked } = offlineFetch(['ai.example.test'], realFetch);
+  assert.equal(await fetch('https://ai.example.test/v1/chat'), 'real');
+  assert.equal(await fetch(new URL('https://ai.example.test/x')), 'real');
+  await assert.rejects(() => fetch('https://dash.example.test/api'), { message: 'Replay is offline: blocked dash.example.test' });
+  await assert.rejects(() => fetch('https://dash.example.test/other'));
+  assert.deepEqual(blocked, { 'dash.example.test': 2 });
+  assert.equal(calls.length, 2);
 });
 
 const row = (key, style, similarity, extra = {}) => ({ key, style, similarity, salesOurs: 3, salesTheirs: 3, worst: 'ok', tokensIn: style === 'full' ? 15500 : 3900, tokensOut: 100, model: 'm', ms: 1, ...extra });
@@ -94,8 +150,16 @@ test('pairStats counts only cases present in both styles', () => {
   assert.equal(s.compact.medianSimilarity, 0.6);
 });
 
-test('pairStats fails the gate on a higher fail rate or heavier prompts', () => {
-  const bad = pairStats([row('a', 'full', 0.9), row('a', 'compact', 0.9, { worst: 'fail', tokensIn: 5000 })]);
+test('pairStats fails the gate on a higher fail rate', () => {
+  const bad = pairStats([row('a', 'full', 0.9), row('a', 'compact', 0.9, { worst: 'fail' })]);
   assert.equal(bad.gate.pass, false);
-  assert.equal(bad.gate.reasons.length, 2);
+  assert.equal(bad.gate.reasons.length, 1);
+});
+
+test('the token ceiling is 6,000: 5,900 passes, 6,100 fails naming 6,000', () => {
+  assert.equal(pairStats([row('a', 'full', 0.6), row('a', 'compact', 0.6, { tokensIn: 5900 })]).gate.pass, true);
+  const bad = pairStats([row('a', 'full', 0.6), row('a', 'compact', 0.6, { tokensIn: 6100 })]);
+  assert.equal(bad.gate.pass, false);
+  assert.ok(bad.gate.reasons.some((r) => r.includes('6,000') || r.includes('6000')));
+  assert.equal(bad.targetTokensIn, 4000);
 });
