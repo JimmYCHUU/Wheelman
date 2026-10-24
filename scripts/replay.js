@@ -58,7 +58,7 @@ const db = openDb();
 const cases = spread(collectCases(db, {}), wanted);
 if (!confirmed) {
   // Dry run: the database copy is read, nothing is sent. With --resume only the cases not yet done count.
-  const done = new Set(before.filter((r) => !r.error && r.worst !== 'fail').map((r) => `${r.key}|${r.style}`));
+  const done = new Set(before.filter((r) => !r.error).map((r) => `${r.key}|${r.style}`));
   const estimate = styles.map((s) => {
     const requests = cases.filter((c, i) => !(s === 'full' && sampleFull !== undefined && i >= sampleFull) && !done.has(`${caseKey(c)}|${s}`)).length;
     return { style: s, requests, tokens: requests * REQUEST_TOKENS[s] };

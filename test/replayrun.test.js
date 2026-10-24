@@ -171,6 +171,8 @@ test('a resume re-runs a case whose earlier result had an error, and pairStats u
   assert.equal(results.length, 2, 'the failed case runs again, the other is new');
   const kept = await runReplay({ cases: [cases[0]], styles: ['compact'], draft: async () => ready(), resumeFrom: [{ ...bad, error: undefined, worst: 'ok' }] });
   assert.equal(kept.results.length, 0, 'a good result is not run again');
+  const factFail = await runReplay({ cases: [cases[0]], styles: ['compact'], draft: async () => ready(), resumeFrom: [{ ...bad, error: undefined, worst: 'fail', tokensIn: 3000 }] });
+  assert.equal(factFail.results.length, 0, 'a draft that failed the fact check (no error) is a real result and is kept');
   const s = pairStats([row(bad.key, 'full', 0.6), bad, row(bad.key, 'compact', 0.6)]);
   assert.equal(s.compact.medianSimilarity, 0.6, 'the last line for a key and style wins');
 });
