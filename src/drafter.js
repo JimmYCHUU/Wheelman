@@ -1,6 +1,6 @@
 // Produces one suggested reply for one waiting customer.
 
-import { buildPrompt, writtenToday } from './prompt.js';
+import { buildPrompt, writtenToday, requestOwnText } from './prompt.js';
 import { complete, LlmError } from './llm.js';
 import { logLine } from './log.js';
 import { finishReply, fixGreeting, checkDraft, retryNote, stripModelSignOff, confirmsTime, worst, chatStyle, dropGreeting, emailChecks, followUpChecks } from './checks.js';
@@ -181,12 +181,15 @@ function assessTemplate(item, text, json, { plan, allowed, said, staffSaid, inst
 }
 
 /**
- * What the AI may repeat as written in the compact style: what the customer and our team wrote in
- * this conversation (the same messages buildPrompt shows), and what our staff typed for this draft.
+ * What the AI may repeat as written in the compact style: the request's own text, system and user,
+ * apart from its learning material (requestOwnText); what the customer and our team wrote in this
+ * conversation (the same messages buildPrompt shows); what our staff typed for this draft; and the
+ * draft our staff coached on. Our records' facts are markers in the request, so they are not here:
+ * those the AI writes as markers.
  */
-function writtenHere(item, staffSaid) {
+function writtenHere(item, prompt, staffSaid, coaching) {
   const say = (e) => [e.text, e.event].filter(Boolean).join(' ');
-  return [...item.timeline.map(say), ...(item.pending || []).map(say), staffSaid].filter(Boolean).join('\n');
+  return [requestOwnText(prompt), ...item.timeline.map(say), ...(item.pending || []).map(say), staffSaid, coaching?.draft || ''].filter(Boolean).join('\n');
 }
 
 /**
@@ -194,10 +197,10 @@ function writtenHere(item, staffSaid) {
  * back, and before code adds anything under it. A figure or link it typed itself (figure-raw), and
  * a marker that is not one of ours (marker-unknown), both fail.
  */
-function factChecks(item, prompt, json, staffSaid) {
+function factChecks(item, prompt, json, staffSaid, coaching) {
   const text = String(json.reply || '').replace(/\\n/g, '\n');
   const out = [];
-  const typed = inventedLiterals(text, { allowedText: writtenHere(item, staffSaid) });
+  const typed = inventedLiterals(text, { allowedText: writtenHere(item, prompt, staffSaid, coaching) });
   if (typed.length) out.push({ level: 'fail', code: 'figure-raw', tokens: typed, message: typed.length === 1 ? `Check this figure: ${typed[0]} was written by the AI itself, not taken from your records or this conversation.` : `Check these figures: ${typed.join(', ')} were written by the AI itself, not taken from your records or this conversation.` });
   const made = unknownMarkers(text, prompt.factMarkers);
   if (made.length) out.push({ level: 'fail', code: 'marker-unknown', tokens: [], message: `${made.join(', ')} ${made.length === 1 ? 'is not one of the markers' : 'are not among the markers'} given for our records' facts, so ${made.length === 1 ? 'it is' : 'they are'} shown as [CHECK?]. Use only the markers given, written exactly as shown.` });
@@ -217,7 +220,7 @@ function factChecks(item, prompt, json, staffSaid) {
  */
 export function assessReply(item, prompt, json, opts) {
   if (!prompt.factMarkers) return assessAnswer(item, prompt, json, opts);
-  const own = opts.byCode ? [] : factChecks(item, prompt, json, opts.staffSaid || '');
+  const own = opts.byCode ? [] : factChecks(item, prompt, json, opts.staffSaid || '', opts.coaching);
   const out = assessAnswer(item, prompt, restoreAnswer(json, prompt.factMarkers), opts);
   if (own.length) out.checks = [...own, ...out.checks.filter((c) => c.level !== 'ok')];
   return out;

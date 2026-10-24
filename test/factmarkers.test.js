@@ -81,6 +81,17 @@ test('masking a line of our records gives one marker per figure or link, and res
   assert.equal(facts.restoreFacts(two.masked['BUSINESS FACTS'], two.markers), 'Hold it for $1,000. The Noah is $36,990. Open from 9 am. Call 0491 570 427. Trade-in: [TRADE-IN VALUE?]');
 });
 
+test('a model year stays plain text and is never a typed figure; other four-digit numbers are still facts', () => {
+  const name = facts.maskTrusted({ 'VEHICLE FACTS': 'Vehicle: 2019 Toyota Harrier\nYear: 2019\nBuilt: 03/2019' });
+  assert.equal(name.masked['VEHICLE FACTS'], 'Vehicle: 2019 Toyota Harrier\nYear: 2019\nBuilt: 03/2019');
+  assert.deepEqual(name.markers, []);
+  const postcode = facts.maskTrusted({ 'BUSINESS FACTS': 'Address: 136 Frances Street, Lidcombe NSW 2141.' });
+  assert.equal(postcode.masked['BUSINESS FACTS'], 'Address: 136 Frances Street, Lidcombe NSW {{F1}}.');
+  assert.deepEqual(postcode.markers.map((m) => m.value), ['2141']);
+  assert.deepEqual(facts.inventedLiterals('It is the 2017 model.', { allowedText: '' }), []);
+  assert.deepEqual(facts.inventedLiterals('Built in 1979, stock 2141.', { allowedText: '' }), ['1979', '2141']);
+});
+
 test('a figure the AI typed itself is found; one the customer wrote, or a marker, is not', () => {
   const allowedText = 'Would you take $24k for the Noah? Can I come at 10:30? See harbour.example/cars/T14 and call me on 0491 570 418';
   assert.deepEqual(facts.inventedLiterals('It is $31,990.', { allowedText: 'Is the Noah still available?' }), ['$31,990']);
@@ -112,6 +123,8 @@ test('the compact request shows our records as markers; the conversation and the
   assert.ok(Array.isArray(compact.factMarkers) && compact.factMarkers.length > 0);
   const vehicle = section(compact.user, 'VEHICLE FACTS');
   assert.ok(vehicle.includes(markerFor(compact, '$36,990')), vehicle);
+  // The model year reads as it is (Ruling 2): "2020 Toyota Noah Si", not a marker.
+  assert.ok(vehicle.includes('Vehicle: 2020 Toyota Noah Si'), vehicle);
   assert.ok(!/\$36,990|41,200|https?:\/\//.test(vehicle), vehicle);
   assert.ok(!compact.user.includes('$36,990'), 'the price is nowhere in the request');
   assert.ok(section(compact.user, 'CONVERSATION SO FAR').includes('$24k'));
@@ -206,7 +219,7 @@ test('compact draft: a made-up marker written twice is never shown as a marker',
 test('compact: code\'s own wording (the standard opening of an offer, a template word for word) is not checked for typed figures', () => {
   const item = customer(7, 'Cosima', [['IN', 'Hello, is the Noah still at your yard?', 2 * DAY], ['OUT', 'Good morning Cosima, yes it is.', 2 * DAY - HOUR], ['IN', 'Is it still available?', 5 * MIN]])();
   const prompt = promptModule.buildPrompt(item, { now, style: 'compact' });
-  const opening = 'We have found a 2015 Toyota Alphard that may be worth considering.';
+  const opening = 'We have found a 2015 Toyota Alphard with 63,800 km that may be worth considering.';
   assert.ok(codes(assessWith(item, prompt, opening).checks).includes('figure-raw'), 'the AI typing it fails');
   assert.ok(!codes(assessWith(item, prompt, opening, { byCode: true }).checks).includes('figure-raw'), 'code writing it does not');
 });
@@ -224,6 +237,38 @@ test('compact template fitting: the facts come back, and a fitting with a fact m
   script(answer('Hello {{NAME}},\n\nYes, the Noah is still available.'));
   const plain = await drafter.draftFor(item(), { now, save: false, style: 'compact', template: tpl });
   assert.equal(plain.context.fitted, 'Hello {{NAME}},\n\nYes, the Noah is still available.');
+});
+
+test('compact: a figure from our own rules in the request passes; one found only in what other customers were sent fails', () => {
+  const item = customer(9, 'Thaddeus', [['IN', 'Is the Noah still available?', 2 * DAY], ['OUT', 'Good morning Thaddeus, yes it is.', 2 * DAY - HOUR], ['IN', 'I would like to buy it. How do I hold it?', 5 * MIN]])();
+  const prompt = promptModule.buildPrompt(item, { now, style: 'compact' });
+  // The SELLING section's deposit is our own rule.
+  assert.ok(section(prompt.user, 'SELLING FOR THIS MESSAGE').includes('$1,000'));
+  assert.ok(!codes(assessWith(item, prompt, 'A $1,000 holding deposit takes the Noah off the market for you.').checks).includes('figure-raw'));
+  // The Marketplace channel rules' inclusions are ours too.
+  const chatRules = { ...prompt, system: promptModule.systemPrompt('marketplace', { style: 'compact' }) };
+  assert.ok(!codes(assessWith(item, chatRules, 'The price includes 6 months rego, a fresh roadworthy and a 5-year warranty.').checks).includes('figure-raw'));
+
+  // A price that is only in a learning section (another customer's car) is not ours to type.
+  const learning = (heading, body) => ({ ...prompt, user: prompt.user.replace('\n=== CONVERSATION SO FAR ===', `\n=== ${heading} ===\n${body}\n\n=== CONVERSATION SO FAR ===`) });
+  const example = learning('EXAMPLES OF HOW WE REPLY', 'Example 1\n  Customer: how much to hold it\n  We replied: It is $29,950 and a deposit holds it.');
+  assert.ok(example.user.includes('$29,950'));
+  assert.ok(fails(assessWith(item, example, 'It is $29,950.').checks).includes('figure-raw'));
+  for (const heading of ['HOW OUR STAFF CHANGED EARLIER SUGGESTIONS', 'WHAT OUR TEAM REALLY SENT FOR SIMILAR MESSAGES', 'HOW WE ANSWERED SIMILAR IMPORT EMAILS']) {
+    assert.ok(fails(assessWith(item, learning(heading, 'Case 1\n  Customer: how much\n  Staff used: It is $29,950.'), 'It is $29,950.').checks).includes('figure-raw'), heading);
+  }
+  // The owner's guidance: an approved reply to another customer is learning; the owner's own lesson is ours.
+  const owner = learning('HOW THE OWNER WANTS THIS HANDLED', 'The owner of the business reads your suggestions and coaches you.\n- When they ask to hold it: the holding deposit is $1,250.\nApproved as written, for a similar message\n  Customer: how much\n  You wrote: It is $29,950.\n  Handle this one the same way.');
+  assert.ok(fails(assessWith(item, owner, 'It is $29,950.').checks).includes('figure-raw'));
+  assert.ok(!codes(assessWith(item, owner, 'The holding deposit is $1,250.').checks).includes('figure-raw'));
+});
+
+test('compact: a figure from the coaching draft our staff commented on may be repeated', () => {
+  const item = customer(10, 'Philippa', [['IN', 'Is the Noah still available?', 2 * DAY], ['OUT', 'Good morning Philippa, yes it is.', 2 * DAY - HOUR], ['IN', 'Is it still available?', 5 * MIN]])();
+  const coaching = { draft: 'Yes, and delivery to Newcastle is $450.', note: 'Shorter, please.' };
+  const prompt = promptModule.buildPrompt(item, { now, style: 'compact', coaching });
+  const d = drafter.assessReply(item, prompt, answer('Yes, and delivery is $450.'), { allowed: { trusted: prompt.vehicleText, policy: '', customer: '' }, said: [], staffSaid: coaching.note, coaching, now });
+  assert.ok(!codes(d.checks).includes('figure-raw'), JSON.stringify(d.checks));
 });
 
 test('the second request says to write facts as markers only when a fact check fired', () => {

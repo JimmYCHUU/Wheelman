@@ -29,6 +29,12 @@ const BARE_LINK = String.raw`\b[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\/
 const FACT = new RegExp([SHORT, LITERAL.source, BARE_LINK].join('|'), 'gi');
 // A blank is for a person, in whatever case it was written: never masked, never a typed figure.
 const BLANK = new RegExp(`^${BLANK_PATTERN}$`, 'i');
+// A model year, a four-digit number from 1980 to 2035 on its own, stays as it is: the car's name
+// reads "2019 Toyota Harrier", and a reply may say "the 2017 model". A postcode such as 2141 is
+// still a fact.
+const YEAR = /^(?:19[89]\d|20[0-2]\d|203[0-5])$/;
+/** What is left as plain text: a blank, or a model year. */
+const plain = (lit) => BLANK.test(lit) || YEAR.test(lit);
 // A marker, written exactly ({{F12}}) or damaged ({F12}, {{ F12 }}, {{f12}}}).
 const MARKER_LIKE = /([$¥]\s?)?\{+\s*[Ff]\s*\d+\s*\}+/g;
 const EXACT = /^\{\{(F\d+)\}\}$/;
@@ -38,17 +44,18 @@ const MADE_UP = '[CHECK?]';
 /** A fact's value and what follows it: "9 am." at the end of a sentence keeps its full stop out. */
 const split = (lit) => (/\d\s?[AaPp][Mm]\.$/.test(lit) ? [lit.slice(0, -1), '.'] : [lit, '']);
 
-/** Every fact in a text, in order, without the blanks. */
+/** Every fact in a text, in order, without the blanks and the model years. */
 function factsIn(text) {
   const out = [];
-  for (const m of String(text ?? '').matchAll(FACT)) if (!BLANK.test(m[0])) out.push(split(m[0])[0]);
+  for (const m of String(text ?? '').matchAll(FACT)) if (!plain(m[0])) out.push(split(m[0])[0]);
   return out;
 }
 
 /**
  * Our records' facts as markers. `sections` maps a section's name to its text. Names are F1, F2
  * ... in order of first appearance across the sections, and the same value always gets the same
- * name. Returns { masked, markers }: the same sections with markers, and [{ name, value }].
+ * name. Blanks and model years stay as they are. Returns { masked, markers }: the same sections
+ * with markers, and [{ name, value }].
  */
 export function maskTrusted(sections) {
   const markers = [];
@@ -60,7 +67,7 @@ export function maskTrusted(sections) {
   const masked = {};
   for (const [name, text] of Object.entries(sections || {})) {
     masked[name] = String(text ?? '').replace(FACT, (lit) => {
-      if (BLANK.test(lit)) return lit;
+      if (plain(lit)) return lit;
       const [value, tail] = split(lit);
       return `{{${nameFor(value)}}}${tail}`;
     });

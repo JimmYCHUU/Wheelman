@@ -594,6 +594,33 @@ function sellingSituation(item, { stage, deal, importPlan, email, primary, prima
 // conversation, the examples, what the team sent and the instruction keep their own words.
 const TRUSTED_SECTIONS = new Set(['VEHICLE FACTS', 'SIMILAR VEHICLES AVAILABLE NOW', 'INSPECTION', 'PRICE REPLY', 'STANDARD FIRST REPLY', 'LINKS THEY ASKED FOR', 'BUSINESS FACTS', 'HOW CARBARN WORKS', 'WEBSITE EXTRACTS', 'RESEARCH FOR THIS IMPORT QUESTION', 'IMPORTING PAGES ON OUR WEBSITE']);
 
+// The learning material in a request: replies to other customers, whose figures belong to other
+// cars or are out of date. In the owner's guidance, the replies the owner approved or coached on
+// (each with its "Customer:" lines under it) are learning too; the owner's own lessons are not.
+const LEARNING_SECTIONS = new Set(['EXAMPLES OF HOW WE REPLY', 'HOW OUR STAFF CHANGED EARLIER SUGGESTIONS', 'WHAT OUR TEAM REALLY SENT FOR SIMILAR MESSAGES', 'HOW WE ANSWERED SIMILAR IMPORT EMAILS']);
+const OWNER_SECTION = 'HOW THE OWNER WANTS THIS HANDLED';
+const OTHER_CUSTOMERS_REPLY = /^(Corrected by the owner and approved|Approved as written|A coaching note on a similar message)\b/;
+
+/**
+ * The request's own text, system and user, without its learning material: what the compact
+ * style's reply may repeat as written (src/drafter.js, the figure-raw check). Every learning
+ * section is dropped by its heading, and so is each of the owner's approved replies with the lines
+ * indented under it.
+ */
+export function requestOwnText({ system = '', user = '' } = {}) {
+  let section = '';
+  let reply = false;
+  return `${system}\n${user}`.split('\n').filter((line) => {
+    const heading = line.match(/^=== (.+) ===$/);
+    if (heading) { section = heading[1]; reply = false; return !LEARNING_SECTIONS.has(section); }
+    if (LEARNING_SECTIONS.has(section)) return false;
+    if (section !== OWNER_SECTION) return true;
+    if (OTHER_CUSTOMERS_REPLY.test(line)) reply = true;
+    else if (!/^\s/.test(line)) reply = false;
+    return !reply;
+  }).join('\n');
+}
+
 /**
  * The compact style: masks the trusted sections of the request in place and returns the markers.
  * `P` is the request's lines as buildPrompt pushed them. A line that starts with a heading opens a
