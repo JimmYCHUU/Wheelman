@@ -347,7 +347,7 @@ export async function distilPending(max = 2) {
  * raw: notes on similar messages with no lesson (not worked out yet, or none could be taken).
  */
 export function ownerGuidance(q, now = Date.now()) {
-  const mine = (r) => canLearnFrom(r.item_key) && r.item_key !== q.excludeItemKey && sameChannel(r, q);
+  const mine = (r) => (r.at || 0) <= now && canLearnFrom(r.item_key) && r.item_key !== q.excludeItemKey && sameChannel(r, q);
   const approved = sinceVoice(allLearned().filter((r) => mine(r) && r.source === 'approved'))
     .map((r) => ({ r, s: score(r, q, now) })).filter((x) => x.s >= 3).sort((a, b) => b.s - a.s).slice(0, 2).map((x) => x.r);
 
@@ -390,7 +390,7 @@ function score(row, q, now) {
 /** Recent replies that were really used, as extra examples. Shaped like the base example bank. */
 export function learnedExamples(q, max = 2, now = Date.now()) {
   // Replies the owner approved are shown in their own section, with more weight than an example.
-  const rows = sinceVoice(allLearned().filter((r) => canLearnFrom(r.item_key) && r.item_key !== q.excludeItemKey && r.source !== 'approved' && sameChannel(r, q)));
+  const rows = sinceVoice(allLearned().filter((r) => (r.at || 0) <= now && canLearnFrom(r.item_key) && r.item_key !== q.excludeItemKey && r.source !== 'approved' && sameChannel(r, q)));
   return rows.map((r) => ({ r, s: score(r, q, now) }))
     .filter((x) => x.s >= 3)
     .sort((a, b) => b.s - a.s)
@@ -400,7 +400,7 @@ export function learnedExamples(q, max = 2, now = Date.now()) {
 
 /** Cases where the person changed the suggestion before using it: the clearest lessons. */
 export function corrections(q, max = 2, now = Date.now()) {
-  const rows = sinceVoice(allLearned().filter((r) => canLearnFrom(r.item_key) && r.changed && r.item_key !== q.excludeItemKey && r.draft_text && (r.similarity ?? 1) < 0.92 && (r.similarity ?? 0) > 0.15 && sameChannel(r, q)));
+  const rows = sinceVoice(allLearned().filter((r) => (r.at || 0) <= now && canLearnFrom(r.item_key) && r.changed && r.item_key !== q.excludeItemKey && r.draft_text && (r.similarity ?? 1) < 0.92 && (r.similarity ?? 0) > 0.15 && sameChannel(r, q)));
   return rows.map((r) => ({ r, s: score(r, q, now) }))
     .filter((x) => x.s >= 2.5)
     .sort((a, b) => b.s - a.s)

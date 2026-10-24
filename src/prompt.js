@@ -548,7 +548,7 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   };
   // Replies our own team recently used come first; our salespeople's genuine past replies fill the rest.
   const recent = learnedExamples(want, 2, now);
-  const examples = [...recent, ...pickExamples(want, 6 - recent.length)];
+  const examples = [...recent, ...pickExamples(want, 6 - recent.length, now)];
   const fixes = corrections(want, 2, now);
 
   // For an email the research record carries the website's passages, chosen for the question.
