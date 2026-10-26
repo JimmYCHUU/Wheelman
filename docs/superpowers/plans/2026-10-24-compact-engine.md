@@ -8,7 +8,7 @@
 
 **Tech Stack:** Node 22, `node:sqlite`, `node:test`, zero dependencies, no build.
 
-**Spec:** the Wheelman Next PRD (private Claude Doc, 24 Oct 2026). This plan covers roadmap stage 2's first part, "facts by markers everywhere; prompts cut to 4,000 tokens". It also uses PRD decision row 6 ("Code inserts every fact through markers"), accepted 24 Oct 2026, and the Stage 1 baseline. Stable IDs and the stored inbox are the next plan, written after this one passes its gate.
+**Spec:** the Wheelman Next PRD (private document, 24 Oct 2026). This plan covers roadmap stage 2's first part, "facts by markers everywhere; prompts cut to 4,000 tokens". It also uses PRD decision row 6 ("Code inserts every fact through markers"), accepted 24 Oct 2026, and the Stage 1 baseline. Stable IDs and the stored inbox are the next plan, written after this one passes its gate.
 
 ## Global Constraints
 
