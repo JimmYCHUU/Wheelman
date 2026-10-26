@@ -11,16 +11,22 @@ export function createAutosave({ api, now, timers, keepalive, get, set }) {
   let timer = null;
   const draftId = () => { const s = get(); return s.item && s.item.draft ? s.item.draft.id : null; };
 
+  // The note speaks for the suggestion on screen. A save for another one (the box moved on to
+  // another suggestion meanwhile) leaves it alone, except a "Saving…" it can no longer finish.
+  function note(edit, save) {
+    if (draftId() === edit.id) set({ save });
+    else if (get().save.state === 'saving') set({ save: { state: 'idle', at: null } });
+  }
+
   async function send(edit) {
-    set({ save: { state: 'saving', at: get().save.at } });
+    note(edit, { state: 'saving', at: get().save.at });
     try {
       await api('/api/drafts/' + edit.id + '/edit', { text: edit.text });
       if (pending === edit) pending = null;
-      // A save that lands after another suggestion arrived says nothing about that one.
-      if (pending === null && draftId() === edit.id) set({ save: { state: 'saved', at: now() } });
+      if (pending === null) note(edit, { state: 'saved', at: now() });
     } catch {
       if (pending !== edit) return;
-      set({ save: { state: 'failed', at: get().save.at } });
+      note(edit, { state: 'failed', at: get().save.at });
       timer = timers.set(() => send(edit), RETRY);
     }
   }

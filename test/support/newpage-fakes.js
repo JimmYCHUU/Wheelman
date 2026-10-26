@@ -35,9 +35,18 @@ export function setup(over = {}) {
     fail: new Set(),
     ...over,
   };
+  // An edit is kept with its suggestion, as the server does: null when it is the suggestion as written.
+  const keepEdit = (id, text) => {
+    for (const [k, it] of Object.entries(data.items)) {
+      if (it && it.draft && it.draft.id === id) data.items[k] = { ...it, draft: { ...it.draft, edited: text === it.draft.reply ? null : text } };
+    }
+  };
+  const failing = (path) => [...data.fail].some((f) => path.includes(f));
   const api = async (path, body) => {
     calls.push({ path, body });
-    for (const f of data.fail) if (path.includes(f)) throw new Error('Network down');
+    if (failing(path)) throw new Error('Network down');
+    const edit = body !== undefined && path.match(/^\/api\/drafts\/(\d+)\/edit$/);
+    if (edit) { keepEdit(Number(edit[1]), body.text); return { ok: true }; }
     if (body === undefined) {
       if (path === '/api/status') return { missing: [], lastSync: { ok: true, at: 0 } };
       if (path.startsWith('/api/items?')) return { items: data.rows, total: data.rows.length, counts: data.counts, unread: { dashboard: 2 }, sections: {}, section: 'dashboard' };

@@ -127,13 +127,20 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     if (changed && state.typed !== null) {
       // The typed text stays. Its replacement is offered only once there is a suggestion to use.
       const ready = !!(fresh.draft && fresh.draft.status === 'ready');
-      set({ item: fresh, context: {
-        message: NEW_MESSAGE,
-        action: ready ? { label: 'Use the new suggestion', run: () => set({ typed: null, context: null }) } : null,
-      } });
+      set({ item: fresh, context: { message: NEW_MESSAGE, action: ready ? { label: 'Use the new suggestion', run: useSuggestion } : null } });
     } else {
       set({ item: fresh, itemState: 'ready' });
     }
+  }
+
+  // "Use the new suggestion": the typed text goes, on the server too (an edit that is the suggestion
+  // as written is kept as none), so no poll brings it back; a poll already on its way is not taken.
+  function useSuggestion() {
+    autosave.drop();
+    listSeq++;
+    const d = state.item && state.item.draft;
+    set({ item: d ? { ...state.item, draft: { ...d, edited: null, editedAt: null } } : state.item, typed: null, context: null, save: { state: 'idle', at: null } });
+    if (d && d.status === 'ready') api('/api/drafts/' + d.id + '/edit', { text: d.reply || '' }).catch((e) => toast(e.message));
   }
 
   /** The newest messages as the server sent them, with the older ones already loaded put back in front. */
@@ -266,7 +273,8 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     try {
       const { item } = await api(itemPath(key));
       if (key !== state.key) return;
-      set({ item, itemState: 'ready', typed: null, context: null });
+      // Another suggestion in the box: the save note was for the text there, saved with its own one.
+      set({ item, itemState: 'ready', typed: null, context: null, save: { state: 'idle', at: null } });
       if (id && !item.draft) await write({ message: id });
     } catch (e) { toast(e.message); }
   }

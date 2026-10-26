@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStore } from '../web/new/js/store.js';
-import { mainAction } from '../web/new/js/model.js';
+import { mainAction, boxText } from '../web/new/js/model.js';
 import { settle, fakeTimers, setup, draft, row, paths } from './support/newpage-fakes.js';
 
 test('a write in flight is known by its key until it ends, even when it fails', async () => {
@@ -271,4 +271,75 @@ test('an empty box tells the server nothing on copy', async () => {
   a.store.actions.type('   ');
   await a.store.actions.copy({});
   assert.equal(a.calls.some((c) => c.path.endsWith('/copied')), false);
+});
+
+test('"Use the new suggestion" stays used: the server forgets the typed text, so the next poll shows the suggestion', async () => {
+  const a = setup();
+  await a.store.actions.open('c:1');
+  a.store.actions.type('My own words');
+  await a.timers.advance(700);
+  // The customer wrote again: a new suggestion, while the typed text stays.
+  a.data.items['c:1'] = { key: 'c:1', anchor: 'a-new', phone: '0491 570 101', draft: draft(12, { reply: 'New suggestion' }) };
+  await a.store.actions.refresh();
+  a.store.actions.type('My own words, more');
+  await a.timers.advance(700);
+  assert.equal(a.data.items['c:1'].draft.edited, 'My own words, more', 'the typing went on with the new suggestion');
+  a.store.actions.type('My own words, more still');
+  a.store.get().context.action.run();
+  assert.equal(boxText(a.store.get().item.draft), 'New suggestion', 'at once');
+  await a.timers.advance(5000);
+  const edits = a.calls.filter((c) => c.path.endsWith('/edit'));
+  assert.deepEqual([edits.at(-1).path, edits.at(-1).body], ['/api/drafts/12/edit', { text: 'New suggestion' }]);
+  assert.equal(edits.some((c) => c.body.text === 'My own words, more still'), false, 'the edit waiting went with the typed text');
+  await a.store.actions.refresh();
+  const s = a.store.get();
+  assert.equal(s.typed, null);
+  assert.equal(boxText(s.item.draft), 'New suggestion');
+  assert.equal(s.context, null);
+  assert.deepEqual(s.save, { state: 'idle', at: null });
+});
+
+test('an Instead option chosen while typing leaves no "Saving…" behind, and the typing is kept with its own suggestion', async () => {
+  const a = setup();
+  a.data.items['c:1'] = { key: 'c:1', anchor: 'a-c:1', phone: '0491 570 101', draft: draft(11), template: '', templates: [{ id: 't1', label: 'Price' }] };
+  await a.store.actions.open('c:1');
+  a.store.actions.type('My edit');
+  a.data.items['c:1'] = { ...a.data.items['c:1'], draft: draft(21, { reply: 'Template reply' }), template: 't1' };
+  await a.store.actions.instead('t1');
+  assert.deepEqual(a.store.get().save, { state: 'idle', at: null });
+  await a.timers.advance(5000);
+  assert.equal(a.store.get().item.draft.id, 21);
+  assert.deepEqual(a.store.get().save, { state: 'idle', at: null });
+  assert.deepEqual(a.calls.filter((c) => c.path.endsWith('/edit')).map((c) => [c.path, c.body.text]), [['/api/drafts/11/edit', 'My edit']]);
+});
+
+test('a poll that swaps the suggestion before or during a save leaves no "Saving…" behind', async () => {
+  // Before: the save goes out after the new suggestion arrived.
+  const a = setup();
+  await a.store.actions.open('c:1');
+  a.store.actions.type('Mine');
+  a.data.items['c:1'] = { ...a.data.items['c:1'], anchor: 'a-new', draft: draft(12, { reply: 'Newer' }) };
+  await a.store.actions.refresh();
+  await a.timers.advance(600);
+  assert.equal(a.store.get().typed, 'Mine');
+  assert.deepEqual(a.store.get().save, { state: 'idle', at: null });
+  // During: the save is on its way when the new suggestion arrives.
+  let release = null;
+  let item = { key: 'c:1', anchor: 'a', draft: { id: 1, status: 'ready', reply: 'Old', edited: null, checks: [] } };
+  const api = async (path, body) => {
+    if (path.endsWith('/edit')) { await new Promise((r) => { release = r; }); return {}; }
+    return body === undefined && path.startsWith('/api/items?') ? { items: [], counts: {} } : { item };
+  };
+  const timers = fakeTimers();
+  const store = createStore({ api, clipboard: {}, storage: { getItem: () => null, setItem() {} }, now: () => 5, timers, keepalive() {} });
+  await store.actions.open('c:1');
+  store.actions.type('Mine');
+  await timers.advance(600);
+  assert.ok(release, 'the save is on its way');
+  item = { key: 'c:1', anchor: 'b', draft: { id: 2, status: 'ready', reply: 'New', edited: null, checks: [] } };
+  await store.actions.refresh();
+  assert.equal(store.get().item.draft.id, 2);
+  release();
+  await settle();
+  assert.deepEqual(store.get().save, { state: 'idle', at: null });
 });
