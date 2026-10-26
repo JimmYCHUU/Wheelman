@@ -706,10 +706,11 @@ What to know:
 A new page is being built beside this one, at http://127.0.0.1:3210/new/. The old page has a
 quiet link, **Try the new page**, next to the cog. For now the new page covers the Dashboard
 texts: the list (Needs reply, Follow-ups and All), the open conversation, and the message box
-with its fill-in blanks, **Instead**, **Tell Wheelman just this once**, and **Copy** with **Undo**.
-Marketplace, Imports and Auction are tabs on the new page too, but each shows a line and a link
-to that section on the old page. The old page stays at the normal address until the switch-over,
-and nothing about it has changed. The new page is built from `prototype/`.
+with its fill-in blanks, **Instead**, the "Tell Wheelman what to say…" line, and **Copy**, with
+**Put back in Needs reply**. Marketplace, Imports and Auction are tabs on the new page too, but
+each shows a line and a link to that section on the old page. The old page stays at the normal
+address until the switch-over, and nothing else about it has changed. The new page is built from
+`prototype/`.
 
 ### The top bar
 
