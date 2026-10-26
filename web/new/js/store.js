@@ -3,6 +3,7 @@
 import { boxText } from './model.js';
 
 const DONE_KEY = 'wheelman.new.done';
+const DONE_AT_KEY = 'wheelman.new.doneAt';
 const COPY_FAILED = 'Could not copy. Select the text and copy it yourself.';
 const NEW_MESSAGE = 'New message from the customer. Your text is kept.';
 
@@ -19,19 +20,21 @@ export function waitingCount(s) {
 }
 
 export function createStore({ api, clipboard, storage, now, timers, keepalive }) {
-  const readDone = () => {
-    try { const v = JSON.parse(storage.getItem(DONE_KEY)); return v && typeof v === 'object' ? v : {}; } catch { return {}; }
+  const read = (k) => {
+    try { const v = JSON.parse(storage.getItem(k)); return v && typeof v === 'object' ? v : {}; } catch { return {}; }
   };
   let state = {
     section: 'dashboard', chip: 'waiting', rows: [], total: 0, counts: {}, unread: {}, listState: 'loading', listError: '',
     limit: 20, key: null, item: null, itemState: 'idle', typed: null, save: { state: 'idle', at: null },
-    overridden: false, done: readDone(), status: null, toast: null, context: null,
+    overridden: false, done: read(DONE_KEY), doneAt: read(DONE_AT_KEY), status: null, toast: null, context: null,
+    writing: null,
   };
   const listeners = new Set();
   const set = (patch) => { state = { ...state, ...patch }; for (const fn of [...listeners]) fn(); };
 
   // Things the UI has no need to see.
   let followupId = null;          // the follow-up the open conversation was opened from
+  let picked = null;              // the answer picked from "Instead:" ('' a reply to what they wrote), null for none
   let pending = null;             // { id, text }: an edit waiting to be sent
   let saveTimer = null;
   let toastTimer = null;
@@ -41,12 +44,22 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
   let openSeq = 0;
   let olderLoaded = 0;            // messages in front of the newest ones, from Load older messages
   let listSeq = 0;
+  let writeSeq = 0;
 
   const text = () => (state.typed !== null ? state.typed : boxText(state.item && state.item.draft));
 
-  function saveDone(done) {
-    set({ done });
-    try { storage.setItem(DONE_KEY, JSON.stringify(done)); } catch { /* storage may be blocked */ }
+  /** How the open conversation is asked for: with the answer picked and the follow-up in hand. */
+  const itemPath = (key) => {
+    const q = [picked !== null ? 'message=' + encodeURIComponent(picked) : '', followupId ? 'followup=' + followupId : ''].filter(Boolean).join('&');
+    return '/api/items/' + key + (q ? '?' + q : '');
+  };
+
+  function saveDone(done, doneAt) {
+    set({ done, doneAt });
+    try {
+      storage.setItem(DONE_KEY, JSON.stringify(done));
+      storage.setItem(DONE_AT_KEY, JSON.stringify(doneAt));
+    } catch { /* storage may be blocked */ }
   }
 
   function toast(message, action = null) {
@@ -73,8 +86,10 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
   }
 
   function type(value) {
-    set({ typed: String(value ?? '') });
+    const typed = String(value ?? '');
     const id = state.item && state.item.draft && state.item.draft.id;
+    // "Saving…" from the first key: the save itself waits for a pause in the typing.
+    set(id ? { typed, save: { state: 'saving', at: state.save.at } } : { typed });
     timers.clear(saveTimer);
     if (!id) { pending = null; return; }
     const edit = { id, text: state.typed };
@@ -153,7 +168,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     const key = state.key;
     if (!key || state.itemState === 'loading') return;
     try {
-      const { item } = await api('/api/items/' + key + (followupId ? '?followup=' + followupId : ''));
+      const { item } = await api(itemPath(key));
       const whole = item && key === state.key ? await withOlder(item) : item;
       if (key === state.key && seq === listSeq && whole) takeItem(whole);
     } catch { /* the conversation on screen stays as it was */ }
@@ -164,6 +179,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     if (holdKey && holdKey !== key) await release();
     const seq = ++openSeq;
     followupId = followup || null;
+    picked = null;
     olderLoaded = 0;
     set({ key, item: null, itemState: 'loading', typed: null, overridden: false, context: null, save: { state: 'idle', at: null } });
     try {
@@ -205,19 +221,29 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
 
   // ---- writing
 
+  /** The template in the box, which a write keeps unless told otherwise (none: a reply to what they wrote). */
+  const templateInHand = (item) => (item && item.templates && item.templates.length && item.template) || undefined;
+
   async function write({ instruction, message, followup } = {}) {
     const key = state.key;
     if (!key) return;
     timers.clear(saveTimer);
     pending = null;
+    // A follow-up written from here is the one in hand from now on, so a refresh asks for it.
+    if (followup) followupId = followup;
     const fu = followup !== undefined ? followup : followupId || undefined;
+    const msg = message !== undefined ? message : templateInHand(state.item);
+    const seq = ++writeSeq;
+    set({ writing: key, save: { state: 'idle', at: null } });
     try {
-      const out = await api('/api/items/' + key + '/draft', { instruction, message, followup: fu });
+      const out = await api('/api/items/' + key + '/draft', { instruction, message: msg, followup: fu });
       if (key !== state.key) return;
       if (out.item) set({ item: out.item, itemState: 'ready', typed: null, context: null });
       if (out.error) toast(out.error);
     } catch (e) {
       if (key === state.key) toast(e.message);
+    } finally {
+      if (seq === writeSeq) set({ writing: null });
     }
   }
 
@@ -226,9 +252,10 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
   async function instead(id) {
     const key = state.key;
     if (!key) return;
-    const q = [id ? 'message=' + encodeURIComponent(id) : '', followupId ? 'followup=' + followupId : ''].filter(Boolean).join('&');
+    // The pick is asked for by name, '' too: without it the server shows the newest suggestion.
+    picked = id || '';
     try {
-      const { item } = await api('/api/items/' + key + (q ? '?' + q : ''));
+      const { item } = await api(itemPath(key));
       if (key !== state.key) return;
       set({ item, itemState: 'ready', typed: null, context: null });
       if (id && !item.draft) await write({ message: id });
@@ -247,11 +274,45 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     const { key, item } = state;
     if (!item) return;
     const value = text();
+    const fu = /^fu:(\d+)$/.exec(item.anchor || '');
     await copyText(value, async () => {
       if (item.draft) { try { await api('/api/drafts/' + item.draft.id + '/copied', { text: value }); } catch { /* the copy itself worked */ } }
-      saveDone({ ...state.done, [key]: item.anchor });
-      toast('Copied', { label: 'Put back in Needs reply', run: () => { const d = { ...state.done }; delete d[key]; saveDone(d); } });
+      saveDone({ ...state.done, [key]: item.anchor }, { ...state.doneAt, [key]: now() });
+      // A follow-up leaves Follow-ups on the server once it is copied, so it is put back there.
+      toast('Copied', fu
+        ? { label: 'Put back in Follow-ups', run: () => restoreFollowUp(Number(fu[1]), key) }
+        : { label: 'Put back in Needs reply', run: () => putBack(key) });
     });
+  }
+
+  /** The row copied from this conversation goes back in Needs reply (nothing changes on the server). */
+  function putBack(key = state.key) {
+    const done = { ...state.done };
+    const doneAt = { ...state.doneAt };
+    delete done[key];
+    delete doneAt[key];
+    saveDone(done, doneAt);
+  }
+
+  /** Undo for Dismiss: the conversation is waiting again. */
+  async function restore(key = state.key) {
+    if (!key) return;
+    try {
+      const back = await api('/api/items/' + key + '/restore', {});
+      if (back.item && key === state.key) set({ item: back.item });
+      await refresh();
+    } catch (e) { toast(e.message); }
+  }
+
+  /** A follow-up copied or dismissed is due again, and the row copied from it is no longer done. */
+  async function restoreFollowUp(id = state.item && state.item.followUp && state.item.followUp.id, key = state.key) {
+    if (!id) return;
+    try {
+      const back = await api('/api/followups/' + id + '/restore', {});
+      if (back.item && key === state.key) set({ item: back.item });
+      if (state.done[key] !== undefined) putBack(key);
+      await refresh();
+    } catch (e) { toast(e.message); }
   }
 
   async function copyNumber() {
@@ -286,9 +347,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     try {
       const out = await api('/api/items/' + key + '/dismiss', {});
       if (out.item && key === state.key) set({ item: out.item });
-      toast('Dismissed', { label: 'Undo', run: async () => {
-        try { const back = await api('/api/items/' + key + '/restore', {}); if (back.item && key === state.key) set({ item: back.item }); await refresh(); } catch (e) { toast(e.message); }
-      } });
+      toast('Dismissed', { label: 'Undo', run: () => restore(key) });
       await refresh();
     } catch (e) { toast(e.message); }
   }
@@ -300,9 +359,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     try {
       const out = await api('/api/followups/' + fu.id + '/dismiss', {});
       if (out.item && key === state.key) set({ item: out.item });
-      toast('Follow-up dismissed', { label: 'Undo', run: async () => {
-        try { const back = await api('/api/followups/' + fu.id + '/restore', {}); if (back.item && key === state.key) set({ item: back.item }); await refresh(); } catch (e) { toast(e.message); }
-      } });
+      toast('Follow-up dismissed', { label: 'Undo', run: () => restoreFollowUp(fu.id, key) });
       await refresh();
     } catch (e) { toast(e.message); }
   }
@@ -312,6 +369,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     actions: {
       boot, refresh, setChip, more, open, type, flush, write, tell, holdTell, instead, copy, copyNumber, copyEmail, older, dismiss, dismissFollowUp,
+      putBack, restore, restoreFollowUp,
       clear: () => type(''),
       bringBack: () => type((state.item && state.item.draft && state.item.draft.reply) || ''),
       override: () => set({ overridden: true }),

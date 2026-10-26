@@ -1,5 +1,4 @@
 // The page: the top bar, then the work grid (the list, the conversation, the message box) and the toast.
-// Tasks 5, 6 and 7 mount their parts in the three marked slots.
 import { html, useState, useEffect } from './html.js';
 import { SECTIONS } from '../model.js';
 import { parseRoute, hashFor } from '../route.js';
@@ -7,6 +6,7 @@ import { TopBar } from './topbar.js';
 import { Toast } from './toast.js';
 import { List } from './list.js';
 import { Conversation } from './conversation.js';
+import { MessageBox } from './messagebox.js';
 
 function useStore(store) {
   const [, redraw] = useState(0);
@@ -47,7 +47,7 @@ export function App({ store, now = Date.now }) {
           </section>
           <section class="tile chat" aria-label="Conversation">
             <${Conversation} state=${state} actions=${store.actions} now=${now()} />
-            <div class="box-area"></div>
+            <${MessageBox} state=${state} actions=${store.actions} />
           </section>
         </main>`
       : html`<main class="work" data-view="list">

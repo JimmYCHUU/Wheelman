@@ -14,9 +14,25 @@ import { pointConfigAt } from './wire.js';
 const PORT = 3211;
 applyTestEnv({ DAILY_DRAFT_LIMIT: '200' });
 
-// The stand-in model answers every draft with a plain reply that leaves one price blank.
+// The stand-in model answers a draft with a plain reply that leaves one price blank. A follow-up
+// gets one that names Carbarn first, as the follow-up checks want; a draft written from Tell
+// Wheelman gets a shorter one, so the rewrite shows. Two instructions are for seeing the rarer
+// states: "fail this one" makes the model fail, and "use a wrong figure" gives a price that is not
+// in the records, so the check fails.
+const said = (req) => (req.messages || []).map((m) => String(m.content || '')).join('\n');
 const ai = aiBehaviour({
-  behave: () => ({ reply: 'Thanks for your message. The price is [PRICE?], and we can book you in to see it.', needs_human: [{ marker: '[PRICE?]', reason: 'A person decides the price.' }], facts_used: [], hold: false }),
+  behave: (req) => {
+    const prompt = said(req);
+    const told = /=== INSTRUCTION FROM OUR STAFF FOR THIS DRAFT ===/.test(prompt);
+    if (told && /fail this one/i.test(prompt)) return { status: 503, message: 'The model is overloaded.' };
+    if (told && /use a wrong figure/i.test(prompt)) return { reply: 'The price is $31,990, and we can book you in to see it.', needs_human: [], facts_used: [], hold: false };
+    // A template to fit to the customer (between <<< and >>>) comes back as it is, as in the tests.
+    const template = prompt.match(/<<<\n([\s\S]*?)\n>>>/);
+    if (template) return { reply: template[1], next_step: '', needs_human: [], facts_used: [], hold: false };
+    if (/=== FOLLOW-UP ===/.test(prompt)) return { reply: 'Team Carbarn here. How did you find the Hiace? You are welcome to come and see it again.', needs_human: [], facts_used: [], hold: false };
+    if (told) return { reply: 'The price is [PRICE?]. When would you like to come and see it?', needs_human: [{ marker: '[PRICE?]', reason: 'A person decides the price.' }], facts_used: [], hold: false };
+    return { reply: 'Thanks for your message. The price is [PRICE?], and we can book you in to see it.', needs_human: [{ marker: '[PRICE?]', reason: 'A person decides the price.' }], facts_used: [], hold: false };
+  },
 });
 const standins = await startStandins({ world: world(Date.now()), ai });
 const { config } = await import('../../src/config.js');

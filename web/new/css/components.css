@@ -28,6 +28,9 @@
   .btn.quiet { border-color: transparent; background: transparent; color: var(--ink-2); }
   .btn.quiet:hover { background: var(--surface-quiet); color: var(--ink); }
   .btn.small { height: 28px; padding: 0 var(--s-3); font-size: var(--fs-13); }
+  .btn.main { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .btn.main:hover { background: var(--accent); opacity: 0.9; }
+  .btn:disabled, .btn:disabled:hover { opacity: 0.55; cursor: not-allowed; transform: none; }
   .menu { position: absolute; top: calc(100% + var(--s-1)); right: 0; z-index: 40; min-width: 240px; padding: var(--s-2); background: var(--surface); border-radius: var(--r-box); box-shadow: var(--shadow-2); }
   .menu h2 { margin: 0; padding: var(--s-2) var(--s-3) var(--s-1); font-size: var(--fs-12); font-weight: var(--fw-semi); color: var(--ink-2); }
   .menu button, .menu a { display: flex; align-items: center; gap: var(--s-2); width: 100%; min-height: var(--control); padding: 0 var(--s-3); border: 0; border-radius: var(--r-bubble); background: none; color: var(--ink); text-align: left; text-decoration: none; font-weight: var(--fw-semi); }

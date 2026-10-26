@@ -94,6 +94,8 @@
     --list-w: 340px;
     --panel-w: 360px;
     --page-edge: 16px;
+    --edit-edge: 1.5px;
+    --tell-w: 240px;
   }
 
   @media (max-width: 899px) {
