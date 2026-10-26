@@ -40,7 +40,7 @@ function allowedMaterial(item, prompt) {
   return {
     // The research for an import email is ours to state: its figures and links came from our website.
     // The car's media links the customer asked for are ours too: they came from the car's own record.
-    trusted: [prompt.vehicleText, alts, booking, (prompt.media?.links || []).map((l) => l.url).join('\n'), prompt.sameModelUrl || '', (prompt.importUrls || []).join('\n'), prompt.researchText || '', ours, prompt.user.split('=== VEHICLE FACTS ===')[0]].join('\n'),
+    trusted: [prompt.vehicleText, alts, booking, (prompt.media?.links || []).map((l) => l.url).join('\n'), prompt.sameModelUrl || '', `${config.site.baseUrl}/used-cars`, (prompt.importUrls || []).join('\n'), prompt.researchText || '', ours, prompt.user.split('=== VEHICLE FACTS ===')[0]].join('\n'),
     policy: [prompt.businessFactsText, prompt.websiteText].join('\n'),
     customer: [theirs, prompt.unconfirmedText || ''].join('\n'),
   };
