@@ -6,6 +6,40 @@
   .list-col, .chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
   .chat-body { flex: 1; min-height: 0; overflow: auto; padding: var(--s-4); }
   .box-area { flex: none; padding: var(--s-4); }
+
+  /* the conversation */
+  .chat-head { flex: none; display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4); border-bottom: 1px solid var(--line); }
+  .chat-head .title { min-width: 0; flex: 1; }
+  .chat-head .name { margin: 0; font-weight: var(--fw-bold); font-size: var(--fs-16); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-head .line2 { font-size: var(--fs-12); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .back { display: none; }
+  .menu-wrap { position: relative; flex: none; }
+  .menu-text { display: grid; }
+  .menu-text small { font-size: var(--fs-12); font-weight: var(--fw-medium); color: var(--ink-2); }
+  .carstrip { flex: none; display: flex; align-items: center; gap: var(--s-3); padding: var(--s-2) var(--s-4); border-bottom: 1px solid var(--line); }
+  .carstrip .info { min-width: 0; flex: 1; font-size: var(--fs-13); }
+  .carstrip .info div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .carstrip .note { color: var(--ink-3); }
+  .carstrip .facts { color: var(--ink-2); }
+  .carstrip a.btn { text-decoration: none; color: var(--ink); }
+  .thread { flex: 1; min-height: 0; overflow-y: auto; padding: var(--s-4) var(--s-4) var(--s-2); display: flex; flex-direction: column; gap: var(--s-2); }
+  .day { align-self: center; font-size: var(--fs-12); color: var(--ink-3); background: var(--surface-quiet); padding: var(--s-hair) var(--s-3); border-radius: var(--r-pill); margin: var(--s-2) 0; }
+  .bubble { max-width: min(78%, 560px); padding: var(--s-2) var(--s-3); border-radius: var(--r-bubble); white-space: pre-wrap; overflow-wrap: anywhere; display: flex; flex-direction: column; gap: var(--s-1); }
+  .bubble.them { align-self: flex-start; background: var(--surface-quiet); border-bottom-left-radius: var(--r-tag); }
+  .bubble.us { align-self: flex-end; background: var(--accent-soft); border-bottom-right-radius: var(--r-tag); }
+  .bubble.auto { align-self: flex-end; background: var(--surface); border: 1px dashed var(--line-strong); border-bottom-right-radius: var(--r-tag); }
+  .bubble .from { font-size: var(--fs-12); font-weight: var(--fw-bold); color: var(--ink-2); }
+  .bubble.us .from, .bubble.auto .from { text-align: right; }
+  .bubble .by { font-size: var(--fs-12); color: var(--ink-3); }
+  .bubble.us .by, .bubble.auto .by { text-align: right; }
+  .bubble .media { font-style: italic; color: var(--ink-2); }
+  .photo-link { display: block; }
+  .photo { display: block; max-width: 100%; max-height: 240px; border-radius: var(--r-tag); }
+  .pill { align-self: center; font-size: var(--fs-12); color: var(--ink-2); background: var(--surface-quiet); border-radius: var(--r-pill); padding: var(--s-1) var(--s-3); text-align: center; max-width: 90%; overflow-wrap: anywhere; }
+  .pill .when { margin-left: var(--s-2); color: var(--ink-3); }
+  .pill.note { background: var(--warn-soft); color: var(--warn); }
+  .more-older { align-self: center; flex: none; }
+  .more-older .num { color: var(--ink-3); font-weight: var(--fw-medium); }
   .empty { margin: 0; text-align: center; padding: var(--s-6); color: var(--ink-2); }
   .empty a { display: inline-block; margin-top: var(--s-2); }
 
@@ -52,6 +86,9 @@
     .status { order: 6; flex-basis: 100%; }
     .tab { padding: 0 var(--s-3); }
     .chip { min-height: var(--touch); }
+    .back { display: inline-flex; }
+    .chat-head { gap: var(--s-2); padding: var(--s-2); }
+    .bubble { max-width: 86%; }
     .work { grid-template-columns: minmax(0, 1fr); }
     .work > .list-col, .work > .chat { display: none; }
     .work[data-view="list"] > .list-col { display: flex; }

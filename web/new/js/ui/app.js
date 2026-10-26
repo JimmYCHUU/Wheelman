@@ -6,6 +6,7 @@ import { parseRoute, hashFor } from '../route.js';
 import { TopBar } from './topbar.js';
 import { Toast } from './toast.js';
 import { List } from './list.js';
+import { Conversation } from './conversation.js';
 
 function useStore(store) {
   const [, redraw] = useState(0);
@@ -45,7 +46,7 @@ export function App({ store, now = Date.now }) {
             <${List} state=${state} actions=${store.actions} now=${now()} section=${section.id} />
           </section>
           <section class="tile chat" aria-label="Conversation">
-            <div class="chat-body"></div>
+            <${Conversation} state=${state} actions=${store.actions} now=${now()} />
             <div class="box-area"></div>
           </section>
         </main>`

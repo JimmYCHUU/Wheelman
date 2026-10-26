@@ -45,6 +45,8 @@ function setup(over = {}) {
     if (body === undefined) {
       if (path === '/api/status') return { missing: [], lastSync: { ok: true, at: 0 } };
       if (path.startsWith('/api/items?')) return { items: data.rows, total: data.rows.length, counts: data.counts, unread: { dashboard: 2 }, sections: {}, section: 'dashboard' };
+      const t = path.match(/^\/api\/items\/[^/]+\/thread\?shown=(\d+)&limit=(\d+)$/);
+      if (t) return data.thread(Number(t[1]), Number(t[2]));
       const m = path.match(/^\/api\/items\/([^?]+)/);
       if (m) return { item: data.items[m[1]] };
     }
@@ -405,4 +407,51 @@ test('waitingCount subtracts only waiting rows that were copied, whatever the ch
   await a.store.actions.open('c:1');
   await a.store.actions.copy({});
   assert.equal(waitingCount(a.store.get()), 1);
+});
+
+const msgs = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => ({ key: 'm:' + (from + i), who: 'customer', text: 'Message ' + (from + i), at: 1000 + from + i }));
+
+test('older puts the earlier messages in front, counts what is shown, and keeps them across a refresh', async () => {
+  const a = setup();
+  a.data.items['c:1'] = { ...a.data.items['c:1'], thread: msgs(41, 60), earlier: 40 };
+  const asked = [];
+  // The thread route of the fake server: the 20 before what is shown.
+  a.data.thread = (shown, limit) => { asked.push([shown, limit]); const end = 60 - shown; return { thread: msgs(Math.max(1, end - limit + 1), end), earlier: Math.max(0, end - limit) }; };
+  await a.store.actions.open('c:1');
+  await a.store.actions.older();
+  assert.deepEqual(asked, [[20, 20]]);
+  assert.equal(a.calls.at(-1).path, '/api/items/c:1/thread?shown=20&limit=20');
+  assert.equal(a.store.get().item.thread.length, 40);
+  assert.equal(a.store.get().item.thread[0].key, 'm:21');
+  assert.equal(a.store.get().item.earlier, 20);
+  // Twenty more, then the next ask counts all forty.
+  await a.store.actions.older();
+  assert.deepEqual(asked[1], [40, 20]);
+  assert.equal(a.store.get().item.earlier, 0);
+  // A refresh brings the newest twenty again; the older ones stay in front, and nothing is twice.
+  await a.store.actions.refresh();
+  const thread = a.store.get().item.thread;
+  assert.equal(thread.length, 60);
+  assert.deepEqual(thread.map((m) => m.key).slice(0, 2), ['m:1', 'm:2']);
+  assert.equal(new Set(thread.map((m) => m.key)).size, 60);
+  assert.equal(a.store.get().item.earlier, 0);
+});
+
+test('older does nothing without an open conversation, and a failure is told in a toast', async () => {
+  const a = setup();
+  await a.store.actions.older();
+  assert.deepEqual(paths(a.calls), []);
+  await a.store.actions.open('c:1');
+  a.data.fail.add('/thread');
+  await a.store.actions.older();
+  assert.equal(a.store.get().toast.message, 'Network down');
+});
+
+test('copyEmail copies the address and says so', async () => {
+  const a = setup();
+  a.data.items['c:1'] = { ...a.data.items['c:1'], email: 'sam@example.com' };
+  await a.store.actions.open('c:1');
+  await a.store.actions.copyEmail();
+  assert.deepEqual(a.written, ['sam@example.com']);
+  assert.equal(a.store.get().toast.message, 'Email copied');
 });

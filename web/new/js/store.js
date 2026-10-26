@@ -39,6 +39,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
   let holdKey = null;
   let holdTimer = null;
   let openSeq = 0;
+  let olderLoaded = 0;            // messages in front of the newest ones, from Load older messages
   let listSeq = 0;
 
   const text = () => (state.typed !== null ? state.typed : boxText(state.item && state.item.draft));
@@ -128,6 +129,16 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     }
   }
 
+  /** The newest messages as the server sent them, with the older ones already loaded put back in front. */
+  async function withOlder(fresh) {
+    if (!olderLoaded || !fresh.thread) return fresh;
+    try {
+      const out = await api('/api/items/' + fresh.key + '/thread?shown=' + fresh.thread.length + '&limit=' + olderLoaded);
+      const have = new Set(fresh.thread.map((m) => m.key));
+      return { ...fresh, thread: [...out.thread.filter((m) => !have.has(m.key)), ...fresh.thread], earlier: out.earlier };
+    } catch { return fresh; }
+  }
+
   async function refresh() {
     const seq = ++listSeq;
     try {
@@ -143,7 +154,8 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     if (!key || state.itemState === 'loading') return;
     try {
       const { item } = await api('/api/items/' + key + (followupId ? '?followup=' + followupId : ''));
-      if (key === state.key && seq === listSeq && item) takeItem(item);
+      const whole = item && key === state.key ? await withOlder(item) : item;
+      if (key === state.key && seq === listSeq && whole) takeItem(whole);
     } catch { /* the conversation on screen stays as it was */ }
   }
 
@@ -152,6 +164,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     if (holdKey && holdKey !== key) await release();
     const seq = ++openSeq;
     followupId = followup || null;
+    olderLoaded = 0;
     set({ key, item: null, itemState: 'loading', typed: null, overridden: false, context: null, save: { state: 'idle', at: null } });
     try {
       const { item } = await api('/api/items/' + key + (followup ? '?followup=' + followup : ''));
@@ -247,6 +260,26 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     await copyText(number, () => toast('Number copied'));
   }
 
+  async function copyEmail() {
+    const address = state.item && state.item.email;
+    if (!address) return;
+    await copyText(address, () => toast('Email copied'));
+  }
+
+  /** Load older messages: the twenty before the ones shown, put in front. */
+  async function older() {
+    const { key, item } = state;
+    if (!key || !item) return;
+    try {
+      const out = await api('/api/items/' + key + '/thread?shown=' + (item.thread || []).length + '&limit=20');
+      if (key !== state.key || !state.item) return;
+      const have = new Set((state.item.thread || []).map((m) => m.key));
+      const fresh = (out.thread || []).filter((m) => !have.has(m.key));
+      olderLoaded += fresh.length;
+      set({ item: { ...state.item, thread: [...fresh, ...(state.item.thread || [])], earlier: out.earlier || 0 } });
+    } catch (e) { toast(e.message); }
+  }
+
   async function dismiss() {
     const key = state.key;
     if (!key) return;
@@ -278,7 +311,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     get: () => state,
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     actions: {
-      boot, refresh, setChip, more, open, type, flush, write, tell, holdTell, instead, copy, copyNumber, dismiss, dismissFollowUp,
+      boot, refresh, setChip, more, open, type, flush, write, tell, holdTell, instead, copy, copyNumber, copyEmail, older, dismiss, dismissFollowUp,
       clear: () => type(''),
       bringBack: () => type((state.item && state.item.draft && state.item.draft.reply) || ''),
       override: () => set({ overridden: true }),
