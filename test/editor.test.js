@@ -101,7 +101,7 @@ test('Good reply approves the text as it stands, changes and all, and the approv
 
   // A similar message from someone else: the owner's version is shown as the model, as a correction.
   const other = customer(3, 'Kim', 'Are you open on Sunday? I want to look at a people mover.');
-  const asked = promptModule.buildPrompt(items.itemFromKey(other), { now }).user;
+  const asked = promptModule.buildPrompt(items.itemFromKey(other), { now: Date.now() }).user;
   assert.match(asked, /Corrected by the owner and approved, for a similar message/);
   assert.match(asked, /You wrote: Hello[^\n]*Yes, we are open on Sunday\.\n  The owner changed it to: Hi[^\n]*Send us a text before you come/);
   assert.match(asked, /Handle this one the way the owner's version does/);

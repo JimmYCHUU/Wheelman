@@ -63,6 +63,44 @@ export function operationsGuide(file = knowledgeFile('how-carbarn-works')) {
   return (cut === -1 ? raw : raw.slice(cut + 4)).trim();
 }
 
+/**
+ * The compact style's business facts: the core topics always, then the few topics whose words
+ * match the message (a title word counts double). Same lines as businessFactsForPrompt writes.
+ * A topic with no confirmed answer is never included.
+ */
+export function relevantFacts(query, { max = 5, core = ['address', 'opening hours', 'holding deposit'], topics = loadBusinessFacts() } = {}) {
+  const usable = topics.filter((t) => t.status !== 'needs_answer');
+  const line = (t) => `- ${t.title}: ${t.answer.replace(/\n+/g, ' ')}`;
+  const isCore = (t) => core.some((c) => t.title.toLowerCase().includes(c.toLowerCase()));
+  const q = new Set(words(query));
+  const ranked = [];
+  usable.forEach((t, order) => {
+    if (isCore(t)) return;
+    const head = new Set(words(t.title));
+    const body = new Set(words(t.answer));
+    let score = 0;
+    for (const w of q) { if (head.has(w)) score += 2; else if (body.has(w)) score += 1; }
+    if (score >= 2) ranked.push({ t, score, order });
+  });
+  ranked.sort((a, b) => b.score - a.score || a.order - b.order);
+  const picked = new Set([...usable.filter(isCore), ...ranked.slice(0, max).map((r) => r.t)]);
+  return usable.filter((t) => picked.has(t)).map(line).join('\n');
+}
+
+/** The compact style's paragraphs of the operations guide that share two or more words with the message. */
+export function relevantOperations(query, { max = 2, text = operationsGuide() } = {}) {
+  const q = new Set(words(query));
+  if (q.size < 2) return '';
+  const ranked = [];
+  String(text || '').replace(/\r/g, '').split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).forEach((p, order) => {
+    let score = 0;
+    for (const w of new Set(words(p))) if (q.has(w)) score++;
+    if (score >= 2) ranked.push({ p, score, order });
+  });
+  ranked.sort((a, b) => b.score - a.score || a.order - b.order);
+  return ranked.slice(0, max).map((r) => r.p).join('\n\n');
+}
+
 // ---- website pages -------------------------------------------------------
 //
 // Every page saved from carbarn.com.au is split into passages. For each customer message the few

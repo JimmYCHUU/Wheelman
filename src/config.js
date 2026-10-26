@@ -12,6 +12,8 @@ export const config = {
   dataDir: path.join(root, 'data'),
   rawDir: path.join(root, 'data', 'raw'),
   dbPath: env.DB_PATH || path.join(root, 'data', 'app.db'),
+  // Replay runs set this: no request goes to the dashboard, the content engine or the car-media addresses.
+  offline: env.OFFLINE === '1',
   // Photos from texts, fetched once and kept beside the database. Tests keep theirs in a temporary folder.
   mediaDir: env.MEDIA_DIR || (env.DB_PATH === ':memory:' ? path.join(os.tmpdir(), `wheelman-media-${process.pid}`) : path.join(path.dirname(env.DB_PATH || path.join(root, 'data', 'app.db')), 'media')),
   // Pictures from this computer itself (http://127.0.0.1): only the tests' stand-ins serve them.
@@ -116,6 +118,10 @@ export const config = {
     maxOutputTokens: 1500,
     dailyLimit: num(env.DAILY_DRAFT_LIMIT, 200),
     secondsBetween: num(env.SECONDS_BETWEEN_DRAFTS, 8),
+    // How much each request carries (src/prompt.js): 'full', the whole voice file and sales
+    // playbook, unless PROMPT_STYLE is 'compact', a short voice card and the advice for that message.
+    // Compact is used only for a plain reply to a text on the dashboard (styleFor in src/drafter.js).
+    promptStyle: env.PROMPT_STYLE === 'compact' ? 'compact' : 'full',
   },
 
   // Facebook Marketplace chats, read from the content engine. Read-only.

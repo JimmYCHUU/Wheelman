@@ -16,6 +16,7 @@ import { redact } from './redact.js';
 import { classify } from './situations.js';
 import { isAcknowledgement, wordCount, similarity } from './text.js';
 import { comparable } from './learn.js';
+import { sydneyDay } from './time.js';
 
 const DAY = 24 * 3600 * 1000;
 const BURST_MS = 15 * 60 * 1000;
@@ -138,12 +139,12 @@ const substance = (text) => wordCount(String(text || '').replace(/\{\{NAME\}\}/g
 let cache = { key: '', rows: [] };
 
 /** Rebuilt only when a message has arrived (on the dashboard or the phone), a text seen on the phone has grown, or a lead has changed. */
-function stamp(days) {
+function stamp(days, now) {
   const d = openDb();
   const m = d.prepare('SELECT COUNT(*) AS n, MAX(id) AS top FROM messages').get();
   const p = d.prepare('SELECT COUNT(*) AS n, MAX(id) AS top, COALESCE(SUM(LENGTH(text)), 0) AS len FROM phone_messages').get();
   const l = d.prepare('SELECT COUNT(*) AS n, MAX(updated_at) AS top FROM leads').get();
-  return `${days}|${m.n}|${m.top}|${p.n}|${p.top}|${p.len}|${l.n}|${l.top}`;
+  return `${days}|${sydneyDay(now)}|${m.n}|${m.top}|${p.n}|${p.top}|${p.len}|${l.n}|${l.top}`;
 }
 
 /**
@@ -151,7 +152,7 @@ function stamp(days) {
  * @returns [{ id, itemKey, at, situations, primary, firstReply, buyer, customer, reply, words, hadBlock }]
  */
 export function recentPractice({ days = PRACTICE_DAYS, now = Date.now() } = {}) {
-  const key = stamp(days);
+  const key = stamp(days, now);
   if (cache.key === key) return cache.rows;
   const since = now - days * DAY;
   const ex = loadExclusions();
@@ -223,7 +224,7 @@ const bag = (s) => new Set(String(s || '').toLowerCase().replace(/\[[^\]]*\]/g, 
 export function practiceFor(q, max = 3, now = Date.now()) {
   const want = bag(q.text);
   const scored = recentPractice({ now })
-    .filter((r) => r.itemKey !== q.excludeItemKey)
+    .filter((r) => r.itemKey !== q.excludeItemKey && r.at <= now)
     .map((r) => {
       let s = 0;
       if (r.primary === q.primary) s += 3;

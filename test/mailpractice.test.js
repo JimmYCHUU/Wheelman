@@ -132,8 +132,8 @@ test('what an email taught serves emails only, and what a text taught serves tex
   const emailNote = db.insertAdvice({ draftId: 503, itemKey: 'em:1', situations: ['import_sourcing'], firstReply: true, customerText: 'x', draftText: 'y', note: 'Always give the deposit band', lessons: [{ scope: 'import_sourcing', when: 'an import email', do: 'Give the deposit band.', internal: false }] });
   const smsNote = db.insertAdvice({ draftId: 504, itemKey: 'c:901', situations: ['import_sourcing'], firstReply: true, customerText: 'x', draftText: 'y', note: 'Keep it to two lines', lessons: [{ scope: 'any', when: 'any text', do: 'Keep it to two lines.', internal: false }] });
   assert.ok(emailNote && smsNote);
-  assert.deepEqual(learn.ownerGuidance(q('email'), now).lessons.map((l) => l.do), ['Give the deposit band.']);
-  assert.deepEqual(learn.ownerGuidance(q('sms'), now).lessons.map((l) => l.do), ['Keep it to two lines.']);
+  assert.deepEqual(learn.ownerGuidance(q('email'), Date.now()).lessons.map((l) => l.do), ['Give the deposit band.']);
+  assert.deepEqual(learn.ownerGuidance(q('sms'), Date.now()).lessons.map((l) => l.do), ['Keep it to two lines.']);
   for (const id of [501, 502, 503, 504]) db.deleteLearned(id);
   db.deleteAdvice(emailNote); db.deleteAdvice(smsNote);
 });

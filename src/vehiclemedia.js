@@ -294,6 +294,7 @@ export function replyLinks(media, vehicle, asked, { pageInBlock = false } = {}) 
  * the half-hour cache, and given up after `waitMs` so a slow dashboard never holds up a reply.
  */
 export async function mediaForReply(item, { waitMs = 5000 } = {}) {
+  if (config.offline) return null;
   const v = item?.vehicles?.[0];
   if (!v?.stockNo || !v.chassisNo) return null;
   const asked = askedFor(item.pendingText);

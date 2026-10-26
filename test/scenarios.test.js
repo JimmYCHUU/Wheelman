@@ -53,7 +53,7 @@ const lead = (id, conv, first, phone, extra = {}) => db.upsertLead({ id, convers
 const conv = (id, leadId, name, phone) => db.upsertConversation({ id, phone, channel: 'SMS', status: 'OPEN', leadId, customerName: name, latestDirection: 'IN', latestAt: now - MIN, latestBody: 'x' });
 const msg = (conversationId, direction, body, agoMs, extra = {}) => db.upsertMessage({ id: mid++, conversationId, direction, body, sentBy: direction === 'OUT' ? 'Dana' : null, status: 'SENT', mediaType: null, at: now - agoMs, importedAt: now - agoMs, ...extra });
 const item = (id) => items.buildItem({ conversationId: id });
-const ask = (id) => promptModule.buildPrompt(item(id), { now }).user;
+const ask = (id) => promptModule.buildPrompt(item(id), { now: Date.now() }).user; // rows taught during the test are dated after the test began
 const draft = async (id, ...replies) => {
   seen.length = 0;
   ai.script =replies.map((reply) => ({ reply, needs_human: /\[CHECK\?\]/.test(reply) ? [{ marker: '[CHECK?]', reason: 'A person must find it.' }] : /\[DATE\?\]/.test(reply) ? [{ marker: '[DATE?]', reason: 'A person must confirm the date.' }] : [], facts_used: [], hold: false }));

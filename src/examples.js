@@ -22,8 +22,9 @@ export function loadExamples() {
 /**
  * @param {object} q { situations: string[], primary, text, firstReply, excludeConversationId }
  */
-export function pickExamples(q, max = 6) {
-  const all = loadExamples().filter((e) => e.conversationId !== q.excludeConversationId);
+export function pickExamples(q, max = 6, now = Date.now()) {
+  // Only replies sent by `now`: a draft written for a past moment must not see later ones.
+  const all = loadExamples().filter((e) => e.conversationId !== q.excludeConversationId && (e.at || 0) <= now);
   if (!all.length) return [];
   const want = bag(q.text);
   const scored = all.map((e) => {

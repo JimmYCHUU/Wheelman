@@ -25,6 +25,7 @@ import { draftFor } from '../src/drafter.js';
 import { providers } from '../src/llm.js';
 import { redact, NAME_TOKEN } from '../src/redact.js';
 import { labelFor } from '../src/situations.js';
+import { isLiveDatabase } from '../src/livedb.js';
 
 // Every bracketed token in a judged turn stands for whatever was there: [NAME], [PHONE], [EMAIL],
 // [REGO], [ADDRESS], [NUMBER] and the rest, and a blank such as [PRICE?] matches itself anyway.
@@ -162,14 +163,8 @@ function oldLabels(file) {
   } catch { return new Map(); }
 }
 
-/**
- * True for the live layout: a file named app.db in a folder named data, the database the app keeps
- * open. The script runs on a copy only.
- */
-export function isLiveDatabase(dbPath) {
-  const full = path.resolve(String(dbPath || ''));
-  return path.basename(full).toLowerCase() === 'app.db' && path.basename(path.dirname(full)).toLowerCase() === 'data';
-}
+// The live-database check lives in src/livedb.js; re-exported for the tests that import it from here.
+export { isLiveDatabase };
 
 function idsFrom(args) {
   const after = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] || '' : null; };
