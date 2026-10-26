@@ -4,29 +4,14 @@ import { boxText } from './model.js';
 import { createAutosave } from './autosave.js';
 import { blanksIn } from '../../lib/blank.js';
 import { plural } from '../../lib/format.js';
+import { visibleRows, followUpOf, waitingCount } from './listview.js';
+
+export { visibleRows, followUpOf, waitingCount };
 
 const DONE_KEY = 'wheelman.new.done';
 const DONE_AT_KEY = 'wheelman.new.doneAt';
 const COPY_FAILED = 'Could not copy. Select the text and copy it yourself.';
 const NEW_MESSAGE = 'New message from the customer. Your text is kept.';
-
-/** Needs reply hides the rows just copied (until the customer writes again and the anchor changes). */
-export function visibleRows(s) {
-  if (s.chip !== 'waiting') return s.rows;
-  return s.rows.filter((r) => s.done[r.key] !== r.anchor);
-}
-
-/** The follow-up in hand for a conversation opened on Follow-ups: its row's, once the list is loaded. */
-export function followUpOf(s, key) {
-  const r = s.chip === 'followups' ? s.rows.find((x) => x.key === key) : null;
-  return (r && r.followUp && r.followUp.id) || undefined;
-}
-
-export function waitingCount(s) {
-  // On other chips the rows include answered ones, which were never in the count.
-  const hidden = s.rows.filter((r) => s.done[r.key] === r.anchor && (s.chip === 'waiting' || r.state === 'awaiting')).length;
-  return Math.max(0, ((s.counts && s.counts.waiting) || 0) - hidden);
-}
 
 export function createStore({ api, clipboard, storage, now, timers, keepalive }) {
   const read = (k) => {
