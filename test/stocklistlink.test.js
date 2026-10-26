@@ -1,7 +1,8 @@
 // The full stock-list link the prompt always offers ("Full stock list: .../used-cars") is ours, so a
 // draft that quotes it passes the link check in both prompt styles, while a made-up page on the same
-// site still fails. All data is invented; a stand-in AI service on this computer plays the model.
-// Numbers 0491 570 5xx are this file's.
+// site still fails. In the compact style the AI writes the link's marker and code puts the link back,
+// so that draft passes every check. All data is invented; a stand-in AI service on this computer
+// plays the model. Numbers 0491 570 5xx are this file's.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { applyTestEnv } from './support/env.js';
@@ -13,7 +14,7 @@ delete process.env.PROMPT_STYLE;
 const now = Date.now();
 const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
 
-let standins, db, items, drafter, sync, config;
+let standins, db, items, drafter, promptModule, sync, config;
 const ai = aiBehaviour();
 
 before(async () => {
@@ -23,6 +24,7 @@ before(async () => {
   db = await import('../src/db.js');
   items = await import('../src/items.js');
   drafter = await import('../src/drafter.js');
+  promptModule = await import('../src/prompt.js');
   sync = await import('../src/sync.js');
   sync.storeVehicles([{ id: 1, stockNo: '5501', year: '2019', title: '2019 Toyota Noah Hybrid', make: 'TOYOTA', model: 'Noah', modelCode: 'ZWR80', auPublishPrice: 33500, odometer: 52000, seats: 8, status: 'PUBLISHED', soldStatus: 'UnSold', stockIn: 'Online', outline: ['6 Months NSW Registration'] }]);
 });
@@ -40,20 +42,35 @@ const customer = (n, first, history) => {
 // One answer per attempt: a draft that fails a hard check gets a second attempt, so each case queues its reply twice.
 const script = (...texts) => { ai.script = texts.map((text) => ({ reply: text, needs_human: [], facts_used: [], hold: false })); };
 const linkFails = (checks) => checks.filter((c) => c.level === 'fail' && c.code === 'link');
+const allFails = (checks) => checks.filter((c) => c.level === 'fail');
 
 for (const style of ['full', 'compact']) {
   test(`the stock-list link we offer is ours in the ${style} style, and a made-up page on the site still fails`, async () => {
-    const item = customer(style === 'full' ? 1 : 2, style === 'full' ? 'Mia' : 'Ruby', [['IN', 'Do you have any other Noah wagons?', 5 * MIN]])();
+    const first = style === 'full' ? 'Mia' : 'Ruby';
+    const item = customer(style === 'full' ? 1 : 2, first, [['IN', 'Do you have any other Noah wagons?', 5 * MIN]])();
     const stockList = `${config.site.baseUrl}/used-cars`;
 
-    const good1 = `Hello Mia,
+    if (style === 'full') {
+      const good1 = `Hello ${first},
 You can see all our vehicles at ${stockList}
 We would be pleased to help you choose one.`;
-    script(good1, good1);
-    const good = await drafter.draftFor(item, { save: false, style: style === 'compact' ? 'compact' : undefined });
-    assert.deepEqual(linkFails(good.checks), [], JSON.stringify(good.checks));
+      script(good1, good1);
+      const good = await drafter.draftFor(item, { save: false });
+      assert.deepEqual(linkFails(good.checks), [], JSON.stringify(good.checks));
+    } else {
+      // The AI writes the link as the marker it was given, and code puts the link back: no check fails.
+      const marker = promptModule.buildPrompt(item, { now, style: 'compact' }).factMarkers.find((m) => m.value === stockList);
+      assert.ok(marker, "the stock-list link is one of the request's fact markers");
+      const good1 = `Hello ${first},
+You can see all our vehicles at {{${marker.name}}}
+We would be pleased to help you choose one.`;
+      script(good1, good1);
+      const good = await drafter.draftFor(item, { save: false, now, style: 'compact' });
+      assert.deepEqual(allFails(good.checks), [], JSON.stringify(good.checks));
+      assert.ok(good.reply.includes(`You can see all our vehicles at ${stockList}`), good.reply);
+    }
 
-    const madeUp = `Hello Mia,
+    const madeUp = `Hello ${first},
 You can see it at ${config.site.baseUrl}/no-such-page
 We would be pleased to help you choose one.`;
     script(madeUp, madeUp);
