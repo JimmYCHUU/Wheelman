@@ -85,7 +85,7 @@
   .tell { flex: 1 1 var(--tell-w); min-width: 0; display: flex; align-items: center; gap: var(--s-1); min-height: var(--control); padding: 0 var(--s-1) 0 var(--s-4); border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface-quiet); }
   .tell input { flex: 1; min-width: 0; min-height: var(--control); padding: 0; border: 0; background: transparent; }
   .tell input:focus-visible { outline: none; }
-  .tell:focus-within { border-color: var(--accent); background: var(--surface); }
+  .tell:focus-within { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 var(--s-1) var(--accent-soft); }
   .box .foot .right { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--s-2); margin-left: auto; }
   .box-note { margin: 0; padding: var(--s-3); border-radius: var(--r-box); background: var(--surface-quiet); color: var(--ink-2); }
   .box-note.good { background: var(--good-soft); color: var(--good); font-weight: var(--fw-semi); }
@@ -111,7 +111,7 @@
   .reason.good { background: var(--good-soft); color: var(--good); }
   .reason.warn { background: var(--warn-soft); color: var(--warn); }
   .reason.bad { background: var(--bad-soft); color: var(--bad); }
-  .reason.info { background: var(--accent-soft); color: var(--accent); }
+  .reason.info { background: var(--accent-soft); color: var(--ink); }
   .avatar { width: 40px; height: 40px; border-radius: var(--r-pill); display: grid; place-items: center; font-weight: var(--fw-bold); font-size: var(--fs-13); color: var(--ink); background: var(--surface-sunk); }
   .av-0 { background: var(--av-0); } .av-1 { background: var(--av-1); } .av-2 { background: var(--av-2); } .av-3 { background: var(--av-3); }
   .av-4 { background: var(--av-4); } .av-5 { background: var(--av-5); } .av-6 { background: var(--av-6); } .av-7 { background: var(--av-7); }
@@ -125,6 +125,13 @@
   .skel .lines i:first-child { width: 60%; }
   .skel .lines i:last-child { width: 85%; }
   @keyframes shimmer { 50% { opacity: 0.45; } }
+
+  /* a short window (200% zoom, a phone turned sideways): the conversation scrolls as a whole, so the box and its buttons are never cut off */
+  @media (max-height: 560px) {
+    .chat { overflow-y: auto; }
+    .chat-body { flex: none; height: 70%; }
+    .box { max-height: none; }
+  }
 
   @media (max-width: 899px) {
     .topbar { flex-wrap: wrap; height: auto; padding: var(--s-2) var(--s-2) var(--s-2) var(--s-3); row-gap: var(--s-2); }
@@ -143,10 +150,8 @@
     .box { padding: var(--s-2); }
     .tell { flex-basis: 100%; min-height: var(--touch); }
     .tell input { min-height: var(--touch); }
-    .instead { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-    .instead::-webkit-scrollbar { display: none; }
     .instead > span { flex: none; }
-    .instead .opt { flex: none; min-height: var(--touch); white-space: nowrap; }
+    .instead .opt { max-width: 100%; min-height: var(--touch); }
     .box .foot .right .btn { padding: 0 var(--s-3); }
     .box .foot .right { flex: 1 1 100%; }
   }

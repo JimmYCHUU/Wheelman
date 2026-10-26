@@ -397,3 +397,10 @@ test('copyEmail copies the address and says so', async () => {
   assert.deepEqual(a.written, ['sam@example.com']);
   assert.equal(a.store.get().toast.message, 'Email copied');
 });
+
+test('a fetch that fails says Wheelman is not responding, and a server message stays as it is', async () => {
+  const down = createApi({ fetch: async () => { throw new TypeError('Failed to fetch'); }, go() {} });
+  await assert.rejects(down('/api/status'), { message: 'Wheelman is not responding. Check that it is running.' });
+  const bad = createApi({ fetch: async () => ({ status: 400, ok: false, json: async () => ({ error: 'Too long' }) }), go() {} });
+  await assert.rejects(bad('/x', {}), { message: 'Too long' });
+});

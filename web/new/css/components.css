@@ -11,8 +11,8 @@
   .tab-track::-webkit-scrollbar { display: none; }
   .tab { display: inline-flex; align-items: center; gap: var(--s-2); height: 30px; padding: 0 var(--s-4); border: 0; border-radius: var(--r-pill); background: transparent; color: var(--ink-2); font-weight: var(--fw-semi); white-space: nowrap; transition: background var(--t-press) var(--ease), color var(--t-press) var(--ease); }
   .tab:hover { color: var(--ink); }
-  .tab[aria-selected="true"] { background: var(--accent-soft); color: var(--ink); box-shadow: inset 0 0 0 1px var(--accent); }
-  .badge { min-width: 20px; height: 20px; padding: 0 var(--s-badge); border-radius: var(--r-pill); background: var(--accent); color: var(--on-accent); font-size: var(--fs-12); font-weight: var(--fw-bold); display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; }
+  .tab[aria-current="page"] { background: var(--accent-soft); color: var(--ink); box-shadow: inset 0 0 0 1px var(--accent); }
+  .badge { position: relative; min-width: 20px; height: 20px; padding: 0 var(--s-badge); border-radius: var(--r-pill); background: var(--accent); color: var(--on-accent); font-size: var(--fs-12); font-weight: var(--fw-bold); display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; }
   .status { display: flex; align-items: center; gap: var(--s-2); font-size: var(--fs-13); color: var(--ink-2); flex: 0 1 auto; min-width: 0; padding: 0 var(--s-1); }
   .status .words { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .status.bad .words { white-space: normal; overflow: visible; color: var(--bad); }
@@ -40,6 +40,7 @@
   .menu .tick { width: var(--s-4); color: var(--accent); }
 
   /* ---------- the toast ---------- */
+  .toast-region { position: fixed; width: 0; height: 0; }
   .toast { position: fixed; z-index: 60; left: 50%; bottom: var(--s-6); transform: translateX(-50%); display: flex; align-items: center; gap: var(--s-3); max-width: calc(100vw - 2 * var(--page-edge)); padding: var(--s-3) var(--s-4); border-radius: var(--r-box); background: var(--ink); color: var(--surface); box-shadow: var(--shadow-2); font-weight: var(--fw-semi); }
   .toast .btn { border-color: var(--surface); background: transparent; color: var(--surface); }
   .toast .btn:hover { background: var(--ink-2); }

@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SECTIONS, CHIPS, rowView, whoLabel, segments, joinSegments, fillBlank, boxText, checkLines,
-  mainAction, statusWords, insteadOptions, wordCount,
+  mainAction, statusWords, statusAnnouncement, insteadOptions, wordCount,
 } from '../web/new/js/model.js';
 
 const NOW = Date.parse('2026-10-26T02:00:00Z');
@@ -134,4 +134,19 @@ test('wordCount', () => {
   assert.deepEqual(wordCount(''), { words: 0, texts: 0 });
   assert.deepEqual(wordCount('one two  three\nfour'), { words: 4, texts: 1 });
   assert.equal(wordCount('x'.repeat(161)).texts, 2);
+});
+
+test('statusAnnouncement speaks only when the tone changes or a problem changes', () => {
+  const ok1 = { tone: 'ok', text: 'Up to date, checked just now' };
+  const ok2 = { tone: 'ok', text: 'Up to date, checked 1 min ago' };
+  const busy = { tone: 'busy', text: 'Checking for new messages' };
+  const bad1 = { tone: 'bad', text: 'Dashboard not reached since 9:00 am' };
+  const bad2 = { tone: 'bad', text: 'Set-up needed: a key' };
+  assert.equal(statusAnnouncement(null, busy), null);
+  assert.equal(statusAnnouncement(null, bad1), bad1.text);
+  assert.equal(statusAnnouncement(ok1, ok2), null);
+  assert.equal(statusAnnouncement(busy, ok1), ok1.text);
+  assert.equal(statusAnnouncement(ok1, bad1), bad1.text);
+  assert.equal(statusAnnouncement(bad1, bad1), null);
+  assert.equal(statusAnnouncement(bad1, bad2), bad2.text);
 });

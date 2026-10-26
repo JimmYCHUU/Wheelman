@@ -40,7 +40,7 @@ function Row({ row, view, selected, tabbable, onOpen }) {
     </span>
     <span class="meta">
       <span class="num">${view.when}</span>
-      ${view.unread ? html`<span class="badge" aria-label=${view.unread + ' unread'}>${view.unread}</span>` : null}
+      ${view.unread ? html`<span class="badge">${view.unread}<span class="sr"> unread</span></span>` : null}
     </span>
   </button>`;
 }

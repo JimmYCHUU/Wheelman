@@ -46,8 +46,12 @@ window.addEventListener('hashchange', () => {
 });
 
 // The address follows the store: opening a conversation or changing the chip puts it in the hash.
+// Nothing is written until the boot has opened the conversation in the address (or decided there is
+// none): a half-booted store has no key, and a reload in that moment would lose the conversation.
 let last = '';
-store.subscribe(() => {
+let booted = false;
+function follow() {
+  if (!booted) return;
   const s = store.get();
   const now = hashFor({ section: s.section, chip: s.chip, key: s.key });
   if (now === last) return;
@@ -60,8 +64,9 @@ store.subscribe(() => {
   } else {
     location.hash = now;
   }
-});
+}
+store.subscribe(follow);
 
-actions.boot(parseRoute(location.hash), { wide: innerWidth >= 1280 });
+actions.boot(parseRoute(location.hash), { wide: innerWidth >= 1280 }).finally(() => { booted = true; follow(); });
 setInterval(() => actions.refresh(), 20000);
 window.addEventListener('pagehide', () => actions.flush());

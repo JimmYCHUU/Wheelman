@@ -110,6 +110,17 @@ export function statusWords(status, now) {
   return { tone: 'busy', text: 'Starting' };
 }
 
+/**
+ * What a screen reader should be told about the status, or null for nothing. The words change every
+ * refresh ("checked 1 min ago"), so only a change of tone, or new words on a problem, is announced.
+ * prev is the status last seen (null on first sight, when only a problem is worth saying).
+ */
+export function statusAnnouncement(prev, next) {
+  if (!prev) return next.tone === 'bad' ? next.text : null;
+  if (prev.tone !== next.tone) return next.text;
+  return next.tone === 'bad' && prev.text !== next.text ? next.text : null;
+}
+
 /** "Write it instead" choices: at most 3, best first, never the one already in use. */
 export function insteadOptions(item) {
   const current = item.template || '';
