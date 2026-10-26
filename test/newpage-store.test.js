@@ -393,3 +393,16 @@ test('the Tell hold is renewed every 30 s and released on close', async () => {
   assert.deepEqual(h2, [true, false]);
   assert.equal(a.timers.pending(), 0);
 });
+
+test('waitingCount subtracts only waiting rows that were copied, whatever the chip', async () => {
+  const a = setup({ rows: [row('c:1', { state: 'awaiting' }), row('c:2', { state: 'answered' }), row('c:3', { state: 'awaiting' })], counts: { all: 3, waiting: 2, quiet: 1, other: 0, followups: 0 } });
+  await a.store.actions.setChip('all');
+  await a.store.actions.refresh();
+  await a.store.actions.open('c:2');
+  await a.store.actions.copy({});
+  assert.equal(a.store.get().done['c:2'], 'a-c:2');
+  assert.equal(waitingCount(a.store.get()), 2);
+  await a.store.actions.open('c:1');
+  await a.store.actions.copy({});
+  assert.equal(waitingCount(a.store.get()), 1);
+});

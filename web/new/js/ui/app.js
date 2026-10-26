@@ -5,6 +5,7 @@ import { SECTIONS } from '../model.js';
 import { parseRoute, hashFor } from '../route.js';
 import { TopBar } from './topbar.js';
 import { Toast } from './toast.js';
+import { List } from './list.js';
 
 function useStore(store) {
   const [, redraw] = useState(0);
@@ -41,7 +42,7 @@ export function App({ store, now = Date.now }) {
     ${section.ready
       ? html`<main class="work" data-view=${route.key ? 'chat' : 'list'}>
           <section class="tile list-col" aria-label="Conversations">
-            <p class="empty">The list comes next.</p>
+            <${List} state=${state} actions=${store.actions} now=${now()} section=${section.id} />
           </section>
           <section class="tile chat" aria-label="Conversation">
             <div class="chat-body"></div>

@@ -13,7 +13,8 @@ export function visibleRows(s) {
 }
 
 export function waitingCount(s) {
-  const hidden = s.rows.filter((r) => s.done[r.key] === r.anchor).length;
+  // On other chips the rows include answered ones, which were never in the count.
+  const hidden = s.rows.filter((r) => s.done[r.key] === r.anchor && (s.chip === 'waiting' || r.state === 'awaiting')).length;
   return Math.max(0, ((s.counts && s.counts.waiting) || 0) - hidden);
 }
 

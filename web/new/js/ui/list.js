@@ -1,0 +1,99 @@
+// The list column: the three chips, one row per conversation with its one reason in words, and the
+// states a list can be in (loading, empty, a problem, more to load).
+import { html, useState, useRef } from './html.js';
+import { CHIPS, rowView } from '../model.js';
+import { hashFor } from '../route.js';
+import { visibleRows, waitingCount } from '../store.js';
+import { initials, hue } from '../../../lib/format.js';
+
+const EMPTY = {
+  waiting: 'No one is waiting.',
+  followups: 'No follow-ups are due.',
+  all: 'There are no conversations yet.',
+};
+const PROBLEM = 'Wheelman is not responding. It tries again every 20 seconds.';
+
+/** How the reason reads: green for done, red for a failed check, amber for something to fill, blue for a follow-up. */
+function toneOf(row, view) {
+  if (view.done) return 'good';
+  if (row.followUp) return 'info';
+  if (row.flag === 'fail') return 'bad';
+  if (row.flag === 'input' || row.flag === 'error') return 'warn';
+  return '';
+}
+
+function Avatar({ name }) {
+  const letters = /\p{L}/u.test(name) ? initials(name) : '#';
+  return html`<span class=${'avatar av-' + hue(name)} aria-hidden="true">${letters}</span>`;
+}
+
+function Row({ row, view, selected, tabbable, onOpen }) {
+  const tone = toneOf(row, view);
+  return html`<button type="button" class=${'row' + (view.unread ? ' unread' : '')} data-key=${row.key}
+      aria-current=${selected ? 'true' : null} tabindex=${tabbable ? 0 : -1} onClick=${() => onOpen(row)}>
+    <${Avatar} name=${view.name} />
+    <span class="row-text">
+      <span class="who">${view.name}</span>
+      ${view.car ? html`<span class="car">${view.car}</span>` : null}
+      <span class="sub">${view.preview}</span>
+      ${view.reason ? html`<span class=${'reason ' + tone}>${view.reason}</span>` : null}
+    </span>
+    <span class="meta">
+      <span class="num">${view.when}</span>
+      ${view.unread ? html`<span class="badge" aria-label=${view.unread + ' unread'}>${view.unread}</span>` : null}
+    </span>
+  </button>`;
+}
+
+function Skeleton() {
+  return html`<div class="skeleton" role="status" aria-label="Loading conversations">
+    ${[0, 1, 2, 3, 4, 5].map((i) => html`<div class="skel" key=${i}><i class="round"></i><span class="lines"><i></i><i></i></span></div>`)}
+  </div>`;
+}
+
+export function List({ state, actions, now, section = 'dashboard' }) {
+  const [cursor, setCursor] = useState(null);
+  const box = useRef(null);
+  const rows = visibleRows(state);
+  const counts = { waiting: waitingCount(state), followups: (state.counts && state.counts.followups) || 0 };
+  const active = rows.some((r) => r.key === cursor) ? cursor : rows.some((r) => r.key === state.key) ? state.key : rows[0] && rows[0].key;
+
+  const choose = (id) => { location.hash = hashFor({ section, chip: id }); actions.setChip(id); };
+  const openRow = (row) => {
+    setCursor(row.key);
+    actions.open(row.key, state.chip === 'followups' && row.followUp ? { followup: row.followUp.id } : undefined);
+    location.hash = hashFor({ section, chip: state.chip, key: row.key });
+  };
+  const onKey = (e) => {
+    const keys = { ArrowDown: 1, ArrowUp: -1, Home: 'first', End: 'last' };
+    if (!(e.key in keys) || !rows.length) return;
+    e.preventDefault();
+    const here = e.target.closest ? e.target.closest('.row') : null;
+    const at = Math.max(0, rows.findIndex((r) => r.key === (here ? here.dataset.key : active)));
+    const to = keys[e.key] === 'first' ? 0 : keys[e.key] === 'last' ? rows.length - 1 : Math.min(rows.length - 1, Math.max(0, at + keys[e.key]));
+    setCursor(rows[to].key);
+    const buttons = box.current ? box.current.querySelectorAll('.row') : [];
+    if (buttons[to]) buttons[to].focus();
+  };
+
+  const loading = state.listState === 'loading';
+  const failed = state.listState === 'error';
+  const left = Math.max(0, (state.total || 0) - state.rows.length);
+  return html`<div class="list-inner">
+    <div class="chips" role="group" aria-label="Show">
+      ${CHIPS.map((c) => html`<button type="button" class="chip" aria-pressed=${state.chip === c.id} onClick=${() => choose(c.id)}>
+        ${c.label}${c.id !== 'all' ? html`<span class="count num">${counts[c.id]}</span>` : null}
+      </button>`)}
+    </div>
+    ${failed ? html`<p class="problem" role="alert">${PROBLEM}</p>` : null}
+    <div class="rows" ref=${box} onKeyDown=${onKey}>
+      ${loading ? html`<${Skeleton} />` : null}
+      ${!loading && !failed && rows.length === 0 ? html`<p class="empty">${EMPTY[state.chip]}</p>` : null}
+      ${!loading ? rows.map((r) => {
+        const view = rowView(r, { now, doneAnchor: state.done[r.key] });
+        return html`<${Row} key=${r.key} row=${r} view=${view} selected=${r.key === state.key} tabbable=${r.key === active} onOpen=${openRow} />`;
+      }) : null}
+      ${!loading && left > 0 ? html`<button type="button" class="btn more" onClick=${() => actions.more()}>Load older conversations<span class="num">${left} more</span></button>` : null}
+    </div>
+  </div>`;
+}
