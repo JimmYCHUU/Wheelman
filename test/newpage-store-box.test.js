@@ -343,3 +343,24 @@ test('a poll that swaps the suggestion before or during a save leaves no "Saving
   await settle();
   assert.deepEqual(store.get().save, { state: 'idle', at: null });
 });
+
+test('a flush when the page hides says saved once it lands, goes once however often it is asked, and is retried if it fails', async () => {
+  const a = setup();
+  await a.store.actions.open('c:1');
+  a.store.actions.type('Half done');
+  a.store.actions.flush();
+  a.store.actions.flush(); // the page hides, then closes
+  assert.equal(a.beacons.length, 1);
+  await settle();
+  assert.deepEqual(a.store.get().save, { state: 'saved', at: 1000 });
+  assert.equal(a.data.items['c:1'].draft.edited, 'Half done');
+  a.data.fail.add('/edit');
+  a.store.actions.type('Half done, more');
+  a.store.actions.flush();
+  await settle();
+  assert.equal(a.store.get().save.state, 'failed');
+  a.data.fail.clear();
+  await a.timers.advance(5000);
+  assert.equal(a.store.get().save.state, 'saved');
+  assert.equal(a.data.items['c:1'].draft.edited, 'Half done, more');
+});

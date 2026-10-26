@@ -66,7 +66,14 @@ export function setup(over = {}) {
   const mem = new Map();
   const storage = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, v) };
   const beacons = [];
-  const store = createStore({ api, clipboard, storage, now: () => 1000, timers, keepalive: (p, b) => beacons.push({ p, b }) });
+  // The last edit as the page closes or hides: logged at once, then kept or failed like any other.
+  const keepalive = async (p, b) => {
+    beacons.push({ p, b });
+    if (failing(p)) throw new Error('Network down');
+    const edit = p.match(/^\/api\/drafts\/(\d+)\/edit$/);
+    if (edit) keepEdit(Number(edit[1]), b.text);
+  };
+  const store = createStore({ api, clipboard, storage, now: () => 1000, timers, keepalive });
   return { store, calls, data, timers, written, clipboard, mem, storage, beacons };
 }
 export const paths = (calls) => calls.map((c) => (c.body === undefined ? 'GET ' : 'POST ') + c.path);

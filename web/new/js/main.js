@@ -15,11 +15,11 @@ const storage = {
 
 const api = createApi({ fetch: (...a) => fetch(...a), go: (url) => location.assign(url) });
 
-// The page may be closing, so the last edit goes out with keepalive.
-const keepalive = (path, body) => {
-  try {
-    fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), keepalive: true }).catch(() => {});
-  } catch { /* nothing more can be done while the page closes */ }
+// The page may be hiding or closing, so the last edit goes out with keepalive. It says whether it
+// landed, for a page that comes back (a failure is tried again).
+const keepalive = async (path, body) => {
+  const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), keepalive: true });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
 };
 
 const store = createStore({
@@ -62,4 +62,6 @@ store.subscribe(follow);
 
 actions.boot(parseRoute(location.hash), { wide: innerWidth >= 1280 }).catch(() => { /* the list shows its own error state */ }).finally(() => { booted = true; follow(); });
 setInterval(() => actions.refresh(), 20000);
+// The last edit goes out when the page hides (another tab, the phone locked) and when it closes.
 window.addEventListener('pagehide', () => actions.flush());
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') actions.flush(); });
