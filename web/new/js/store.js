@@ -2,6 +2,8 @@
 // clock and timers are passed in, so the tests run it with fakes. The UI reads get() and calls actions.
 import { boxText } from './model.js';
 import { createAutosave } from './autosave.js';
+import { blanksIn } from '../../lib/blank.js';
+import { plural } from '../../lib/format.js';
 
 const DONE_KEY = 'wheelman.new.done';
 const DONE_AT_KEY = 'wheelman.new.doneAt';
@@ -298,7 +300,8 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
       if (item.draft && value.trim()) { try { await api('/api/drafts/' + item.draft.id + '/copied', { text: value }); } catch { /* the copy itself worked */ } }
       saveDone({ ...state.done, [key]: item.anchor }, { ...state.doneAt, [key]: now() });
       // A follow-up leaves Follow-ups on the server once it is copied, so it is put back there.
-      toast('Copied', fu
+      const left = blanksIn(value).length;
+      toast(left ? 'Copied, with ' + plural(left, 'blank') + ' still to fill' : 'Copied', fu
         ? { label: 'Put back in Follow-ups', run: () => restoreFollowUp(Number(fu[1]), key) }
         : { label: 'Put back in Needs reply', run: () => putBack(key) });
     });

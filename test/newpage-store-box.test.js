@@ -364,3 +364,19 @@ test('a flush when the page hides says saved once it lands, goes once however of
   assert.equal(a.store.get().save.state, 'saved');
   assert.equal(a.data.items['c:1'].draft.edited, 'Half done, more');
 });
+
+test('a copy with blanks still to fill says how many, as the old page did', async () => {
+  const a = setup();
+  await a.store.actions.refresh();
+  await a.store.actions.open('c:1');
+  a.store.actions.type('The price is [PRICE?].');
+  await a.store.actions.copy({ withBlanks: true });
+  assert.equal(a.store.get().toast.message, 'Copied, with 1 blank still to fill');
+  assert.equal(a.store.get().toast.action.label, 'Put back in Needs reply');
+  a.store.actions.type('The price is [PRICE?], ready on [DATE?].');
+  await a.store.actions.copy({ withBlanks: true });
+  assert.equal(a.store.get().toast.message, 'Copied, with 2 blanks still to fill');
+  a.store.actions.type('The price is $25,990.');
+  await a.store.actions.copy({});
+  assert.equal(a.store.get().toast.message, 'Copied');
+});
