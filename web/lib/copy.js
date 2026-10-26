@@ -31,9 +31,7 @@ export const COPY = {
 
   'action.checkNow': 'Check for new messages now',
   'action.aiModel': 'Which AI writes the suggestions',
-  'top.newPage': 'Try the new page',
-  'top.newPage.short': 'New page',
-  'action.search':'Search conversations',
+  'action.search': 'Search conversations',
   'action.backToList': 'Back to conversations',
 
   'tag.check': 'Check the reply',
@@ -375,6 +373,10 @@ export const COPY = {
   'find.none': 'No car matches "{q}". Try a stock number or a make and model.',
   'find.results': '{n, one: car, other: cars} found',
   'find.open': 'Find a car',
+
+  // The link to the new page, in the top bar.
+  'top.newPage': 'Try the new page',
+  'top.newPage.short': 'New page',
 };
 
 const PLURAL = /\{(\w+), one: ([^,}]*), other: ([^}]*)\}/g;
