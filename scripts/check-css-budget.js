@@ -50,9 +50,15 @@ export function checkCssBudget(folder = dir) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { files, offenders, counts, over } = checkCssBudget();
-  for (const o of offenders) console.log(`  ${o.where}: ${o.kind}: ${o.text}`);
-  console.log(`Checked ${files.length} stylesheets. Ad hoc values: ${Object.entries(counts).map(([k, n]) => `${k} ${n}`).join(', ') || 'none'}.`);
-  if (over.length) { console.log(`Over the limit: ${over.map(([k, l]) => `${k} (${counts[k]} > ${l})`).join(', ')}. Use a token from web/css/tokens.css.`); process.exit(1); }
+  // Each page's stylesheets are checked against their own tokens.css (the old page, then the new one).
+  let failed = false;
+  for (const folder of [dir, path.join(root, 'web', 'new', 'css')]) {
+    const name = path.relative(root, folder).split(path.sep).join('/');
+    const { files, offenders, counts, over } = checkCssBudget(folder);
+    for (const o of offenders) console.log(`  ${name}/${o.where}: ${o.kind}: ${o.text}`);
+    console.log(`${name}: checked ${files.length} stylesheets. Ad hoc values: ${Object.entries(counts).map(([k, n]) => `${k} ${n}`).join(', ') || 'none'}.`);
+    if (over.length) { console.log(`Over the limit: ${over.map(([k, l]) => `${k} (${counts[k]} > ${l})`).join(', ')}. Use a token from ${name}/tokens.css.`); failed = true; }
+  }
+  if (failed) process.exit(1);
   console.log('Every value is on the token scales.');
 }
