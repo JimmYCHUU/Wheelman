@@ -227,3 +227,38 @@ test('a new message while typing offers "Use the new suggestion" only once there
   assert.equal(a.store.get().typed, 'My words');
   assert.equal(a.store.get().context.action.label, 'Use the new suggestion');
 });
+
+test('a write that returns a failed suggestion keeps the typed text, its unsaved edit and its retry', async () => {
+  const a = setup();
+  await a.store.actions.open('c:1');
+  a.data.fail.add('/edit');
+  a.store.actions.type('My words');
+  await a.timers.advance(600);
+  assert.equal(a.store.get().save.state, 'failed');
+  a.data.draftReply = () => ({ ok: false, error: 'The model is overloaded.', item: { ...a.data.items['c:1'], draft: draft(98, { status: 'failed', reply: '', error: 'The model is overloaded.' }) } });
+  await a.store.actions.tell('Make it shorter');
+  const s = a.store.get();
+  assert.equal(s.item.draft.status, 'failed');
+  assert.equal(s.typed, 'My words');
+  assert.equal(s.save.state, 'failed', 'still Not saved yet');
+  assert.equal(s.toast, null, 'the box shows the failure beside the text');
+  const tries = a.calls.filter((c) => c.path.endsWith('/edit')).length;
+  a.data.fail.clear();
+  await a.timers.advance(5000);
+  const edits = a.calls.filter((c) => c.path.endsWith('/edit'));
+  assert.equal(edits.length, tries + 1, 'the retry still runs');
+  assert.deepEqual([edits.at(-1).path, edits.at(-1).body], ['/api/drafts/98/edit', { text: 'My words' }], 'kept with the suggestion now on screen, so a reload brings it back');
+  assert.equal(a.store.get().save.state, 'saved');
+});
+
+test('copying typed text beside a failed suggestion copies it, and tells the server nothing about that suggestion', async () => {
+  const a = setup();
+  a.data.items['c:1'] = { ...a.data.items['c:1'], draft: draft(98, { status: 'failed', reply: '', error: 'x' }) };
+  await a.store.actions.refresh();
+  await a.store.actions.open('c:1');
+  a.store.actions.type('Mine');
+  await a.store.actions.copy({});
+  assert.deepEqual(a.written, ['Mine']);
+  assert.equal(a.calls.some((c) => c.path.endsWith('/copied')), false);
+  assert.equal(a.store.get().done['c:1'], 'a-c:1');
+});

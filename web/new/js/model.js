@@ -195,7 +195,9 @@ const PUT_BACK_FOLLOW_UP = { label: 'Put back in Follow-ups', act: 'restore-foll
  * one button (act names what it does), and whether the Tell Wheelman line goes with it.
  * writing: a write this page started. typed: the person has typed text, which stays in the editor
  * whatever arrives (a new message with no suggestion yet, Wheelman writing in the background, or a
- * failure); only a write from here, done, opted out and dismissed take the box over.
+ * failure); only a write from here, done, opted out and dismissed take the box over. A suggestion
+ * that could not be written beside text the person typed (now, or saved before a reload) is told in
+ * the editor view's failure line, and the text stays.
  */
 export function boxView({ item, writing = false, done = false, doneAt = null, typed = false } = {}) {
   if (!item) return { kind: 'none' };
@@ -205,6 +207,9 @@ export function boxView({ item, writing = false, done = false, doneAt = null, ty
   const mine = !!fu && item.anchor === 'fu:' + fu.id;
   const say = (sentence, button = null, o = {}) => ({ kind: 'quiet', tone: '', sentence, button, tell: false, ...o });
   const failed = (first) => say((first + ' ' + (d.error || '')).trim(), { label: 'Try again', act: 'retry', main: true }, { tone: 'bad', tell: true });
+  const isFailed = !!d && d.status === 'failed';
+  const kept = typed || (isFailed && typeof d.edited === 'string' && d.edited.trim() !== '');
+  const failure = isFailed ? ((mine ? 'The follow-up could not be written. ' : 'A suggestion could not be written. ') + (d.error ? d.error + ' ' : '') + 'Your text is kept.') : '';
 
   if (writing) return { kind: 'writing' };
   if (done) return say(doneAt ? 'Copied at ' + clock(doneAt) + '.' : 'Copied.', mine ? PUT_BACK_FOLLOW_UP : PUT_BACK, { tone: 'good' });
@@ -214,7 +219,7 @@ export function boxView({ item, writing = false, done = false, doneAt = null, ty
   if (item.dismissed && item.state === 'awaiting') {
     return say('You dismissed this conversation. It comes back by itself if the customer writes again.', { label: 'Put back in Needs reply', act: 'restore', main: false });
   }
-  if (typed) return { kind: 'editor', context: mine ? 'Follow-up: ' + fu.reason : '' };
+  if (kept) return { kind: 'editor', context: mine ? 'Follow-up: ' + fu.reason : '', ...(failure ? { failure } : {}) };
   if (item.writing) return { kind: 'writing' };
   if (fu) {
     if (mine && ready) return { kind: 'editor', context: 'Follow-up: ' + fu.reason };

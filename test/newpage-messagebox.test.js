@@ -172,3 +172,17 @@ test('mainAction with a failed check and an empty blank: fill it first, and noth
   assert.equal(mainAction({ text: 'It is $31,990 on Saturday', checks: fail, overridden: false }).kind, 'blocked');
   assert.deepEqual(mainAction({ text: 'It is $31,990 on [DATE?]', checks: fail, overridden: true }), { kind: 'fill', label: 'Fill 1 blank', secondary: 'Copy with the blank' });
 });
+
+test('boxView shows a failed suggestion beside the kept text, and after a reload beside the saved edit', () => {
+  const failed = (o = {}) => draft({ status: 'failed', reply: '', error: 'The model is overloaded.', ...o });
+  assert.deepEqual(boxView({ item: item({ draft: failed() }), typed: true }),
+    { kind: 'editor', context: '', failure: 'A suggestion could not be written. The model is overloaded. Your text is kept.' });
+  assert.deepEqual(boxView({ item: item({ draft: failed({ edited: 'My words' }) }) }),
+    { kind: 'editor', context: '', failure: 'A suggestion could not be written. The model is overloaded. Your text is kept.' });
+  const fu = boxView({ item: item({ anchor: 'fu:5', state: 'answered', followUp: { id: 5, reason: 'Inspection passed', done: '' }, draft: failed({ edited: 'Mine' }) }) });
+  assert.deepEqual(fu, { kind: 'editor', context: 'Follow-up: Inspection passed', failure: 'The follow-up could not be written. The model is overloaded. Your text is kept.' });
+  // Nothing typed, or emptied: the failure alone, with Try again.
+  assert.equal(boxView({ item: item({ draft: failed() }) }).kind, 'quiet');
+  assert.equal(boxView({ item: item({ draft: failed({ edited: '' }) }) }).kind, 'quiet');
+  assert.equal('failure' in boxView({ item: item() }), false);
+});

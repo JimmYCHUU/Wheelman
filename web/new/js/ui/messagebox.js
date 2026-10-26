@@ -96,11 +96,12 @@ function Quiet({ state, actions, item, view }) {
 /**
  * The suggestion in its editor, with the checks, Instead, Tell Wheelman, Clear and the main button.
  * Typed text stays here even when the conversation has no ready suggestion (a new message has
- * arrived, say): then nothing is checked and there is nothing to bring back.
+ * arrived, or the suggestion could not be written): then nothing is checked and there is nothing
+ * to bring back. A suggestion that could not be written is told above the text, with Try again.
  */
 function Draft({ state, actions, item, view, editor, main }) {
   const d = item.draft && item.draft.status === 'ready' ? item.draft : null;
-  const text = state.typed !== null ? state.typed : boxText(d);
+  const text = state.typed !== null ? state.typed : boxText(item.draft);
   const empty = !text.trim();
   const live = liveChecks(d, text);
   const lines = checkLines(live);
@@ -133,11 +134,14 @@ function Draft({ state, actions, item, view, editor, main }) {
 
   // Green only for Wheelman's own text as the server checked it; anything typed says it was not checked.
   const trust = !lines.fails.length && !lines.warns.length && !lines.inputs.length ? trustLine(d, text) : null;
-  const note = saveWords({ save: state.save, draft: d, typed: state.typed });
+  const note = saveWords({ save: state.save, draft: item.draft, typed: state.typed });
 
   return html`<div class="box" role="group" aria-label="Message box">
     <div class="box-scroll">
       <${Context} context=${state.context} words=${view.context} />
+      ${view.failure ? html`<div class="context bad" role="status"><span>${view.failure}</span>
+        <button type="button" class="btn small" onClick=${() => actions.write({ instruction: item.draft.instruction || undefined })}>Try again</button>
+      </div>` : null}
       <div class="box-head">
         <span class="box-label"><b>Suggested reply</b> · not sent</span>
         ${note ? html`<span class=${'save-note' + (state.save.state === 'failed' ? ' bad' : '')}>${note}</span>` : null}

@@ -1,6 +1,7 @@
 // The new page's store: all of its state and every action, with no DOM. The server, clipboard, storage,
 // clock and timers are passed in, so the tests run it with fakes. The UI reads get() and calls actions.
 import { boxText } from './model.js';
+import { createAutosave } from './autosave.js';
 
 const DONE_KEY = 'wheelman.new.done';
 const DONE_AT_KEY = 'wheelman.new.doneAt';
@@ -41,8 +42,6 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
   // Things the UI has no need to see.
   let followupId = null;          // the follow-up the open conversation was opened from
   let picked = null;              // the answer picked from "Instead:" ('' a reply to what they wrote), null for none
-  let pending = null;             // { id, text }: an edit waiting to be sent
-  let saveTimer = null;
   let toastTimer = null;
   let toastSeq = 0;
   let holdKey = null;
@@ -76,39 +75,17 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     toastTimer = timers.set(() => { if (id === toastSeq) set({ toast: null }); }, action ? 9000 : 4000);
   }
 
-  // ---- saving what the person types
+  // ---- saving what the person types (web/new/js/autosave.js)
 
-  async function send(edit) {
-    set({ save: { state: 'saving', at: state.save.at } });
-    try {
-      await api('/api/drafts/' + edit.id + '/edit', { text: edit.text });
-      if (pending === edit) pending = null;
-      if (pending === null && draftId(state.item) === edit.id) set({ save: { state: 'saved', at: now() } });
-    } catch {
-      if (pending !== edit) return;
-      set({ save: { state: 'failed', at: state.save.at } });
-      saveTimer = timers.set(() => send(edit), 5000);
-    }
-  }
+  const autosave = createAutosave({ api, now, timers, keepalive, get: () => state, set });
+  const flush = () => autosave.flush();
 
   function type(value) {
     const typed = String(value ?? '');
-    const id = state.item && state.item.draft && state.item.draft.id;
+    const id = draftId(state.item);
     // "Saving…" from the first key: the save itself waits for a pause in the typing.
     set(id ? { typed, save: { state: 'saving', at: state.save.at } } : { typed });
-    timers.clear(saveTimer);
-    if (!id) { pending = null; return; }
-    const edit = { id, text: state.typed };
-    pending = edit;
-    saveTimer = timers.set(() => send(edit), 600);
-  }
-
-  function flush() {
-    timers.clear(saveTimer);
-    if (!pending) return;
-    const edit = pending;
-    pending = null;
-    keepalive('/api/drafts/' + edit.id + '/edit', { text: edit.text });
+    autosave.queue(id, typed);
   }
 
   // ---- the Tell hold: automatic writing never replaces a draft while an instruction is being typed
@@ -244,12 +221,16 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     try {
       const out = await api('/api/items/' + key + '/draft', { instruction, message: msg, followup: fu });
       if (key !== state.key) return;
-      if (out.item) {
-        // The new suggestion replaces the text, and an edit still waiting to be saved goes with it.
-        // Until then (a write that fails on the way) the edit, its note and its retry stay.
-        timers.clear(saveTimer);
-        pending = null;
+      const ready = !!(out.item && out.item.draft && out.item.draft.status === 'ready');
+      if (ready || (out.item && state.typed === null)) {
+        // A new suggestion replaces the text, and an edit still waiting to be saved goes with it.
+        autosave.drop();
         set({ item: out.item, itemState: 'ready', typed: null, context: null, save: { state: 'idle', at: null } });
+      } else if (out.item) {
+        // It could not be written: the typed text stays, saved with the suggestion now on screen (so
+        // a reload brings it back), and a save that was failing keeps its note and its retry.
+        set({ item: out.item, itemState: 'ready' });
+        autosave.move(draftId(out.item), state.typed);
       }
       const shown = !!(out.item && out.item.draft && out.item.draft.status === 'failed');
       if (out.error && !shown) toast(out.error);
@@ -289,7 +270,8 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     const value = text();
     const fu = /^fu:(\d+)$/.exec(item.anchor || '');
     await copyText(value, async () => {
-      if (item.draft) { try { await api('/api/drafts/' + item.draft.id + '/copied', { text: value }); } catch { /* the copy itself worked */ } }
+      // Only a ready suggestion is told: one that could not be written has nothing to learn from.
+      if (item.draft && item.draft.status === 'ready') { try { await api('/api/drafts/' + item.draft.id + '/copied', { text: value }); } catch { /* the copy itself worked */ } }
       saveDone({ ...state.done, [key]: item.anchor }, { ...state.doneAt, [key]: now() });
       // A follow-up leaves Follow-ups on the server once it is copied, so it is put back there.
       toast('Copied', fu
