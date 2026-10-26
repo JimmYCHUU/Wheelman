@@ -46,12 +46,15 @@ const answer = (reply, more = {}) => ({ reply, needs_human: [], facts_used: [], 
 const script = (...answers) => { seen.length = 0; ai.script = answers; };
 const codes = (list) => list.map((c) => c.code);
 const fails = (list) => list.filter((c) => c.level === 'fail').map((c) => c.code);
+// The fail lines that name a figure nobody gave: the figure check's, and the compact style's own (figure-raw).
+const figureFails = (list) => fails(list).filter((c) => c === 'figure' || c === 'figure-raw');
 const section = (user, name) => (user.split(`=== ${name} ===`)[1] || '').split(/\n=== /)[0];
 
 // What writeDraft gives assessReply, built by hand: our records may be quoted, the customer's words are theirs.
-const assessWith = (item, prompt, reply, { staffSaid = '', byCode = false } = {}) => drafter.assessReply(item, prompt, answer(reply), {
+// trusted: more that is ours to state, as writeDraft adds an auction offer's figures.
+const assessWith = (item, prompt, reply, { staffSaid = '', byCode = false, trusted = '' } = {}) => drafter.assessReply(item, prompt, answer(reply), {
   allowed: {
-    trusted: [prompt.vehicleText, item.timeline.filter((e) => e.who === 'us').map((e) => e.text).join('\n')].join('\n'),
+    trusted: [prompt.vehicleText, item.timeline.filter((e) => e.who === 'us').map((e) => e.text).join('\n'), trusted].join('\n'),
     policy: [prompt.businessFactsText, prompt.websiteText].join('\n'),
     customer: item.timeline.filter((e) => e.who !== 'us').map((e) => e.text).join('\n'),
   },
@@ -143,13 +146,18 @@ test('the compact request shows our records as markers; the conversation and the
   assert.ok(!promptModule.systemPrompt('sms').includes('{{F3}}'));
 });
 
-test('compact: a figure the AI typed fails figure-raw, a marker is put back and passes, an unknown marker fails marker-unknown', () => {
+test('compact: a figure the AI typed fails once, a marker is put back and passes, an unknown marker fails marker-unknown', () => {
   const item = customer(2, 'Ottilie', [['IN', 'Hello, is the Noah still at your yard?', 2 * DAY], ['OUT', 'Good morning Ottilie, yes it is.', 2 * DAY - HOUR], ['IN', 'Is it still available?', 5 * MIN]])();
   const prompt = promptModule.buildPrompt(item, { now, style: 'compact' });
 
+  // An invented price is named once, on the figure check's line, as in the full style.
   const typed = assessWith(item, prompt, 'It is $31,990.');
-  assert.ok(fails(typed.checks).includes('figure-raw'), JSON.stringify(typed.checks));
-  assert.deepEqual(typed.checks.find((c) => c.code === 'figure-raw').tokens, ['$31,990']);
+  assert.deepEqual(figureFails(typed.checks), ['figure'], JSON.stringify(typed.checks));
+  assert.deepEqual(typed.checks.find((c) => c.code === 'figure').tokens, ['$31,990']);
+  // Our record's 41,200 typed as 41200: the figure check finds it in our records; figure-raw fails it.
+  const raw = assessWith(item, prompt, 'It has 41200 km.');
+  assert.deepEqual(figureFails(raw.checks), ['figure-raw'], JSON.stringify(raw.checks));
+  assert.deepEqual(raw.checks.find((c) => c.code === 'figure-raw').tokens, ['41200']);
 
   const marked = assessWith(item, prompt, `It is ${markerFor(prompt, '$36,990')}.`);
   assert.equal(marked.body, 'It is $36,990.');
@@ -197,7 +205,8 @@ test('compact draft: a typed figure goes back once with the markers as the AI sa
   const d = await drafter.draftFor(item(), { now, save: false, style: 'compact' });
   assert.equal(seen.length, 2, 'one second request');
   const retry = seen[1].messages[1].content;
-  assert.ok(retry.includes('Write facts only as their markers.'), 'the retry note says how to write facts');
+  // The invented price is named once, by the figure check, not again as typed.
+  assert.ok(retry.includes('$31,990 is not in your records') && !retry.includes('You typed the figure $31,990'), retry.slice(-900));
   assert.ok(retry.includes(`Your rejected draft was:\nIt is ${price}, or $31,990 to you.`), retry.slice(-400));
   assert.ok(!seen.some((b) => b.messages.some((m) => m.content.includes('$36,990'))), 'the price never went to the AI');
   assert.ok(d.reply.startsWith('It is $36,990.'), d.reply);
@@ -220,8 +229,9 @@ test('compact: code\'s own wording (the standard opening of an offer, a template
   const item = customer(7, 'Cosima', [['IN', 'Hello, is the Noah still at your yard?', 2 * DAY], ['OUT', 'Good morning Cosima, yes it is.', 2 * DAY - HOUR], ['IN', 'Is it still available?', 5 * MIN]])();
   const prompt = promptModule.buildPrompt(item, { now, style: 'compact' });
   const opening = 'We have found a 2015 Toyota Alphard with 63,800 km that may be worth considering.';
-  assert.ok(codes(assessWith(item, prompt, opening).checks).includes('figure-raw'), 'the AI typing it fails');
-  assert.ok(!codes(assessWith(item, prompt, opening, { byCode: true }).checks).includes('figure-raw'), 'code writing it does not');
+  // The auction car's figures are ours to state, as writeDraft allows them for an offer.
+  assert.ok(codes(assessWith(item, prompt, opening, { trusted: opening }).checks).includes('figure-raw'), 'the AI typing it fails');
+  assert.ok(!codes(assessWith(item, prompt, opening, { trusted: opening, byCode: true }).checks).includes('figure-raw'), 'code writing it does not');
 });
 
 test('compact template fitting: the facts come back, and a fitting with a fact marker in it is not kept to be used again', async () => {
@@ -249,17 +259,22 @@ test('compact: a figure from our own rules in the request passes; one found only
   const chatRules = { ...prompt, system: promptModule.systemPrompt('marketplace', { style: 'compact' }) };
   assert.ok(!codes(assessWith(item, chatRules, 'The price includes 6 months rego, a fresh roadworthy and a 5-year warranty.').checks).includes('figure-raw'));
 
-  // A price that is only in a learning section (another customer's car) is not ours to type.
+  // A price that is only in a learning section (another customer's car) is not ours to type: it is
+  // not among what the reply may repeat, and the draft fails on it, once (the figure check names it).
   const learning = (heading, body) => ({ ...prompt, user: prompt.user.replace('\n=== CONVERSATION SO FAR ===', `\n=== ${heading} ===\n${body}\n\n=== CONVERSATION SO FAR ===`) });
   const example = learning('EXAMPLES OF HOW WE REPLY', 'Example 1\n  Customer: how much to hold it\n  We replied: It is $29,950 and a deposit holds it.');
   assert.ok(example.user.includes('$29,950'));
-  assert.ok(fails(assessWith(item, example, 'It is $29,950.').checks).includes('figure-raw'));
+  assert.ok(!promptModule.requestOwnText(example).includes('$29,950'));
+  assert.deepEqual(figureFails(assessWith(item, example, 'It is $29,950.').checks), ['figure']);
   for (const heading of ['HOW OUR STAFF CHANGED EARLIER SUGGESTIONS', 'WHAT OUR TEAM REALLY SENT FOR SIMILAR MESSAGES', 'HOW WE ANSWERED SIMILAR IMPORT EMAILS']) {
-    assert.ok(fails(assessWith(item, learning(heading, 'Case 1\n  Customer: how much\n  Staff used: It is $29,950.'), 'It is $29,950.').checks).includes('figure-raw'), heading);
+    const sent = learning(heading, 'Case 1\n  Customer: how much\n  Staff used: It is $29,950.');
+    assert.ok(!promptModule.requestOwnText(sent).includes('$29,950'), heading);
+    assert.deepEqual(figureFails(assessWith(item, sent, 'It is $29,950.').checks), ['figure'], heading);
   }
   // The owner's guidance: an approved reply to another customer is learning; the owner's own lesson is ours.
   const owner = learning('HOW THE OWNER WANTS THIS HANDLED', 'The owner of the business reads your suggestions and coaches you.\n- When they ask to hold it: the holding deposit is $1,250.\nApproved as written, for a similar message\n  Customer: how much\n  You wrote: It is $29,950.\n  Handle this one the same way.');
-  assert.ok(fails(assessWith(item, owner, 'It is $29,950.').checks).includes('figure-raw'));
+  assert.ok(!promptModule.requestOwnText(owner).includes('$29,950') && promptModule.requestOwnText(owner).includes('$1,250'));
+  assert.deepEqual(figureFails(assessWith(item, owner, 'It is $29,950.').checks), ['figure']);
   assert.ok(!codes(assessWith(item, owner, 'The holding deposit is $1,250.').checks).includes('figure-raw'));
 });
 
@@ -307,10 +322,10 @@ test('compact: the page says it in plain words; the AI is told which figure it t
   const item = customer(12, 'Barnaby', [['IN', 'Hello, is the Noah still at your yard?', 2 * DAY], ['OUT', 'Good morning Barnaby, yes it is.', 2 * DAY - HOUR], ['IN', 'Is it still available?', 5 * MIN]])();
   const prompt = promptModule.buildPrompt(item, { now, style: 'compact' });
   const odo = markerFor(prompt, '41,200');
-  // 41200 is our record's 41,200 written another way: the AI is told its marker.
-  const typed = assessWith(item, prompt, 'It has 41200 km and costs $31,990.').checks.find((c) => c.code === 'figure-raw');
-  assert.equal(typed.message, 'Wheelman wrote 41200, $31,990 itself instead of taking them from your records or this conversation. Check them before sending.');
-  assert.equal(typed.retry, `You typed the figure 41200 yourself; write its marker ${odo} instead. You typed the figure $31,990 yourself; it is not in our records.`);
+  // 41200 is our record's 41,200 written another way: the AI is told its marker. The link is in none of our records.
+  const typed = assessWith(item, prompt, 'It has 41200 km; see harbour.example/cars/T15.').checks.find((c) => c.code === 'figure-raw');
+  assert.equal(typed.message, 'Wheelman wrote 41200, harbour.example/cars/T15 itself instead of taking them from your records or this conversation. Check them before sending.');
+  assert.equal(typed.retry, `You typed the figure 41200 yourself; write its marker ${odo} instead. You typed the figure harbour.example/cars/T15 yourself; it is not in our records.`);
   const made = assessWith(item, prompt, 'It is {{F999}}.').checks.find((c) => c.code === 'marker-unknown');
   assert.equal(made.message, 'Wheelman wrote a fact placeholder it could not fill; it is shown as [CHECK?]. Check this part before sending.');
   assert.ok(!/\{\{/.test(typed.message) && !/\{\{/.test(made.message));
@@ -330,6 +345,7 @@ test('compact draft: the second request names the typed figure and its marker, a
   assert.equal(seen.length, 2);
   const retry = seen[1].messages[1].content;
   assert.ok(retry.includes(`You typed the figure 41200 yourself; write its marker ${odo} instead.`), retry.slice(-900));
+  assert.ok(retry.includes('Write facts only as their markers.'), 'the retry note says how to write facts');
   assert.ok(!retry.includes(`You typed the figure ${odo}`) && !retry.includes(`${odo} was written`), 'never told its right marker is wrong');
   assert.ok(retry.includes('Your rejected draft was:\nYes, it has 41200 km on it.'), retry.slice(-300));
   assert.ok(d.reply.startsWith('Yes, it has 41,200 km on it.'), d.reply);
@@ -345,10 +361,32 @@ test('compact draft: a figure typed exactly as our records have it is not figure
   assert.deepEqual(fails(ours.checks), [], JSON.stringify(ours.checks));
   assert.ok(ours.reply.startsWith('It has 41,200 km on it and is $36,990.'), ours.reply);
 
+  // A figure from nowhere still fails, named once by the figure check.
   script(answer('It has 52,700 km on it.'), answer('It has 52,700 km on it.'));
   const made = await drafter.draftFor(item(), { now, save: false, style: 'compact' });
   assert.equal(seen.length, 2, 'the usual one second request');
-  assert.ok(fails(made.checks).includes('figure-raw'), JSON.stringify(made.checks));
+  assert.deepEqual(figureFails(made.checks), ['figure'], JSON.stringify(made.checks));
+});
+
+test('compact: an invented price fails on one line, with the price-floor line the full style gives too, and still goes back once', async () => {
+  const item = customer(16, 'Wilfred', [['IN', 'Hello, is the Noah still at your yard?', 2 * DAY], ['OUT', 'Good morning Wilfred, yes it is.', 2 * DAY - HOUR], ['IN', 'Is it still available?', 5 * MIN]]);
+  const checksIn = async (style) => {
+    script(answer('Yes, it is still available at $31,990.'), answer('Yes, it is still available at $31,990.'));
+    const d = await drafter.draftFor(item(), { now, save: false, style });
+    assert.equal(seen.length, 2, `${style}: the usual one second request`);
+    return d.checks;
+  };
+  const full = await checksIn('full');
+  const compact = await checksIn('compact');
+  assert.deepEqual(figureFails(full), ['figure'], JSON.stringify(full));
+  assert.ok(fails(full).includes('price-floor'), JSON.stringify(full));
+  assert.deepEqual(fails(compact).sort(), fails(full).sort(), JSON.stringify(compact));
+
+  // Two figures typed: the invented one is named by the figure check, our record's written another way by figure-raw.
+  const prompt = promptModule.buildPrompt(item(), { now, style: 'compact' });
+  const both = assessWith(item(), prompt, 'It has 41200 km and costs $31,990.').checks;
+  assert.deepEqual(both.find((c) => c.code === 'figure').tokens, ['$31,990']);
+  assert.deepEqual(both.find((c) => c.code === 'figure-raw').tokens, ['41200']);
 });
 
 test('a typed phone number must match a phone number written in the allowed text, not digits scattered through it (item 3)', () => {
@@ -366,12 +404,13 @@ test('a money value never keeps a trailing comma (item 4)', () => {
   assert.equal(facts.restoreFacts('A {{F1}} holding deposit.', markers), 'A $1,000 holding deposit.');
 });
 
-test('compact: a figure only in the Marketplace system\'s unconfirmed notes fails figure-raw (item 6)', () => {
+test('compact: a figure only in the Marketplace system\'s unconfirmed notes fails (item 6)', () => {
   const item = customer(14, 'Leontyne', [['IN', 'Hello, is the Noah still at your yard?', 2 * DAY], ['OUT', 'Good morning Leontyne, yes it is.', 2 * DAY - HOUR], ['IN', 'Is it still available?', 5 * MIN]])();
   const prompt = promptModule.buildPrompt(item, { now, style: 'compact' });
   const notes = { ...prompt, user: prompt.user.replace('\n=== CONVERSATION SO FAR ===', '\n=== NOTES FROM THE MARKETPLACE SYSTEM (UNCONFIRMED) ===\nAn automatic system made these notes while chatting with the buyer.\n- the buyer was told $28,750\n\n=== CONVERSATION SO FAR ===') };
   assert.ok(notes.user.includes('$28,750'));
-  assert.ok(fails(assessWith(item, notes, 'It is $28,750.').checks).includes('figure-raw'));
+  assert.ok(!promptModule.requestOwnText(notes).includes('$28,750'));
+  assert.deepEqual(figureFails(assessWith(item, notes, 'It is $28,750.').checks), ['figure']);
 });
 
 test('the second request says to write facts as markers only when a fact check fired', () => {

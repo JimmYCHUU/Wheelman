@@ -3,7 +3,7 @@
 import { buildPrompt, writtenToday, requestOwnText } from './prompt.js';
 import { complete, LlmError } from './llm.js';
 import { logLine } from './log.js';
-import { finishReply, fixGreeting, checkDraft, retryNote, stripModelSignOff, confirmsTime, worst, chatStyle, dropGreeting, emailChecks, followUpChecks } from './checks.js';
+import { finishReply, fixGreeting, checkDraft, retryNote, stripModelSignOff, confirmsTime, worst, chatStyle, dropGreeting, emailChecks, followUpChecks, numbersIn } from './checks.js';
 import { researchFor, renderResearch } from './importquery.js';
 import { config } from './config.js';
 import { redact, restore } from './redact.js';
@@ -197,14 +197,17 @@ function writtenHere(item, prompt, staffSaid, coaching) {
  * back, and before code adds anything under it. A figure or link it typed itself (figure-raw), and
  * a marker that is not one of ours (marker-unknown), both fail. A figure typed exactly as one of
  * our records' values is not figure-raw: code checks it as well as its marker, in the figure and
- * link checks that read the reply once the markers are back.
+ * link checks that read the reply once the markers are back. Nor is one whose numbers the figure
+ * check already names (named): one invented figure, one line.
  */
-function factChecks(item, prompt, json, staffSaid, coaching) {
+function factChecks(item, prompt, json, staffSaid, coaching, named = new Set()) {
   const text = String(json.reply || '').replace(/\\n/g, '\n');
   const markers = prompt.factMarkers;
   const out = [];
+  // A link is never named there: the figure check reads figures, not links.
+  const namedThere = (lit) => { const ns = [...numbersIn(lit)]; return !lit.includes('/') && ns.length > 0 && ns.every((n) => named.has(n)); };
   const typed = inventedLiterals(text, { allowedText: writtenHere(item, prompt, staffSaid, coaching) })
-    .filter((lit) => !markers.some((m) => m.value === lit));
+    .filter((lit) => !markers.some((m) => m.value === lit) && !namedThere(lit));
   if (typed.length) {
     const it = typed.length === 1 ? 'it' : 'them';
     out.push({
@@ -243,8 +246,10 @@ const unknownMarkerCheck = (made) => ({
  */
 export function assessReply(item, prompt, json, opts) {
   if (!prompt.factMarkers) return assessAnswer(item, prompt, json, opts);
-  const own = opts.byCode ? [] : factChecks(item, prompt, json, opts.staffSaid || '', opts.coaching);
   const out = assessAnswer(item, prompt, restoreAnswer(json, prompt.factMarkers), opts);
+  // The numbers of the figures the figure check names: those are not named again as typed.
+  const named = new Set(out.checks.filter((c) => c.code === 'figure').flatMap((c) => [...numbersIn((c.tokens || []).join(' '))]));
+  const own = opts.byCode ? [] : factChecks(item, prompt, json, opts.staffSaid || '', opts.coaching, named);
   // The last safety net: nothing shaped like a fact marker is ever shown.
   if (factShaped(out.reply) || factShaped(out.body)) {
     out.reply = netFacts(out.reply);
