@@ -129,7 +129,7 @@
   /* a short window (200% zoom, a phone turned sideways): the conversation scrolls as a whole, so the box and its buttons are never cut off */
   @media (max-height: 560px) {
     .chat { overflow-y: auto; }
-    .chat-body { flex: none; height: 70%; }
+    .thread { flex: none; height: 40vh; }
     .box { max-height: none; }
   }
 

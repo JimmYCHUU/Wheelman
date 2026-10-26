@@ -136,7 +136,7 @@ test('wordCount', () => {
   assert.equal(wordCount('x'.repeat(161)).texts, 2);
 });
 
-test('statusAnnouncement speaks only when the tone changes or a problem changes', () => {
+test('statusAnnouncement speaks only an ok/problem change or new words on a problem, never busy', () => {
   const ok1 = { tone: 'ok', text: 'Up to date, checked just now' };
   const ok2 = { tone: 'ok', text: 'Up to date, checked 1 min ago' };
   const busy = { tone: 'busy', text: 'Checking for new messages' };
@@ -145,8 +145,11 @@ test('statusAnnouncement speaks only when the tone changes or a problem changes'
   assert.equal(statusAnnouncement(null, busy), null);
   assert.equal(statusAnnouncement(null, bad1), bad1.text);
   assert.equal(statusAnnouncement(ok1, ok2), null);
-  assert.equal(statusAnnouncement(busy, ok1), ok1.text);
+  assert.equal(statusAnnouncement(ok1, busy), null);
+  assert.equal(statusAnnouncement(ok1, ok2), null);
   assert.equal(statusAnnouncement(ok1, bad1), bad1.text);
+  assert.equal(statusAnnouncement(bad1, ok1), ok1.text);
+  assert.equal(statusAnnouncement(bad1, busy), null);
   assert.equal(statusAnnouncement(bad1, bad1), null);
   assert.equal(statusAnnouncement(bad1, bad2), bad2.text);
 });

@@ -112,10 +112,11 @@ export function statusWords(status, now) {
 
 /**
  * What a screen reader should be told about the status, or null for nothing. The words change every
- * refresh ("checked 1 min ago"), so only a change of tone, or new words on a problem, is announced.
- * prev is the status last seen (null on first sight, when only a problem is worth saying).
+ * refresh ("checked 1 min ago"), so only a change between ok and a problem, or new words on a problem, is announced; busy never is.
+ * prev is the last status that was not busy (null on first sight, when only a problem is worth saying).
  */
 export function statusAnnouncement(prev, next) {
+  if (next.tone === 'busy') return null;
   if (!prev) return next.tone === 'bad' ? next.text : null;
   if (prev.tone !== next.tone) return next.text;
   return next.tone === 'bad' && prev.text !== next.text ? next.text : null;

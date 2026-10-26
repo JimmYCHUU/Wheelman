@@ -27,7 +27,7 @@ function StatusLive({ status }) {
   const [said, setSaid] = useState('');
   useEffect(() => {
     const next = statusAnnouncement(seen.current, status);
-    seen.current = status;
+    if (status.tone !== 'busy') seen.current = status;
     if (next !== null) setSaid(next);
   }, [status.tone, status.text]);
   return html`<span class="sr" role="status" aria-live="polite">${said}</span>`;

@@ -67,6 +67,6 @@ function follow() {
 }
 store.subscribe(follow);
 
-actions.boot(parseRoute(location.hash), { wide: innerWidth >= 1280 }).finally(() => { booted = true; follow(); });
+actions.boot(parseRoute(location.hash), { wide: innerWidth >= 1280 }).catch(() => { /* the list shows its own error state */ }).finally(() => { booted = true; follow(); });
 setInterval(() => actions.refresh(), 20000);
 window.addEventListener('pagehide', () => actions.flush());
