@@ -46,6 +46,8 @@ export function setup(over = {}) {
       const m = path.match(/^\/api\/items\/([^?]+)/);
       if (m) return { item: data.items[m[1]] };
     }
+    // A test may answer a write itself (a failed suggestion, say).
+    if (path.endsWith('/draft') && data.draftReply) return data.draftReply(path, body);
     if (path.endsWith('/draft')) return { ok: true, item: { ...data.items[path.split('/')[3]], draft: draft(99, { reply: 'Written' }) } };
     return { ok: true, item: data.items[path.split('/')[3]] };
   };

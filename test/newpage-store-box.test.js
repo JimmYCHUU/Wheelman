@@ -3,7 +3,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStore } from '../web/new/js/store.js';
-import { fakeTimers, setup, paths } from './support/newpage-fakes.js';
+import { mainAction } from '../web/new/js/model.js';
+import { settle, fakeTimers, setup, draft, paths } from './support/newpage-fakes.js';
 
 test('a write in flight is known by its key until it ends, even when it fails', async () => {
   const a = setup();
@@ -128,4 +129,101 @@ test('Instead keeps the pick: back to the reply asks for it by name, and a refre
   a.calls.length = 0;
   await a.store.actions.refresh();
   assert.ok(paths(a.calls).includes('GET /api/items/c:2'));
+});
+
+test('an override covers one draft: a new draft with a failed check is blocked again', async () => {
+  const fail = [{ level: 'fail', code: 'figure', tokens: ['$31,990'], message: 'Check this figure: $31,990 is not in your records.' }];
+  const a = setup();
+  a.data.items['c:1'] = { ...a.data.items['c:1'], draft: draft(11, { reply: 'It is $31,990.', checks: fail }) };
+  const blocked = () => { const s = a.store.get(); return mainAction({ text: s.item.draft.reply, checks: s.item.draft.checks, overridden: s.overridden }).kind; };
+  await a.store.actions.open('c:1');
+  a.store.actions.override();
+  assert.equal(blocked(), 'copy');
+  await a.store.actions.refresh();
+  assert.equal(blocked(), 'copy', 'the same draft again keeps the override');
+  a.data.items['c:1'] = { ...a.data.items['c:1'], draft: draft(12, { reply: 'It is $31,990 now.', checks: fail }) };
+  await a.store.actions.refresh();
+  assert.equal(blocked(), 'blocked', 'a new draft from a refresh');
+  a.store.actions.override();
+  a.data.draftReply = () => ({ ok: true, item: { ...a.data.items['c:1'], draft: draft(13, { reply: 'Still $31,990.', checks: fail }) } });
+  await a.store.actions.write({});
+  assert.equal(blocked(), 'blocked', 'a new draft from a write');
+});
+
+test('a failed write keeps the unsaved edit: the note still says Not saved yet and the retry still runs', async () => {
+  const a = setup();
+  await a.store.actions.open('c:1');
+  a.data.fail.add('/edit');
+  a.store.actions.type('My words');
+  await a.timers.advance(600);
+  assert.equal(a.store.get().save.state, 'failed');
+  a.data.fail.add('/draft');
+  await a.store.actions.tell('Make it shorter');
+  assert.equal(a.store.get().save.state, 'failed');
+  assert.equal(a.store.get().typed, 'My words');
+  const tries = a.calls.filter((c) => c.path.endsWith('/edit')).length;
+  a.data.fail.clear();
+  await a.timers.advance(5000);
+  assert.equal(a.calls.filter((c) => c.path.endsWith('/edit')).length, tries + 1);
+  assert.deepEqual(a.calls.filter((c) => c.path.endsWith('/edit')).at(-1).body, { text: 'My words' });
+  assert.equal(a.store.get().save.state, 'saved');
+});
+
+test('a write that brings a new suggestion drops the edit waiting to be saved', async () => {
+  const a = setup();
+  await a.store.actions.open('c:1');
+  a.store.actions.type('My words');
+  await a.store.actions.write({});
+  assert.equal(a.store.get().typed, null);
+  assert.deepEqual(a.store.get().save, { state: 'idle', at: null });
+  await a.timers.advance(1000);
+  assert.equal(a.calls.some((c) => c.path.endsWith('/edit')), false);
+});
+
+test('a failed suggestion shown in the box is not told again in a toast; a write that never arrived is', async () => {
+  const a = setup();
+  await a.store.actions.open('c:1');
+  a.data.draftReply = () => ({ ok: false, error: 'The model is overloaded.', item: { ...a.data.items['c:1'], draft: draft(98, { status: 'failed', reply: '', error: 'The model is overloaded.' }) } });
+  await a.store.actions.write({});
+  assert.equal(a.store.get().item.draft.status, 'failed');
+  assert.equal(a.store.get().toast, null);
+  a.data.draftReply = null;
+  a.data.fail.add('/draft');
+  await a.store.actions.write({});
+  assert.equal(a.store.get().toast.message, 'Network down');
+});
+
+test('a save that lands after a new suggestion leaves the new one\'s note alone', async () => {
+  let release = null;
+  const old = { id: 1, status: 'ready', reply: 'Old', edited: null, checks: [] };
+  const api = async (path) => {
+    if (path.endsWith('/edit')) { await new Promise((r) => { release = r; }); return {}; }
+    if (path.endsWith('/draft')) return { ok: true, item: { key: 'c:1', anchor: 'a', draft: { ...old, id: 2, reply: 'New' } } };
+    return { item: { key: 'c:1', anchor: 'a', draft: old } };
+  };
+  const timers = fakeTimers();
+  const store = createStore({ api, clipboard: {}, storage: { getItem: () => null, setItem() {} }, now: () => 5, timers, keepalive() {} });
+  await store.actions.open('c:1');
+  store.actions.type('Mine');
+  await timers.advance(600);
+  assert.ok(release, 'the save is on its way');
+  await store.actions.write({});
+  release();
+  await settle();
+  assert.deepEqual(store.get().save, { state: 'idle', at: null });
+});
+
+test('a new message while typing offers "Use the new suggestion" only once there is one to use', async () => {
+  const a = setup();
+  await a.store.actions.open('c:1');
+  a.store.actions.type('My words');
+  a.data.items['c:1'] = { ...a.data.items['c:1'], anchor: 'a-newer', draft: null, writing: true };
+  await a.store.actions.refresh();
+  assert.equal(a.store.get().typed, 'My words');
+  assert.equal(a.store.get().context.message, 'New message from the customer. Your text is kept.');
+  assert.equal(a.store.get().context.action, null);
+  a.data.items['c:1'] = { ...a.data.items['c:1'], draft: draft(21, { reply: 'For the new message' }), writing: false };
+  await a.store.actions.refresh();
+  assert.equal(a.store.get().typed, 'My words');
+  assert.equal(a.store.get().context.action.label, 'Use the new suggestion');
 });

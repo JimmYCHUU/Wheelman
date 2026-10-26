@@ -5,7 +5,7 @@
 // focus stays in the editor nothing is rebuilt, so the caret never jumps; a pill typed in stays a
 // pill (green) until focus leaves the editor, and then becomes part of the text.
 import { html, useRef, useState, useLayoutEffect } from './html.js';
-import { segments, joinSegments, fillBlank, blankWords } from '../model.js';
+import { segments, joinSegments, fillBlank, blankWords, plainPaste } from '../model.js';
 
 /** Whether this browser keeps an editable element to plain text (paste and Enter then stay plain). */
 const PLAIN = (() => {
@@ -90,11 +90,17 @@ function TextPiece({ text, only, last, onText }) {
   const paste = (e) => {
     e.preventDefault();
     const t = (e.clipboardData && e.clipboardData.getData('text/plain')) || '';
-    if (t) insertPlain(e.currentTarget, t.replace(/\r\n?/g, '\n'), last, onText);
+    if (t) insertPlain(e.currentTarget, plainPaste(t), last, onText);
+  };
+  // A phone keyboard may send its Enter only as an input of this kind, with no Enter key: the same newline.
+  const beforeInput = (e) => {
+    if (e.isComposing || (e.inputType !== 'insertParagraph' && e.inputType !== 'insertLineBreak')) return;
+    e.preventDefault();
+    insertPlain(e.currentTarget, '\n', last, onText);
   };
   return html`<span class="seg" ref=${ref} contenteditable=${PLAIN ? 'plaintext-only' : 'true'} role="textbox" aria-multiline="true"
     aria-label="Reply text, you can change it" spellcheck="true" data-placeholder=${only ? 'Type your reply' : null}
-    onInput=${(e) => onText(readText(e.currentTarget, last))} onKeyDown=${keys} onPaste=${paste} onDrop=${(e) => e.preventDefault()}></span>`;
+    onInput=${(e) => onText(readText(e.currentTarget, last))} onKeyDown=${keys} onbeforeinput=${beforeInput} onPaste=${paste} onDrop=${(e) => e.preventDefault()}></span>`;
 }
 
 function Pill({ piece, onValue, onKey }) {

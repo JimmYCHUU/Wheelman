@@ -2,7 +2,7 @@
 // about the text in the box, the save note and the word count. Invented data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { blankWords, wordsChanged, liveChecks, boxView, wordsLine, saveWords } from '../web/new/js/model.js';
+import { blankWords, wordsChanged, liveChecks, boxView, trustLine, plainPaste, wordsLine, saveWords, mainAction } from '../web/new/js/model.js';
 import { clock } from '../web/lib/format.js';
 
 const AT = Date.parse('2026-10-26T22:40:00Z'); // 9:40 am in Sydney
@@ -131,4 +131,44 @@ test('saveWords: saving, saved with the time, not saved, and an edit saved befor
   assert.equal(saveWords({ save: { state: 'idle', at: null }, draft: draft({ edited: 'Mine', editedAt: AT }), typed: null }), 'Your changes are saved · ' + clock(AT));
   assert.equal(saveWords({ save: { state: 'idle', at: null }, draft: draft(), typed: null }), '');
   assert.equal(saveWords({ save: { state: 'idle', at: null }, draft: null, typed: null }), '');
+});
+
+test('boxView keeps the editor while there is typed text: a new message, its writing or its failure never hide it', () => {
+  const typed = (o) => boxView({ item: item(o), typed: true });
+  assert.deepEqual(typed({ draft: null }), { kind: 'editor', context: '' }, 'the new message has no suggestion yet');
+  assert.deepEqual(typed({ writing: true }), { kind: 'editor', context: '' }, 'Wheelman is writing in the background');
+  assert.equal(typed({ draft: draft({ status: 'failed', reply: '', error: 'x' }) }).kind, 'editor');
+  assert.equal(typed({ state: 'answered', draft: null }).kind, 'editor');
+  assert.equal(boxView({ item: item({ anchor: 'fu:5', followUp: { id: 5, reason: 'Inspection passed', done: '' }, draft: null }), typed: true }).context, 'Follow-up: Inspection passed');
+  // Only a write this page started, done, opted out and dismissed take the box over.
+  assert.equal(boxView({ item: item({ draft: null }), typed: true, writing: true }).kind, 'writing');
+  assert.equal(boxView({ item: item(), typed: true, done: true }).sentence, 'Copied.');
+  assert.equal(typed({ state: 'optout' }).sentence, 'This customer asked not to be contacted. Do not reply.');
+  assert.equal(typed({ dismissed: true }).button.act, 'restore');
+  assert.equal(boxView({ item: item({ anchor: 'fu:5', followUp: { id: 5, reason: 'x', done: 'copied' } }), typed: true }).button.act, 'restore-followup');
+});
+
+test('trustLine: green only for Wheelman\'s own text as checked, untouched', () => {
+  const ok = { level: 'ok', code: 'ok', tokens: [], message: 'Figures and links match your records.' };
+  const plain = draft({ reply: 'Hello, the car is here.', checks: [ok] });
+  assert.deepEqual(trustLine(plain, 'Hello, the car is here.'), { tone: 'good', text: 'Figures and links match your records.' });
+  const blank = draft({ reply: 'The price is [PRICE?].', checks: [ok] });
+  assert.deepEqual(trustLine(blank, 'The price is $25,990.'), { tone: 'quiet', text: 'What you typed has not been checked.' }, 'a filled blank is typed text');
+  assert.deepEqual(trustLine(plain, 'Hello, the car is here!'), { tone: 'quiet', text: 'What you typed has not been checked.' });
+  assert.equal(trustLine(draft({ reply: 'Hello.', checks: [] }), 'Hello.'), null, 'untouched without the ok line: neither');
+  assert.deepEqual(trustLine(draft({ reply: '', checks: [], status: 'failed' }), 'Mine'), { tone: 'quiet', text: 'What you typed has not been checked.' }, 'beside a failed suggestion the text is theirs');
+  assert.deepEqual(trustLine(null, 'My own words'), { tone: 'quiet', text: 'What you typed has not been checked.' });
+  assert.equal(trustLine(plain, '   '), null);
+});
+
+test('plainPaste: Windows line ends and non-breaking spaces become plain ones', () => {
+  assert.equal(plainPaste('One\r\nTwo\rThree four  five'), 'One\nTwo\nThree four  five');
+  assert.equal(plainPaste(''), '');
+});
+
+test('mainAction with a failed check and an empty blank: fill it first, and nothing copies past the check', () => {
+  const fail = [{ level: 'fail', message: 'x' }];
+  assert.deepEqual(mainAction({ text: 'It is $31,990 on [DATE?]', checks: fail, overridden: false }), { kind: 'fill', label: 'Fill 1 blank', secondary: null });
+  assert.equal(mainAction({ text: 'It is $31,990 on Saturday', checks: fail, overridden: false }).kind, 'blocked');
+  assert.deepEqual(mainAction({ text: 'It is $31,990 on [DATE?]', checks: fail, overridden: true }), { kind: 'fill', label: 'Fill 1 blank', secondary: 'Copy with the blank' });
 });

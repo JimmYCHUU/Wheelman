@@ -3,11 +3,8 @@
 // Clear and the one main button. Nothing is sent from here: a Dashboard reply is copied, then pasted
 // into the dashboard. When there is no suggestion to show, one sentence says why, with one button.
 import { html, useState, useEffect, useRef, useLayoutEffect } from './html.js';
-import { boxText, boxView, liveChecks, checkLines, mainAction, insteadOptions, wordsChanged, wordsLine, saveWords, segments } from '../model.js';
+import { boxText, boxView, liveChecks, checkLines, mainAction, insteadOptions, trustLine, wordsLine, saveWords, segments } from '../model.js';
 import { Editor, focusFirstBlank, focusText } from './editor.js';
-
-const MATCH = 'Figures and links match your records.';
-const UNCHECKED = 'What you typed has not been checked.';
 
 /** Ctrl+Enter (Cmd+Enter on a Mac) runs main.current, unless focus is in a field outside the editor. */
 function useCtrlEnter(main, editor) {
@@ -96,9 +93,13 @@ function Quiet({ state, actions, item, view }) {
   </div>`;
 }
 
-/** The suggestion in its editor, with the checks, Instead, Tell Wheelman, Clear and the main button. */
+/**
+ * The suggestion in its editor, with the checks, Instead, Tell Wheelman, Clear and the main button.
+ * Typed text stays here even when the conversation has no ready suggestion (a new message has
+ * arrived, say): then nothing is checked and there is nothing to bring back.
+ */
 function Draft({ state, actions, item, view, editor, main }) {
-  const d = item.draft;
+  const d = item.draft && item.draft.status === 'ready' ? item.draft : null;
   const text = state.typed !== null ? state.typed : boxText(d);
   const empty = !text.trim();
   const live = liveChecks(d, text);
@@ -114,11 +115,10 @@ function Draft({ state, actions, item, view, editor, main }) {
     else actions.copy({});
   };
   main.current = run;
-  // Copy anyway: the person's own decision. It copies at once, unless a blank is still to fill.
+  // Copy anyway: the person's own decision. Offered only while no blank is empty, so it copies.
   const copyAnyway = () => {
     actions.override();
-    if (blanks) fill();
-    else actions.copy({});
+    actions.copy({});
   };
   // After Clear or Bring back the button pressed is gone, so the caret goes into the text, once the
   // new text is on screen.
@@ -131,9 +131,8 @@ function Draft({ state, actions, item, view, editor, main }) {
   const clear = () => { refocus.current = true; actions.clear(); };
   const bringBack = () => { refocus.current = true; actions.bringBack(); };
 
-  const quietLine = !lines.fails.length && !lines.warns.length && !lines.inputs.length
-    ? (wordsChanged(d.reply, text) ? html`<p class="check quiet">${UNCHECKED}</p>` : blanks ? null : html`<p class="check good">${MATCH}</p>`)
-    : null;
+  // Green only for Wheelman's own text as the server checked it; anything typed says it was not checked.
+  const trust = !lines.fails.length && !lines.warns.length && !lines.inputs.length ? trustLine(d, text) : null;
   const note = saveWords({ save: state.save, draft: d, typed: state.typed });
 
   return html`<div class="box" role="group" aria-label="Message box">
@@ -149,9 +148,9 @@ function Draft({ state, actions, item, view, editor, main }) {
     <div class="box-foot">
       ${empty ? null : html`<div class="checks">
         ${lines.fails.map((m, i) => html`<p class="check bad" key=${'f' + i}><span>${m}</span>
-          ${state.overridden ? null : html`<button type="button" class="btn small" onClick=${copyAnyway}>Copy anyway</button>`}</p>`)}
+          ${state.overridden || blanks ? null : html`<button type="button" class="btn small" onClick=${copyAnyway}>Copy anyway</button>`}</p>`)}
         ${[...lines.warns, ...lines.inputs].map((m, i) => html`<p class="check warn" key=${'w' + i}>${m}</p>`)}
-        ${quietLine}
+        ${trust ? html`<p class=${'check ' + trust.tone}>${trust.text}</p>` : null}
       </div>`}
       ${options.length ? html`<div class="instead"><span>Instead:</span>
         ${options.map((o) => html`<button type="button" class="opt" key=${o.id} onClick=${() => actions.instead(o.id)}>${o.label}</button>`)}
@@ -160,7 +159,7 @@ function Draft({ state, actions, item, view, editor, main }) {
         <${Tell} onSend=${(v) => actions.tell(v)} holdTell=${actions.holdTell} button="Rewrite" />
         <div class="right">
           ${empty
-            ? (d.reply ? html`<button type="button" class="btn" onClick=${bringBack}>Bring back the suggestion</button>` : null)
+            ? (d && d.reply ? html`<button type="button" class="btn" onClick=${bringBack}>Bring back the suggestion</button>` : null)
             : html`<button type="button" class="btn quiet" onClick=${clear}>Clear</button>`}
           ${action && action.secondary ? html`<button type="button" class="btn quiet" onClick=${() => actions.copy({ withBlanks: true })}>${action.secondary}</button>` : null}
           ${action ? html`<button type="button" class="btn main" disabled=${action.kind === 'blocked'} title=${action.kind === 'blocked' ? null : action.label + ' (Ctrl+Enter)'} onClick=${run}>${action.label}</button>` : null}
@@ -174,7 +173,7 @@ function Box({ state, actions, item }) {
   const editor = useRef(null);
   const main = useRef(null);
   useCtrlEnter(main, editor);
-  const view = boxView({ item, writing: state.writing === state.key, done: state.done[state.key] === item.anchor, doneAt: state.doneAt[state.key] });
+  const view = boxView({ item, writing: state.writing === state.key, done: state.done[state.key] === item.anchor, doneAt: state.doneAt[state.key], typed: state.typed !== null });
   if (view.kind !== 'editor') main.current = null;
   if (view.kind === 'writing') return html`<${Writing} state=${state} />`;
   if (view.kind === 'quiet') return html`<${Quiet} state=${state} actions=${actions} item=${item} view=${view} />`;

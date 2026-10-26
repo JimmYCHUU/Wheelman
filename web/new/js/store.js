@@ -30,7 +30,13 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     writing: null,
   };
   const listeners = new Set();
-  const set = (patch) => { state = { ...state, ...patch }; for (const fn of [...listeners]) fn(); };
+  const draftId = (item) => (item && item.draft ? item.draft.id : null);
+  const set = (patch) => {
+    // "Copy anyway" was for the draft on screen: another draft is checked afresh.
+    if ('item' in patch && !('overridden' in patch) && draftId(patch.item) !== draftId(state.item)) patch = { ...patch, overridden: false };
+    state = { ...state, ...patch };
+    for (const fn of [...listeners]) fn();
+  };
 
   // Things the UI has no need to see.
   let followupId = null;          // the follow-up the open conversation was opened from
@@ -77,7 +83,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     try {
       await api('/api/drafts/' + edit.id + '/edit', { text: edit.text });
       if (pending === edit) pending = null;
-      if (pending === null) set({ save: { state: 'saved', at: now() } });
+      if (pending === null && draftId(state.item) === edit.id) set({ save: { state: 'saved', at: now() } });
     } catch {
       if (pending !== edit) return;
       set({ save: { state: 'failed', at: state.save.at } });
@@ -135,9 +141,11 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     const old = state.item;
     const changed = old && ((old.draft && old.draft.id) !== (fresh.draft && fresh.draft.id) || old.anchor !== fresh.anchor);
     if (changed && state.typed !== null) {
+      // The typed text stays. Its replacement is offered only once there is a suggestion to use.
+      const ready = !!(fresh.draft && fresh.draft.status === 'ready');
       set({ item: fresh, context: {
         message: NEW_MESSAGE,
-        action: { label: 'Use the new suggestion', run: () => set({ typed: null, context: null }) },
+        action: ready ? { label: 'Use the new suggestion', run: () => set({ typed: null, context: null }) } : null,
       } });
     } else {
       set({ item: fresh, itemState: 'ready' });
@@ -227,19 +235,24 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
   async function write({ instruction, message, followup } = {}) {
     const key = state.key;
     if (!key) return;
-    timers.clear(saveTimer);
-    pending = null;
     // A follow-up written from here is the one in hand from now on, so a refresh asks for it.
     if (followup) followupId = followup;
     const fu = followup !== undefined ? followup : followupId || undefined;
     const msg = message !== undefined ? message : templateInHand(state.item);
     const seq = ++writeSeq;
-    set({ writing: key, save: { state: 'idle', at: null } });
+    set({ writing: key });
     try {
       const out = await api('/api/items/' + key + '/draft', { instruction, message: msg, followup: fu });
       if (key !== state.key) return;
-      if (out.item) set({ item: out.item, itemState: 'ready', typed: null, context: null });
-      if (out.error) toast(out.error);
+      if (out.item) {
+        // The new suggestion replaces the text, and an edit still waiting to be saved goes with it.
+        // Until then (a write that fails on the way) the edit, its note and its retry stay.
+        timers.clear(saveTimer);
+        pending = null;
+        set({ item: out.item, itemState: 'ready', typed: null, context: null, save: { state: 'idle', at: null } });
+      }
+      const shown = !!(out.item && out.item.draft && out.item.draft.status === 'failed');
+      if (out.error && !shown) toast(out.error);
     } catch (e) {
       if (key === state.key) toast(e.message);
     } finally {

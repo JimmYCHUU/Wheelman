@@ -91,9 +91,12 @@ export function checkLines(checks) {
 
 /** The one main button. */
 export function mainAction({ text, checks, overridden }) {
-  if (!overridden && (checks || []).some((c) => c.level === 'fail')) return { kind: 'blocked', label: 'Fix the check first', secondary: null };
+  const blocked = !overridden && (checks || []).some((c) => c.level === 'fail');
   const n = blanksIn(text).length;
-  if (n) return { kind: 'fill', label: n === 1 ? 'Fill 1 blank' : 'Fill ' + n + ' blanks', secondary: n === 1 ? 'Copy with the blank' : 'Copy with the blanks' };
+  const fill = n === 1 ? 'Fill 1 blank' : 'Fill ' + n + ' blanks';
+  // A blank comes first even past a failed check, but nothing is copied until the check is dealt with.
+  if (blocked) return n ? { kind: 'fill', label: fill, secondary: null } : { kind: 'blocked', label: 'Fix the check first', secondary: null };
+  if (n) return { kind: 'fill', label: fill, secondary: n === 1 ? 'Copy with the blank' : 'Copy with the blanks' };
   return { kind: 'copy', label: 'Copy reply', secondary: null };
 }
 
@@ -190,8 +193,11 @@ const PUT_BACK_FOLLOW_UP = { label: 'Put back in Follow-ups', act: 'restore-foll
 /**
  * What the message box shows for the open conversation: the editor, or one sentence with at most
  * one button (act names what it does), and whether the Tell Wheelman line goes with it.
+ * writing: a write this page started. typed: the person has typed text, which stays in the editor
+ * whatever arrives (a new message with no suggestion yet, Wheelman writing in the background, or a
+ * failure); only a write from here, done, opted out and dismissed take the box over.
  */
-export function boxView({ item, writing = false, done = false, doneAt = null } = {}) {
+export function boxView({ item, writing = false, done = false, doneAt = null, typed = false } = {}) {
   if (!item) return { kind: 'none' };
   const d = item.draft || null;
   const ready = !!d && d.status === 'ready';
@@ -200,19 +206,21 @@ export function boxView({ item, writing = false, done = false, doneAt = null } =
   const say = (sentence, button = null, o = {}) => ({ kind: 'quiet', tone: '', sentence, button, tell: false, ...o });
   const failed = (first) => say((first + ' ' + (d.error || '')).trim(), { label: 'Try again', act: 'retry', main: true }, { tone: 'bad', tell: true });
 
-  if (writing || item.writing) return { kind: 'writing' };
+  if (writing) return { kind: 'writing' };
   if (done) return say(doneAt ? 'Copied at ' + clock(doneAt) + '.' : 'Copied.', mine ? PUT_BACK_FOLLOW_UP : PUT_BACK, { tone: 'good' });
+  if (fu && fu.done === 'copied') return say('You copied this follow-up. It has left Follow-ups.', PUT_BACK_FOLLOW_UP);
+  if (fu && fu.done) return say('You dismissed this follow-up.', PUT_BACK_FOLLOW_UP);
+  if (item.state === 'optout') return say('This customer asked not to be contacted. Do not reply.', null, { tone: 'bad' });
+  if (item.dismissed && item.state === 'awaiting') {
+    return say('You dismissed this conversation. It comes back by itself if the customer writes again.', { label: 'Put back in Needs reply', act: 'restore', main: false });
+  }
+  if (typed) return { kind: 'editor', context: mine ? 'Follow-up: ' + fu.reason : '' };
+  if (item.writing) return { kind: 'writing' };
   if (fu) {
-    if (fu.done === 'copied') return say('You copied this follow-up. It has left Follow-ups.', PUT_BACK_FOLLOW_UP);
-    if (fu.done) return say('You dismissed this follow-up.', PUT_BACK_FOLLOW_UP);
     if (mine && ready) return { kind: 'editor', context: 'Follow-up: ' + fu.reason };
     if (mine && d && d.status === 'failed') return failed('The follow-up could not be written.');
     return say(fu.reason + '. A follow-up is due. Nothing is sent by itself: write it, check it, then copy it.',
       { label: 'Write the follow-up', act: 'write-followup', main: true }, { tell: true });
-  }
-  if (item.state === 'optout') return say('This customer asked not to be contacted. Do not reply.', null, { tone: 'bad' });
-  if (item.dismissed && item.state === 'awaiting') {
-    return say('You dismissed this conversation. It comes back by itself if the customer writes again.', { label: 'Put back in Needs reply', act: 'restore', main: false });
   }
   if (item.state !== 'awaiting' && !ready) {
     return say(item.state === 'answered' ? 'We have replied. Nothing is waiting here.' : item.note || 'No reply needed.',
@@ -238,3 +246,22 @@ export function saveWords({ save, draft, typed }) {
   if (typed === null && draft && draft.edited !== null && draft.edited !== undefined && draft.editedAt) return 'Your changes are saved · ' + clock(draft.editedAt);
   return '';
 }
+
+const UNCHECKED = 'What you typed has not been checked.';
+
+/**
+ * The quiet line under the checks: green only for Wheelman's own text, untouched, when the server's
+ * checks found everything matching (their "ok" line). Anything typed, a filled blank too, was never
+ * checked, and says so.
+ */
+export function trustLine(draft, text) {
+  const t = String(text ?? '');
+  if (!t.trim()) return null;
+  const ready = draft && draft.status === 'ready' ? draft : null;
+  if (!ready || t !== ready.reply) return { tone: 'quiet', text: UNCHECKED };
+  const ok = (ready.checks || []).find((c) => c.level === 'ok');
+  return ok ? { tone: 'good', text: ok.message } : null;
+}
+
+/** Pasted text as plain text: Windows line ends and non-breaking spaces made plain. */
+export const plainPaste = (text) => String(text || '').replace(/\r\n?/g, '\n').replace(/ /g, ' ');
