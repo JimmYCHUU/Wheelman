@@ -58,8 +58,8 @@ export function TopBar({ state, tab, onTab, now }) {
         })}
       </div>
     </nav>
-    <div class="status" title=${status.text}>
-      <span class=${'dot ' + status.tone}></span><span class="words">${status.text}</span>
+    <div class=${'status ' + status.tone}>
+      <span class=${'dot ' + status.tone} aria-hidden="true"></span><span class="words" role="status">${status.text}</span>
     </div>
     <div class="menu-wrap">
       <button type="button" class="btn quiet" aria-haspopup="true" aria-expanded=${menu} onClick=${() => setMenu(!menu)}>Menu</button>

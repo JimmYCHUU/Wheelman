@@ -9,13 +9,11 @@
   .empty { margin: 0; padding: var(--s-6); color: var(--ink-2); }
   .empty a { display: inline-block; margin-top: var(--s-2); }
 
-  @media (max-width: 1099px) {
-    .status .words { display: none; }
-  }
   @media (max-width: 899px) {
     .topbar { flex-wrap: wrap; height: auto; padding: var(--s-2) var(--s-2) var(--s-2) var(--s-3); row-gap: var(--s-2); }
     .brand { margin-right: auto; }
     .tabs { order: 5; flex-basis: 100%; justify-content: flex-start; }
+    .status { order: 6; flex-basis: 100%; }
     .tab { padding: 0 var(--s-3); }
     .work { grid-template-columns: minmax(0, 1fr); }
     .work > .list-col, .work > .chat { display: none; }
