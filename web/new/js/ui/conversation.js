@@ -115,6 +115,7 @@ function Thread({ item, name, now, older }) {
 
   const onScroll = () => {
     const el = box.current;
+    if (!el) return; // a scroll that arrives as the conversation is being replaced
     const k = keep.current;
     k.stuck = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM;
     k.fromBottom = el.scrollHeight - el.scrollTop;

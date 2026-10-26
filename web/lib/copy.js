@@ -31,7 +31,9 @@ export const COPY = {
 
   'action.checkNow': 'Check for new messages now',
   'action.aiModel': 'Which AI writes the suggestions',
-  'action.search': 'Search conversations',
+  'top.newPage': 'Try the new page',
+  'top.newPage.short': 'New page',
+  'action.search':'Search conversations',
   'action.backToList': 'Back to conversations',
 
   'tag.check': 'Check the reply',
