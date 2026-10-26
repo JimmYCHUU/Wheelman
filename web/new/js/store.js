@@ -14,6 +14,12 @@ export function visibleRows(s) {
   return s.rows.filter((r) => s.done[r.key] !== r.anchor);
 }
 
+/** The follow-up in hand for a conversation opened on Follow-ups: its row's, once the list is loaded. */
+export function followUpOf(s, key) {
+  const r = s.chip === 'followups' ? s.rows.find((x) => x.key === key) : null;
+  return (r && r.followUp && r.followUp.id) || undefined;
+}
+
 export function waitingCount(s) {
   // On other chips the rows include answered ones, which were never in the count.
   const hidden = s.rows.filter((r) => s.done[r.key] === r.anchor && (s.chip === 'waiting' || r.state === 'awaiting')).length;
@@ -24,6 +30,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
   const read = (k) => {
     try { const v = JSON.parse(storage.getItem(k)); return v && typeof v === 'object' ? v : {}; } catch { return {}; }
   };
+  // Only the Dashboard is on the new page yet: the section never changes, whatever the address says.
   let state = {
     section: 'dashboard', chip: 'waiting', rows: [], total: 0, counts: {}, unread: {}, listState: 'loading', listError: '',
     limit: 20, key: null, item: null, itemState: 'idle', typed: null, save: { state: 'idle', at: null },
@@ -178,25 +185,33 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     }
   }
 
-  async function setChip(id) {
+  // Another list. Chosen, Follow-ups opens the first one and writes it if nothing is written or being
+  // written. From the address (a key, or null: Back, forward), only that conversation opens, if any.
+  async function setChip(id, { key } = {}) {
     set({ chip: id });
     await refresh();
+    if (state.chip !== id) return; // another chip was chosen meanwhile
+    if (key !== undefined) { // with its follow-up, and nothing is written by itself
+      const followup = followUpOf(state, key);
+      if (key && (key !== state.key || (followup || null) !== followupId)) await open(key, { followup });
+      return;
+    }
     if (id !== 'followups') return;
     const first = state.rows[0];
     if (!first) { set({ key: null, item: null, itemState: 'idle' }); return; }
     const fu = first.followUp && first.followUp.id;
     await open(first.key, { followup: fu });
-    if (state.itemState === 'ready' && state.item && !state.item.draft) await write({ followup: fu });
+    if (state.itemState === 'ready' && state.item && !state.item.draft && !state.item.writing) await write({ followup: fu });
   }
 
+  // The first list and conversation, from the address. Another section's address (still on the old
+  // page) shows its tab's note only: the Dashboard's list loads, and nothing is opened or seen.
   async function boot(route, { wide } = {}) {
-    set({ section: route.section || 'dashboard', chip: route.chip || 'waiting' });
+    set({ chip: route.chip || 'waiting' });
     await refresh();
-    if (route.key) await open(route.key);
-    else if (wide) {
-      const first = visibleRows(state)[0];
-      if (first) await open(first.key, { followup: state.chip === 'followups' && first.followUp ? first.followUp.id : undefined });
-    }
+    if ((route.section || state.section) !== state.section) return;
+    const key = route.key || (wide && visibleRows(state)[0] ? visibleRows(state)[0].key : null);
+    if (key) await open(key, { followup: followUpOf(state, key) });
   }
 
   async function more() {
