@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStore } from '../web/new/js/store.js';
 import { mainAction } from '../web/new/js/model.js';
-import { settle, fakeTimers, setup, draft, paths } from './support/newpage-fakes.js';
+import { settle, fakeTimers, setup, draft, row, paths } from './support/newpage-fakes.js';
 
 test('a write in flight is known by its key until it ends, even when it fails', async () => {
   const a = setup();
@@ -251,14 +251,24 @@ test('a write that returns a failed suggestion keeps the typed text, its unsaved
   assert.equal(a.store.get().save.state, 'saved');
 });
 
-test('copying typed text beside a failed suggestion copies it, and tells the server nothing about that suggestion', async () => {
+test('copying typed text beside a failed follow-up tells the server, which closes the follow-up', async () => {
   const a = setup();
-  a.data.items['c:1'] = { ...a.data.items['c:1'], draft: draft(98, { status: 'failed', reply: '', error: 'x' }) };
-  await a.store.actions.refresh();
-  await a.store.actions.open('c:1');
-  a.store.actions.type('Mine');
+  a.data.rows = [row('c:1', { anchor: 'fu:5', followUp: { id: 5, reason: 'Inspection passed', done: '' } })];
+  a.data.items['c:1'] = { ...a.data.items['c:1'], anchor: 'fu:5', followUp: { id: 5, reason: 'Inspection passed', done: '' }, draft: draft(98, { status: 'failed', reply: '', error: 'x' }) };
+  await a.store.actions.setChip('followups');
+  assert.ok(paths(a.calls).includes('GET /api/items/c:1?followup=5'), 'opened from the Follow-ups chip');
+  a.store.actions.type('Team Carbarn here. How did you find the van?');
   await a.store.actions.copy({});
-  assert.deepEqual(a.written, ['Mine']);
+  assert.deepEqual(a.written, ['Team Carbarn here. How did you find the van?']);
+  const copied = a.calls.filter((c) => c.path.endsWith('/copied'));
+  assert.deepEqual(copied.map((c) => [c.path, c.body]), [['/api/drafts/98/copied', { text: 'Team Carbarn here. How did you find the van?' }]]);
+  assert.equal(a.store.get().done['c:1'], 'fu:5');
+});
+
+test('an empty box tells the server nothing on copy', async () => {
+  const a = setup();
+  await a.store.actions.open('c:1');
+  a.store.actions.type('   ');
+  await a.store.actions.copy({});
   assert.equal(a.calls.some((c) => c.path.endsWith('/copied')), false);
-  assert.equal(a.store.get().done['c:1'], 'a-c:1');
 });

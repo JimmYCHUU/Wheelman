@@ -270,8 +270,9 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     const value = text();
     const fu = /^fu:(\d+)$/.exec(item.anchor || '');
     await copyText(value, async () => {
-      // Only a ready suggestion is told: one that could not be written has nothing to learn from.
-      if (item.draft && item.draft.status === 'ready') { try { await api('/api/drafts/' + item.draft.id + '/copied', { text: value }); } catch { /* the copy itself worked */ } }
+      // The server keeps every reply copied, the person's own text beside a suggestion that could not
+      // be written too, and closes a follow-up that was copied (its anchor is fu:<id>).
+      if (item.draft && value.trim()) { try { await api('/api/drafts/' + item.draft.id + '/copied', { text: value }); } catch { /* the copy itself worked */ } }
       saveDone({ ...state.done, [key]: item.anchor }, { ...state.doneAt, [key]: now() });
       // A follow-up leaves Follow-ups on the server once it is copied, so it is put back there.
       toast('Copied', fu
