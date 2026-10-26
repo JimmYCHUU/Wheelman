@@ -2,8 +2,9 @@
 // plain reply to a customer's text on the dashboard. With PROMPT_STYLE=compact that write is
 // compact, and every other one (a Prompt or Rewrite, Could be better, a template, a follow-up,
 // Marketplace, an Import Query email, Auction) keeps the full style until it is replayed too. A
-// style given for one write (the replay, the tests) is used as given. All data is invented; a
-// stand-in AI service on this computer plays the model. Numbers 0491 570 2xx are this file's.
+// style given for one write (the replay, the tests) is used as given. Each draft keeps the style
+// it was written in. All data is invented; a stand-in AI service on this computer plays the model.
+// Numbers 0491 570 2xx are this file's.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { applyTestEnv } from './support/env.js';
@@ -60,8 +61,9 @@ const asCompact = async (fn) => {
 test('with PROMPT_STYLE=compact, a plain reply to a text on the dashboard is written in the compact style', async () => {
   const item = customer(1, 'Henrietta');
   await asCompact(async () => {
-    const { sent } = await write(item());
+    const { d, sent } = await write(item());
     assert.deepEqual(sent, ['compact']);
+    assert.equal(d.context.style, 'compact');
   });
 });
 
@@ -70,6 +72,7 @@ test('with PROMPT_STYLE=compact, a Prompt, Could be better, a template and a fol
   await asCompact(async () => {
     const prompted = await write(item(), { instruction: 'Keep it short' });
     assert.deepEqual(prompted.sent, ['full'], 'a Prompt or Rewrite');
+    assert.equal(prompted.d.context.style, 'full');
 
     const coached = await write(item(), { coaching: { note: 'Shorter, please.', draft: 'Hello, yes the Voxy is still here.' } });
     assert.deepEqual(coached.sent, ['full'], 'Could be better');
@@ -84,10 +87,12 @@ test('with PROMPT_STYLE=compact, a Prompt, Could be better, a template and a fol
     followUp.isFirstReply = false;
     const fu = await write(followUp);
     assert.deepEqual(fu.sent, ['full'], 'a follow-up');
+    assert.equal(fu.d.context.style, 'full');
 
     // A style given for the write is used as given: the replay asks for compact on every case.
     const given = await write(item(), { instruction: 'Keep it short', style: 'compact' });
     assert.deepEqual(given.sent, ['compact']);
+    assert.equal(given.d.context.style, 'compact');
   });
 });
 
@@ -112,7 +117,16 @@ test('with PROMPT_STYLE=compact, a Marketplace chat, an auction order, an import
 test('with PROMPT_STYLE=full (or unset) every write is full, as before', async () => {
   assert.equal(config.llm.promptStyle, 'full');
   const item = customer(4, 'Augustin');
-  const { sent } = await write(item());
+  const { d, sent } = await write(item());
   assert.deepEqual(sent, ['full']);
+  assert.equal(d.context.style, 'full');
   assert.equal(drafter.styleFor(item()), 'full');
+});
+
+test('a saved draft keeps the style it was written in: full by default, compact when compact was used', async () => {
+  const item = customer(5, 'Philomena');
+  const plain = await drafter.draftFor(item(), { now });
+  assert.equal(db.getDraft(plain.id).context.style, 'full');
+  const compact = await drafter.draftFor(item(), { now, style: 'compact' });
+  assert.equal(db.getDraft(compact.id).context.style, 'compact');
 });

@@ -436,6 +436,8 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
     ...(tpl && item.order ? { message: tpl.id } : {}),
     // A follow-up (src/followup.js): never learned from, whatever its anchor says later.
     followUp: item.followUp ? { id: item.followUp.id, kind: item.followUp.kind } : null,
+    // The prompt style it was written in (styleFor), so replays and the teaching buttons can be split by it.
+    style,
   };
   // What the owner typed into "Add what you know" is kept with a template's suggestion as its instruction was.
   const base = { itemKey: item.itemKey, anchorKey: item.anchorKey, situation: tpl && item.order ? tpl.id : item.situation.primary, instruction: instruction || tpl?.typed || '', context, template: tpl?.id || null };
