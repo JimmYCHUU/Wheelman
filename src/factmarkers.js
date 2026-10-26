@@ -4,8 +4,9 @@
 // distance, date, phone number and link in the trusted sections of the request (VEHICLE FACTS,
 // BUSINESS FACTS and the others, see buildPrompt in src/prompt.js) is replaced by a numbered
 // marker, {{F1}}, {{F2}} ..., and code puts each one back exactly as it was. A figure the AI typed
-// itself that nobody wrote in this conversation, and our staff did not give, fails the draft
-// (figure-raw); so does a marker that is not one of ours (marker-unknown). A blank such as
+// itself that nobody wrote in this conversation, our staff did not give and is not exactly one of
+// our records' values, fails the draft (figure-raw); so does a marker that is not one of ours
+// (marker-unknown). A blank such as
 // [PRICE?] is for a person to fill in: it is never masked and never filled by code.
 //
 // The fitter's markers for one of the owner's templates are {{K1}} ... (src/fitter.js), and the

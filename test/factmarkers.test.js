@@ -307,9 +307,10 @@ test('compact: the page says it in plain words; the AI is told which figure it t
   const item = customer(12, 'Barnaby', [['IN', 'Hello, is the Noah still at your yard?', 2 * DAY], ['OUT', 'Good morning Barnaby, yes it is.', 2 * DAY - HOUR], ['IN', 'Is it still available?', 5 * MIN]])();
   const prompt = promptModule.buildPrompt(item, { now, style: 'compact' });
   const odo = markerFor(prompt, '41,200');
-  const typed = assessWith(item, prompt, 'It has 41,200 km and costs $31,990.').checks.find((c) => c.code === 'figure-raw');
-  assert.equal(typed.message, 'Wheelman wrote 41,200, $31,990 itself instead of taking them from your records or this conversation. Check them before sending.');
-  assert.equal(typed.retry, `You typed the figure 41,200 yourself; write its marker ${odo} instead. You typed the figure $31,990 yourself; it is not in our records.`);
+  // 41200 is our record's 41,200 written another way: the AI is told its marker.
+  const typed = assessWith(item, prompt, 'It has 41200 km and costs $31,990.').checks.find((c) => c.code === 'figure-raw');
+  assert.equal(typed.message, 'Wheelman wrote 41200, $31,990 itself instead of taking them from your records or this conversation. Check them before sending.');
+  assert.equal(typed.retry, `You typed the figure 41200 yourself; write its marker ${odo} instead. You typed the figure $31,990 yourself; it is not in our records.`);
   const made = assessWith(item, prompt, 'It is {{F999}}.').checks.find((c) => c.code === 'marker-unknown');
   assert.equal(made.message, 'Wheelman wrote a fact placeholder it could not fill; it is shown as [CHECK?]. Check this part before sending.');
   assert.ok(!/\{\{/.test(typed.message) && !/\{\{/.test(made.message));
@@ -323,15 +324,31 @@ test('compact draft: the second request names the typed figure and its marker, a
   const item = customer(13, 'Clementine', [['IN', 'Hello, is the Noah still at your yard?', 2 * DAY], ['OUT', 'Good morning Clementine, yes it is.', 2 * DAY - HOUR], ['IN', 'Is it still available?', 5 * MIN]]);
   const prompt = promptModule.buildPrompt(item(), { now, style: 'compact' });
   const odo = markerFor(prompt, '41,200');
-  script(answer('Yes, it has 41,200 km on it.'), answer(`Yes, it has ${odo} km on it.`));
+  // 41200 is our record's 41,200 written another way: typed, not taken from the record.
+  script(answer('Yes, it has 41200 km on it.'), answer(`Yes, it has ${odo} km on it.`));
   const d = await drafter.draftFor(item(), { now, save: false, style: 'compact' });
   assert.equal(seen.length, 2);
   const retry = seen[1].messages[1].content;
-  assert.ok(retry.includes(`You typed the figure 41,200 yourself; write its marker ${odo} instead.`), retry.slice(-900));
+  assert.ok(retry.includes(`You typed the figure 41200 yourself; write its marker ${odo} instead.`), retry.slice(-900));
   assert.ok(!retry.includes(`You typed the figure ${odo}`) && !retry.includes(`${odo} was written`), 'never told its right marker is wrong');
-  assert.ok(retry.includes('Your rejected draft was:\nYes, it has 41,200 km on it.'), retry.slice(-300));
+  assert.ok(retry.includes('Your rejected draft was:\nYes, it has 41200 km on it.'), retry.slice(-300));
   assert.ok(d.reply.startsWith('Yes, it has 41,200 km on it.'), d.reply);
   assert.ok(!codes(d.checks).includes('figure-raw'), JSON.stringify(d.checks));
+});
+
+test('compact draft: a figure typed exactly as our records have it is not figure-raw; a figure from nowhere still fails', async () => {
+  const item = customer(15, 'Ignatius', [['IN', 'Hello, is the Noah still at your yard?', 2 * DAY], ['OUT', 'Good morning Ignatius, yes it is.', 2 * DAY - HOUR], ['IN', 'How many kilometres has it done?', 5 * MIN]]);
+  // Code checks our record's own value, typed, as well as its marker: no second request.
+  script(answer('It has 41,200 km on it and is $36,990.'));
+  const ours = await drafter.draftFor(item(), { now, save: false, style: 'compact' });
+  assert.equal(seen.length, 1, JSON.stringify(ours.checks));
+  assert.deepEqual(fails(ours.checks), [], JSON.stringify(ours.checks));
+  assert.ok(ours.reply.startsWith('It has 41,200 km on it and is $36,990.'), ours.reply);
+
+  script(answer('It has 52,700 km on it.'), answer('It has 52,700 km on it.'));
+  const made = await drafter.draftFor(item(), { now, save: false, style: 'compact' });
+  assert.equal(seen.length, 2, 'the usual one second request');
+  assert.ok(fails(made.checks).includes('figure-raw'), JSON.stringify(made.checks));
 });
 
 test('a typed phone number must match a phone number written in the allowed text, not digits scattered through it (item 3)', () => {

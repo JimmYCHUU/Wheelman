@@ -195,13 +195,16 @@ function writtenHere(item, prompt, staffSaid, coaching) {
 /**
  * The compact style's own checks, on the AI's text as it wrote it: before its markers are put
  * back, and before code adds anything under it. A figure or link it typed itself (figure-raw), and
- * a marker that is not one of ours (marker-unknown), both fail.
+ * a marker that is not one of ours (marker-unknown), both fail. A figure typed exactly as one of
+ * our records' values is not figure-raw: code checks it as well as its marker, in the figure and
+ * link checks that read the reply once the markers are back.
  */
 function factChecks(item, prompt, json, staffSaid, coaching) {
   const text = String(json.reply || '').replace(/\\n/g, '\n');
   const markers = prompt.factMarkers;
   const out = [];
-  const typed = inventedLiterals(text, { allowedText: writtenHere(item, prompt, staffSaid, coaching) });
+  const typed = inventedLiterals(text, { allowedText: writtenHere(item, prompt, staffSaid, coaching) })
+    .filter((lit) => !markers.some((m) => m.value === lit));
   if (typed.length) {
     const it = typed.length === 1 ? 'it' : 'them';
     out.push({
