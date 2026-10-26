@@ -282,3 +282,16 @@ export function trustLine(draft, text) {
 
 /** Pasted text as plain text: Windows line ends and non-breaking spaces made plain. */
 export const plainPaste = (text) => String(text || '').replace(/\r\n?/g, '\n').replace(/ /g, ' ');
+
+const STAGE_STEPS = ['Enquiry', 'Inspection booked', 'Seen the car', 'Deposit', 'Sold'];
+const DEAL_STEP = { deposit_paid: 3, payment_pending: 3, paid_in_full: 4, delivered: 4 };
+const STATUS_STEP = { INSPECTION: 1, INSPECTION_DONE: 2, DEPOSIT_RECEIVED: 3, CAR_SOLD: 4 };
+
+/** How far the customer has got: the sale record first, then the lead status, else an enquiry. */
+export function stageLine(item) {
+  const fromDeal = DEAL_STEP[item?.deal?.stage];
+  if (fromDeal !== undefined) return { steps: STAGE_STEPS, current: fromDeal, source: 'From the sale record' };
+  const fromStatus = STATUS_STEP[item?.leadStatus];
+  if (fromStatus !== undefined) return { steps: STAGE_STEPS, current: fromStatus, source: 'From the lead status' };
+  return { steps: STAGE_STEPS, current: 0, source: '' };
+}

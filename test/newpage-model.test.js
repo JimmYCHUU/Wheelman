@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SECTIONS, CHIPS, rowView, whoLabel, segments, joinSegments, fillBlank, boxText, checkLines,
-  mainAction, statusWords, statusAnnouncement, insteadOptions, wordCount,
+  mainAction, statusWords, statusAnnouncement, insteadOptions, wordCount, stageLine,
 } from '../web/new/js/model.js';
 
 const NOW = Date.parse('2026-10-26T02:00:00Z');
@@ -152,4 +152,17 @@ test('statusAnnouncement speaks only an ok/problem change or new words on a prob
   assert.equal(statusAnnouncement(bad1, busy), null);
   assert.equal(statusAnnouncement(bad1, bad1), null);
   assert.equal(statusAnnouncement(bad1, bad2), bad2.text);
+});
+
+test('stageLine reads the sale record first, then the lead status', () => {
+  const steps = ['Enquiry', 'Inspection booked', 'Seen the car', 'Deposit', 'Sold'];
+  assert.deepEqual(stageLine({ deal: { stage: 'deposit_paid' }, leadStatus: 'INSPECTION' }), { steps, current: 3, source: 'From the sale record' });
+  assert.equal(stageLine({ deal: { stage: 'payment_pending' } }).current, 3);
+  assert.equal(stageLine({ deal: { stage: 'paid_in_full' } }).current, 4);
+  assert.equal(stageLine({ deal: { stage: 'delivered' } }).current, 4);
+  for (const [status, current] of [['INSPECTION', 1], ['INSPECTION_DONE', 2], ['DEPOSIT_RECEIVED', 3], ['CAR_SOLD', 4]]) {
+    assert.deepEqual(stageLine({ deal: null, leadStatus: status }), { steps, current, source: 'From the lead status' });
+  }
+  assert.deepEqual(stageLine({ deal: { stage: 'unknown' }, leadStatus: 'HOT' }), { steps, current: 0, source: '' });
+  assert.deepEqual(stageLine({}), { steps, current: 0, source: '' });
 });

@@ -15,6 +15,7 @@ import { availability } from './normalize.js';
 import { firstNameOf, isPlaceholderName } from './redact.js';
 import { signedName } from './signature.js';
 import { rowMatches } from '../web/lib/search.js';
+import { searchAll } from './search.js';
 import { RUNG_LABELS } from './selling.js';
 import { teachesHere } from './learn.js';
 import { validateMailReport, storeMailThread } from './mail.js';
@@ -339,6 +340,8 @@ function present(item) {
   return {
     ...summary(item),
     note: item.note,
+    // The sale stage, when there is one: the new page's stage line reads it.
+    deal: item.deal ? { stage: item.deal.stage, stageText: item.deal.stageText, source: item.deal.source } : null,
     channel: item.channel,
     marketplace: marketplaceOf(item),
     mail: mailOf(item),
@@ -685,6 +688,16 @@ async function api(req, res, url) {
     const item = itemFromKey(m[1], { message: m[1].startsWith('ao:') ? asked || '' : asked, followUp: Number(url.searchParams.get('followup')) || undefined });
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
     return send(res, 200, { item: present(item) });
+  }
+
+  // One search across every section that is on, the stock list and the words in messages.
+  if (req.method === 'GET' && p === '/api/search') {
+    const rowsOf = (s) => {
+      if (!sectionOn(s)) return null;
+      const r = sectionRows(s);
+      return r.all || [...r.waiting, ...r.quiet, ...r.other];
+    };
+    return send(res, 200, searchAll(url.searchParams.get('q'), { rowsOf }));
   }
 
   // Find a car: cars from the stored stock list matching a stock number or words of the title.
