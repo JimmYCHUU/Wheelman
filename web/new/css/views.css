@@ -1,0 +1,25 @@
+@layer views {
+  .shell { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: var(--tile-gap); }
+
+  /* the work grid: list, then the conversation with its message box (the panel joins it later) */
+  .work { display: grid; grid-template-columns: var(--list-w) minmax(0, 1fr); gap: var(--tile-gap); min-height: 0; }
+  .list-col, .chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+  .chat-body { flex: 1; min-height: 0; overflow: auto; padding: var(--s-4); }
+  .box-area { flex: none; padding: var(--s-4); }
+  .empty { margin: 0; padding: var(--s-6); color: var(--ink-2); }
+  .empty a { display: inline-block; margin-top: var(--s-2); }
+
+  @media (max-width: 1099px) {
+    .status .words { display: none; }
+  }
+  @media (max-width: 899px) {
+    .topbar { flex-wrap: wrap; height: auto; padding: var(--s-2) var(--s-2) var(--s-2) var(--s-3); row-gap: var(--s-2); }
+    .brand { margin-right: auto; }
+    .tabs { order: 5; flex-basis: 100%; justify-content: flex-start; }
+    .tab { padding: 0 var(--s-3); }
+    .work { grid-template-columns: minmax(0, 1fr); }
+    .work > .list-col, .work > .chat { display: none; }
+    .work[data-view="list"] > .list-col { display: flex; }
+    .work[data-view="chat"] > .chat { display: flex; }
+  }
+}

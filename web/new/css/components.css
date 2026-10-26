@@ -1,0 +1,47 @@
+@layer components {
+  .tile { background: var(--surface); border-radius: var(--r-tile); box-shadow: var(--shadow-1); min-width: 0; min-height: 0; }
+
+  /* ---------- top bar ---------- */
+  .topbar { height: var(--bar); display: flex; align-items: center; gap: var(--s-3); padding: 0 var(--s-3) 0 var(--s-4); position: relative; }
+  .brand { display: flex; align-items: center; gap: var(--s-2); flex: none; color: var(--accent); }
+  .brand .mark { width: 30px; height: 30px; display: block; }
+  .brand-word { margin: 0; font-family: var(--font-mark); font-weight: var(--fw-bold); font-size: var(--fs-14); letter-spacing: 0.08em; color: var(--ink); }
+  .tabs { flex: 1; display: flex; justify-content: center; min-width: 0; }
+  .tab-track { display: flex; gap: var(--s-hair); padding: var(--s-1); background: var(--surface-sunk); border-radius: var(--r-pill); overflow-x: auto; scrollbar-width: none; }
+  .tab-track::-webkit-scrollbar { display: none; }
+  .tab { display: inline-flex; align-items: center; gap: var(--s-2); height: 30px; padding: 0 var(--s-4); border: 0; border-radius: var(--r-pill); background: transparent; color: var(--ink-2); font-weight: var(--fw-semi); white-space: nowrap; transition: background var(--t-press) var(--ease), color var(--t-press) var(--ease); }
+  .tab:hover { color: var(--ink); }
+  .tab[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-1); }
+  .badge { min-width: 20px; height: 20px; padding: 0 var(--s-badge); border-radius: var(--r-pill); background: var(--accent); color: var(--on-accent); font-size: var(--fs-12); font-weight: var(--fw-bold); display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; }
+  .status { display: flex; align-items: center; gap: var(--s-2); font-size: var(--fs-13); color: var(--ink-2); white-space: nowrap; flex: none; padding: 0 var(--s-1); }
+  .dot { width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--good); flex: none; }
+  .dot.busy { background: var(--accent); animation: pulse 1.2s infinite var(--ease); }
+  .dot.bad { background: var(--bad); }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+
+  /* ---------- buttons and the menu ---------- */
+  .btn { height: var(--control); padding: 0 var(--s-4); border-radius: var(--r-pill); border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font-weight: var(--fw-semi); display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2); white-space: nowrap; transition: background var(--t-press) var(--ease), transform var(--t-press) var(--ease); }
+  .btn:hover { background: var(--surface-quiet); }
+  .btn:active { transform: scale(0.97); }
+  .btn.quiet { border-color: transparent; background: transparent; color: var(--ink-2); }
+  .btn.quiet:hover { background: var(--surface-quiet); color: var(--ink); }
+  .btn.small { height: 28px; padding: 0 var(--s-3); font-size: var(--fs-13); }
+  .menu { position: absolute; top: calc(100% + var(--s-1)); right: 0; z-index: 40; min-width: 240px; padding: var(--s-2); background: var(--surface); border-radius: var(--r-box); box-shadow: var(--shadow-2); }
+  .menu h2 { margin: 0; padding: var(--s-2) var(--s-3) var(--s-1); font-size: var(--fs-12); font-weight: var(--fw-semi); color: var(--ink-2); }
+  .menu button, .menu a { display: flex; align-items: center; gap: var(--s-2); width: 100%; min-height: var(--control); padding: 0 var(--s-3); border: 0; border-radius: var(--r-bubble); background: none; color: var(--ink); text-align: left; text-decoration: none; font-weight: var(--fw-semi); }
+  .menu button:hover, .menu a:hover { background: var(--surface-quiet); }
+  .menu button[aria-checked="true"] { background: var(--accent-soft); }
+  .menu hr { border: 0; border-top: 1px solid var(--line); margin: var(--s-2) 0; }
+  .menu .tick { width: var(--s-4); color: var(--accent); }
+
+  /* ---------- the toast ---------- */
+  .toast { position: fixed; z-index: 60; left: 50%; bottom: var(--s-6); transform: translateX(-50%); display: flex; align-items: center; gap: var(--s-3); max-width: calc(100vw - 2 * var(--page-edge)); padding: var(--s-3) var(--s-4); border-radius: var(--r-box); background: var(--ink); color: var(--surface); box-shadow: var(--shadow-2); font-weight: var(--fw-semi); }
+  .toast .btn { border-color: var(--surface); background: transparent; color: var(--surface); }
+  .toast .btn:hover { background: var(--ink-2); }
+
+  @media (max-width: 899px) {
+    .btn, .tab { min-height: var(--touch); }
+    .btn.small { min-height: var(--touch); }
+    .toast { top: var(--s-2); bottom: auto; }
+  }
+}
