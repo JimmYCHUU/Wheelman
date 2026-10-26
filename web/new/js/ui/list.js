@@ -58,11 +58,12 @@ export function List({ state, actions, now, section = 'dashboard' }) {
   const counts = { waiting: waitingCount(state), followups: (state.counts && state.counts.followups) || 0 };
   const active = rows.some((r) => r.key === cursor) ? cursor : rows.some((r) => r.key === state.key) ? state.key : rows[0] && rows[0].key;
 
+  // A chip or a row pressed is a new entry in the address first, so Back undoes it (hashsync.js).
   const choose = (id) => { location.hash = hashFor({ section, chip: id }); actions.setChip(id); };
   const openRow = (row) => {
     setCursor(row.key);
-    actions.open(row.key, state.chip === 'followups' && row.followUp ? { followup: row.followUp.id } : undefined);
     location.hash = hashFor({ section, chip: state.chip, key: row.key });
+    actions.open(row.key, state.chip === 'followups' && row.followUp ? { followup: row.followUp.id } : undefined);
   };
   const onKey = (e) => {
     const keys = { ArrowDown: 1, ArrowUp: -1, Home: 'first', End: 'last' };

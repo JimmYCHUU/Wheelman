@@ -2,8 +2,8 @@
 // address bar and the store in step.
 import { createApi } from './api.js';
 import { createStore } from './store.js';
-import { parseRoute, hashFor } from './route.js';
-import { SECTIONS } from './model.js';
+import { parseRoute } from './route.js';
+import { storeStep, addressAfter } from './hashsync.js';
 import { html, render } from './ui/html.js';
 import { App } from './ui/app.js';
 import { readTheme, applyTheme } from './ui/topbar.js';
@@ -35,35 +35,28 @@ const { actions } = store;
 applyTheme(readTheme(), storage);
 render(html`<${App} store=${store} />`, document.getElementById('app'));
 
-// The store follows the address: another chip or another conversation, from Back or a pasted link.
-const ready = (route) => SECTIONS.some((s) => s.id === route.section && s.ready);
+// The store follows the address: another chip or another conversation, from Back, forward, a pasted
+// link, or a row or chip pressed (web/new/js/hashsync.js).
 window.addEventListener('hashchange', () => {
-  const route = parseRoute(location.hash);
-  if (!ready(route)) return;
-  const s = store.get();
-  if (route.chip !== s.chip) actions.setChip(route.chip);
-  else if (route.key && route.key !== s.key) actions.open(route.key);
+  const step = storeStep(parseRoute(location.hash), store.get());
+  if (!step) return;
+  if (step.chip) actions.setChip(step.chip, { key: step.key });
+  else actions.open(step.open, { followup: step.followup });
 });
 
-// The address follows the store: opening a conversation or changing the chip puts it in the hash.
-// Nothing is written until the boot has opened the conversation in the address (or decided there is
-// none): a half-booted store has no key, and a reload in that moment would lose the conversation.
-let last = '';
+// The address follows the store when the store opened a conversation by itself, in place of the
+// entry on screen. Nothing is written until the boot has opened the conversation in the address (or
+// decided there is none): a half-booted store has no key, and a reload then would lose it.
+let prev = null;
 let booted = false;
 function follow() {
   if (!booted) return;
   const s = store.get();
-  const now = hashFor({ section: s.section, chip: s.chip, key: s.key });
-  if (now === last) return;
-  const first = last === '';
-  last = now;
-  if (!ready(parseRoute(location.hash)) || location.hash === now) return;
-  if (first || !parseRoute(location.hash).key) {
-    history.replaceState(null, '', now);
-    window.dispatchEvent(new HashChangeEvent('hashchange'));
-  } else {
-    location.hash = now;
-  }
+  const next = addressAfter(prev, location.hash, s);
+  prev = { section: s.section, chip: s.chip, key: s.key };
+  if (next === null) return;
+  history.replaceState(null, '', next);
+  window.dispatchEvent(new HashChangeEvent('hashchange')); // replaceState says nothing to the page's own route
 }
 store.subscribe(follow);
 
