@@ -383,8 +383,22 @@ export function draftFor(item, opts = {}) {
   return flight.promise;
 }
 
-// style: 'full' or 'compact', the prompt style (src/prompt.js); PROMPT_STYLE in .env unless given.
-async function writeDraft(item, { instruction = '', coaching = null, template: tpl = null, save = true, holdOutConversation = true, now = Date.now(), pin = null, style = config.llm.promptStyle } = {}, flight) {
+/**
+ * The prompt style for one write: the one asked for (the replay and the tests give it), else
+ * PROMPT_STYLE for a plain reply to a text on the dashboard (no Prompt, no Could be better, no
+ * template, not a follow-up, an import or auction customer, a Marketplace chat or an email), else full.
+ */
+// Measured by the replay; other sections stay full until replayed.
+export function styleFor(item, { style = null, instruction = '', coaching = null, template = null } = {}) {
+  if (style) return style;
+  const measured = item.channel === 'sms' && (item.section || 'dashboard') === 'dashboard' && !instruction && !coaching && !template
+    && !item.followUp && !item.order && !item.imports && !item.marketplace && !item.mail;
+  return measured ? config.llm.promptStyle : 'full';
+}
+
+// style: 'full' or 'compact', the prompt style (src/prompt.js); styleFor's choice unless given.
+async function writeDraft(item, { instruction = '', coaching = null, template: tpl = null, save = true, holdOutConversation = true, now = Date.now(), pin = null, style: given = null } = {}, flight) {
+  const style = styleFor(item, { style: given, instruction, coaching, template: tpl });
   // Keeps the finished draft, unless it is a plain write that finished after a reply from the
   // owner's own words was written for the same message: then the owner's stands and this one goes,
   // whether it came out ready or failed.

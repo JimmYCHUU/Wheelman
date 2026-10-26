@@ -120,6 +120,7 @@ export const config = {
     secondsBetween: num(env.SECONDS_BETWEEN_DRAFTS, 8),
     // How much each request carries (src/prompt.js): 'full', the whole voice file and sales
     // playbook, unless PROMPT_STYLE is 'compact', a short voice card and the advice for that message.
+    // Compact is used only for a plain reply to a text on the dashboard (styleFor in src/drafter.js).
     promptStyle: env.PROMPT_STYLE === 'compact' ? 'compact' : 'full',
   },
 
