@@ -1,7 +1,7 @@
 // Keeping the new page's address and its store in step (web/new/js/hashsync.js). Invented data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addressAfter, storeStep } from '../web/new/js/hashsync.js';
+import { addressAfter, storeStep, sheetStep, sheetOnPop, isSheetEntry, withSheet } from '../web/new/js/hashsync.js';
 import { parseRoute } from '../web/new/js/route.js';
 
 /** The store as the sync sees it. */
@@ -70,4 +70,30 @@ test('an address ahead of the store is left for the store to follow', () => {
   assert.equal(addressAfter(S('followups', 'c:1'), '#/dashboard/waiting/c%3A5', S('followups', 'c:2')), null);
   // Another row pressed while the store was still opening the last one.
   assert.equal(addressAfter(S('waiting', 'c:1'), '#/dashboard/waiting/c%3A3', S('waiting', 'c:2')), null);
+});
+
+test('the panel closes on Escape and Back', () => {
+  // On a phone, Details opens the sheet as a history entry of its own, so Back has it to close.
+  assert.equal(sheetStep({ narrow: true, open: true, entry: false }), 'push');
+  assert.equal(isSheetEntry(withSheet(null)), true);
+  assert.deepEqual(withSheet({ kept: 1 }), { kept: 1, sheet: true });
+  assert.equal(isSheetEntry(null), false);
+  // Back: the entry before is the conversation's. The sheet closes, and the address is the
+  // conversation's own, so the store does not move.
+  assert.equal(sheetOnPop({ narrow: true, entry: isSheetEntry(null) }), false);
+  assert.equal(storeStep(parseRoute('#/dashboard/waiting/c%3A1'), S('waiting', 'c:1')), null);
+  // Forward again: the sheet's entry, so it opens.
+  assert.equal(sheetOnPop({ narrow: true, entry: true }), true);
+  // Escape, Close or Add to reply on the sheet's entry: the entry is taken back too, so the next
+  // Back leaves the conversation as it would without the sheet.
+  assert.equal(sheetStep({ narrow: true, open: false, entry: true }), 'back');
+  // Not on the sheet's entry (the page was reloaded): closed where it is, history untouched.
+  assert.equal(sheetStep({ narrow: true, open: false, entry: false }), 'set');
+  // Already on the sheet's entry: no second one.
+  assert.equal(sheetStep({ narrow: true, open: true, entry: true }), 'set');
+  // Wider windows: a column or a drawer, never a history entry, and Back leaves it as it is.
+  assert.equal(sheetStep({ narrow: false, open: true, entry: false }), 'set');
+  assert.equal(sheetStep({ narrow: false, open: false, entry: true }), 'set');
+  assert.equal(sheetOnPop({ narrow: false, entry: false }), null);
+  assert.equal(sheetOnPop({ narrow: false, entry: true }), null);
 });

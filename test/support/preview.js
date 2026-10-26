@@ -34,7 +34,30 @@ const ai = aiBehaviour({
     return { reply: 'Thanks for your message. The price is [PRICE?], and we can book you in to see it.', needs_human: [{ marker: '[PRICE?]', reason: 'A person decides the price.' }], facts_used: [], hold: false };
   },
 });
-const standins = await startStandins({ world: world(Date.now()), ai });
+// One more invented car for the deal panel: more photos than it shows at once, auction photos, a
+// video, and an auction sheet at the supplier's address (for Jim only). Nothing in it is fetched
+// from elsewhere: the pictures are the stand-in's, and no link is opened by the preview.
+const invented = world(Date.now());
+const VOXY = 'ZRR85-0303030';
+const ROLES = ['front_exterior', 'side_exterior', 'rear_exterior', 'interior_front', 'dashboard', 'odometer', 'climate_control', 'gear_shifter', 'door_controls', 'rear_seats', 'boot_space'];
+invented.vehicles.push({
+  id: 9, stockNo: '1800', year: '2020', title: '2020 Toyota Voxy ZS', make: 'TOYOTA', model: 'Voxy', modelCode: 'ZRR85W', auPublishPrice: 31900, odometer: 54000,
+  seats: 7, fuel: 'Petrol', transmission: 'Automatic', color: 'Black', status: 'PUBLISHED', soldStatus: 'UnSold', stockIn: 'Online',
+  outline: ['6 Months NSW Registration', 'Roadside assistance'], chassisNo: VOXY,
+});
+invented.vehicleMedia = { ...invented.vehicleMedia, [VOXY]: [
+  ...Array.from({ length: 14 }, (_, i) => ({ id: 100 + i, chassisNo: VOXY, mediaType: 'IMAGE', imageRole: ROLES[i % ROLES.length], displayOrder: i, url: `{base}/pic/voxy-${i}.png` })),
+  { id: 120, chassisNo: VOXY, mediaType: 'VIDEO', label: 'Walkaround 360', url: 'https://fastlycb.s3.ap-southeast-2.amazonaws.com/inventory/media-v2/invented/walk.mp4', thumbnailUrl: '{base}/pic/voxy-poster.png' },
+] };
+invented.vehicleRecords = { ...invented.vehicleRecords, [VOXY]: {
+  id: 9, chassisNo: VOXY, stockNo: '1800',
+  auctionPhotos: Array.from({ length: 8 }, (_, i) => `{base}/pic/voxy-auction-${i}.png`),
+  operation: { id: 9, vehicleId: 9, documents: [
+    { id: 91, documentType: 'AUCTION_SHEET', url: 'https://www.nichibojapan.com/invented/voxy-sheet.pdf', active: true },
+    { id: 92, documentType: 'EXPORT_CERTIFICATE', url: 'https://fastlycb.s3.ap-southeast-2.amazonaws.com/docs/invented-voxy-export.pdf', active: true },
+  ] },
+} };
+const standins = await startStandins({ world: invented, ai });
 const { config } = await import('../../src/config.js');
 pointConfigAt(config, standins, { port: PORT, sessionPath: path.join(os.tmpdir(), `wheelman-preview-session-${process.pid}.json`) });
 
@@ -52,9 +75,11 @@ const { parseDashboardTime, sydneyDay } = await import('../../src/time.js');
   const lines = ['Is it still available?', 'Can I come and see it this week?', 'What is the best price?', 'Does it have a service history?', 'Can you hold it until Saturday?'];
   let mid = 90000;
   const talk = (id, direction, body, at) => db.upsertMessage({ id: mid++, conversationId: id, direction, body, sentBy: direction === 'OUT' ? 'Alex STONE' : null, status: 'SENT', mediaType: null, at, importedAt: at });
+  // Ada asks about the Voxy, Bo about no car at all; everyone else about the Hiace 1201.
+  const stocksOf = { Ada: ['1800'], Bo: [] };
   const person = (n, first, { waiting = true } = {}) => {
     const id = 700 + n, phone = `0491 570 ${String(130 + n).padStart(3, '0')}`;
-    db.upsertLead({ id, conversationId: id, firstName: first, lastName: 'Invented', phone, email: '', source: 'carsales', status: 'NEW', platform: 'CARSALES', state: 'NSW', leadAt: now - 3 * 24 * HOUR, updatedAt: now - n * 7 * MIN, stocks: ['1201'], inquiries: [] });
+    db.upsertLead({ id, conversationId: id, firstName: first, lastName: 'Invented', phone, email: '', source: 'carsales', status: 'NEW', platform: 'CARSALES', state: 'NSW', leadAt: now - 3 * 24 * HOUR, updatedAt: now - n * 7 * MIN, stocks: stocksOf[first] || ['1201'], inquiries: [] });
     db.upsertConversation({ id, phone: `+61${phone.replace(/\D/g, '').slice(1)}`, channel: 'SMS', status: 'OPEN', leadId: id, customerName: `${first} Invented`, latestDirection: waiting ? 'IN' : 'OUT', latestAt: now - n * 7 * MIN, latestBody: 'x' });
     return id;
   };

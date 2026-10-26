@@ -1,5 +1,6 @@
-// The page: the top bar, then the work grid (the list, the conversation, the message box) and the toast.
-import { html, useState, useEffect } from './html.js';
+// The page: the top bar, then the work grid (the list, the conversation with its message box, and the
+// deal panel) and the toast.
+import { html, useState, useEffect, useRef } from './html.js';
 import { SECTIONS } from '../model.js';
 import { parseRoute, hashFor } from '../route.js';
 import { TopBar } from './topbar.js';
@@ -7,6 +8,7 @@ import { Toast } from './toast.js';
 import { List } from './list.js';
 import { Conversation } from './conversation.js';
 import { MessageBox } from './messagebox.js';
+import { Panel, useMode } from './panel.js';
 
 function useStore(store) {
   const [, redraw] = useState(0);
@@ -28,27 +30,47 @@ function unreadTotal(state) {
   return Object.values(state.unread || {}).reduce((sum, n) => sum + (n || 0), 0);
 }
 
-export function App({ store, now = Date.now }) {
+/**
+ * store: the main store; panel: the panel store; setPanel(open) opens or closes the panel (on a
+ * phone, through history: web/new/js/main.js).
+ */
+export function App({ store, panel, setPanel, now = Date.now }) {
   const state = useStore(store);
+  const pstate = useStore(panel);
   const route = useRoute();
+  const mode = useMode();
+  const reply = useRef(null);
   const unread = unreadTotal(state);
   useEffect(() => { document.title = (unread > 0 ? '(' + unread + ') ' : '') + 'Wheelman'; }, [unread]);
 
   const section = SECTIONS.find((s) => s.id === route.section) || SECTIONS[0];
   // A section that is not ready is only a tab and a hash: the store stays on the Dashboard.
   const onTab = (id) => { location.hash = hashFor({ section: id, chip: state.chip, key: id === 'dashboard' ? state.key : null }); };
+  // The panel: a column on a wide window, else a drawer or sheet over the conversation (then the
+  // rest of the page waits behind it), only with a conversation or another car to show.
+  const shown = section.ready && pstate.open && (mode === 'column' || !!state.key || !!pstate.other);
+  const overlay = shown && mode !== 'column';
+  const details = {
+    open: shown,
+    media: pstate.media,
+    toggle: () => setPanel(!shown),
+    // The car strip's "24 photos": the conversation's own car, on the Car tab.
+    photos: () => { panel.actions.back(); panel.actions.setTab('car'); setPanel(true); },
+  };
 
   return html`<div class="shell">
-    <${TopBar} state=${state} tab=${section.id} onTab=${onTab} now=${now()} />
+    <${TopBar} state=${state} tab=${section.id} onTab=${onTab} now=${now()} inert=${overlay} />
     ${section.ready
-      ? html`<main class="work" data-view=${route.key ? 'chat' : 'list'}>
-          <section class="tile list-col" aria-label="Conversations">
+      ? html`<main class=${'work' + (shown && !overlay ? ' with-panel' : '')} data-view=${route.key ? 'chat' : 'list'}>
+          <section class="tile list-col" aria-label="Conversations" inert=${overlay}>
             <${List} state=${state} actions=${store.actions} now=${now()} section=${section.id} />
           </section>
-          <section class="tile chat" aria-label="Conversation">
-            <${Conversation} state=${state} actions=${store.actions} now=${now()} />
-            <${MessageBox} state=${state} actions=${store.actions} />
+          <section class="tile chat" aria-label="Conversation" inert=${overlay}>
+            <${Conversation} state=${state} actions=${store.actions} now=${now()} details=${details} />
+            <${MessageBox} state=${state} actions=${store.actions} reply=${reply} />
           </section>
+          ${shown ? html`<${Panel} state=${state} pstate=${pstate} panel=${panel} actions=${store.actions} mode=${mode}
+            setPanel=${setPanel} reply=${reply} now=${now()} />` : null}
         </main>`
       : html`<main class="work" data-view="list">
           <section class="tile list-col" aria-label=${section.label}>

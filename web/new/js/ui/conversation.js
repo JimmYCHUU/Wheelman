@@ -4,7 +4,7 @@ import { html, useState, useRef, useLayoutEffect } from './html.js';
 import { whoLabel } from '../model.js';
 import { hashFor } from '../route.js';
 import { MenuButton } from './menu.js';
-import { clock, dayKey, dayLabel, money, km } from '../../../lib/format.js';
+import { clock, dayKey, dayLabel, money, km, plural } from '../../../lib/format.js';
 
 const WELCOME = 'Choose a customer on the left.';
 const FAILED = 'This conversation could not be opened.';
@@ -29,7 +29,7 @@ export function linked(text) {
 
 const safeUrl = (u) => (/^https?:\/\//i.test(String(u || '')) ? u : '');
 
-function Head({ state, actions }) {
+function Head({ state, actions, details }) {
   const item = state.item;
   const name = item.name || item.phone || item.email || 'Unknown number';
   const back = () => { location.hash = hashFor({ section: state.section, chip: state.chip }); };
@@ -46,19 +46,24 @@ function Head({ state, actions }) {
       item.phone ? { label: 'Copy number', hint: item.phone, run: actions.copyNumber }
         : item.email && { label: 'Copy email', hint: item.email, run: actions.copyEmail },
     ]} />
+    <button type="button" class="btn quiet details" aria-expanded=${details.open} aria-controls="deal-panel" onClick=${details.toggle}>Details</button>
   </div>`;
 }
 
-function CarStrip({ vehicle }) {
+/** The car, with how many photos it has (once read): pressing that opens the panel's Car tab. */
+function CarStrip({ vehicle, details }) {
   const v = vehicle;
   const facts = [money(v.price), km(v.odometer), v.availability && v.availability.text].filter(Boolean).join(' · ');
   const url = safeUrl(v.url);
+  const m = details.media[String(v.stockNo)];
+  const shots = m && m.photos ? m.photos.filter((p) => p.group === 'car').length || m.photos.length : 0;
   return html`<div class="carstrip">
     <div class="info">
       <div class="car-title"><b>${v.title}</b>${v.stockNo ? html` <span class="note">Stock ${v.stockNo}</span>` : null}</div>
       <div class="facts num">${facts}</div>
     </div>
-    ${url ? html`<a class="btn small" href=${url} target="_blank" rel="noopener noreferrer">Open listing</a>` : null}
+    <button type="button" class="btn small" onClick=${details.photos}>${shots ? plural(shots, 'photo') : 'Photos'}</button>
+    ${url ? html`<a class="btn small listing" href=${url} target="_blank" rel="noopener noreferrer">Open listing</a>` : null}
   </div>`;
 }
 
@@ -137,13 +142,14 @@ function Thread({ item, name, now, older }) {
   </div>`;
 }
 
-export function Conversation({ state, actions, now }) {
+/** details: the panel as the conversation sees it: { open, media, toggle(), photos() } (web/new/js/ui/app.js). */
+export function Conversation({ state, actions, now, details }) {
   if (!state.key) return html`<div class="chat-body"><p class="empty">${WELCOME}</p></div>`;
   if (state.itemState === 'error') return html`<div class="chat-body"><p class="empty" role="alert">${FAILED}</p></div>`;
   const item = state.item;
   if (!item) return html`<div class="chat-body"><p class="empty" role="status">Opening…</p></div>`;
   const name = item.name || item.phone || item.email || 'Customer';
-  return html`<${Head} state=${state} actions=${actions} />
-    ${item.vehicle ? html`<${CarStrip} vehicle=${item.vehicle} />` : null}
+  return html`<${Head} state=${state} actions=${actions} details=${details} />
+    ${item.vehicle ? html`<${CarStrip} vehicle=${item.vehicle} details=${details} />` : null}
     <${Thread} item=${item} name=${name} now=${now} older=${actions.older} key=${state.key} />`;
 }

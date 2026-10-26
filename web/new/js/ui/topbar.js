@@ -33,11 +33,12 @@ function StatusLive({ status }) {
   return html`<span class="sr" role="status" aria-live="polite">${said}</span>`;
 }
 
-export function TopBar({ state, tab, onTab, now }) {
+/** inert: the bar waits while a drawer or sheet is open over the page. */
+export function TopBar({ state, tab, onTab, now, inert = false }) {
   const [theme, setTheme] = useState(readTheme);
   const status = statusWords(state.status, now);
   const choose = (id) => { setTheme(id); applyTheme(id); };
-  return html`<header class="tile topbar" role="banner">
+  return html`<header class="tile topbar" role="banner" inert=${inert}>
     <div class="brand">
       <svg class="mark" aria-hidden="true"><use href="../assets/brand.svg#mark"></use></svg>
       <h1 class="brand-word">WHEELMAN</h1>

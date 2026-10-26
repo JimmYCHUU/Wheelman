@@ -19,6 +19,29 @@ export function storeStep(route, s) {
   return null;
 }
 
+// The panel on a phone is a sheet over the conversation, and the sheet is a history entry of its
+// own (the address stays the conversation's, the entry's state says { sheet: true }). Back closes
+// it and nothing else moves: the address before it is the same, so storeStep has nothing to do.
+// On wider windows the panel is a column or a drawer, and history is left alone.
+
+export const isSheetEntry = (entryState) => !!(entryState && entryState.sheet);
+export const withSheet = (entryState) => ({ ...(entryState || {}), sheet: true });
+
+/**
+ * What opening or closing the panel does to history: 'push' a new entry for the sheet, go 'back'
+ * off the sheet's entry (it closes as it goes), or 'set' the panel where it is.
+ */
+export function sheetStep({ narrow, open, entry }) {
+  if (!narrow) return 'set';
+  if (open) return entry ? 'set' : 'push';
+  return entry ? 'back' : 'set';
+}
+
+/** After Back or forward on a phone, whether the sheet is open (its entry's own); null to leave the panel. */
+export function sheetOnPop({ narrow, entry }) {
+  return narrow ? !!entry : null;
+}
+
 /**
  * The address to put in place of the one on screen after the store changed, or null to leave it.
  * prev is the store's { section, chip, key } at the last sync, null at the first one (after the

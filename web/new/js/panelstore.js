@@ -53,9 +53,12 @@ export function createPanelStore({ api, storage, now, wide }) {
 
   const back = () => { otherSeq++; set({ other: null }); };
 
+  /** The window crossed a width: on a wide one the column as it was left, elsewhere closed. */
+  const fit = () => set({ open: !!wide() && remembered() });
+
   return {
     get: () => state,
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-    actions: { toggle, setTab: (tab) => set({ tab }), media, showCar, back, reset: back },
+    actions: { toggle, setTab: (tab) => set({ tab }), media, showCar, back, reset: back, fit },
   };
 }

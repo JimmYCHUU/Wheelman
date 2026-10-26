@@ -4,7 +4,7 @@
 // The text is in pieces: an editable span for each run of text, an <input> for each blank. While
 // focus stays in the editor nothing is rebuilt, so the caret never jumps; a pill typed in stays a
 // pill (green) until focus leaves the editor, and then becomes part of the text.
-import { html, useRef, useState, useLayoutEffect } from './html.js';
+import { html, useRef, useState, useEffect, useLayoutEffect } from './html.js';
 import { segments, joinSegments, fillBlank, blankWords, plainPaste } from '../model.js';
 
 /** Whether this browser keeps an editable element to plain text (paste and Enter then stay plain). */
@@ -111,6 +111,57 @@ function Pill({ piece, onValue, onKey }) {
     onInput=${(e) => onValue(e.currentTarget.value)} onKeyDown=${onKey} />`;
 }
 
+// The caret as an offset into the box text, for Add to reply: a filled pill counts as its value, an
+// empty one as its blank, the same text textOf() makes.
+const lengthOf = (p) => (p.kind === 'blank' ? (p.value.trim() ? p.value.trim().length : p.raw.length) : p.text.length);
+const startOf = (list, i) => list.slice(0, i).reduce((n, p) => n + lengthOf(p), 0);
+const pieceEls = (root) => [...(root.querySelector('.para') || root).children];
+
+/** Where the caret is in the box text while focus is in the editor (after a pill in it), else null. */
+function caretOf(root, list) {
+  const a = document.activeElement;
+  if (!root || !a || !root.contains(a)) return null;
+  const i = pieceEls(root).indexOf(a);
+  if (i === -1 || !list[i]) return null;
+  if (list[i].kind === 'blank') return startOf(list, i) + lengthOf(list[i]);
+  const sel = window.getSelection();
+  if (!sel.rangeCount || !a.contains(sel.focusNode)) return null;
+  const before = document.createRange();
+  before.setStart(a, 0);
+  before.setEnd(sel.focusNode, sel.focusOffset);
+  const copy = document.createElement('span');
+  copy.append(before.cloneContents());
+  return startOf(list, i) + Math.min(readText(copy).length, list[i].text.length);
+}
+
+/** Puts the caret at an offset into the box text, in the text piece there, and scrolls it into view. */
+function putCaret(root, list, at) {
+  const els = pieceEls(root);
+  let start = 0;
+  for (let i = 0; i < list.length; i++) {
+    const n = lengthOf(list[i]);
+    if (list[i].kind === 'text' && at <= start + n && els[i]) {
+      const el = els[i];
+      const node = el.firstChild;
+      const range = document.createRange();
+      if (node && node.nodeType === 3) range.setStart(node, Math.max(0, Math.min(at - start, node.data.length)));
+      else range.setStart(el, 0);
+      range.collapse(true);
+      el.focus({ preventScroll: true });
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      const box = root.closest('.box-scroll') || root;
+      const r = range.getBoundingClientRect();
+      const b = box.getBoundingClientRect();
+      if (r.height && r.bottom > b.bottom) box.scrollTop += r.bottom - b.bottom;
+      else if (r.height && r.top < b.top) box.scrollTop -= b.top - r.top;
+      return;
+    }
+    start += n;
+  }
+}
+
 /** Puts focus in the first pill with nothing typed in it. False when there is none. */
 export function focusFirstBlank(root) {
   const pill = root && [...root.querySelectorAll('input.blank-pill')].find((p) => !p.value.trim());
@@ -137,14 +188,41 @@ export function focusText(root) {
 
 /**
  * text: what the box holds; onChange(text) gets the whole new text on every change. A text that
- * arrives from outside (a new suggestion, Clear, Bring back) rebuilds the pieces; the editor's own
- * changes never do.
+ * arrives from outside (a new suggestion, Clear, Bring back, Add to reply) rebuilds the pieces; the
+ * editor's own changes never do.
+ *
+ * handle (a ref) is how Add to reply reaches the editor: text() is the text on screen, caret() the
+ * last caret position as an offset into it (null when the editor has not had focus since its text
+ * arrived), and land(text, at) says where the caret goes once that text arrives from outside.
  */
-export function Editor({ text, onChange, bad, root }) {
-  const own = useRef({ text: null, pieces: [], rev: 0 });
+export function Editor({ text, onChange, bad, root, handle }) {
+  const own = useRef({ text: null, pieces: [], rev: 0, caret: null, land: null });
   const [, redraw] = useState(0);
   const s = own.current;
-  if (text !== s.text) { s.text = text; s.pieces = pieces(text); s.rev += 1; }
+  if (text !== s.text) {
+    s.text = text;
+    s.pieces = pieces(text);
+    s.rev += 1;
+    const landing = !!s.land && s.land.text === text;
+    s.caret = landing ? s.land.at : null;
+    if (!landing) s.land = null;
+  }
+  if (handle) handle.current = { own: s, text: () => s.text, caret: () => s.caret, land: (t, at) => { s.land = { text: t, at }; } };
+  useEffect(() => () => { if (handle && handle.current && handle.current.own === s) handle.current = null; }, []);
+
+  // The caret is remembered wherever it goes in the editor, so Add to reply puts the link there.
+  const mark = () => { const at = caretOf(root.current, s.pieces); if (at !== null) s.caret = at; };
+  useEffect(() => {
+    document.addEventListener('selectionchange', mark);
+    return () => document.removeEventListener('selectionchange', mark);
+  }, []);
+  // A link put in from outside: once its text is on screen, the caret goes after it.
+  useLayoutEffect(() => {
+    if (!s.land || s.land.text !== s.text || !root.current) return;
+    const at = s.land.at;
+    s.land = null;
+    putCaret(root.current, s.pieces, at);
+  });
 
   const set = (i, patch) => {
     s.pieces = s.pieces.map((p, n) => (n === i ? { ...p, ...patch } : p));
@@ -189,7 +267,7 @@ export function Editor({ text, onChange, bad, root }) {
   };
 
   const only = s.pieces.length === 1;
-  return html`<div class=${'editor' + (bad ? ' bad' : '')} ref=${root} role="group" aria-label="Suggested reply, not sent" onfocusout=${settle} onMouseDown=${edge}>
+  return html`<div class=${'editor' + (bad ? ' bad' : '')} ref=${root} role="group" aria-label="Suggested reply, not sent" onfocusout=${settle} onfocusin=${mark} onInput=${mark} onMouseDown=${edge}>
     <div class="para">${s.pieces.map((p, i) => (p.kind === 'blank'
       ? html`<${Pill} key=${s.rev + '-' + i} piece=${p} onValue=${(value) => set(i, { value })} onKey=${tab} />`
       : html`<${TextPiece} key=${s.rev + '-' + i} text=${p.text} only=${only} last=${i === s.pieces.length - 1} onText=${(t) => set(i, { text: t })} />`))}</div>

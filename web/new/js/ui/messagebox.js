@@ -99,7 +99,7 @@ function Quiet({ state, actions, item, view }) {
  * arrived, or the suggestion could not be written): then nothing is checked and there is nothing
  * to bring back. A suggestion that could not be written is told above the text, with Try again.
  */
-function Draft({ state, actions, item, view, editor, main }) {
+function Draft({ state, actions, item, view, editor, main, reply }) {
   const d = item.draft && item.draft.status === 'ready' ? item.draft : null;
   const text = state.typed !== null ? state.typed : boxText(item.draft);
   const empty = !text.trim();
@@ -147,7 +147,7 @@ function Draft({ state, actions, item, view, editor, main }) {
         ${note ? html`<span class=${'save-note' + (state.save.state === 'failed' ? ' bad' : '')}>${note}</span>` : null}
         <span class="count num">${wordsLine(text)}</span>
       </div>
-      <${Editor} text=${text} onChange=${actions.type} bad=${lines.fails.length > 0 && !state.overridden} root=${editor} />
+      <${Editor} text=${text} onChange=${actions.type} bad=${lines.fails.length > 0 && !state.overridden} root=${editor} handle=${reply} />
     </div>
     <div class="box-foot">
       ${empty ? null : html`<div class="checks">
@@ -173,7 +173,7 @@ function Draft({ state, actions, item, view, editor, main }) {
   </div>`;
 }
 
-function Box({ state, actions, item }) {
+function Box({ state, actions, item, reply }) {
   const editor = useRef(null);
   const main = useRef(null);
   useCtrlEnter(main, editor);
@@ -181,10 +181,11 @@ function Box({ state, actions, item }) {
   if (view.kind !== 'editor') main.current = null;
   if (view.kind === 'writing') return html`<${Writing} state=${state} />`;
   if (view.kind === 'quiet') return html`<${Quiet} state=${state} actions=${actions} item=${item} view=${view} />`;
-  return html`<${Draft} state=${state} actions=${actions} item=${item} view=${view} editor=${editor} main=${main} />`;
+  return html`<${Draft} state=${state} actions=${actions} item=${item} view=${view} editor=${editor} main=${main} reply=${reply} />`;
 }
 
-export function MessageBox({ state, actions }) {
+/** reply: a ref the editor fills while it is on screen, for Add to reply (see Editor's handle). */
+export function MessageBox({ state, actions, reply }) {
   if (!state.key || !state.item || state.itemState !== 'ready') return null;
-  return html`<${Box} key=${state.key} state=${state} actions=${actions} item=${state.item} />`;
+  return html`<${Box} key=${state.key} state=${state} actions=${actions} item=${state.item} reply=${reply} />`;
 }

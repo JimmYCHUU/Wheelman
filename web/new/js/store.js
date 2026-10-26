@@ -322,6 +322,9 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     } catch (e) { toast(e.message); }
   }
 
+  /** A car's photo, video or document link, from the panel. */
+  const copyLink = (url) => copyText(url, () => toast('Link copied'));
+
   async function copyNumber() {
     const number = state.item && state.item.phone;
     if (!number) return;
@@ -376,7 +379,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     actions: {
       boot, refresh, setChip, more, open, type, flush, write, tell, holdTell, instead, copy, copyNumber, copyEmail, older, dismiss, dismissFollowUp,
-      putBack, restore, restoreFollowUp,
+      putBack, restore, restoreFollowUp, copyLink, toast,
       clear: () => type(''),
       bringBack: () => type((state.item && state.item.draft && state.item.draft.reply) || ''),
       override: () => set({ overridden: true }),
