@@ -40,6 +40,7 @@
     "tone-redraft": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/tone-redraft.js",
     "review": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/review.js",
     "report": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/report.js",
+    "measure": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/measure.js",
     "backup": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/backup.js",
     "restore": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/restore.js",
     "prompt-size": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/prompt-size.js",

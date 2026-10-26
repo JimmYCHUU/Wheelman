@@ -1,0 +1,160 @@
+/* Wheelman prototype design tokens.
+   Layout concept: a calm messaging app on a tray — list, conversation and deal panel are tiles,
+   the conversation is the brightest; the draft lives in the box, never as a bubble. */
+
+:root {
+  /* accent, chosen by the business identity setting */
+  --accent-l: #0a66e0;
+  --accent-d: #5b9bff;
+  --accent-soft-l: #e7f0fd;
+  --accent-soft-d: #15294a;
+
+  /* light palette */
+  --tray: #e8edf3;
+  --surface: #ffffff;
+  --surface-quiet: #f4f7fa;
+  --surface-sunk: #eef2f6;
+  --ink: #0b1b2b;
+  --ink-2: #46586b;
+  --ink-3: #5d6f82;
+  --line: #dce3eb;
+  --line-strong: #c3cdd8;
+  --accent: var(--accent-l);
+  --accent-soft: var(--accent-soft-l);
+  --on-accent: #ffffff;
+  --good: #0f7b4b;
+  --good-soft: #e3f4ec;
+  --warn: #8a5a00;
+  --warn-soft: #fff2d3;
+  --warn-line: #e9c46a;
+  --bad: #b42318;
+  --bad-soft: #fdecea;
+  --block: #f2f6fb;
+  --block-line: #d5e0ec;
+  --shadow-1: 0 1px 2px rgba(11, 27, 43, 0.06), 0 0 0 1px rgba(11, 27, 43, 0.03);
+  --shadow-2: 0 10px 30px rgba(11, 27, 43, 0.16), 0 2px 6px rgba(11, 27, 43, 0.08);
+  --scrim: rgba(11, 27, 43, 0.32);
+  --photo-1: #c9d6e4;
+  --photo-2: #aebfd2;
+  --skeleton: #e3e9ef;
+  --focus: #0a66e0;
+
+  /* type */
+  --font-ui: "Manrope", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mark: "Montserrat", "Manrope", "Segoe UI", sans-serif;
+  --fs-12: 0.75rem;
+  --fs-13: 0.8125rem;
+  --fs-14: 0.875rem;
+  --fs-16: 1rem;
+  --fs-18: 1.125rem;
+  --fs-24: 1.5rem;
+
+  /* space, 4px grid */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --tile-gap: 6px;
+
+  /* shape */
+  --r-tag: 6px;
+  --r-bubble: 10px;
+  --r-box: 14px;
+  --r-tile: 18px;
+  --r-pill: 999px;
+
+  /* motion */
+  --t-press: 120ms;
+  --t-panel: 180ms;
+  --t-sheet: 240ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* sizes */
+  --control: 36px;
+  --row: 64px;
+  --bar: 56px;
+}
+
+:root[data-accent="teal"] {
+  --accent-l: #0b7a75;
+  --accent-d: #3cc4bc;
+  --accent-soft-l: #e2f3f2;
+  --accent-soft-d: #0f2e2d;
+}
+
+:root[data-accent="indigo"] {
+  --accent-l: #4338ca;
+  --accent-d: #8f88ff;
+  --accent-soft-l: #ebeafd;
+  --accent-soft-d: #22204a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --tray: #0a121c;
+    --surface: #111b27;
+    --surface-quiet: #172331;
+    --surface-sunk: #0e1722;
+    --ink: #e7eef6;
+    --ink-2: #a9b7c6;
+    --ink-3: #8797a8;
+    --line: #24324a;
+    --line-strong: #34455f;
+    --accent: var(--accent-d);
+    --accent-soft: var(--accent-soft-d);
+    --on-accent: #071019;
+    --good: #57c892;
+    --good-soft: #11301f;
+    --warn: #f0b44c;
+    --warn-soft: #33270c;
+    --warn-line: #8a6a22;
+    --bad: #ff8a7e;
+    --bad-soft: #3a1512;
+    --block: #152131;
+    --block-line: #26384f;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.03);
+    --shadow-2: 0 12px 34px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.35);
+    --scrim: rgba(0, 0, 0, 0.55);
+    --photo-1: #25364b;
+    --photo-2: #31465f;
+    --skeleton: #1c2a3a;
+    --focus: #5b9bff;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --tray: #0a121c;
+  --surface: #111b27;
+  --surface-quiet: #172331;
+  --surface-sunk: #0e1722;
+  --ink: #e7eef6;
+  --ink-2: #a9b7c6;
+  --ink-3: #8797a8;
+  --line: #24324a;
+  --line-strong: #34455f;
+  --accent: var(--accent-d);
+  --accent-soft: var(--accent-soft-d);
+  --on-accent: #071019;
+  --good: #57c892;
+  --good-soft: #11301f;
+  --warn: #f0b44c;
+  --warn-soft: #33270c;
+  --warn-line: #8a6a22;
+  --bad: #ff8a7e;
+  --bad-soft: #3a1512;
+  --block: #152131;
+  --block-line: #26384f;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.03);
+  --shadow-2: 0 12px 34px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.35);
+  --scrim: rgba(0, 0, 0, 0.55);
+  --photo-1: #25364b;
+  --photo-2: #31465f;
+  --skeleton: #1c2a3a;
+  --focus: #5b9bff;
+  color-scheme: dark;
+}

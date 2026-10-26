@@ -1705,6 +1705,7 @@ claim outside what the records allow; and the block or the proof that was due.
 | `npm run replay` | Compares suggestions with real past replies. `-- 60` for 60 cases, `-- --buyers` or `-- --first` for one kind |
 | `npm run review` | Writes the same real conversations two ways for the Review page. `-- --b-voice <folder>` or `-- --b-model provider/model`; `-- --n 40`; `-- --confirm` when a paid model is in the run |
 | `npm run report` | Counts how suggestions were used and which checks fired. `-- 30` for 30 days |
+| `npm run measure` | Counts what each stage of the redesign is judged on: drafts never used and why, sent as written, open to Copy, first answers, tokens. Reads a copy of the database it makes and deletes; saves the counts in `eval\redesign\` |
 | `npm run check-private` | Before a commit: makes sure no setting from `.env`, staff name or key is in a file git would publish |
 | `npm run build-voice` | Rebuilds the example bank from stored conversations |
 | `npm run fetch-website` | Saves the website's policy pages. `-- --all` for every guide, blog post and import page |
@@ -1729,6 +1730,7 @@ computer. Git never sees any of it.
 | `data\analysis\` | The cleaned samples behind the voice and the business facts |
 | `voice\examples.json` | The bank of genuine replies, rebuilt daily |
 | `eval\out\` | Replay comparisons against real past replies |
+| `eval\redesign\` | The redesign's measurements, replay report and build notes: the business's own counts |
 | `knowledge\website\` | Downloaded website pages. Rebuilt with `fetch-website -- --all` |
 | `.playwright-mcp\`, `.impeccable\review\` | Captures and screenshots from building the page |
 | `data\share-url.txt` | The address the page is shared at, while Wheelman runs shared |
@@ -1939,7 +1941,9 @@ wheelman/
 │   ├── lib/                           blank.js: what a blank is, shared with the server's checks;
 │   │                                  insert.js: where Add to reply puts a link; copy.js: every word
 │   └── assets/                        brand.svg: the mark, placed with <use>
-├── scripts/                           check-login · check-model · replay · report
+├── prototype/                         the redesign as a clickable demo on invented data: the design
+│                                      the new page is built from. Open prototype.cmd opens it
+├── scripts/                           check-login · check-model · replay · report · measure
 │                                      build-voice · fetch-website · import-history
 │                                      check-private
 └── test/                              core · pipeline · greeting · inspection · marketplace
@@ -2039,6 +2043,12 @@ some announced enquiries never reach the dashboard's lead list: they come from C
 sites, and the Sydney list (which Wheelman reads the same way) is filtered to the Australian
 platform; those are counted and left alone. Checked on the automated tests (eight new ones) and
 by one read-only read of the live feed.
+
+26 October 2026: the redesign moved into this repository. Wheelman is rebuilt here in stages,
+keeping its name and its history. The engine comes first, behind today's page. A new page
+follows beside the old one, section by section, and the old page goes only after Carbarn says
+yes. `prototype/` is the clickable design on invented data. `npm run measure` counts what each
+stage is judged on.
 
 ### Open questions for Carbarn
 

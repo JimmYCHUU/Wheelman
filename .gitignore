@@ -53,3 +53,7 @@ docs/tone-judgement.md
 docs/tone-upgrade-brief.md
 docs/tone-codebook.md
 docs/tone-dashboard.html
+
+# The redesign of October 2026: its measurements, replay report and build notes hold the business's
+# own counts, so they stay on this computer. scripts/measure.js writes here.
+eval/redesign/
