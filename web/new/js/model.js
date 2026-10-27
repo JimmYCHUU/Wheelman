@@ -20,11 +20,13 @@ export const CHIPS = [
 
 /**
  * Who answered a customer instead of us, in words: "Answered on the phone 10:42". The time is the clock
- * today and the list's own time on an earlier day (listTime). '' for nobody, or a way not known.
+ * today and the list's own time on an earlier day (listTime), a day word in lower case mid-sentence;
+ * left out when it is shownAt, the time already shown beside the words. '' for nobody, or a way not known.
  */
-export function answeredWords(answered, now) {
+export function answeredWords(answered, now, shownAt = '') {
   if (!answered) return '';
-  const when = listTime(answered.at, now);
+  const day = listTime(answered.at, now);
+  const when = day === shownAt ? '' : day === 'Yesterday' ? 'yesterday' : day;
   const by = answered.by ? ' by ' + answered.by : '';
   const text = { phone: 'Answered on the phone', dashboard: 'Answered' + by + ' on the dashboard', auto: 'Answered by an auto-reply', wheelman: "Answered with Wheelman's suggestion" }[answered.how];
   return text ? (text + ' ' + when).trim() : '';
@@ -37,10 +39,11 @@ export function rowView(row, { now, doneAnchor } = {}) {
   let preview = p.text || '';
   if (!preview && p.media) preview = 'Photo';
   else if (p.who === 'us') preview = 'You: ' + preview;
+  const when = listTime(row.lastAt, now);
   let reason = '';
   if (done) reason = 'Copied, waiting for it to show on the dashboard';
   else if (row.followUp) reason = 'Follow-up: ' + row.followUp.reason;
-  else if (row.state === 'answered' && answeredWords(row.answered, now)) reason = answeredWords(row.answered, now);
+  else if (row.state === 'answered' && answeredWords(row.answered, now)) reason = answeredWords(row.answered, now, when);
   else if (row.flag === 'fail') reason = 'Check failed';
   else if (row.flag === 'input') reason = 'Blank to fill';
   else if (row.flag === 'error') reason = 'Not written yet';
@@ -48,7 +51,7 @@ export function rowView(row, { now, doneAnchor } = {}) {
   return {
     key: row.key,
     name: row.name || row.phone || row.email || 'Unknown number',
-    when: listTime(row.lastAt, now),
+    when,
     car: row.car || '',
     preview,
     reason,

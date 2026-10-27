@@ -342,6 +342,9 @@ test('answeredWords says how, by whom and when', () => {
   assert.equal(answeredWords({ how: 'auto', by: '', at }, now), 'Answered by an auto-reply ' + clock(at));
   assert.equal(answeredWords({ how: 'wheelman', by: 'Alex', at }, now), "Answered with Wheelman's suggestion " + clock(at));
   assert.match(answeredWords({ how: 'phone', by: '', at }, at + 3 * 86400000), /^Answered on the phone \w+$/, 'an earlier day reads as the list time does');
+  // Mid-sentence, a day word is lower case; a weekday is a name and keeps its capital.
+  assert.equal(answeredWords({ how: 'phone', by: '', at }, at + 86400000), 'Answered on the phone yesterday');
+  assert.match(answeredWords({ how: 'phone', by: '', at }, at + 3 * 86400000), /^Answered on the phone [A-Z][a-z]+day$/);
   assert.equal(answeredWords(null, now), '');
   assert.equal(answeredWords({ how: 'other', by: '', at }, now), '');
 });
@@ -356,4 +359,17 @@ test("an answered row's reason on All", () => {
   assert.equal(rowView(row({ state: 'answered', answered: null }), { now: NOW }).reason, '');
   // A follow-up is still told as a follow-up.
   assert.equal(rowView(row({ state: 'answered', answered, followUp: { reason: 'Inspection passed' } }), { now: NOW }).reason, 'Follow-up: Inspection passed');
+});
+
+test("an answered row's reason leaves out a time the row already shows", () => {
+  const at = NOW - 3600000;
+  const v = rowView(row({ state: 'answered', lastAt: at, answered: { how: 'dashboard', by: 'Alex', at } }), { now: NOW });
+  assert.equal(v.reason, 'Answered by Alex on the dashboard');
+  assert.equal(v.when, clock(at), 'the row keeps its own time');
+  // Answered at another time than the row's last message: the reason keeps its time.
+  const later = rowView(row({ state: 'answered', lastAt: at + 60000, answered: { how: 'phone', by: '', at } }), { now: NOW });
+  assert.equal(later.reason, 'Answered on the phone ' + clock(at));
+  // The same day word on both is the same time shown: said once.
+  const day = NOW - 86400000;
+  assert.equal(rowView(row({ state: 'answered', lastAt: day + 60000, answered: { how: 'phone', by: '', at: day } }), { now: NOW }).reason, 'Answered on the phone');
 });
