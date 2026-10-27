@@ -724,7 +724,21 @@ stated**, and **What Wheelman used** lists the model, the provider and what was 
 suggestion. A car found by search opens in the panel as **Another car**, with a button back to
 the customer.
 
-**Remember**, the source of each fact, and removable blocks come in a later update.
+In the message box, the parts Wheelman's code builds are shown in the reply with a label and a
+**Remove** button: **Price reply**, **Invitation to see the car**, **First-reply details**,
+**Links you asked for**, **Sign-off** and **Auction offer**. A removed block can be brought back
+with **Put back**, and what you typed beside a block is copied as shown. Under the reply, the
+**trust line** says how many facts were checked. It is green only when nothing is wrong; if a
+figure or link cannot be traced to our records, it says so in red and names how many facts are
+not in your records. Open it to see each fact and where it came from: the stock record, our
+earlier messages, business facts, the website, what the customer said, your instruction or your
+wording file.
+
+After you ask Wheelman to rewrite with **Tell Wheelman what to say…**, it offers **Remember for**
+that kind of reply. Choosing it keeps your instruction as a lesson for later replies of that
+kind, and **Undo** switches the lesson off again. **Just this once** keeps nothing. **What
+Wheelman used** now also lists the lessons it followed and the rules that applied. A list of all
+lessons comes in a later update.
 
 The **search box** in the top bar looks across customers, cars and the words in messages, in
 every section. A Dashboard result opens on the new page. A Marketplace, Imports or Auction
@@ -1465,6 +1479,14 @@ what the team really sends. **How to say it** comes from the two voices.
   yourself counts the same way. When the reply later appears in the dashboard conversation,
   what was really sent replaces what was copied. Typing alone teaches nothing: a half-written
   change that was never copied, approved or sent is not learned from.
+- **Copying as written.** On the new page, copying a reply with no blank left and no change
+  counts as approval, the same as **Good reply**.
+- **Remember.** On the new page, a rewrite you ask for with **Tell Wheelman what to say…** can be
+  remembered for that kind of reply in that channel. The lesson is put into every later request
+  of that kind, the same conversation included. Each time a lesson is used it is counted, and it
+  can be switched off, after which it is never used. **Just this once** stores nothing.
+  Marketplace, the phone-only list and auction orders teach nothing, so Remember is not offered
+  there.
 - **Only what you changed.** A suggestion used word for word is Wheelman's own text, so it
   is not kept as an example of how the team writes.
 - **Only the reply to that message.** A sent reply counts for a suggestion only if it directly
@@ -1958,6 +1980,7 @@ wheelman/
 │   ├── log.js                         what went wrong, written to data/wheelman.log
 │   ├── checks.js · drafter.js         figures and links traced, blanks, greeting once a day
 │   ├── firstreply.js · promises.js    the standard first reply; promises, days and places
+│   ├── parts.js                       finds the blocks Wheelman's code built in a finished reply
 │   ├── worker.js                      the loop: read, note what was sent, draft what is waiting
 │   ├── server.js                      the local page's data, on 127.0.0.1 only; the team's sign-in
 │   ├── share.js                       sharing with the team: the Cloudflare tunnel, the sign-in cookie
@@ -1976,8 +1999,10 @@ wheelman/
 │       ├── vendor/                    Preact and htm, one file, the only code from elsewhere
 │       ├── css/                       tokens, base, components, views, panel, viewer, search, in layers
 │       └── js/                        main · model · route · hashsync · store · panelstore · searchstore
-│                                      · listview · insertlink · autosave · api, and ui/ (the pieces on screen: top bar, search, list,
-│                                      conversation, message box, panel with its tabs, viewer)
+│                                      · listview · insertlink · autosave · api · segments (the reply as
+│                                      text and blocks) · editorpieces · lessons · remember, and ui/ (the
+│                                      pieces on screen: top bar, search, list, conversation, message box,
+│                                      trust line, panel with its tabs, viewer)
 ├── prototype/                         the redesign as a clickable demo on invented data: the design
 │                                      the new page is built from. Open prototype.cmd opens it
 ├── scripts/                           check-login · check-model · replay · report · measure
@@ -2095,6 +2120,12 @@ Wheelman used) and one search across customers, cars and message words in every 
 server gained a search route and a stage on each conversation; nothing else about it changed.
 Checked on the automated tests and in a browser on invented data. Marketplace, Imports and Auction
 still open on the old page.
+
+27 October 2026, later: the new page's message box shows Wheelman's blocks with Remove and Put
+back, a trust line with where each fact came from, and Remember after a rewrite. On the server,
+copying a draft unchanged counts as approval, lessons can be switched off and are counted when
+used, and a route lists them. Checked on the automated tests and in a browser on invented data.
+The page that lists all lessons is not built yet.
 
 ### Open questions for Carbarn
 
