@@ -3,7 +3,7 @@
 // Clear and the one main button. Nothing is sent from here: a Dashboard reply is copied, then pasted
 // into the dashboard. When there is no suggestion to show, one sentence says why, with one button.
 import { html, useState, useEffect, useRef, useLayoutEffect } from './html.js';
-import { boxText, boxView, liveChecks, checkLines, mainAction, insteadOptions, trustLine, wordsLine, saveWords, segments } from '../model.js';
+import { boxText, boxView, liveChecks, checkLines, mainAction, insteadOptions, trustLine, wordsLine, saveWords, segments, rememberOffer } from '../model.js';
 import { Trust } from './trust.js';
 import { Editor, focusFirstBlank, focusText } from './editor.js';
 import { cutBlock, putBackText } from '../segments.js';
@@ -59,6 +59,22 @@ function Context({ context, words }) {
     </div>`;
   }
   return words ? html`<div class="context info"><span>${words}</span></div>` : null;
+}
+
+/**
+ * After a rewrite from an instruction: one line under the box. "Just this once" only closes it; Remember
+ * keeps the instruction for this kind of reply (the store asks the server, and Undo is in the toast).
+ */
+function Note({ state, actions, item }) {
+  const d = item.draft;
+  if (!d || d.status !== 'ready' || !d.instruction || state.closedNotes.includes(d.id)) return null;
+  const offer = rememberOffer(item, d, state.remembered);
+  return html`<p class="note" role="status"><span>Rewritten from your instruction.</span>
+    ${offer ? html`<span class="note-acts">
+      <button type="button" class="btn small quiet" onClick=${actions.justOnce}>Just this once</button>
+      <button type="button" class="btn small" onClick=${() => actions.remember(offer.scope)}>${offer.label}</button>
+    </span>` : null}
+  </p>`;
 }
 
 function Writing({ state }) {
@@ -191,6 +207,7 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
           ${action ? html`<button type="button" class="btn main" disabled=${action.kind === 'blocked'} title=${action.kind === 'blocked' ? null : action.label + ' (Ctrl+Enter)'} onClick=${run}>${action.label}</button>` : null}
         </div>
       </div>
+      <${Note} state=${state} actions=${actions} item=${item} />
     </div>
   </div>`;
 }

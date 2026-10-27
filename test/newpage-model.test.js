@@ -269,3 +269,41 @@ test('trustLine: typed text, however small the change, is not checked', () => {
   assert.deepEqual(trustLine(d2, 'Hello, the car is here!'), unchecked, 'one character');
   assert.deepEqual(trustLine({ ...withFacts(facts2, ''), status: 'failed' }, 'Mine'), unchecked, 'beside a failed suggestion');
 });
+
+import { rememberOffer, ruleWords, lessonLines } from '../web/new/js/model.js';
+import { SITUATIONS } from '../src/situations.js';
+
+test('rememberOffer is offered only for a Dashboard draft with an instruction', () => {
+  const item = { key: 'c:1', situation: 'Price, discount or offer' };
+  const d = { id: 5, instruction: 'Do not mention finance' };
+  assert.deepEqual(rememberOffer(item, d), { scope: 'price_negotiation', label: 'Remember for price questions' });
+  assert.deepEqual(rememberOffer({ key: 'em:9' }, d), { scope: 'any', label: 'Remember for every reply' });
+  assert.deepEqual(rememberOffer({ key: 'l:3', situation: 'General enquiry' }, d), { scope: 'general', label: 'Remember for general enquiries' });
+  assert.equal(rememberOffer(item, { id: 5 }), null);
+  assert.equal(rememberOffer({ key: 'm:1', situation: item.situation }, d), null);
+  assert.equal(rememberOffer({ key: 'ip:1' }, d), null);
+  assert.equal(rememberOffer(item, d, [5]), null);
+  assert.equal(rememberOffer(item, null), null);
+});
+
+test('every situation the server names is a scope the page can remember for', () => {
+  for (const s of Object.values(SITUATIONS)) assert.ok(rememberOffer({ key: 'c:1', situation: s.label }, { id: 1, instruction: 'x' }), s.label);
+  for (const [key, s] of Object.entries(SITUATIONS)) assert.equal(rememberOffer({ key: 'c:1', situation: s.label }, { id: 1, instruction: 'x' }).scope, key);
+});
+
+test('ruleWords says one plain sentence for each rule that fired', () => {
+  assert.deepEqual(ruleWords(null), []);
+  assert.deepEqual(ruleWords({ standard: false, price: false }), []);
+  assert.deepEqual(ruleWords({ standard: true, price: true, invite: false, again: true }), [
+    'Added the first-reply details for a new enquiry', 'Added the price reply', 'Left out the greeting and sign-off: not the first reply today',
+  ]);
+});
+
+test('lessonLines gives each lesson with its day in Sydney time', () => {
+  const now = Date.parse('2026-10-27T02:00:00Z');
+  const lines = lessonLines([{ adviceId: 1, do: 'Do not mention finance', at: Date.parse('2026-10-26T02:00:00Z') }, { do: 'Keep it short', at: Date.parse('2026-10-20T02:00:00Z') }, { do: 'Old', at: 0 }], now);
+  assert.deepEqual(lines, [
+    { text: 'Do not mention finance', from: 'from yesterday' }, { text: 'Keep it short', from: 'from Tuesday 20 October' }, { text: 'Old', from: '' },
+  ]);
+  assert.deepEqual(lessonLines(null), []);
+});

@@ -5,6 +5,7 @@ import { createAutosave } from './autosave.js';
 import { blanksIn } from '../../lib/blank.js';
 import { plural } from '../../lib/format.js';
 import { visibleRows, followUpOf, waitingCount } from './listview.js';
+import { createRemember } from './remember.js';
 
 export { visibleRows, followUpOf, waitingCount };
 
@@ -22,7 +23,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     section: 'dashboard', chip: 'waiting', rows: [], total: 0, counts: {}, unread: {}, listState: 'loading', listError: '',
     limit: 20, key: null, item: null, itemState: 'idle', typed: null, save: { state: 'idle', at: null },
     overridden: false, done: read(DONE_KEY), doneAt: read(DONE_AT_KEY), status: null, toast: null, context: null,
-    writing: null,
+    writing: null, remembered: [], closedNotes: [],
   };
   const listeners = new Set();
   const draftId = (item) => (item && item.draft ? item.draft.id : null);
@@ -251,6 +252,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
   }
 
   const tell = (instruction) => write({ instruction });
+  const { remember, justOnce, switchLesson } = createRemember({ api, get: () => state, set, toast });
 
   async function instead(id) {
     const key = state.key;
@@ -379,7 +381,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     actions: {
       boot, refresh, setChip, more, open, type, flush, write, tell, holdTell, instead, copy, copyNumber, copyEmail, older, dismiss, dismissFollowUp,
-      putBack, restore, restoreFollowUp, copyLink, toast,
+      putBack, restore, restoreFollowUp, copyLink, toast, remember, justOnce, switchLesson,
       clear: () => type(''),
       bringBack: () => type((state.item && state.item.draft && state.item.draft.reply) || ''),
       override: () => set({ overridden: true }),

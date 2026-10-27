@@ -100,6 +100,8 @@
   .tell input:focus-visible { outline: none; }
   .tell:focus-within { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 var(--s-1) var(--accent-soft); }
   .box .foot .right { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--s-2); margin-left: auto; }
+  .box .note { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); padding: 0 var(--s-1); font-size: var(--fs-13); color: var(--ink-2); }
+  .box .note-acts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-left: auto; }
   .box-note { margin: 0; padding: var(--s-3); border-radius: var(--r-box); background: var(--surface-quiet); color: var(--ink-2); }
   .box-note.good { background: var(--good-soft); color: var(--good); font-weight: var(--fw-semi); }
   .box-note.bad { background: var(--bad-soft); color: var(--bad); font-weight: var(--fw-semi); }

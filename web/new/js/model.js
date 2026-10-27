@@ -359,3 +359,5 @@ export function writtenBy(d) {
   const from = providerWords(d.provider);
   return 'Written by ' + (d.model || 'the AI model') + (from ? ', from ' + from : '') + '.';
 }
+
+export { rememberOffer, scopeWords, ruleWords, lessonLines } from './lessons.js';

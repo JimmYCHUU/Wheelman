@@ -380,3 +380,46 @@ test('a copy with blanks still to fill says how many, as the old page did', asyn
   await a.store.actions.copy({});
   assert.equal(a.store.get().toast.message, 'Copied');
 });
+
+const withInstruction = (a, extra = {}) => {
+  a.data.items['c:1'] = { ...a.data.items['c:1'], key: 'c:1', situation: 'Price, discount or offer', draft: draft(11, { instruction: 'Do not mention finance', ...extra }) };
+};
+
+test('remember posts the scope and Undo switches the lesson off', async () => {
+  const a = setup();
+  withInstruction(a);
+  a.data.on = {
+    '/api/drafts/11/remember': () => ({ lesson: { id: 4, do: 'Do not mention finance', scope: 'price_negotiation', off: false } }),
+    '/api/lessons/4/switch': (b) => ({ lesson: { id: 4, off: !b.on } }),
+  };
+  await a.store.actions.open('c:1');
+  await a.store.actions.remember('price_negotiation');
+  const post = a.calls.find((c) => c.path === '/api/drafts/11/remember');
+  assert.deepEqual(post.body, { scope: 'price_negotiation' });
+  assert.equal(a.store.get().toast.message, 'Remembered for price questions');
+  assert.deepEqual(a.store.get().remembered, [11]);
+  await a.store.get().toast.action.run();
+  const off = a.calls.find((c) => c.path === '/api/lessons/4/switch');
+  assert.deepEqual(off.body, { on: false });
+  assert.deepEqual(a.store.get().remembered, []);
+});
+
+test('a refused remember shows its sentence', async () => {
+  const a = setup();
+  withInstruction(a);
+  a.data.on = { '/api/drafts/11/remember': () => { throw new Error('Marketplace chats, phone-only texts and auction orders do not teach Wheelman.'); } };
+  await a.store.actions.open('c:1');
+  await a.store.actions.remember('any');
+  assert.equal(a.store.get().toast.message, 'Marketplace chats, phone-only texts and auction orders do not teach Wheelman.');
+  assert.deepEqual(a.store.get().remembered, []);
+});
+
+test('Just this once closes the line and sends nothing', async () => {
+  const a = setup();
+  withInstruction(a);
+  await a.store.actions.open('c:1');
+  a.calls.length = 0;
+  a.store.actions.justOnce();
+  assert.deepEqual(a.store.get().closedNotes, [11]);
+  assert.equal(a.calls.length, 0);
+});
