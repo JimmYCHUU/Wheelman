@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { config } from './config.js';
-import { availability } from './normalize.js';
+import { availability, phoneKeys } from './normalize.js';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS leads (
@@ -436,6 +436,7 @@ export function oldRowsStamp() {
       (SELECT COUNT(*) || ':' || IFNULL(MAX(at), 0) FROM item_moves) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(changed_at), 0) || ':' || IFNULL(SUM(gone_at IS NULL), 0) FROM auction_orders) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(changed_at), 0) || ':' || IFNULL(SUM(conversation_id), 0) FROM phone_threads) || '/' ||
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(id), 0) FROM phone_messages) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(last_message_at), 0) FROM mp_conversations) || '/' ||
       (SELECT COUNT(*) FROM mp_messages) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(changed_at), 0) FROM mail_threads) || '/' ||
@@ -447,13 +448,29 @@ export function oldRowsStamp() {
  * ids and times (no conversation is built). The time is a guide for paging, not the final order.
  */
 export function dashboardCandidates() {
-  const out = [];
-  for (const r of stmt('SELECT id, latest_at AS t FROM conversations').all()) out.push({ key: `c:${r.id}`, t: r.t || 0 });
-  for (const r of stmt('SELECT id, conversation_id AS cid, MAX(IFNULL(lead_at, 0), IFNULL(updated_at, 0)) AS t FROM leads').all()) out.push({ key: r.cid ? `c:${r.cid}` : `l:${r.id}`, t: r.t || 0 });
-  for (const r of stmt('SELECT id, latest_at AS t FROM phone_threads WHERE conversation_id IS NULL AND lead_id IS NULL').all()) out.push({ key: `ph:${r.id}`, t: r.t || 0 });
+  // A text the dashboard missed, read by the phone add-on, joins a conversation's timeline by its
+  // thread link or its number, so it can be newer than the conversation's own latest_at.
+  const byConv = new Map();
+  const byKey = new Map();
+  if (config.phone.switchedOn) {
+    for (const r of stmt("SELECT conversation_id AS cid, phone_key AS pk, latest_at AS t FROM phone_threads WHERE conversation_id IS NOT NULL OR phone_key != ''").all()) {
+      if (r.cid) byConv.set(r.cid, Math.max(byConv.get(r.cid) || 0, r.t || 0));
+      if (r.pk) byKey.set(r.pk, Math.max(byKey.get(r.pk) || 0, r.t || 0));
+    }
+  }
+  const best = new Map();
+  const note = (key, t, cid, ...phones) => {
+    let latest = t || 0;
+    if (cid) latest = Math.max(latest, byConv.get(cid) || 0);
+    if (byKey.size) for (const k of phoneKeys(...phones)) latest = Math.max(latest, byKey.get(k) || 0);
+    best.set(key, Math.max(best.get(key) || 0, latest));
+  };
+  for (const r of stmt('SELECT id, phone, latest_at AS t FROM conversations').all()) note(`c:${r.id}`, r.t, r.id, r.phone);
+  for (const r of stmt('SELECT id, conversation_id AS cid, phone, MAX(IFNULL(lead_at, 0), IFNULL(updated_at, 0)) AS t FROM leads').all()) note(r.cid ? `c:${r.cid}` : `l:${r.id}`, r.t, r.cid, r.phone);
+  for (const r of stmt('SELECT id, latest_at AS t FROM phone_threads WHERE conversation_id IS NULL AND lead_id IS NULL').all()) best.set(`ph:${r.id}`, r.t || 0);
   // Conversations moved here from another section: few, and their activity is not known yet.
-  for (const key of movedKeys('dashboard')) out.push({ key, t: Infinity });
-  return out.sort((a, b) => b.t - a.t);
+  for (const key of movedKeys('dashboard')) best.set(key, Infinity);
+  return [...best].map(([key, t]) => ({ key, t })).sort((a, b) => b.t - a.t);
 }
 
 export function getMeta(key, fallback = null) {

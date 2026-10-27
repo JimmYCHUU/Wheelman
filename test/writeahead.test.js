@@ -198,3 +198,27 @@ test('a draft that keeps failing is written ahead only three times in all', asyn
   assert.notEqual(latest(two).id, twoLast, 'two failures: tried again');
   assert.equal(latest(two).status, 'ready');
 });
+
+test('a text the phone add-on read counts toward the ten newest waiting', () => {
+  // The dashboard's last message from this customer is 100 days old; the add-on read a newer one
+  // on the phone, linked to the conversation by its number and by the thread's link.
+  const key = addWaiting(1020, 100 * 24 * 60);
+  const keyByNumber = addWaiting(1021, 101 * 24 * 60);
+  const now = Date.now();
+  const thread = (k, conversationId, phoneKey, minsOld) => {
+    const t = db.upsertPhoneThread({ key: k, name: phoneKey, phoneKey, kind: 'number', conversationId, leadId: null, latestDirection: 'IN', latestAt: now - minsOld * MIN, latestText: 'Still keen', latestSig: k });
+    db.addPhoneMessage(t.id, { direction: 'IN', text: 'Still keen', at: now - minsOld * MIN, precision: 'minute', seenAt: now });
+  };
+  const phoneKeyOf = (id) => db.getConversation(id).phone.slice(-9);
+  thread('ref:linked', 1020, '', 0.2);              // joined by the thread's link
+  thread('ref:bynumber', null, phoneKeyOf(1021), 0.3); // joined by the phone number only
+  // Paging by the dashboard's own times alone would stop long before these two.
+  const keys = items.newestWaitingKeys(3, { pageSize: 2 });
+  assert.deepEqual(keys.slice(0, 2), [key, keyByNumber]);
+  // The answer was cached before the phone text arrived? A new phone message must clear it.
+  const before = items.newestWaitingKeys.stats.misses;
+  const t = db.getPhoneThread(db.upsertPhoneThread({ key: 'ref:linked', name: '', phoneKey: '', kind: 'number', conversationId: 1020, leadId: null, latestDirection: 'IN', latestAt: now - 0.1 * MIN, latestText: 'Still keen', latestSig: 'ref:linked2' }).id);
+  db.addPhoneMessage(t.id, { direction: 'IN', text: 'Hello?', at: now - 30e3, precision: 'minute', seenAt: now });
+  items.newestWaitingKeys(3, { pageSize: 2 });
+  assert.equal(items.newestWaitingKeys.stats.misses, before + 1);
+});
