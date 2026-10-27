@@ -22,7 +22,7 @@ export function Viewer({ title, groups, group, index, opener, onCopy, onAdd, onC
   const [gid, setGid] = useState(group);
   const [at, setAt] = useState(index || 0);
   const [voice, setVoice] = useState(true); // the voice-over version first, as the website plays it
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState(''); // what the Copy button says for 2 s: Copied, or Could not copy
 
   const g = full.find((x) => x.id === gid) || full[0];
   const n = g ? g.items.length : 0;
@@ -41,10 +41,10 @@ export function Viewer({ title, groups, group, index, opener, onCopy, onAdd, onC
     (d.querySelector('.viewer-nav.next') || d.querySelector('.viewer-close')).focus({ preventScroll: true });
     return () => { d.removeEventListener('close', done); if (d.open) d.close(); };
   }, []);
-  useEffect(() => { setCopied(false); }, [gid, i, voice]);
+  useEffect(() => { setCopied(''); }, [gid, i, voice]);
   useEffect(() => {
     if (!copied) return undefined;
-    const timer = setTimeout(() => setCopied(false), COPIED_FOR);
+    const timer = setTimeout(() => setCopied(''), COPIED_FOR);
     return () => clearTimeout(timer);
   }, [copied]);
   useEffect(() => {
@@ -61,6 +61,7 @@ export function Viewer({ title, groups, group, index, opener, onCopy, onAdd, onC
 
   const keys = (e) => {
     if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
     if (e.target && e.target.tagName === 'VIDEO') return;
     const to = { ArrowLeft: () => go(-1), ArrowRight: () => go(1), Home: () => setAt(0), End: () => setAt(n - 1) }[e.key];
     if (!to) return;
@@ -69,7 +70,7 @@ export function Viewer({ title, groups, group, index, opener, onCopy, onAdd, onC
   };
   // A click on the dark ground around the picture closes it, as in any photo app.
   const ground = (e) => { if (e.target === dlg.current || e.target.classList.contains('viewer-stage')) close(); };
-  const copy = async () => { setCopied((await onCopy(link)) !== false); };
+  const copy = async () => { setCopied((await onCopy(link)) === false ? 'Could not copy' : 'Copied'); };
   const add = () => { quiet.current = true; close(); onAdd(it, g.id, link); };
 
   const word = (NOUN[g.id] || 'Item') + ' ' + (i + 1) + ' of ' + n;
@@ -103,7 +104,7 @@ export function Viewer({ title, groups, group, index, opener, onCopy, onAdd, onC
       </div>` : null}
       <span class="viewer-grow"></span>
       ${mine ? html`<span class="for-you">For you only</span>` : null}
-      ${mine ? null : html`<button type="button" class="btn" onClick=${copy}><span aria-live="polite">${copied ? 'Copied' : 'Copy link'}</span></button>`}
+      ${mine ? null : html`<button type="button" class="btn" onClick=${copy}><span aria-live="polite">${copied || 'Copy link'}</span></button>`}
       ${mine ? null : html`<button type="button" class="btn" title="Put this link in the reply, on its own line, where your cursor was" onClick=${add}>Add to reply</button>`}
       <a class="btn" href=${link} target="_blank" rel="noopener noreferrer">Open original</a>
     </div>

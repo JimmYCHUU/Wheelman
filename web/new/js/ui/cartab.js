@@ -3,7 +3,7 @@
 // in the new page's components. Every picture comes through Wheelman (/api/vehicles/<stock>/picture/<id>).
 // A link with shareable: false is the supplier's own address: it is for Jim only, so it opens and
 // says "For you only", with no Copy link and no Add to reply.
-import { html, useState, useEffect } from './html.js';
+import { html, useState, useEffect, useRef } from './html.js';
 import { money, km, ago, plural } from '../../../lib/format.js';
 import { replyLabel } from '../insertlink.js';
 import { Viewer } from './viewer.js';
@@ -82,7 +82,7 @@ function PhotoGroup({ id, title, stockNo, photos, show, empty, view }) {
     ${photos.length ? html`<div class="photo-grid">${shown.map((p, i) => {
       const more = left > 0 && i === shown.length - 1;
       return html`<button type="button" class="photo-tile" key=${p.id} onClick=${(e) => view(id, i, e.currentTarget)}
-        aria-label=${more ? 'See all ' + photos.length + ' photos' : p.label} title=${more ? null : 'See ' + p.label + ' large'}>
+        aria-label=${more ? 'See all ' + photos.length + ' photos' : p.label + (p.shareable === false ? ', for you only' : '')} title=${more ? null : 'See ' + p.label + ' large'}>
         <img src=${pictureSrc(stockNo, p.id)} alt="" loading="lazy" decoding="async" />
         ${more ? html`<span class="photo-more num" aria-hidden="true">+${left + 1}</span>` : null}
         ${p.shareable === false ? html`<span class="tile-tag" aria-hidden="true">For you only</span>` : null}
@@ -169,7 +169,9 @@ export function CarTab({ car, media, other, backTo, looking, now, act }) {
   useEffect(() => { if (stock && (!other || other.state === 'ready')) act.load(String(stock)); }, [stock, other && other.state]);
   // The viewer: where it opens and the tile that opened it, so the focus can go back there.
   const [seen, setSeen] = useState(null);
-  const view = (group, index, opener) => setSeen({ group, index, opener });
+  // The groups are taken when it opens, so a media refresh that fails behind it does not take it away.
+  const snap = useRef(null);
+  const view = (group, index, opener) => { snap.current = null; setSeen({ group, index, opener }); };
   const back = other ? html`<div class="car-other">
     <span><b>Another car</b> · Stock ${other.stockNo}</span>
     <button type="button" class="link-btn" onClick=${act.back}>${backTo ? 'Back to ' + backTo : 'Close this car'}</button>
@@ -183,7 +185,7 @@ export function CarTab({ car, media, other, backTo, looking, now, act }) {
   return html`${back}
     <${Top} car=${car} media=${m} view=${view} />
     <${Media} car=${car} media=${m} act=${act} view=${view} />
-    ${seen && m.photos ? html`<${Viewer} title=${car.title || 'Stock ' + car.stockNo} groups=${viewerGroups(car.stockNo, m)} group=${seen.group}
+    ${seen && (snap.current || m.photos) ? html`<${Viewer} title=${car.title || 'Stock ' + car.stockNo} groups=${snap.current || (snap.current = viewerGroups(car.stockNo, m))} group=${seen.group}
       index=${seen.index} opener=${seen.opener} onClose=${() => setSeen(null)} onCopy=${act.copy}
       onAdd=${(it, from, url) => act.add(replyLabel(it.kind === 'video' ? 'video' : from === 'auction' ? 'auction' : 'picture', it.label), url)} />` : null}
     ${included.length ? html`<section class="car-sec"><h4>Included with this car</h4>

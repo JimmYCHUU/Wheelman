@@ -54,6 +54,7 @@ window.addEventListener('popstate', () => {
 // Escape closes a drawer or sheet; the column on a wide window stays.
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || e.defaultPrevented || WIDE.matches || !panel.get().open) return;
+  if (document.querySelector('dialog[open]')) return; // the viewer's own Escape closes only the viewer
   e.preventDefault();
   setPanel(false);
 });
