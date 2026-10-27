@@ -3,6 +3,7 @@
 import { html, useState, useEffect, useRef } from './html.js';
 import { SECTIONS } from '../model.js';
 import { parseRoute, hashFor } from '../route.js';
+import { openAction } from '../hashsync.js';
 import { TopBar } from './topbar.js';
 import { Toast } from './toast.js';
 import { List } from './list.js';
@@ -64,9 +65,10 @@ export function App({ store, panel, setPanel, search, now = Date.now }) {
   const openResult = (r) => {
     if (r.section !== 'dashboard') { location.assign('/'); return; }
     // The conversation already on screen stays as it is: opening it again would blank it and lose what is typed.
-    if (r.key === state.key && route.key === r.key) return;
+    const todo = openAction(state.key, route.key, r.key);
+    if (todo === 'none') return;
     location.hash = hashFor({ section: 'dashboard', chip: state.chip, key: r.key });
-    store.actions.open(r.key);
+    if (todo === 'open') store.actions.open(r.key);
   };
   // A car opens in the panel as "Another car": the panel opens the way the Details button opens it
   // (on a phone as a history entry, so Back closes the sheet), then shows the car.

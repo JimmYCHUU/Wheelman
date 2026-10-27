@@ -19,6 +19,17 @@ export function storeStep(route, s) {
   return null;
 }
 
+/**
+ * What choosing a conversation (a row, a search result) does: 'none' when it is open and the address
+ * already says so; 'view' when the store has it open but the address does not (a phone showing the
+ * list), so only the address is written and the view switches, nothing is reopened (what is typed
+ * stays); 'open' for any other conversation.
+ */
+export function openAction(storeKey, routeKey, key) {
+  if (key !== storeKey) return 'open';
+  return routeKey === key ? 'none' : 'view';
+}
+
 // The panel on a phone is a sheet over the conversation, and the sheet is a history entry of its
 // own (the address stays the conversation's, the entry's state says { sheet: true }). Back closes
 // it and nothing else moves: the address before it is the same, so storeStep has nothing to do.

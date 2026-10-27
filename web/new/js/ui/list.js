@@ -3,6 +3,7 @@
 import { html, useState, useRef } from './html.js';
 import { CHIPS, rowView } from '../model.js';
 import { hashFor, parseRoute } from '../route.js';
+import { openAction } from '../hashsync.js';
 import { visibleRows, waitingCount } from '../store.js';
 import { initials, hue } from '../../../lib/format.js';
 
@@ -63,8 +64,10 @@ export function List({ state, actions, now, section = 'dashboard' }) {
   const openRow = (row) => {
     setCursor(row.key);
     // The row already open stays as it is: opening it again would blank the conversation and lose what is typed.
-    if (row.key === state.key && parseRoute(location.hash).key === row.key) return;
+    const todo = openAction(state.key, parseRoute(location.hash).key, row.key);
+    if (todo === 'none') return;
     location.hash = hashFor({ section, chip: state.chip, key: row.key });
+    if (todo === 'view') return; // the store has it open; the address switches the view
     actions.open(row.key, state.chip === 'followups' && row.followUp ? { followup: row.followUp.id } : undefined);
   };
   const onKey = (e) => {

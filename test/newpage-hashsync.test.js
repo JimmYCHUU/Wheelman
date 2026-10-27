@@ -1,7 +1,7 @@
 // Keeping the new page's address and its store in step (web/new/js/hashsync.js). Invented data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addressAfter, storeStep, sheetStep, sheetOnPop, isSheetEntry, withSheet } from '../web/new/js/hashsync.js';
+import { openAction, addressAfter, storeStep, sheetStep, sheetOnPop, isSheetEntry, withSheet } from '../web/new/js/hashsync.js';
 import { parseRoute } from '../web/new/js/route.js';
 
 /** The store as the sync sees it. */
@@ -96,4 +96,12 @@ test('the panel closes on Escape and Back', () => {
   assert.equal(sheetStep({ narrow: false, open: false, entry: true }), 'set');
   assert.equal(sheetOnPop({ narrow: false, entry: false }), null);
   assert.equal(sheetOnPop({ narrow: false, entry: true }), null);
+});
+
+test('choosing the open conversation never reopens it', () => {
+  assert.equal(openAction('c:1', 'c:1', 'c:1'), 'none'); // on screen already
+  assert.equal(openAction('c:1', null, 'c:1'), 'view'); // a phone showing the list: only the address moves
+  assert.equal(openAction('c:1', 'c:1', 'c:2'), 'open'); // another conversation
+  assert.equal(openAction(null, null, 'c:2'), 'open');
+  assert.equal(storeStep(parseRoute('#/dashboard/waiting/c%3A1'), { section: 'dashboard', chip: 'waiting', key: 'c:1' }), null);
 });
