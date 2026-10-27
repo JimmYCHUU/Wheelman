@@ -79,6 +79,48 @@ test('search treats % _ and quotes as plain text', async () => {
   assert.equal((await search('\\\\')).messages.length, 0);
 });
 
+test('a text seen on the phone is found once, under the conversation it belongs to', async () => {
+  const key = customer(7, 'Tamsin', '0491 570 129', [['IN', 'Is the wombat-grey one still there?', 2 * HOUR]]);
+  const thread = db.upsertPhoneThread({ key: 'ref:invented-7', ref: 'invented-7', name: '0491 570 129', phoneKey: '491570129', kind: 'number', conversationId: Number(key.slice(2)), leadId: 7, latestDirection: 'OUT', latestAt: now - HOUR, latestText: 'Yes', latestSig: 'OUT|yes|' }, now);
+  // The same text the dashboard has, seen on the phone a minute later; and one the dashboard does not have.
+  db.addPhoneMessage(thread.id, { direction: 'IN', text: 'Is the wombat-grey one still there?', at: now - 2 * HOUR + MIN, precision: 'minute', seenAt: now - 2 * HOUR + MIN });
+  db.addPhoneMessage(thread.id, { direction: 'OUT', text: 'Yes, the wombat-grey one is here', at: now - HOUR, precision: 'minute', seenAt: now - HOUR });
+  // A lead the dashboard has with no conversation yet: its phone texts are listed under the lead.
+  db.upsertLead({ id: 8, conversationId: null, firstName: 'Ulric', lastName: 'Searchable', phone: '0491 570 130', email: '', source: 'carsales', status: 'FOLLOW_UP', platform: 'CARSALES', state: 'NSW', leadAt: now - 3 * HOUR, updatedAt: now - 5 * MIN, stocks: [], inquiries: [], statusHistory: [] });
+  const leadThread = db.upsertPhoneThread({ key: 'ref:invented-8', ref: 'invented-8', name: '0491 570 130', phoneKey: '491570130', kind: 'number', conversationId: null, leadId: 8, latestDirection: 'IN', latestAt: now - 30 * MIN, latestText: 'x', latestSig: 'IN|x|' }, now);
+  db.addPhoneMessage(leadThread.id, { direction: 'IN', text: 'And a wombat-grey roof rack?', at: now - 30 * MIN, precision: 'minute', seenAt: now - 30 * MIN });
+  const { messages } = await search('wombat-grey');
+  assert.deepEqual(messages.map((m) => [m.key, m.who, m.section]), [['l:8', 'customer', 'dashboard'], [key, 'us', 'dashboard'], [key, 'customer', 'dashboard']]);
+  assert.equal(messages.filter((m) => m.text.includes('still there')).length, 1, 'the phone copy of a dashboard text is left out');
+  assert.equal(messages[1].name, 'Tamsin Searchable');
+});
+
+test('a source that is switched off is not searched: the phone add-on, Marketplace and Imports', async () => {
+  const { config } = await import('../src/config.js');
+  const phoneOnly = db.upsertPhoneThread({ key: 'ref:invented-9', ref: 'invented-9', name: '0491 570 133', phoneKey: '491570133', kind: 'number', conversationId: null, leadId: null, latestDirection: 'IN', latestAt: now - HOUR, latestText: 'x', latestSig: 'IN|x|' }, now);
+  db.addPhoneMessage(phoneOnly.id, { direction: 'IN', text: 'Any capybara-brown vans?', at: now - HOUR, precision: 'minute', seenAt: now - HOUR });
+  db.upsertMpConversation({ id: 78, account: 'Carbarn', buyerName: 'Vera Marketplace', stockId: '', lastDirection: 'in', lastMessageAt: now - HOUR, archived: false });
+  db.replaceMpMessages(78, [{ id: 7801, seq: 0, direction: 'in', source: 'buyer', text: 'Is the capybara-brown one sold?', status: '', hasMedia: false, at: now - HOUR }], 'sig78');
+  const mail = db.upsertMailThread({ key: 'gmail:invented-1', ref: 'invented-1', subject: 'Import enquiry' }, now);
+  db.addMailMessage(mail.id, { direction: 'IN', fromName: 'Wren Invented', fromEmail: 'wren@example.com', text: 'Could you find a capybara-brown Alphard?', at: now - HOUR }, now);
+  db.refreshMailThreadSummary(mail.id, now, { changed: true });
+  const keys = async () => (await search('capybara-brown')).messages.map((m) => m.key.split(':')[0]).sort();
+  // The tests start with Marketplace and Imports off and the phone add-on on.
+  assert.deepEqual(await keys(), ['ph']);
+  const was = { phone: config.phone.switchedOn, mp: config.marketplace.switchedOn, url: config.marketplace.url, mail: config.mail.switchedOn };
+  try {
+    Object.assign(config.marketplace, { switchedOn: true, url: 'http://127.0.0.1:9' });
+    config.mail.switchedOn = true;
+    assert.deepEqual(await keys(), ['em', 'mp', 'ph']);
+    config.phone.switchedOn = false;
+    assert.deepEqual(await keys(), ['em', 'mp']);
+  } finally {
+    Object.assign(config.marketplace, { switchedOn: was.mp, url: was.url });
+    config.mail.switchedOn = was.mail;
+    config.phone.switchedOn = was.phone;
+  }
+});
+
 test("customer search finds an auction order under Finished", async () => {
   const order = normalize.normalizeOrder({
     id: 9601, orderNo: 'AS-9601', stage: 'CANCELLED', source: 'LIVE_AUCTION', lotPhase: 'SOURCING', depositState: 'NONE',

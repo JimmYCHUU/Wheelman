@@ -2,6 +2,9 @@
 // words in messages. Plain SQL over the database module, no HTTP. The query is only ever a bound
 // parameter, and % _ and the escape character in it are plain text.
 import { openDb } from './db.js';
+import { config } from './config.js';
+import { sectionOn } from './placement.js';
+import { sameMessage, windowFor } from './phone.js';
 import { findCars } from './vehiclemedia.js';
 import { rowMatches } from '../web/lib/search.js';
 
@@ -9,12 +12,15 @@ const SECTION_ORDER = ['dashboard', 'marketplace', 'importquery', 'auction'];
 const SNIPPET = 140;
 const MESSAGE_LIMIT = 20;
 
-// Each message table: where the body is, how it maps to an item key, and the name to show.
+// Each message table: where the body is, how it maps to an item key, the name to show, and its
+// section (a table whose section is switched off is not searched). A text seen on the phone is
+// listed under the dashboard's conversation or lead once the thread is matched to one, as the list
+// does (rekeyPhoneThreads in src/db.js); only an unmatched thread is "ph:".
 const SOURCES = [
   { table: 'messages', sql: `SELECT 'c:' || m.conversation_id AS key, COALESCE(NULLIF(c.customer_name, ''), c.phone, '') AS name, m.at AS at, m.direction AS dir, m.body AS text FROM messages m LEFT JOIN conversations c ON c.id = m.conversation_id WHERE m.body LIKE ? ESCAPE '!' ORDER BY m.at DESC LIMIT ?`, home: 'dashboard' },
   { table: 'mp_messages', sql: `SELECT 'mp:' || m.conversation_id AS key, COALESCE(c.buyer_name, '') AS name, m.at AS at, m.direction AS dir, m.text AS text FROM mp_messages m LEFT JOIN mp_conversations c ON c.id = m.conversation_id WHERE m.text LIKE ? ESCAPE '!' ORDER BY m.at DESC LIMIT ?`, home: 'marketplace' },
   { table: 'mail_messages', sql: `SELECT 'em:' || m.thread_id AS key, COALESCE(NULLIF(t.customer_name, ''), t.customer_email, '') AS name, m.at AS at, m.direction AS dir, m.text AS text FROM mail_messages m LEFT JOIN mail_threads t ON t.id = m.thread_id WHERE m.text LIKE ? ESCAPE '!' ORDER BY m.at DESC LIMIT ?`, home: 'importquery' },
-  { table: 'phone_messages', sql: `SELECT 'ph:' || m.thread_id AS key, COALESCE(t.name, '') AS name, m.at AS at, m.direction AS dir, m.text AS text FROM phone_messages m LEFT JOIN phone_threads t ON t.id = m.thread_id WHERE m.text LIKE ? ESCAPE '!' ORDER BY m.at DESC LIMIT ?`, home: 'dashboard' },
+  { table: 'phone_messages', sql: `SELECT COALESCE('c:' || t.conversation_id, 'c:' || l.conversation_id, 'l:' || t.lead_id, 'ph:' || m.thread_id) AS key, COALESCE(NULLIF(c.customer_name, ''), t.name, '') AS name, m.at AS at, m.direction AS dir, m.text AS text, m.truncated AS truncated, m.precision AS precision FROM phone_messages m LEFT JOIN phone_threads t ON t.id = m.thread_id LEFT JOIN leads l ON l.id = t.lead_id LEFT JOIN conversations c ON c.id = COALESCE(t.conversation_id, l.conversation_id) WHERE m.text LIKE ? ESCAPE '!' ORDER BY m.at DESC LIMIT ?`, home: 'dashboard', on: () => config.phone.switchedOn },
 ];
 
 /** The words around the first match, at most 140 characters, with … where it was cut. */
@@ -35,10 +41,15 @@ function messagesMatching(q, sectionOf) {
   const have = new Set(d.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name));
   const like = `%${q.replace(/[!%_]/g, (c) => `!${c}`)}%`;
   const found = [];
+  const dashboard = []; // the dashboard's own texts found, so the phone's copy of one is left out
   for (const src of SOURCES) {
-    if (!have.has(src.table)) continue;
+    if (!have.has(src.table) || !sectionOn(src.home) || (src.on && !src.on())) continue;
     for (const r of d.prepare(src.sql).all(like, MESSAGE_LIMIT)) {
-      found.push({ key: r.key, section: sectionOf.get(r.key) || src.home, name: r.name || '', at: r.at || 0, who: String(r.dir).toLowerCase() === 'in' ? 'customer' : 'us', text: snippet(r.text, q) });
+      const direction = String(r.dir).toUpperCase() === 'IN' ? 'IN' : 'OUT';
+      // The same text on the dashboard and on the phone is shown once, as the conversation shows it (addPhoneEntries in src/items.js).
+      if (src.table === 'messages') dashboard.push({ key: r.key, direction, text: r.text, at: r.at });
+      if (src.table === 'phone_messages' && dashboard.some((x) => x.key === r.key && sameMessage(x, { direction, text: r.text, at: r.at, truncated: !!r.truncated }, windowFor(r.precision)))) continue;
+      found.push({ key: r.key, section: sectionOf.get(r.key) || src.home, name: r.name || '', at: r.at || 0, who: direction === 'IN' ? 'customer' : 'us', text: snippet(r.text, q) });
     }
   }
   return found.sort((a, b) => b.at - a.at).slice(0, MESSAGE_LIMIT);
