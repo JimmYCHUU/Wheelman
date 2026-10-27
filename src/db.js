@@ -1220,16 +1220,22 @@ export function deleteAdvice(id) {
  * Remember: an instruction the owner keeps as a lesson for every later reply of its kind (scope) in
  * its channel. It belongs to no suggestion (draft_id is null), so a Could be better note on the same
  * suggestion never replaces it, nor it the note. The same instruction remembered again for the same
- * kind of reply keeps the one lesson, switched on.
+ * kind of reply keeps the one lesson, switched on and dated afresh.
  */
 export function insertRemember({ itemKey, scope, instruction, situations = [], at = Date.now() }) {
   if (!TEACHES.test(String(itemKey || ''))) throw new Error('Refused: only dashboard conversations and import emails can be learned from.');
   const channel = channelOfKey(itemKey);
-  const same = stmt("SELECT id, lessons_json FROM advice WHERE kind = 'remember' AND channel = ? AND note = ?").all(channel, instruction)
-    .find((r) => JSON.parse(r.lessons_json || '[]')[0]?.scope === scope);
-  if (same) { stmt('UPDATE advice SET off = 0 WHERE id = ?').run(same.id); return Number(same.id); }
+  const same = rememberedAlready({ itemKey, scope, instruction });
+  if (same) { stmt('UPDATE advice SET off = 0, at = ? WHERE id = ?').run(at, same.id); return same.id; }
   return Number(stmt("INSERT INTO advice(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, note, lessons_json, at, channel, kind) VALUES(NULL, ?, ?, 0, '', '', ?, ?, ?, ?, 'remember')")
     .run(itemKey, JSON.stringify(situations || []), instruction, JSON.stringify([{ scope, when: '', do: instruction, internal: false }]), at, channel).lastInsertRowid);
+}
+
+/** The Remember lesson that already holds this instruction for this kind of reply in this channel: { id, off }, or null. */
+export function rememberedAlready({ itemKey, scope, instruction }) {
+  const row = stmt("SELECT id, lessons_json, off FROM advice WHERE kind = 'remember' AND channel = ? AND note = ?").all(channelOfKey(itemKey), instruction)
+    .find((r) => JSON.parse(r.lessons_json || '[]')[0]?.scope === scope);
+  return row ? { id: Number(row.id), off: !!row.off } : null;
 }
 
 /** The lessons one advice row holds, as the page lists them. A note gives up to three; they share its switch and its count. */

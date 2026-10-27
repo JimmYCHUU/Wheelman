@@ -1013,7 +1013,8 @@ async function api(req, res, url) {
     if (!draft) return send(res, 404, { error: 'Suggestion not found.' });
     // A Marketplace chat, a phone-only text or an auction order is refused without being looked up.
     const out = onRemember(canLearnFrom(draft.item_key) ? itemFromKey(draft.item_key) : null, draft.id, body.scope);
-    return out.error ? send(res, out.status || 400, { error: out.error }) : send(res, 200, { lesson: out.lesson });
+    // wasOn: the lesson was already there and switched on, so this press changed nothing Undo could take back.
+    return out.error ? send(res, out.status || 400, { error: out.error }) : send(res, 200, { lesson: out.lesson, wasOn: out.wasOn });
   }
 
   // Every lesson, newest first, each with its kind, channel, scope, date, off switch and use.

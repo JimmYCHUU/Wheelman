@@ -15,6 +15,8 @@ let standins, app, base, db, items, learn, promptModule, sync;
 const ai = aiBehaviour({ behave: () => ({ reply: 'Hello {{NAME}},\nCertainly.', needs_human: [], facts_used: [], hold: false }) });
 
 const REFUSED = 'Marketplace chats, phone-only texts and auction orders do not teach Wheelman.';
+const FOLLOW_UPS = 'Follow-ups do not teach Wheelman.';
+const AUCTION = 'Auction conversations do not teach Wheelman.';
 const NOTHING = 'There is no instruction to remember.';
 
 before(async () => {
@@ -91,7 +93,7 @@ test('remember stores one lesson with its scope and channel', async () => {
   assert.equal(db.countRows('advice'), before + 1);
 
   const listed = (await lessons()).find((l) => l.id === out.lesson.id);
-  assert.deepEqual(listed, { id: out.lesson.id, n: 0, kind: 'remember', channel: 'sms', scope: 'price_negotiation', do: 'Do not mention finance.', at: out.lesson.at, off: false, usedCount: 0, lastUsedAt: null });
+  assert.deepEqual(listed, { id: out.lesson.id, n: 0, kind: 'remember', channel: 'sms', scope: 'price_negotiation', do: 'Do not mention finance.', at: again.lesson.at, off: false, usedCount: 0, lastUsedAt: null });
 
   // A lesson remembered from an import email is for emails.
   const mail = db.insertRemember({ itemKey: 'em:9', scope: 'any', instruction: 'Give the deposit band in every email.' });
@@ -165,10 +167,13 @@ test('remember is refused for Marketplace, phone-only and orders, and without a 
   const key = customer(6, 'Fay', 'Do you take trade-ins?');
   const before = db.countRows('advice');
   const draft = (itemKey, anchorKey, instruction = 'Be brief.') => db.insertDraft({ itemKey, anchorKey, situation: 'trade_in', reply: 'Yes, we do.', status: 'ready', checks: [], instruction });
-  for (const [itemKey, anchorKey] of [['mp:77', 'fm:1'], ['ph:5', 'pm:1'], ['ao:3', 'out:deposit'], [key, 'fu:9']]) {
+  for (const [itemKey, anchorKey] of [['mp:77', 'fm:1'], ['ph:5', 'pm:1'], ['ao:3', 'out:deposit']]) {
     const out = await post(`/api/drafts/${draft(itemKey, anchorKey)}/remember`, { scope: 'any' });
     assert.deepEqual([out.status, out.error], [400, REFUSED], itemKey);
   }
+  // A follow-up is refused in words of its own.
+  const fu = await post(`/api/drafts/${draft(key, 'fu:9')}/remember`, { scope: 'any' });
+  assert.deepEqual([fu.status, fu.error], [400, FOLLOW_UPS]);
   const anchor = items.itemFromKey(key).anchorKey;
   const plain = await post(`/api/drafts/${draft(key, anchor, '')}/remember`, { scope: 'trade_in' });
   assert.deepEqual([plain.status, plain.error], [400, NOTHING]);
@@ -359,4 +364,62 @@ test('copying with a block removed: the sign-off, or the first-reply details alo
   const out = await copy(e.id, without(e, 'Price reply'));
   assert.equal(out.approved, undefined, 'the price reply removed is a change');
   assert.equal(db.getLearned(e.id).source, 'copied');
+});
+
+test('remember says whether the lesson was already on, and a repeat dates it afresh', async () => {
+  const key = customer(25, 'Yul', 'What is the best you can do on the Noah?');
+  const d = await write(key, 'Hello {{NAME}},\nThanks for asking about the Noah.', { instruction: 'Never mention a cash discount.' });
+  const first = await post(`/api/drafts/${d.id}/remember`, { scope: 'price_negotiation' });
+  assert.deepEqual([first.status, first.wasOn], [200, false], 'made by this press');
+  const row = () => db.allAdvice().find((a) => a.id === first.lesson.id);
+  db.openDb().prepare('UPDATE advice SET at = ? WHERE id = ?').run(now - 5 * HOUR, first.lesson.id);
+
+  const again = await post(`/api/drafts/${d.id}/remember`, { scope: 'price_negotiation' });
+  assert.deepEqual([again.lesson.id, again.wasOn], [first.lesson.id, true], 'already there and on');
+  assert.ok(row().at >= now, 'dated afresh');
+  assert.equal(again.lesson.at, row().at);
+
+  // Switched off, then remembered again: this press switched it on, so Undo may switch it off.
+  db.switchLesson(first.lesson.id, false);
+  const back = await post(`/api/drafts/${d.id}/remember`, { scope: 'price_negotiation' });
+  assert.deepEqual([back.lesson.id, back.wasOn, back.lesson.off], [first.lesson.id, false, false]);
+  assert.equal(row().off, 0);
+  // For another kind of reply it is a lesson of its own.
+  const other = await post(`/api/drafts/${d.id}/remember`, { scope: 'any' });
+  assert.notEqual(other.lesson.id, first.lesson.id);
+  assert.equal(other.wasOn, false);
+  db.switchLesson(first.lesson.id, false);
+  db.switchLesson(other.lesson.id, false);
+});
+
+test('remember is refused for a conversation in Auction, or a reply written there', async () => {
+  const before = db.countRows('advice');
+  // Written while the conversation was in Auction, then moved out.
+  const key = customer(26, 'Zoe', 'Can you find me a Noah from Japan?');
+  const anchor = items.itemFromKey(key).anchorKey;
+  const there = db.insertDraft({ itemKey: key, anchorKey: anchor, situation: 'import_sourcing', reply: 'Yes, we can.', status: 'ready', checks: [], instruction: 'Be brief.', context: { section: 'auction', situations: ['import_sourcing'] } });
+  let out = await post(`/api/drafts/${there}/remember`, { scope: 'any' });
+  assert.deepEqual([out.status, out.error], [400, AUCTION]);
+  // Listed in Auction now.
+  const key2 = customer(27, 'Abe', 'Is the Noah still available?');
+  const d = db.insertDraft({ itemKey: key2, anchorKey: items.itemFromKey(key2).anchorKey, situation: 'availability', reply: 'Yes, it is.', status: 'ready', checks: [], instruction: 'Be brief.' });
+  assert.equal((await post(`/api/items/${key2}/move`, { section: 'auction' })).item.section, 'auction');
+  out = await post(`/api/drafts/${d}/remember`, { scope: 'any' });
+  assert.deepEqual([out.status, out.error], [400, AUCTION]);
+  assert.equal(db.countRows('advice'), before, 'nothing was stored');
+  await post(`/api/items/${key2}/move`, { section: 'dashboard' });
+});
+
+test('a Remember lesson never reaches a Marketplace request; a Could be better lesson still does', async () => {
+  // The reviewer's case: remembered on a dashboard text, c:501.
+  const id = db.insertRemember({ itemKey: 'c:501', scope: 'price_negotiation', instruction: 'Always give the booking link and the full price breakdown.' });
+  const q = { situations: ['price_negotiation'], primary: 'price_negotiation', text: 'best price?', firstReply: false };
+  const said = (channel, excludeItemKey) => learn.ownerGuidance({ ...q, channel, excludeItemKey }).lessons.map((l) => l.do);
+  assert.ok(!said('marketplace', 'mp:9').includes('Always give the booking link and the full price breakdown.'), 'not in a Marketplace request');
+  assert.ok(said('sms', 'c:777').includes('Always give the booking link and the full price breakdown.'), 'in a text request');
+  // Distilled from a Could be better note on a text: used on Marketplace, as today.
+  const note = db.insertAdvice({ draftId: null, itemKey: 'c:502', situations: ['price_negotiation'], firstReply: false, customerText: 'x', draftText: 'y', note: 'n', lessons: [{ scope: 'price_negotiation', when: '', do: 'Ask what budget they have in mind.', internal: false }] });
+  assert.ok(said('marketplace', 'mp:9').includes('Ask what budget they have in mind.'));
+  db.deleteAdvice(note);
+  db.switchLesson(id, false);
 });

@@ -11,7 +11,7 @@
 // "sent" replaces "copied" for the same suggestion once it is seen.
 
 import { config } from './config.js';
-import { getMeta, setMeta, getDraft, upsertLearned, deleteLearned, deleteLearnedForAnchor, learnedTextExists, allLearned, recordCopied, recordCopiedTime, recordEdit, setDraftRating, getLearned, insertAdvice, allAdvice, setAdviceLessons, insertRemember, getLesson } from './db.js';
+import { getMeta, setMeta, getDraft, upsertLearned, deleteLearned, deleteLearnedForAnchor, learnedTextExists, allLearned, recordCopied, recordCopiedTime, recordEdit, setDraftRating, getLearned, insertAdvice, allAdvice, setAdviceLessons, insertRemember, rememberedAlready, getLesson } from './db.js';
 import { redact } from './redact.js';
 import { maskCustomerSignOff, maskGreetingNames, stripLocationBlock, loadExclusions } from './voice.js';
 import { stripModelSignOff, BLANK_PATTERN } from './checks.js';
@@ -360,6 +360,8 @@ export async function onAdvice(item, draftId, note) {
 // What a lesson can be for: one kind of customer message, or every reply.
 const SCOPES = [...Object.keys(SITUATIONS), 'general', 'any'];
 export const REMEMBER_REFUSED = 'Marketplace chats, phone-only texts and auction orders do not teach Wheelman.';
+export const REMEMBER_FOLLOW_UP = 'Follow-ups do not teach Wheelman.';
+export const REMEMBER_AUCTION = 'Auction conversations do not teach Wheelman.';
 export const NOTHING_TO_REMEMBER = 'There is no instruction to remember.';
 const NO_SCOPE = 'Say which kind of reply to remember it for.';
 
@@ -369,20 +371,25 @@ const NO_SCOPE = 'Say which kind of reply to remember it for.';
  * conversation included. The instruction itself is the lesson, with the customer's details taken
  * out; no AI is asked. Where nothing teaches it is refused, as is a suggestion written from no
  * instruction. item may be null when the conversation cannot be found.
- * Returns { lesson } or { status, error }.
+ * Returns { lesson, wasOn } (wasOn: the lesson was there and switched on before this call) or { status, error }.
  */
 export function onRemember(item, draftId, scope) {
   const draft = getDraft(draftId);
   if (!draft) return { status: 404, error: 'Suggestion not found.' };
-  // Marketplace, the phone-only list and auction orders (and their out: messages), follow-ups, and anything in Auction.
-  if (!canLearnFrom(draft.item_key) || isFollowUp(draft) || /^out:/.test(String(draft.anchor_key || '')) || writtenInAuction(draft) || item?.section === 'auction') return { status: 400, error: REMEMBER_REFUSED };
+  // Marketplace, the phone-only list and auction orders (and their out: messages), then follow-ups,
+  // then anything in Auction: each refused in its own sentence.
+  if (!canLearnFrom(draft.item_key) || /^out:/.test(String(draft.anchor_key || ''))) return { status: 400, error: REMEMBER_REFUSED };
+  if (isFollowUp(draft)) return { status: 400, error: REMEMBER_FOLLOW_UP };
+  if (writtenInAuction(draft) || item?.section === 'auction') return { status: 400, error: REMEMBER_AUCTION };
   if (!item) return { status: 404, error: 'That conversation was not found.' };
   const instruction = squash(redact(String(draft.instruction || ''), item.lead)).slice(0, 600);
   if (!instruction) return { status: 400, error: NOTHING_TO_REMEMBER };
   const kind = String(scope ?? '').trim();
   if (!SCOPES.includes(kind)) return { status: 400, error: NO_SCOPE };
+  // Remembered before and still switched on: Undo must not switch off a lesson this press did not make.
+  const prior = rememberedAlready({ itemKey: draft.item_key, scope: kind, instruction });
   const { id, do: said, channel, at } = getLesson(insertRemember({ itemKey: draft.item_key, scope: kind, instruction, situations: draft.context?.situations || [] }));
-  return { lesson: { id, do: said, scope: kind, channel, at, off: false } };
+  return { lesson: { id, do: said, scope: kind, channel, at, off: false }, wasOn: !!prior && !prior.off };
 }
 
 /** Works out the lessons of notes that have none yet (the AI was busy when they were written). */
@@ -403,6 +410,7 @@ export async function distilPending(max = 2) {
  * raw: notes on similar messages with no lesson (not worked out yet, or none could be taken).
  * A lesson switched off is never used. A Remember lesson is used in this conversation too: the
  * hold-out (a replay must not see its own answer) is for what a conversation taught by example.
+ * A Remember lesson is never used for a Marketplace chat; a Could be better lesson is, as before.
  * Each lesson carries where it came from: adviceId (its advice row) and n (its place in that row).
  */
 export function ownerGuidance(q, now = Date.now()) {
@@ -411,7 +419,9 @@ export function ownerGuidance(q, now = Date.now()) {
   const approved = sinceVoice(allLearned().filter((r) => mine(r) && r.source === 'approved'))
     .map((r) => ({ r, s: score(r, q, now) })).filter((x) => x.s >= 3).sort((a, b) => b.s - a.s).slice(0, 2).map((x) => x.r);
 
-  const notes = allAdvice().filter((a) => !a.off && (a.kind === 'remember' ? taught(a) : mine(a))); // newest first
+  // A Remember lesson is for texts and emails: a Marketplace request never carries one.
+  const rememberFits = (a) => q?.channel !== 'marketplace' && taught(a);
+  const notes = allAdvice().filter((a) => !a.off && (a.kind === 'remember' ? rememberFits(a) : mine(a))); // newest first
   const kinds = new Set([...(q.situations || []), q.primary].filter(Boolean));
   const lessons = [];
   for (const a of notes) {
