@@ -701,6 +701,35 @@ What to know:
 
 ## The page
 
+### The new page
+
+A new page is being built beside this one, at http://127.0.0.1:3210/new/. The old page has a
+quiet link, **Try the new page**, next to the cog. For now the new page covers the Dashboard
+texts: the list (Needs reply, Follow-ups and All), the open conversation, and the message box
+with its fill-in blanks, **Instead**, the "Tell Wheelman what to say…" line, and **Copy**, with
+**Put back in Needs reply**. Marketplace, Imports and Auction are tabs on the new page too, but
+each shows a line and a link to that section on the old page. The old page stays at the normal
+address until the switch-over, and nothing else about it has changed. The new page is built from
+`prototype/`.
+
+Beside the open conversation is the **deal panel** (a column on a wide screen, a drawer on a
+medium one, a sheet from the bottom on a phone; it remembers whether you left it open). Its
+**Car** tab shows the car the customer asked about: photos, auction photos, videos and documents,
+each with **Copy link** and **Add to reply**, which puts the link into the message box where the
+cursor is. Photos and videos open large in a viewer you can move through with the arrow keys.
+A link that is for you only, such as a supplier's, can be opened but not copied or added to a
+reply. Its **Customer** tab shows **How far they have got**: five steps from enquiry to sold,
+with where the record says they are. It also shows the facts that **Shaped the reply, never
+stated**, and **What Wheelman used** lists the model, the provider and what was read to write the
+suggestion. A car found by search opens in the panel as **Another car**, with a button back to
+the customer.
+
+**Remember**, the source of each fact, and removable blocks come in a later update.
+
+The **search box** in the top bar looks across customers, cars and the words in messages, in
+every section. A Dashboard result opens on the new page. A Marketplace, Imports or Auction
+result says **Opens on the old page** and goes there until those sections move over.
+
 ### The top bar
 
 - **The sections** are tabs in the middle of the top bar: **Dashboard** (leads and text messages),
@@ -1711,6 +1740,7 @@ claim outside what the records allow; and the block or the proof that was due.
 | `npm run fetch-website` | Saves the website's policy pages. `-- --all` for every guide, blog post and import page |
 | `npm run import-history` | Loads the saved history in `data/raw` into the database |
 | `npm test` | Runs the automated checks |
+| `node test/support/preview.js` | Runs Wheelman on invented data at http://127.0.0.1:3211/new/ to look at the new page. Nothing real is read or sent |
 
 ## Where your files live
 
@@ -1940,7 +1970,14 @@ wheelman/
 │   │                                  (the Car tab) · Viewer (photos and videos large) · FindCar
 │   ├── lib/                           blank.js: what a blank is, shared with the server's checks;
 │   │                                  insert.js: where Add to reply puts a link; copy.js: every word
-│   └── assets/                        brand.svg: the mark, placed with <use>
+│   ├── assets/                        brand.svg: the mark, placed with <use>
+│   └── new/                           the new page, at /new/ (Dashboard texts first)
+│       ├── index.html                 the one page
+│       ├── vendor/                    Preact and htm, one file, the only code from elsewhere
+│       ├── css/                       tokens, base, components, views, panel, viewer, search, in layers
+│       └── js/                        main · model · route · hashsync · store · panelstore · searchstore
+│                                      · listview · insertlink · autosave · api, and ui/ (the pieces on screen: top bar, search, list,
+│                                      conversation, message box, panel with its tabs, viewer)
 ├── prototype/                         the redesign as a clickable demo on invented data: the design
 │                                      the new page is built from. Open prototype.cmd opens it
 ├── scripts/                           check-login · check-model · replay · report · measure
@@ -2049,6 +2086,15 @@ keeping its name and its history. The engine comes first, behind today's page. A
 follows beside the old one, section by section, and the old page goes only after Carbarn says
 yes. `prototype/` is the clickable design on invented data. `npm run measure` counts what each
 stage is judged on.
+
+26 October 2026, later: the new page for Dashboard texts is at `/new/`, built from the prototype.
+Checked on the automated tests and in a browser on invented data. Not yet used over a working day.
+
+27 October 2026: the new page gained the deal panel (the Car and Customer tabs, the viewer, What
+Wheelman used) and one search across customers, cars and message words in every section. The
+server gained a search route and a stage on each conversation; nothing else about it changed.
+Checked on the automated tests and in a browser on invented data. Marketplace, Imports and Auction
+still open on the old page.
 
 ### Open questions for Carbarn
 

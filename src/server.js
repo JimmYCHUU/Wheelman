@@ -15,6 +15,7 @@ import { availability } from './normalize.js';
 import { firstNameOf, isPlaceholderName } from './redact.js';
 import { signedName } from './signature.js';
 import { rowMatches } from '../web/lib/search.js';
+import { searchAll } from './search.js';
 import { RUNG_LABELS } from './selling.js';
 import { teachesHere } from './learn.js';
 import { validateMailReport, storeMailThread } from './mail.js';
@@ -339,6 +340,8 @@ function present(item) {
   return {
     ...summary(item),
     note: item.note,
+    // The sale stage, when there is one: the new page's stage line reads it.
+    deal: item.deal ? { stage: item.deal.stage, stageText: item.deal.stageText, source: item.deal.source } : null,
     channel: item.channel,
     marketplace: marketplaceOf(item),
     mail: mailOf(item),
@@ -687,6 +690,17 @@ async function api(req, res, url) {
     return send(res, 200, { item: present(item) });
   }
 
+  // One search across every section that is on, the stock list and the words in messages.
+  if (req.method === 'GET' && p === '/api/search') {
+    // Auction's All is To do and In progress only: its Finished orders are found too.
+    const rowsOf = (s) => {
+      if (!sectionOn(s)) return null;
+      const r = sectionRows(s);
+      return s === 'auction' ? [...r.waiting, ...r.quiet, ...r.other] : r.all;
+    };
+    return send(res, 200, searchAll(url.searchParams.get('q'), { rowsOf }));
+  }
+
   // Find a car: cars from the stored stock list matching a stock number or words of the title.
   if (req.method === 'GET' && p === '/api/vehicles') {
     return send(res, 200, { cars: findCars(String(url.searchParams.get('q') || '').slice(0, 60)) });
@@ -1003,7 +1017,8 @@ async function api(req, res, url) {
 
 function serveStatic(res, url) {
   if (url.pathname === '/favicon.ico') { res.writeHead(204, { 'cache-control': 'max-age=86400' }); return res.end(); }
-  const rel = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\/+/, '');
+  // A path ending in / serves that folder's index.html (/ itself, and /new/ for the new page).
+  const rel = url.pathname.replace(/^\/+/, '') + (url.pathname.endsWith('/') ? 'index.html' : '');
   const file = path.resolve(config.webDir, rel);
   if (!file.startsWith(path.resolve(config.webDir) + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return send(res, 404, 'Not found', 'text/plain; charset=utf-8');
   send(res, 200, fs.readFileSync(file), TYPES[path.extname(file)] || 'application/octet-stream');
@@ -1076,6 +1091,7 @@ export function startServer() {
       }
       if (url.pathname.startsWith('/api/')) return await api(req, res, url);
       if (req.method !== 'GET') return send(res, 405, { error: 'Not allowed' });
+      if (url.pathname === '/new') { res.writeHead(303, { location: '/new/', 'cache-control': 'no-store' }); return res.end(); }
       return serveStatic(res, url);
     } catch (e) {
       send(res, 500, { error: e.message });

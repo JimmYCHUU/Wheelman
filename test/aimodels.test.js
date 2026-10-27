@@ -501,3 +501,8 @@ test("the month's budget: an estimate from the owner's price file, a warning at 
     assert.equal(llm.usageDetail().today.find((r) => r.model === 'model-b').requests, byModel + 1, 'but counted by model');
   } finally { config.llm.monthlyBudgetAud = kept; fs.rmSync(file, { force: true }); budget.forgetPrices(); }
 });
+
+test('the new page names each provider as the AI choice does', async () => {
+  const { providerWords } = await import('../web/new/js/model.js');
+  for (const [id, p] of Object.entries(ai.PROVIDERS)) assert.equal(providerWords(id), p.label, id);
+});

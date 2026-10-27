@@ -38,6 +38,13 @@
   }
   .brand-by { margin-top: var(--sp-1); font-size: var(--fs-caption); font-weight: var(--fw-semibold); color: var(--faint); letter-spacing: 0.01em; }
   .topbar-actions { display: flex; align-items: center; gap: var(--sp-1); }
+  .topbar-new { white-space: nowrap; font-size: var(--fs-label); text-decoration: none; }
+  .topbar-new:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .topbar-new .t-short { display: none; }
+  @media (max-width: 520px) {
+    .topbar-new .t-long { display: none; }
+    .topbar-new .t-short { display: inline; }
+  }
 
   /* The sections: pills on a pale track in the middle of the bar, the chosen one raised off it. */
   .topbar-nav { min-width: 0; justify-self: center; display: flex; align-items: center; overflow-x: auto; scrollbar-width: none; }
