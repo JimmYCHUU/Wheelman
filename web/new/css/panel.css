@@ -23,8 +23,8 @@
   @keyframes scrim-in { from { opacity: 0; } }
 
   .panel-head { flex: none; display: flex; align-items: center; gap: var(--s-2); padding: var(--s-3); border-bottom: 1px solid var(--line); }
-  .panel-tabs { flex: 1; display: flex; gap: var(--s-hair); padding: var(--s-hair); background: var(--surface-sunk); border-radius: var(--r-pill); }
-  .panel-tabs [role="tab"] { flex: 1; height: 28px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--ink-2); font-size: var(--fs-13); font-weight: var(--fw-semi); white-space: nowrap; }
+  .panel-tabs { flex: 1; display: flex; gap: var(--s-hair); padding: var(--s-hair); background: var(--surface-sunk); border-radius: var(--r-pill); overflow-x: auto; scrollbar-width: none; }
+  .panel-tabs [role="tab"] { flex: 1 0 auto; padding: 0 var(--s-2); height: 28px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--ink-2); font-size: var(--fs-12); font-weight: var(--fw-semi); white-space: nowrap; }
   .panel-tabs [role="tab"][aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-1); }
   .panel-body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-5); }
   .panel .fine { margin: 0; font-size: var(--fs-13); color: var(--ink-2); }
@@ -74,6 +74,15 @@
   .asked { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--s-1) var(--s-4); font-size: var(--fs-13); }
   .asked dt { color: var(--ink-3); }
   .asked dd { margin: 0; font-weight: var(--fw-semi); }
+  /* the Customer tab */
+  .stage { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); font-size: var(--fs-13); color: var(--ink-3); }
+  .stage li { display: flex; align-items: center; gap: var(--s-2); }
+  .stage li::before { content: ""; flex: none; width: var(--s-3); height: var(--s-3); border-radius: var(--r-pill); border: 2px solid var(--line); }
+  .stage li.done { color: var(--ink-2); }
+  .stage li.done::before { background: var(--good); border-color: var(--good); }
+  .stage li.now { color: var(--accent); font-weight: var(--fw-bold); }
+  .stage li.now::before { background: var(--accent); border-color: var(--accent); }
+  .asked .link-btn { text-align: left; overflow-wrap: anywhere; }
   .skel-line { display: block; height: var(--s-3); border-radius: var(--r-tag); background: var(--surface-sunk); animation: shimmer 1.4s infinite var(--ease); }
   .skel-line:nth-child(2) { width: 80%; }
   .skel-line:nth-child(3) { width: 55%; }

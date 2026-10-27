@@ -295,3 +295,35 @@ export function stageLine(item) {
   if (fromStatus !== undefined) return { steps: STAGE_STEPS, current: fromStatus, source: 'From the lead status' };
   return { steps: STAGE_STEPS, current: 0, source: '' };
 }
+
+const STATUS_NAME = { NEW: 'New enquiry' };
+
+/** The lead status in words: the stage line's own step for the ones it knows, else the status made plain. */
+export function leadStatusWords(status) {
+  const s = String(status || '').trim().toUpperCase();
+  if (!s) return '';
+  if (STATUS_STEP[s] !== undefined) return STAGE_STEPS[STATUS_STEP[s]];
+  if (STATUS_NAME[s]) return STATUS_NAME[s];
+  const plain = s.replace(/_/g, ' ').toLowerCase();
+  return plain[0].toUpperCase() + plain.slice(1);
+}
+
+/** Where a customer came from, in words (the old page's list). */
+export function sourceWords(source) {
+  const s = String(source || '').trim();
+  if (!s) return '';
+  if (/^carsales$/i.test(s)) return 'Carsales';
+  if (/sms connect/i.test(s)) return 'Carsales (text message)';
+  if (/call connect/i.test(s)) return 'Carsales (phone call)';
+  if (/dealer studio|autotrader/i.test(s)) return 'Autotrader';
+  if (/caravancamping/i.test(s)) return 'Caravan Camping Sales';
+  if (/finance/i.test(s)) return 'Website, finance application';
+  if (/trade.?in/i.test(s)) return 'Website, trade-in request';
+  if (/inspection|test drive/i.test(s)) return 'Website, inspection booking';
+  if (/purchase/i.test(s)) return 'Website, purchase steps';
+  if (/contact/i.test(s)) return 'Website, contact form';
+  if (/chat box/i.test(s)) return 'Website, chat box';
+  if (/waitlist/i.test(s)) return 'Website, waitlist';
+  if (/^(customer|regular user)$/i.test(s)) return 'Website account';
+  return s.replace(/_/g, ' ');
+}

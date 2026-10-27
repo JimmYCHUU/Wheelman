@@ -146,16 +146,23 @@ function Media({ car, media, act, view }) {
     <${Documents} documents=${media.documents || []} act=${act} />`;
 }
 
-/** No car matched: says so, with what the customer asked about when the conversation says. */
-function NoCar({ looking }) {
+/** What an import customer asked for, then what is not known yet (the old page's words). */
+export function Asked({ looking }) {
   const l = looking || {};
   const rows = [
     ['Asking about', l.car], ['Years', l.years], ['Kilometres', l.maxKm ? 'Up to ' + km(l.maxKm) : ''],
     ['Budget', l.budget ? money(l.budget) : ''], ['Auction grade', l.grade ? 'At least ' + l.grade : ''],
+    ['Auction request', l.order],
   ].filter((r) => r[1]);
+  return html`${rows.length ? html`<dl class="asked">${rows.map(([k, v]) => [html`<dt key=${k}>${k}</dt>`, html`<dd key=${k + '='}>${v}</dd>`])}</dl>` : null}
+    ${l.missing ? html`<p class="fine">Not known yet: ${l.missing}.</p>` : null}`;
+}
+
+/** No car matched: says so, with what the customer asked about when the conversation says. */
+function NoCar({ looking }) {
   return html`<div class="car-none">
     <p>No car is linked to this conversation.</p>
-    ${rows.length ? html`<dl class="asked">${rows.map(([k, v]) => [html`<dt key=${k}>${k}</dt>`, html`<dd key=${k + '='}>${v}</dd>`])}</dl>` : null}
+    <${Asked} looking=${looking} />
   </div>`;
 }
 

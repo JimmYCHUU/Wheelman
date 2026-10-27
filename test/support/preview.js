@@ -75,11 +75,11 @@ const { parseDashboardTime, sydneyDay } = await import('../../src/time.js');
   const lines = ['Is it still available?', 'Can I come and see it this week?', 'What is the best price?', 'Does it have a service history?', 'Can you hold it until Saturday?'];
   let mid = 90000;
   const talk = (id, direction, body, at) => db.upsertMessage({ id: mid++, conversationId: id, direction, body, sentBy: direction === 'OUT' ? 'Alex STONE' : null, status: 'SENT', mediaType: null, at, importedAt: at });
-  // Ada asks about the Voxy, Bo about no car at all; everyone else about the Hiace 1201.
+  // Cleo has an inspection booked; Ada asks about the Voxy, Bo about no car at all; everyone else about the Hiace 1201.
   const stocksOf = { Ada: ['1800'], Bo: [] };
   const person = (n, first, { waiting = true } = {}) => {
     const id = 700 + n, phone = `0491 570 ${String(130 + n).padStart(3, '0')}`;
-    db.upsertLead({ id, conversationId: id, firstName: first, lastName: 'Invented', phone, email: '', source: 'carsales', status: 'NEW', platform: 'CARSALES', state: 'NSW', leadAt: now - 3 * 24 * HOUR, updatedAt: now - n * 7 * MIN, stocks: stocksOf[first] || ['1201'], inquiries: [] });
+    db.upsertLead({ id, conversationId: id, firstName: first, lastName: 'Invented', phone, email: '', source: 'carsales', status: first === 'Cleo' ? 'INSPECTION' : 'NEW', platform: 'CARSALES', state: 'NSW', leadAt: now - 3 * 24 * HOUR, updatedAt: now - n * 7 * MIN, stocks: stocksOf[first] || ['1201'], inquiries: [] });
     db.upsertConversation({ id, phone: `+61${phone.replace(/\D/g, '').slice(1)}`, channel: 'SMS', status: 'OPEN', leadId: id, customerName: `${first} Invented`, latestDirection: waiting ? 'IN' : 'OUT', latestAt: now - n * 7 * MIN, latestBody: 'x' });
     return id;
   };

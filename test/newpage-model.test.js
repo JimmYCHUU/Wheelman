@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SECTIONS, CHIPS, rowView, whoLabel, segments, joinSegments, fillBlank, boxText, checkLines,
-  mainAction, statusWords, statusAnnouncement, insteadOptions, wordCount, stageLine,
+  mainAction, statusWords, statusAnnouncement, insteadOptions, wordCount, stageLine, leadStatusWords, sourceWords,
 } from '../web/new/js/model.js';
 
 const NOW = Date.parse('2026-10-26T02:00:00Z');
@@ -165,4 +165,24 @@ test('stageLine reads the sale record first, then the lead status', () => {
   }
   assert.deepEqual(stageLine({ deal: { stage: 'unknown' }, leadStatus: 'HOT' }), { steps, current: 0, source: '' });
   assert.deepEqual(stageLine({}), { steps, current: 0, source: '' });
+});
+
+test('leadStatusWords says the lead status in the stage line own words', () => {
+  assert.equal(leadStatusWords('INSPECTION'), 'Inspection booked');
+  assert.equal(leadStatusWords('INSPECTION_DONE'), 'Seen the car');
+  assert.equal(leadStatusWords('DEPOSIT_RECEIVED'), 'Deposit');
+  assert.equal(leadStatusWords('CAR_SOLD'), 'Sold');
+  assert.equal(leadStatusWords('NEW'), 'New enquiry');
+  assert.equal(leadStatusWords('HOT_LEAD'), 'Hot lead');
+  assert.equal(leadStatusWords(''), '');
+  assert.equal(leadStatusWords(undefined), '');
+});
+
+test('sourceWords names where a customer came from', () => {
+  assert.equal(sourceWords('carsales'), 'Carsales');
+  assert.equal(sourceWords('Carsales SMS Connect'), 'Carsales (text message)');
+  assert.equal(sourceWords('Dealer Studio'), 'Autotrader');
+  assert.equal(sourceWords('Website contact form'), 'Website, contact form');
+  assert.equal(sourceWords('some_new_source'), 'some new source');
+  assert.equal(sourceWords(''), '');
 });

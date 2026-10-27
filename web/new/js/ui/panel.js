@@ -5,12 +5,14 @@
 import { html, useState, useEffect, useRef } from './html.js';
 import { placeLink } from '../insertlink.js';
 import { CarTab } from './cartab.js';
+import { CustomerTab } from './customertab.js';
+import { UsedTab } from './usedtab.js';
 
 const WIDE = '(min-width: 1280px)';
 const DRAWER = '(min-width: 900px)';
 const NO_REPLY = 'Open a conversation with a suggestion first, then Add to reply puts the link in it.';
-// The tabs, in order. The Customer tab and What Wheelman used join them.
-const TABS = [{ id: 'car', label: 'Car' }];
+const TABS = [{ id: 'car', label: 'Car' }, { id: 'customer', label: 'Customer' }, { id: 'used', label: 'What Wheelman used' }];
+const NONE = { car: 'its car', customer: 'its customer', used: 'what Wheelman used' };
 
 /** 'column', 'drawer' or 'sheet': what the panel is at the window's width, kept up to date. */
 export function useMode() {
@@ -91,8 +93,11 @@ export function Panel({ state, pstate, panel, actions, mode, setPanel, reply, no
   };
   const tab = TABS.some((t) => t.id === pstate.tab) ? pstate.tab : 'car';
   let body;
-  if (!state.key && !other) body = html`<p class="empty">Open a conversation to see its car here.</p>`;
-  else if (state.key && !item && !other) body = html`<p class="empty" role="status">Opening…</p>`;
+  const here = tab === 'car' ? other : null;
+  if (!state.key && !here) body = html`<p class="empty">Open a conversation to see ${NONE[tab]} here.</p>`;
+  else if (state.key && !item && !here) body = html`<p class="empty" role="status">Opening…</p>`;
+  else if (tab === 'customer') body = html`<${CustomerTab} item=${item} act=${{ copyNumber: actions.copyNumber, copyEmail: actions.copyEmail }} />`;
+  else if (tab === 'used') body = html`<${UsedTab} item=${item} />`;
   else {
     body = html`<${CarTab} car=${car} media=${stock ? pstate.media[String(stock)] : null} other=${other} now=${now}
       backTo=${item ? item.name || item.phone || item.email || '' : ''} looking=${item && item.looking} act=${act} />`;
