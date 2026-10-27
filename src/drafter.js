@@ -9,7 +9,7 @@ import { config } from './config.js';
 import { redact, restore } from './redact.js';
 import { planImport, auctionNote, bidBasisLine } from './imports.js';
 import { planOrderReply, restoreAmounts } from './ordermessages.js';
-import { insertDraft, latestDraft } from './db.js';
+import { insertDraft, latestDraft, countLessonUse } from './db.js';
 import { templatePlan, checkMarkers, markerTrouble, unmask, finishTemplate, maskInstruction } from './fitter.js';
 import { BLANK_PATTERN } from '../web/lib/blank.js';
 import { sydneyHour } from './time.js';
@@ -373,6 +373,17 @@ function assessAnswer(item, prompt, json, { plan = null, chat = false, email = f
   return { body, reply, checks, blocks };
 }
 
+/**
+ * Which of the rules code follows shaped a reply, for What Wheelman used: the blocks it added under
+ * the AI's lines (the first-reply details, the price reply, the invitation, the links asked for),
+ * whether the greeting and sign-off were left off because we already wrote today, and whether the
+ * playbook's sections for this message went into the request (the compact style).
+ */
+const rulesOf = (blocks, { again = false, playbook = false } = {}) => {
+  const added = (kind) => (blocks || []).some((b) => b.kind === kind);
+  return { standard: added('first'), price: added('price'), invite: added('invite'), media: added('links'), again: !!again, playbook: !!playbook };
+};
+
 // One write at a time for one customer message. A second plain write while one is under way (the
 // page's Write it now during a background write, or the other way round) joins it instead of asking
 // the AI again. A write from the owner's own words (the Prompt line, Rewrite, Could be better)
@@ -502,8 +513,11 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
     // Nothing of the customer's own to answer: the first reply is the standard wording, no AI needed.
     if (plan?.stage === 'ask' && plan.ready) {
       const reply = [restore(plan.ready, item.lead), plan.tail].filter(Boolean).join('\n\n');
-      // Its closing lines (address, phone, hours, sign-off) are the first-reply details.
-      context.parts = partsOf(reply, plan.tail ? [blockOf('first', plan.tail)] : []);
+      // Its closing lines (address, phone, hours, sign-off) are the first-reply details. No AI was asked, so no lesson went in.
+      const blocks = plan.tail ? [blockOf('first', plan.tail)] : [];
+      context.parts = partsOf(reply, blocks);
+      context.lessons = [];
+      context.rules = rulesOf(blocks);
       const d = { ...base, status: 'ready', reply, needsHuman: [], factsUsed: [], nextStep: 'asked what they are looking for', checks: [{ level: 'ok', code: 'ok', message: 'Standard wording for a new import enquiry.', tokens: [] }], provider: 'none', model: 'standard wording', exampleIds: [] };
       return persist(d);
     }
@@ -635,6 +649,12 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
     if (prompt.factMarkers) restoreFacts(String(result.json.reply || '').replace(/\\n/g, '\n'), prompt.factMarkers, { used: marked });
     const stockLinks = [...(prompt.inspection?.urls || []), prompt.inspection?.url, prompt.price?.inspectionUrl, prompt.standard?.vehicleUrl, prompt.standard?.inspectionUrl, item.vehicles[0]?.url, ...(prompt.media?.links || []).map((l) => l.url)].filter(Boolean);
     context.facts = traceFacts(aiPart, allowed.pieces, failTokens, { blocks: context.parts.filter((p) => p.kind === 'block'), stockLinks, marked });
+    // The owner's lessons the request carried, when the reply is that request's answer: not a
+    // template used word for word, a fitting used again, or the standard opening of an offer.
+    const answered = !result.byCode && !result.reused;
+    context.lessons = answered ? (prompt.owner?.lessons || []).map((l) => ({ adviceId: l.adviceId, n: l.n, do: l.do, scope: l.scope, at: l.at })) : [];
+    // A template keeps its own greeting and closing, so the once-a-day rule did not shape it.
+    context.rules = rulesOf(best.blocks, { again: again && !fit, playbook: answered && style === 'compact' });
     const draft = {
       ...base,
       status: 'ready',
@@ -657,7 +677,10 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
       usage: result.usage || null,
       exampleIds: prompt.exampleIds,
     };
-    return persist(draft);
+    const kept = persist(draft);
+    // Each lesson it followed is counted once the suggestion is kept, for the list of lessons.
+    if (kept.id && !kept.dropped && context.lessons.length) countLessonUse(context.lessons.map((l) => l.adviceId));
+    return kept;
   } catch (e) {
     const d = { ...base, status: 'failed', reply: '', error: e.message, checks: [{ level: 'fail', code: 'error', message: e.message }] };
     persist(d);

@@ -28,12 +28,12 @@ import { vehicleMedia, vehiclePicture, findCars, carSummary, VIDEO_HOSTS } from 
 import { logLine } from './log.js';
 import { businessFactsForPrompt, loadBusinessFacts } from './knowledge.js';
 import * as worker from './worker.js';
-import { onCopied, onRated, onApproved, onAdvice, onEdited } from './learn.js';
+import { onCopied, onRated, onApproved, onAdvice, onEdited, onRemember, canLearnFrom } from './learn.js';
 import { displayNameFor } from './people.js';
 import { reservedByAnother } from './deal.js';
 import { wantedFrom, enquiryStage } from './imports.js';
 import { SECTIONS, sectionOn, movesFor, onImportsList } from './placement.js';
-import { learnedStats } from './db.js';
+import { learnedStats, listLessons, switchLesson } from './db.js';
 import { validateReport, storePhoneReport } from './phone.js';
 import { sendReply, fetchConversation, normalizeMpMessage, tagMarketplaceLinks } from './marketplace.js';
 import { storeMpConversation } from './sync.js';
@@ -155,6 +155,9 @@ function draftOf(item) {
     parts: draft.context?.parts || null,
     // Each figure and link in the AI's part and in the blocks, with where it came from (traceFacts in src/checks.js).
     facts: draft.context?.facts || [],
+    // The owner's lessons the request carried ({ adviceId, n, do, scope, at }), and which of code's rules shaped the reply.
+    lessonsApplied: draft.context?.lessons || [],
+    rules: draft.context?.rules || null,
   } : null;
 }
 
@@ -999,6 +1002,29 @@ async function api(req, res, url) {
     // The same note guides a new draft for this customer, as coaching, not as wording to send.
     const next = await draftFor(item, { coaching: { note, draft: draft.reply } });
     return send(res, 200, { item: present(itemFromKey(draft.item_key) || item), ok: next.status === 'ready', error: next.error || '', learned: true, lessons: result.lessons || [], pending: !!result.pending });
+  }
+
+  // "Remember": the instruction this suggestion was written from becomes a lesson for every later
+  // reply of its kind. "Just this once" is no call at all: nothing is stored.
+  m = p.match(/^\/api\/drafts\/(\d+)\/remember$/);
+  if (req.method === 'POST' && m) {
+    const body = await readBody(req);
+    const draft = getDraft(Number(m[1]));
+    if (!draft) return send(res, 404, { error: 'Suggestion not found.' });
+    // A Marketplace chat, a phone-only text or an auction order is refused without being looked up.
+    const out = onRemember(canLearnFrom(draft.item_key) ? itemFromKey(draft.item_key) : null, draft.id, body.scope);
+    return out.error ? send(res, out.status || 400, { error: out.error }) : send(res, 200, { lesson: out.lesson });
+  }
+
+  // Every lesson, newest first, each with its kind, channel, scope, date, off switch and use.
+  if (req.method === 'GET' && p === '/api/lessons') return send(res, 200, { lessons: listLessons() });
+
+  m = p.match(/^\/api\/lessons\/(\d+)\/switch$/);
+  if (req.method === 'POST' && m) {
+    const body = await readBody(req);
+    if (typeof body.on !== 'boolean') return send(res, 400, { error: 'Say whether to switch the lesson on or off.' });
+    const lesson = switchLesson(Number(m[1]), body.on);
+    return lesson ? send(res, 200, { lesson }) : send(res, 404, { error: 'That lesson was not found.' });
   }
 
   // The Review page's runs: real conversations written two ways, and the owner's votes. The runs

@@ -11,10 +11,11 @@
 // "sent" replaces "copied" for the same suggestion once it is seen.
 
 import { config } from './config.js';
-import { getMeta, setMeta, getDraft, upsertLearned, deleteLearned, deleteLearnedForAnchor, learnedTextExists, allLearned, recordCopied, recordCopiedTime, recordEdit, setDraftRating, getLearned, insertAdvice, allAdvice, setAdviceLessons } from './db.js';
+import { getMeta, setMeta, getDraft, upsertLearned, deleteLearned, deleteLearnedForAnchor, learnedTextExists, allLearned, recordCopied, recordCopiedTime, recordEdit, setDraftRating, getLearned, insertAdvice, allAdvice, setAdviceLessons, insertRemember, getLesson } from './db.js';
 import { redact } from './redact.js';
 import { maskCustomerSignOff, maskGreetingNames, stripLocationBlock, loadExclusions } from './voice.js';
 import { stripModelSignOff, BLANK_PATTERN } from './checks.js';
+import { blanksIn } from '../web/lib/blank.js';
 import { similarity, wordCount, squash } from './text.js';
 import { complete } from './llm.js';
 import { SITUATIONS } from './situations.js';
@@ -173,7 +174,19 @@ export function onCopied(item, draftId, text) {
   // pressed, keep none of the text, learn nothing.
   if (!canLearnFrom(draft.item_key) || !canLearnFrom(item?.itemKey)) { recordCopiedTime(draftId); return { learned: false, why: NOT_HERE }; }
   recordCopied(draftId, String(text || '').slice(0, 4000));
+  // Copied as Wheelman wrote it, with no blank left: the person says it is right, as Good reply did.
+  // Not where nothing teaches (the Auction section), nor once it was marked not usable.
+  if (copiedAsWritten(draft, text) && teachesHere(item) && !writtenInAuction(draft) && draft.rating !== 'bad') {
+    setDraftRating(draftId, 'good');
+    return { ...onApproved(item, draftId, true), approved: true };
+  }
   return learnFrom(item, draft, text, 'copied');
+}
+
+/** The copied text is the suggestion as written (spacing and the sign-off aside), and no blank is left in it. */
+function copiedAsWritten(draft, text) {
+  const written = squash(comparable(draft.reply));
+  return !!written && squash(comparable(text)) === written && blanksIn(text).length === 0;
 }
 
 /** The text in the message box: what the person typed over the suggestion, or the suggestion itself. */
@@ -329,6 +342,34 @@ export async function onAdvice(item, draftId, note) {
   return { learned: true, lessons: lessons || [], pending: lessons === null };
 }
 
+// What a lesson can be for: one kind of customer message, or every reply.
+const SCOPES = [...Object.keys(SITUATIONS), 'general', 'any'];
+export const REMEMBER_REFUSED = 'Marketplace chats, phone-only texts and auction orders do not teach Wheelman.';
+export const NOTHING_TO_REMEMBER = 'There is no instruction to remember.';
+const NO_SCOPE = 'Say which kind of reply to remember it for.';
+
+/**
+ * "Remember": the instruction a suggestion was written from (Tell Wheelman) becomes a lesson for
+ * every later reply of its kind (scope: a situation key, or 'any') in its channel, this
+ * conversation included. The instruction itself is the lesson, with the customer's details taken
+ * out; no AI is asked. Where nothing teaches it is refused, as is a suggestion written from no
+ * instruction. item may be null when the conversation cannot be found.
+ * Returns { lesson } or { status, error }.
+ */
+export function onRemember(item, draftId, scope) {
+  const draft = getDraft(draftId);
+  if (!draft) return { status: 404, error: 'Suggestion not found.' };
+  // Marketplace, the phone-only list and auction orders (and their out: messages), follow-ups, and anything in Auction.
+  if (!canLearnFrom(draft.item_key) || isFollowUp(draft) || /^out:/.test(String(draft.anchor_key || '')) || writtenInAuction(draft) || item?.section === 'auction') return { status: 400, error: REMEMBER_REFUSED };
+  if (!item) return { status: 404, error: 'That conversation was not found.' };
+  const instruction = squash(redact(String(draft.instruction || ''), item.lead)).slice(0, 600);
+  if (!instruction) return { status: 400, error: NOTHING_TO_REMEMBER };
+  const kind = String(scope ?? '').trim();
+  if (!SCOPES.includes(kind)) return { status: 400, error: NO_SCOPE };
+  const { id, do: said, channel, at } = getLesson(insertRemember({ itemKey: draft.item_key, scope: kind, instruction, situations: draft.context?.situations || [] }));
+  return { lesson: { id, do: said, scope: kind, channel, at, off: false } };
+}
+
 /** Works out the lessons of notes that have none yet (the AI was busy when they were written). */
 export async function distilPending(max = 2) {
   let done = 0;
@@ -345,22 +386,26 @@ export async function distilPending(max = 2) {
  * lessons: the lessons taken from coaching notes, newest first: those for this kind of message
  *          and those that apply to every reply.
  * raw: notes on similar messages with no lesson (not worked out yet, or none could be taken).
+ * A lesson switched off is never used. A Remember lesson is used in this conversation too: the
+ * hold-out (a replay must not see its own answer) is for what a conversation taught by example.
+ * Each lesson carries where it came from: adviceId (its advice row) and n (its place in that row).
  */
 export function ownerGuidance(q, now = Date.now()) {
-  const mine = (r) => (r.at || 0) <= now && canLearnFrom(r.item_key) && r.item_key !== q.excludeItemKey && sameChannel(r, q);
+  const taught = (r) => (r.at || 0) <= now && canLearnFrom(r.item_key) && sameChannel(r, q);
+  const mine = (r) => taught(r) && r.item_key !== q.excludeItemKey;
   const approved = sinceVoice(allLearned().filter((r) => mine(r) && r.source === 'approved'))
     .map((r) => ({ r, s: score(r, q, now) })).filter((x) => x.s >= 3).sort((a, b) => b.s - a.s).slice(0, 2).map((x) => x.r);
 
-  const notes = allAdvice().filter(mine); // newest first
+  const notes = allAdvice().filter((a) => !a.off && (a.kind === 'remember' ? taught(a) : mine(a))); // newest first
   const kinds = new Set([...(q.situations || []), q.primary].filter(Boolean));
   const lessons = [];
   for (const a of notes) {
-    for (const l of a.lessons || []) {
+    (a.lessons || []).forEach((l, n) => {
       const fits = l.scope === 'any' || kinds.has(l.scope);
-      if (!fits) continue;
-      if (lessons.some((x) => similarity(x.do, l.do) >= 0.8)) continue; // said before, in other words
-      lessons.push({ ...l, at: a.at });
-    }
+      if (!fits) return;
+      if (lessons.some((x) => similarity(x.do, l.do) >= 0.8)) return; // said before, in other words
+      lessons.push({ ...l, at: a.at, adviceId: a.id, n });
+    });
   }
   const raw = notes.filter((a) => a.lessons === null || !a.lessons.length)
     .map((r) => ({ r, s: score({ ...r, source: 'note' }, q, now) })).filter((x) => x.s >= 2.5).sort((a, b) => b.s - a.s).slice(0, 2).map((x) => x.r);

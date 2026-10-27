@@ -1032,6 +1032,8 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     user: P.join('\n'),
     // The compact style's markers for our records' facts, [{ name: 'F1', value }]; null in the full style.
     factMarkers,
+    // The owner's lessons the request carries, each with where it came from (adviceId, n).
+    owner: { lessons: owner.lessons },
     exampleIds: examples.map((e) => e.id),
     // The past emails join the examples here so a reply lifted from one is caught as copied.
     exampleReplies: [...examples.map((e) => e.reply), ...mailSent.map((s) => s.reply)],
