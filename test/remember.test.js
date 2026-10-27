@@ -423,3 +423,35 @@ test('a Remember lesson never reaches a Marketplace request; a Could be better l
   db.deleteAdvice(note);
   db.switchLesson(id, false);
 });
+
+test('a lesson count that cannot be written leaves the ready suggestion as the only one saved', async () => {
+  const from = customer(29, 'Cy', 'Is the Noah a hybrid?');
+  const t = await write(from, 'Hello {{NAME}},\nNo, the Noah runs on petrol.', { instruction: 'Name the fuel type in the first sentence.' });
+  const { lesson } = await post(`/api/drafts/${t.id}/remember`, { scope: 'any' });
+  // The database refuses the count, and only the count.
+  db.openDb().exec("CREATE TEMP TRIGGER no_count BEFORE UPDATE OF used_count ON advice BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END;");
+  try {
+    const key = customer(30, 'Dax', 'Does the Noah have a third row?');
+    const out = await post(`/api/items/${key}/draft`, { instruction: '' });
+    assert.equal(out.ok, true, out.error);
+    assert.equal(out.item.draft.status, 'ready');
+    assert.ok(out.item.draft.lessonsApplied.some((l) => l.adviceId === lesson.id), 'the lesson went in');
+    const saved = db.openDb().prepare('SELECT status FROM drafts WHERE item_key = ?').all(key).map((r) => r.status);
+    assert.deepEqual(saved, ['ready'], 'no failed suggestion beside it');
+    assert.equal((await lessons()).find((l) => l.id === lesson.id).usedCount, 0, 'not counted');
+  } finally {
+    db.openDb().exec('DROP TRIGGER no_count');
+    db.switchLesson(lesson.id, false);
+  }
+});
+
+test('a Tell rewrite on a later reply the same day keeps the greeting, and does not say it left it out', async () => {
+  const key = customer(31, 'Eve', 'Does the Noah have a tow bar?', { oursAgo: 20 * MIN });
+  const plain = await write(key, 'Yes, the Noah has a tow bar.');
+  assert.equal(plain.rules.again, true, 'a plain write leaves out the greeting and sign-off');
+  const told = await write(key, 'Hello {{NAME}},\nYes, the Noah has a tow bar.', { instruction: 'Say it is rated for 1,500 kg.' });
+  assert.match(told.reply, /^(Good \w+|Hello) Eve\b/, 'the greeting is kept');
+  assert.equal(told.rules.again, false);
+  const { ruleWords } = await import('../web/new/js/lessons.js');
+  assert.ok(!ruleWords(told.rules).some((w) => w.startsWith('Left out the greeting and sign-off')));
+});

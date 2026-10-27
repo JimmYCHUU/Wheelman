@@ -561,7 +561,8 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
 
     // The Prompt line and Rewrite: the owner's words come first. A Could be better note is a lesson, not a Prompt.
     // byCode: code's own wording, not the AI's (see assessReply).
-    const assess = (json, byCode = false) => assessReply(item, prompt, json, { plan, chat, email, research, again, staffSaid, instructed: !!String(instruction || '').trim(), allowed, said, coaching, now, byCode });
+    const instructed = !!String(instruction || '').trim();
+    const assess = (json, byCode = false) => assessReply(item, prompt, json, { plan, chat, email, research, again, staffSaid, instructed, allowed, said, coaching, now, byCode });
     const failures = (checks) => checks.filter((c) => c.level === 'fail').length;
 
     // An offer does not depend on the AI: its figures come from the auction. If no model can
@@ -653,8 +654,10 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
     // template used word for word, a fitting used again, or the standard opening of an offer.
     const answered = !result.byCode && !result.reused;
     context.lessons = answered ? (prompt.owner?.lessons || []).map((l) => ({ adviceId: l.adviceId, n: l.n, do: l.do, scope: l.scope, at: l.at })) : [];
-    // A template keeps its own greeting and closing, so the once-a-day rule did not shape it.
-    context.rules = rulesOf(best.blocks, { again: again && !fit, playbook: answered && style === 'compact' });
+    // The once-a-day rule shaped the reply only when both the greeting and the closing were left out:
+    // not for a template (its own greeting and closing), a Prompt or Rewrite (the greeting is kept),
+    // or an import, auction or order reply (their closing lines are kept).
+    context.rules = rulesOf(best.blocks, { again: again && !fit && !instructed && !plan, playbook: answered && style === 'compact' });
     const draft = {
       ...base,
       status: 'ready',
@@ -678,8 +681,12 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
       exampleIds: prompt.exampleIds,
     };
     const kept = persist(draft);
-    // Each lesson it followed is counted once the suggestion is kept, for the list of lessons.
-    if (kept.id && !kept.dropped && context.lessons.length) countLessonUse(context.lessons.map((l) => l.adviceId));
+    // Each lesson it followed is counted once the suggestion is kept, for the list of lessons. A count
+    // that cannot be written is logged: the suggestion is kept all the same, and no failed one is added.
+    if (kept.id && !kept.dropped && context.lessons.length) {
+      try { countLessonUse(context.lessons.map((l) => l.adviceId)); }
+      catch (e) { logLine('suggestion', `${item.itemKey}: the lessons this suggestion followed could not be counted. ${e.message}`); }
+    }
     return kept;
   } catch (e) {
     const d = { ...base, status: 'failed', reply: '', error: e.message, checks: [{ level: 'fail', code: 'error', message: e.message }] };
