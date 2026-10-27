@@ -712,6 +712,23 @@ each shows a line and a link to that section on the old page. The old page stays
 address until the switch-over, and nothing else about it has changed. The new page is built from
 `prototype/`.
 
+Beside the open conversation is the **deal panel** (a column on a wide screen, a drawer on a
+medium one, a sheet from the bottom on a phone; it remembers whether you left it open). Its
+**Car** tab shows the car the customer asked about: photos, auction photos, videos and documents,
+each with **Copy link** and **Add to reply**, which puts the link into the message box where the
+cursor is. Photos and videos open large in a viewer you can move through with the arrow keys.
+A link that is for you only, such as a supplier's, can be opened but not copied or added to a
+reply. Its **Customer** tab shows **How far they have got** in a sentence and the facts that
+**Shaped the reply, never stated**, and **What Wheelman used** lists the model, the provider and
+what was read to write the suggestion. **Find a car** opens any other car in the panel as
+**Another car**, with a button back to the customer.
+
+The **search box** in the top bar looks across customers, cars and the words in messages, in
+every section. A Dashboard result opens on the new page. A Marketplace, Imports or Auction
+result says **Opens on the old page** and goes there until those sections move over. The
+**Remember** note, the line that says how far to trust a suggestion, and removable blocks come
+later.
+
 ### The top bar
 
 - **The sections** are tabs in the middle of the top bar: **Dashboard** (leads and text messages),
@@ -1956,9 +1973,10 @@ wheelman/
 │   └── new/                           the new page, at /new/ (Dashboard texts first)
 │       ├── index.html                 the one page
 │       ├── vendor/                    Preact and htm, one file, the only code from elsewhere
-│       ├── css/                       tokens, base, components, views, in layers
-│       └── js/                        model · route · store · autosave · api, and ui/ (the pieces
-│                                      on screen: top bar, list, conversation, message box)
+│       ├── css/                       tokens, base, components, views, panel, viewer, search, in layers
+│       └── js/                        model · route · store · panelstore · searchstore · autosave
+│                                      · api, and ui/ (the pieces on screen: top bar, search, list,
+│                                      conversation, message box, panel with its tabs, viewer)
 ├── prototype/                         the redesign as a clickable demo on invented data: the design
 │                                      the new page is built from. Open prototype.cmd opens it
 ├── scripts/                           check-login · check-model · replay · report · measure
@@ -2070,6 +2088,12 @@ stage is judged on.
 
 26 October 2026, later: the new page for Dashboard texts is at `/new/`, built from the prototype.
 Checked on the automated tests and in a browser on invented data. Not yet used over a working day.
+
+27 October 2026: the new page gained the deal panel (the Car and Customer tabs, the viewer, What
+Wheelman used) and one search across customers, cars and message words in every section. The
+server gained a search route and a stage on each conversation; nothing else about it changed.
+Checked on the automated tests and in a browser on invented data. Marketplace, Imports and Auction
+still open on the old page.
 
 ### Open questions for Carbarn
 
