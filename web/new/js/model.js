@@ -327,3 +327,16 @@ export function sourceWords(source) {
   if (/^(customer|regular user)$/i.test(s)) return 'Website account';
   return s.replace(/_/g, ' ');
 }
+
+// The providers as the AI choice names them (PROVIDERS in src/aimodels.js; test/aimodels.test.js keeps the two the same).
+const PROVIDER_WORDS = { gemini: 'Gemini (Google)', openai: 'ChatGPT (OpenAI)', openrouter: 'OpenRouter' };
+
+/** An AI provider in words; '' for one this page does not know. */
+export const providerWords = (id) => PROVIDER_WORDS[id] || '';
+
+/** Who wrote the suggestion, for What Wheelman used: the model and its provider, or the wording with no AI. */
+export function writtenBy(d) {
+  if (d.provider === 'none') return 'Written from ' + (d.model || 'your wording') + ', with no AI.';
+  const from = providerWords(d.provider);
+  return 'Written by ' + (d.model || 'the AI model') + (from ? ', from ' + from : '') + '.';
+}

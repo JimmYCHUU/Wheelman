@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SECTIONS, CHIPS, rowView, whoLabel, segments, joinSegments, fillBlank, boxText, checkLines,
-  mainAction, statusWords, statusAnnouncement, insteadOptions, wordCount, stageLine, leadStatusWords, sourceWords,
+  mainAction, statusWords, statusAnnouncement, insteadOptions, wordCount, stageLine, leadStatusWords, sourceWords, providerWords, writtenBy,
 } from '../web/new/js/model.js';
 
 const NOW = Date.parse('2026-10-26T02:00:00Z');
@@ -185,4 +185,18 @@ test('sourceWords names where a customer came from', () => {
   assert.equal(sourceWords('Website contact form'), 'Website, contact form');
   assert.equal(sourceWords('some_new_source'), 'some new source');
   assert.equal(sourceWords(''), '');
+});
+
+test('writtenBy names the model and its provider in words', () => {
+  assert.equal(providerWords('gemini'), 'Gemini (Google)');
+  assert.equal(providerWords('openai'), 'ChatGPT (OpenAI)');
+  assert.equal(providerWords('openrouter'), 'OpenRouter');
+  assert.equal(providerWords('something-else'), '');
+  assert.equal(writtenBy({ provider: 'gemini', model: 'model-a' }), 'Written by model-a, from Gemini (Google).');
+  assert.equal(writtenBy({ provider: 'openai', model: 'gpt-test' }), 'Written by gpt-test, from ChatGPT (OpenAI).');
+  assert.equal(writtenBy({ provider: 'openrouter', model: 'some/model:free' }), 'Written by some/model:free, from OpenRouter.');
+  assert.equal(writtenBy({ provider: 'none', model: 'your wording' }), 'Written from your wording, with no AI.');
+  assert.equal(writtenBy({ provider: 'none' }), 'Written from your wording, with no AI.');
+  assert.equal(writtenBy({ provider: 'something-else', model: 'model-z' }), 'Written by model-z.');
+  assert.equal(writtenBy({}), 'Written by the AI model.');
 });
