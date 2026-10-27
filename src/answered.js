@@ -37,7 +37,7 @@ function sentFromWheelman(draft, sentText) {
  */
 export function answeredBy(timeline, latestDraft, nameOf = (x) => x) {
   let lastUs = -1;
-  for (let i = timeline.length - 1; i >= 0; i--) if (timeline[i].who === 'us') { lastUs = i; break; }
+  for (let i = timeline.length - 1; i >= 0; i--) if (timeline[i].who === 'us' && !timeline[i].internal) { lastUs = i; break; }
   const customer = lastCustomerEntry(timeline);
   if (lastUs === -1 || !customer || timeline.indexOf(customer) > lastUs) return null;
   const reply = timeline[lastUs];
@@ -45,5 +45,6 @@ export function answeredBy(timeline, latestDraft, nameOf = (x) => x) {
   if (sentFromWheelman(latestDraft, sentTextAfter(timeline, customer))) return { how: 'wheelman', by: '', at };
   if (reply.auto) return { how: 'auto', by: '', at };
   if (reply.phone || reply.phoneOnly) return { how: 'phone', by: '', at };
-  return { how: 'dashboard', by: nameOf(reply.by) || '', at };
+  const by = reply.via === 'Marketplace' && reply.by === 'Typed by a person' ? '' : nameOf(reply.by) || '';
+  return { how: 'dashboard', by, at };
 }

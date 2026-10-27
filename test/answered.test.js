@@ -101,3 +101,32 @@ test('answeredBy is null unless our reply is the newest message', () => {
   assert.equal(answeredBy([], null), null);
   assert.deepEqual(answeredBy(t.slice(0, 2), null), { how: 'dashboard', by: 'Dana', at: 2 });
 });
+
+test('a staff note is not an answer, and a real reply before it still is', () => {
+  const c = { who: 'customer', key: 'a', at: 1, text: 'Hi' };
+  const note = { who: 'us', internal: true, key: 'n', at: 3, text: 'SMS sent', by: 'Dana' };
+  assert.equal(answeredBy([c, note], null), null);
+  assert.deepEqual(answeredBy([c, { who: 'us', key: 'b', at: 2, text: 'Hello', by: 'Dana' }, note], null), { how: 'dashboard', by: 'Dana', at: 2 });
+});
+
+test('a Marketplace reply typed by a person names nobody', () => {
+  const t = [{ who: 'customer', key: 'a', at: 1, text: 'Hi' }, { who: 'us', via: 'Marketplace', key: 'b', at: 2, text: 'Hello', by: 'Typed by a person' }];
+  assert.deepEqual(answeredBy(t, null), { how: 'dashboard', by: '', at: 2 });
+});
+
+test('a copied suggestion sent with one word changed is still Wheelman\'s, and a recorded outcome counts', async () => {
+  const key = customer(6, 'Gus', '0491 570 106', 'Is the Noah still for sale?');
+  const text = 'Hi Gus, yes the Noah is still for sale. Would you like to come and see it this week?';
+  const id = db.insertDraft({ itemKey: key, anchorKey: (await itemOf(key)).anchor, reply: text, status: 'ready' });
+  db.recordCopied(id, text);
+  say(606, 'OUT', text.replace('this week', 'on Saturday'), 6 * MIN, 'Dana');
+  assert.equal((await rowOf(key)).answered.how, 'wheelman');
+
+  const other = customer(7, 'Hal', '0491 570 107', 'Do you have a Prado?');
+  const id2 = db.insertDraft({ itemKey: other, anchorKey: (await itemOf(other)).anchor, reply: 'Hi Hal, we have one Prado at the moment.', status: 'ready' });
+  db.recordCopied(id2, 'Hi Hal, we have one Prado at the moment.');
+  say(607, 'OUT', 'Totally different words here.', 5 * MIN, 'Dana');
+  assert.equal((await rowOf(other)).answered.how, 'dashboard');
+  db.recordOutcome(id2, { sentText: 'Totally different words here.', sentBy: 'Dana', sentAt: now - 5 * MIN, similarity: 0.9 });
+  assert.equal((await rowOf(other)).answered.how, 'wheelman');
+});
