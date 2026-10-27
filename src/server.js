@@ -30,6 +30,7 @@ import { businessFactsForPrompt, loadBusinessFacts } from './knowledge.js';
 import * as worker from './worker.js';
 import { onCopied, onRated, onApproved, onAdvice, onEdited, onRemember, canLearnFrom } from './learn.js';
 import { displayNameFor } from './people.js';
+import { answeredBy, lastCustomerEntry } from './answered.js';
 import { reservedByAnother } from './deal.js';
 import { wantedFrom, enquiryStage } from './imports.js';
 import { SECTIONS, sectionOn, movesFor, onImportsList } from './placement.js';
@@ -173,9 +174,19 @@ function flagLevel(draft) {
 /** A follow-up as the page sees it: why it is due, and what became of it ('' while it is open). */
 const followUpOf = (r) => ({ id: r.id, kind: r.kind, reason: r.reason, dueAt: r.due_at, done: r.done_how || '', template: r.template });
 
+/**
+ * How a conversation was answered ({ how, by, at }), or null while it is not answered. The
+ * suggestion compared is the one for the customer message our reply answered.
+ */
+function answeredOf(item) {
+  if (item.state !== 'answered') return null;
+  const customer = lastCustomerEntry(item.timeline);
+  return answeredBy(item.timeline, customer ? latestDraft(item.itemKey, customer.key) : null, displayNameFor);
+}
+
 /** One row in the conversation list. Deliberately small. */
 function summary(item) {
-  if (item.order) return { ...item.orderRow, anchor: item.anchorKey, flag: flagLevel(draftOf(item)) };
+  if (item.order) return { ...item.orderRow, anchor: item.anchorKey, answered: null, flag: flagLevel(draftOf(item)) };
   const draft = draftOf(item);
   const last = item.timeline[item.timeline.length - 1];
   const lastShown = [...item.timeline].reverse().find((e) => !e.internal) || last;
@@ -190,6 +201,8 @@ function summary(item) {
     replyComing: !!item.marketplace?.replyComing,
     anchor: item.anchorKey,
     state: item.state,
+    // Who answered it, when it is answered: 'wheelman', 'auto', 'phone' or 'dashboard'.
+    answered: answeredOf(item),
     // Seen only on the phone: the dashboard has no conversation for this number.
     phoneOnly: !!item.phoneOnly,
     dismissed: isDismissed(item.itemKey, item.anchorKey),
