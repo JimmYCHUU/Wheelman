@@ -3,8 +3,7 @@
 import { html, useState, useRef, useLayoutEffect, useEffect } from './html.js';
 import { whoLabel } from '../model.js';
 import { hashFor } from '../route.js';
-import { visibleRows } from '../store.js';
-import { skipLabel } from '../runstore.js';
+import { skipLabel, startAgain } from '../runstore.js';
 import { MenuButton } from './menu.js';
 import { clock, dayKey, dayLabel, money, km, plural } from '../../../lib/format.js';
 
@@ -155,18 +154,20 @@ function RunBar({ run, actions, label }) {
 }
 
 /**
- * The end of a reply run: its one sentence, Start again while more are waiting on the list, and Back
- * to the list. The first button takes the focus and reads the sentence with its name, once.
+ * The end of a reply run: its one sentence, Start again while more are waiting (with a line when the
+ * run skipped anyone), and Back to the list. The first button takes the focus and reads the words
+ * with its name, once.
  */
 function RunEnd({ state, actions }) {
   const first = useRef(null);
   useEffect(() => { if (first.current) first.current.focus(); }, []);
-  const again = state.runMore > 0 && visibleRows(state).length > 0;
+  const { offer: again, note } = startAgain(state);
   const back = () => { actions.endRun(); location.hash = hashFor({ section: state.section, chip: state.chip }); };
   return html`<div class="chat-body run-end">
     <p class="run-words" id="run-words">${state.runSummary}</p>
+    ${note ? html`<p class="run-note" id="run-note">${note}</p>` : null}
     <div class="run-acts">
-      ${again ? html`<button type="button" class="btn" ref=${first} aria-describedby="run-words" onClick=${() => actions.startRun()}>Start again</button>` : null}
+      ${again ? html`<button type="button" class="btn" ref=${first} aria-describedby=${note ? 'run-words run-note' : 'run-words'} onClick=${() => actions.startRun()}>Start again</button>` : null}
       <button type="button" class="btn" ref=${again ? null : first} aria-describedby=${again ? null : 'run-words'} onClick=${back}>Back to the list</button>
     </div>
   </div>`;

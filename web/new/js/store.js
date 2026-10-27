@@ -24,7 +24,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     section: 'dashboard', chip: 'waiting', rows: [], total: 0, counts: {}, unread: {}, listState: 'loading', listError: '',
     limit: 20, key: null, item: null, itemState: 'idle', typed: null, save: { state: 'idle', at: null },
     overridden: false, done: read(DONE_KEY), doneAt: read(DONE_AT_KEY), status: null, toast: null, context: null,
-    writing: null, remembered: [], closedNotes: [], run: null, runSummary: null, runMore: 0,
+    writing: null, remembered: [], closedNotes: [], run: null, runSummary: null, runMore: 0, runSkipped: 0,
   };
   const listeners = new Set();
   const draftId = (item) => (item && item.draft ? item.draft.id : null);

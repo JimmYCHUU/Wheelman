@@ -5,7 +5,7 @@ import { CHIPS, rowView } from '../model.js';
 import { hashFor, parseRoute } from '../route.js';
 import { openAction } from '../hashsync.js';
 import { visibleRows, waitingCount } from '../store.js';
-import { oldestWaiting } from '../runstore.js';
+import { oldestWaiting, runTakes } from '../runstore.js';
 import { initials, hue, ago } from '../../../lib/format.js';
 
 const EMPTY = {
@@ -49,13 +49,14 @@ function Row({ row, view, selected, tabbable, onOpen }) {
 
 /**
  * Above Needs reply: how many are waiting, and Start replying (gone from the moment a run starts, and
- * when no row on the list is left for a run to take). How long the oldest has waited is said once
- * every waiting row is loaded (the list comes newest first, so until then it is not known).
+ * while a run would take nobody: the ten newest are all copied, until the replies show on the
+ * dashboard). How long the oldest has waited is said once every waiting row is loaded (the list
+ * comes newest first, so until then it is not known).
  */
 function RunOffer({ state, now, onStart }) {
   const n = waitingCount(state);
   const rows = visibleRows(state);
-  if (state.chip !== 'waiting' || state.run || state.listState !== 'ready' || !n || !rows.length) return null;
+  if (state.chip !== 'waiting' || state.run || state.listState !== 'ready' || !n || !runTakes(state)) return null;
   const oldest = (state.total || 0) <= state.rows.length ? oldestWaiting(rows) : null;
   return html`<p class="run-start">
     <span class="num">${n} waiting${oldest ? ', oldest ' + ago(oldest, now) : ''}</span>

@@ -3,7 +3,7 @@
 // and endRun), and the address while it goes on (web/new/js/hashsync.js). Invented data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRun, nextKey, runSummary, oldestWaiting, skipLabel, RUN_SIZE, SETTLE_MS } from '../web/new/js/runstore.js';
+import { createRun, nextKey, runSummary, oldestWaiting, skipLabel, runTakes, startAgain, RUN_SIZE, SETTLE_MS } from '../web/new/js/runstore.js';
 import { visibleRows } from '../web/new/js/store.js';
 import { addressAfter, leavesRun, sheetFirst, withSheet } from '../web/new/js/hashsync.js';
 import { parseRoute } from '../web/new/js/route.js';
@@ -68,9 +68,33 @@ test('more waiting at the end: the summary says how many, and Start again takes 
   assert.equal(a.store.get().runSummary, 'All answered: 10 copied. 2 more waiting.');
   assert.equal(a.store.get().runMore, 2);
   assert.equal(a.store.get().key, null);
+  // The ten copied are still the server's ten newest waiting until the replies show on the
+  // dashboard: a run now would take nobody, so Start again is not offered yet.
+  assert.equal(runTakes(a.store.get()), 0);
+  assert.deepEqual(startAgain(a.store.get()), { offer: false, note: '' });
+  a.data.rows = a.data.rows.slice(10);
+  a.data.counts = { ...a.data.counts, waiting: 2 };
+  await a.store.actions.refresh();
+  assert.deepEqual(startAgain(a.store.get()), { offer: true, note: '' }, 'nobody was skipped: no line');
   await a.store.actions.startRun(); // Start again
   assert.equal(a.store.get().runSummary, null);
   assert.deepEqual(a.store.get().run, { at: 1, of: 2, key: 'c:12' });
+});
+
+test("the run's ten are the server's ten newest waiting: one copied before the run is left out, not replaced by the eleventh", async () => {
+  // Pure: the ten at the top of all rows, less the ones copied here and not yet on the dashboard.
+  const rows = Array.from({ length: 12 }, (_, i) => row('c:' + (i + 1), { waitingSince: 100 - i }));
+  assert.deepEqual(createRun(rows, 9000, { 'c:1': 'a-c:1', 'c:11': 'a-c:11' }).queue, ['c:10', 'c:9', 'c:8', 'c:7', 'c:6', 'c:5', 'c:4', 'c:3', 'c:2']);
+  assert.equal(createRun(rows, 9000, { 'c:1': 'an older anchor' }).queue.length, 10, 'a customer who wrote again is not done');
+
+  // The store: c:1 is copied outside a run, and the run takes the other nine.
+  const a = waiting(12);
+  await a.store.actions.refresh();
+  await a.store.actions.open('c:1');
+  await a.store.actions.copy();
+  assert.equal(runTakes(a.store.get()), 9);
+  await a.store.actions.startRun();
+  assert.deepEqual(a.store.get().run, { at: 1, of: 9, key: 'c:10' });
 });
 
 test('copy in a run opens the next', async () => {
@@ -174,7 +198,7 @@ test('skip moves on without marking done', async () => {
   assert.equal(a.store.get().runSummary, 'Run finished: 1 copied, 2 skipped.');
 });
 
-test('dismissing the run\'s customer moves on and is not counted', async () => {
+test('dismissing the run\'s customer moves on and is counted as dismissed, not as answered', async () => {
   const a = waiting();
   await a.store.actions.refresh();
   await a.store.actions.startRun();
@@ -186,7 +210,16 @@ test('dismissing the run\'s customer moves on and is not counted', async () => {
   assert.equal(a.store.get().toast.message, 'Dismissed');
   await copyLater(a);
   await copyLater(a);
-  assert.equal(a.store.get().runSummary, 'All answered: 2 copied.');
+  assert.equal(a.store.get().runSummary, 'Run finished: 2 copied, 1 dismissed.');
+
+  // Every customer dismissed: nobody was answered.
+  const b = waiting(1);
+  await b.store.actions.refresh();
+  await b.store.actions.startRun();
+  b.data.rows = [];
+  b.data.counts = { ...b.data.counts, waiting: 0 };
+  await b.store.actions.dismiss();
+  assert.equal(b.store.get().runSummary, 'Run finished: 1 dismissed.');
 });
 
 test('End run stops the run and leaves the conversation open', async () => {
@@ -258,6 +291,70 @@ test('a row answered elsewhere during the run is passed over and counted', async
   await copyLater(a);
   assert.equal(a.store.get().runSummary, 'All answered: 2 copied, 1 answered elsewhere.');
   assert.deepEqual(opened(a.calls), ['c:3', 'c:1']);
+});
+
+test('a customer pushed off a page cut short is opened, not counted as answered elsewhere', async () => {
+  // Pure: absent from a list cut short, the customer is still the run's next; absent from the whole list, they were answered.
+  const run = createRun([row('c:1', { waitingSince: 3 }), row('c:2', { waitingSince: 2 }), row('c:3', { waitingSince: 1 })], 9);
+  assert.equal(nextKey(run, [row('c:1')], false), 'c:3');
+  assert.equal(run.elsewhere, 0);
+  assert.equal(nextKey(run, [row('c:1')], true), 'c:1', 'the whole list: c:2 is gone, so it was answered');
+  assert.equal(run.elsewhere, 1);
+
+  // The store: twelve waiting, and fifteen more write in while the first of the run is open. The
+  // page still loads twenty, so the run's older customers are no longer on it.
+  const a = waiting(12);
+  await a.store.actions.refresh();
+  await a.store.actions.startRun();
+  assert.deepEqual(a.store.get().run, { at: 1, of: 10, key: 'c:10' });
+  const fresh = Array.from({ length: 15 }, (_, i) => 'c:' + (100 + i));
+  for (const k of fresh) a.data.items[k] = { key: k, anchor: 'a-' + k, state: 'awaiting', draft: draft(500 + Number(k.slice(2))) };
+  a.data.rows = [...fresh.map((k) => row(k, { waitingSince: 20000 })), ...a.data.rows];
+  a.data.counts = { ...a.data.counts, waiting: 27 };
+  await a.store.actions.refresh();
+  assert.ok(!a.store.get().rows.some((r) => r.key === 'c:9'), 'c:9 is off the page');
+  await copyLater(a);
+  assert.deepEqual(a.store.get().run, { at: 2, of: 10, key: 'c:9' });
+  assert.equal(a.store.get().key, 'c:9');
+  assert.equal(a.store.get().item.state, 'awaiting', 'the open says the customer still waits');
+
+  // One answered meanwhile: the open says so, and Next counts it as answered elsewhere.
+  a.data.items['c:8'] = { ...a.data.items['c:8'], state: 'answered', answered: { how: 'phone', by: '', at: 900 } };
+  await copyLater(a);
+  assert.equal(a.store.get().key, 'c:8');
+  assert.equal(skipLabel(a.store.get()), 'Next');
+  await a.store.actions.skipRun();
+  for (let n = 0; n < 6; n++) await copyLater(a);
+  a.data.rows = a.data.rows.filter((r) => r.key !== 'c:8');
+  a.data.counts = { ...a.data.counts, waiting: 26 };
+  await a.store.actions.refresh();
+  assert.deepEqual(a.store.get().run, { at: 10, of: 10, key: 'c:1' });
+  await copyLater(a);
+  // 26 waiting, less the nine copied, which the server lists until the replies show on the
+  // dashboard (four of them off the page): 17 more, the fifteen new and c:11 and c:12.
+  assert.equal(a.store.get().runSummary, 'All answered: 9 copied, 1 answered elsewhere. 17 more waiting.');
+});
+
+test('Start again after skipping says that it takes the skipped ones too', async () => {
+  const a = waiting(5);
+  a.data.rows.push(...Array.from({ length: 10 }, (_, i) => row('c:' + (20 + i), { waitingSince: 10 - i })));
+  for (const r of a.data.rows) a.data.items[r.key] ||= { key: r.key, anchor: r.anchor, state: 'awaiting', draft: draft(Number(r.key.slice(2))) };
+  a.data.counts = { ...a.data.counts, waiting: 15 };
+  await a.store.actions.refresh();
+  await a.store.actions.startRun();
+  await a.store.actions.skipRun();
+  for (let n = 0; n < 9; n++) await copyLater(a);
+  assert.equal(a.store.get().runSummary, 'Run finished: 9 copied, 1 skipped. 5 more waiting.');
+  assert.deepEqual(startAgain(a.store.get()), { offer: true, note: 'Start again takes the newest ten still waiting, skipped ones included.' });
+  // Nothing more waiting beyond the run: no Start again, and no line about it.
+  const b = waiting(3);
+  await b.store.actions.refresh();
+  await b.store.actions.startRun();
+  await b.store.actions.skipRun();
+  await copyLater(b);
+  await copyLater(b);
+  assert.equal(b.store.get().runSummary, 'Run finished: 2 copied, 1 skipped.');
+  assert.deepEqual(startAgain(b.store.get()), { offer: false, note: '' });
 });
 
 test('a row that changes during the run is not visited twice', async () => {
@@ -369,12 +466,16 @@ test('a failed copy keeps the run where it is', async () => {
 });
 
 test('the summary leaves out the zero parts', async () => {
-  const r = (copied, skipped, elsewhere, n = 7) => ({ queue: Array.from({ length: n }, (_, i) => 'c:' + i), copied, skipped, elsewhere });
+  // A finished run: every customer in it counted once.
+  const r = (copied, skipped, elsewhere, dismissed = 0) => ({ queue: Array.from({ length: copied + skipped + elsewhere + dismissed }, (_, i) => 'c:' + i), copied, skipped, elsewhere, dismissed });
   assert.equal(runSummary(r(5, 0, 1)), 'All answered: 5 copied, 1 answered elsewhere.');
+  assert.equal(runSummary(r(0, 0, 2)), 'All answered: 2 answered elsewhere.');
   assert.equal(runSummary(r(5, 1, 1)), 'Run finished: 5 copied, 1 skipped, 1 answered elsewhere.', 'someone skipped: not all answered');
+  assert.equal(runSummary(r(4, 2, 1, 1)), 'Run finished: 4 copied, 2 skipped, 1 dismissed, 1 answered elsewhere.');
+  assert.equal(runSummary(r(0, 0, 0, 3)), 'Run finished: 3 dismissed.', 'every one dismissed: nobody was answered');
   assert.equal(runSummary(r(0, 2, 0)), 'Run finished: 2 skipped.');
   assert.equal(runSummary(r(3, 0, 0), 4), 'All answered: 3 copied. 4 more waiting.');
-  assert.equal(runSummary(r(0, 0, 0, 0)), 'Nothing waiting.');
+  assert.equal(runSummary({ queue: [], copied: 0, skipped: 0, elsewhere: 0, dismissed: 0 }), 'Nothing waiting.');
 
   // Nothing waiting when the run starts: the summary at once, and nothing opened.
   const a = waiting(0);
