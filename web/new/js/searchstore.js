@@ -4,6 +4,13 @@
 export const MIN_CHARS = 2;
 export const WAIT_MS = 200;
 
+/** Which result Enter opens: the highlighted one, else the first once the newest answer is in; -1 for none (a stale list is never opened by Enter). */
+export function enterPick(s, at, count) {
+  if (count === 0) return -1;
+  if (at >= 0) return at;
+  return s.state === 'ready' ? 0 : -1;
+}
+
 const none = () => ({ customers: [], cars: [], messages: [] });
 
 export function createSearchStore({ api, timers }) {

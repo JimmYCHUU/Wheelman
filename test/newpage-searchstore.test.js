@@ -72,3 +72,11 @@ test('a failed search says so, and the next one works', async () => {
   await timers.advance(200);
   assert.equal(store.get().state, 'ready');
 });
+
+test('Enter opens nothing from a list that a newer search is replacing', async () => {
+  const { enterPick } = await import('../web/new/js/searchstore.js');
+  assert.equal(enterPick({ state: 'loading' }, -1, 3), -1);
+  assert.equal(enterPick({ state: 'ready' }, -1, 3), 0);
+  assert.equal(enterPick({ state: 'loading' }, 2, 3), 2);
+  assert.equal(enterPick({ state: 'ready' }, -1, 0), -1);
+});

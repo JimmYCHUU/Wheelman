@@ -2,7 +2,7 @@
 // states a list can be in (loading, empty, a problem, more to load).
 import { html, useState, useRef } from './html.js';
 import { CHIPS, rowView } from '../model.js';
-import { hashFor } from '../route.js';
+import { hashFor, parseRoute } from '../route.js';
 import { visibleRows, waitingCount } from '../store.js';
 import { initials, hue } from '../../../lib/format.js';
 
@@ -62,6 +62,8 @@ export function List({ state, actions, now, section = 'dashboard' }) {
   const choose = (id) => { location.hash = hashFor({ section, chip: id }); actions.setChip(id); };
   const openRow = (row) => {
     setCursor(row.key);
+    // The row already open stays as it is: opening it again would blank the conversation and lose what is typed.
+    if (row.key === state.key && parseRoute(location.hash).key === row.key) return;
     location.hash = hashFor({ section, chip: state.chip, key: row.key });
     actions.open(row.key, state.chip === 'followups' && row.followUp ? { followup: row.followUp.id } : undefined);
   };

@@ -63,6 +63,8 @@ export function App({ store, panel, setPanel, search, now = Date.now }) {
   // undoes it); another section has no address on the new page, so its result opens the old page.
   const openResult = (r) => {
     if (r.section !== 'dashboard') { location.assign('/'); return; }
+    // The conversation already on screen stays as it is: opening it again would blank it and lose what is typed.
+    if (r.key === state.key && route.key === r.key) return;
     location.hash = hashFor({ section: 'dashboard', chip: state.chip, key: r.key });
     store.actions.open(r.key);
   };

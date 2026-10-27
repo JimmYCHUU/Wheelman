@@ -4,7 +4,7 @@
 import { html, useState, useEffect, useRef } from './html.js';
 import { SECTIONS } from '../model.js';
 import { listTime, money } from '../../../lib/format.js';
-import { MIN_CHARS } from '../searchstore.js';
+import { MIN_CHARS, enterPick } from '../searchstore.js';
 
 const SHOWN = 6;
 const INPUT_ID = 'wheelman-search';
@@ -41,7 +41,7 @@ export function focusSearch() {
   if (button) button.click();
 }
 
-function Option({ e, active, now, onPick }) {
+function Option({ e, active, now, onPick, stale }) {
   const r = e.r;
   let body;
   if (e.kind === 'more') {
@@ -62,7 +62,7 @@ function Option({ e, active, now, onPick }) {
       ${old ? html`<span class="hit-old">${sectionLabel(r.section)} · ${OLD_PAGE}</span>` : null}`;
   }
   return html`<div role="option" id=${e.id} class=${'hit' + (e.kind === 'more' ? ' more' : '')} aria-selected=${active ? 'true' : 'false'}
-    onMouseDown=${(ev) => ev.preventDefault()} onClick=${() => onPick(e)}>${body}</div>`;
+    onMouseDown=${(ev) => ev.preventDefault()} onClick=${() => { if (!stale) onPick(e); }}>${body}</div>`;
 }
 
 /**
@@ -102,9 +102,10 @@ export function Search({ search, onOpen, onCar, now }) {
       ev.preventDefault();
       setAt(ev.key === 'ArrowDown' ? Math.min(entries.length - 1, at + 1) : Math.max(0, at - 1));
     } else if (ev.key === 'Enter') {
-      if (!showing || !entries.length) return;
+      const i = showing ? enterPick(s, at, entries.length) : -1;
+      if (i < 0) { if (showing && entries.length) ev.preventDefault(); return; }
       ev.preventDefault();
-      pick(entries[at >= 0 ? at : 0]);
+      pick(entries[i]);
     } else if (ev.key === 'Escape') {
       ev.preventDefault(); // the panel's own Escape (main.js) leaves it alone
       if (s.q) search.actions.clear();
@@ -134,7 +135,7 @@ export function Search({ search, onOpen, onCar, now }) {
             if (!mine.length) return null;
             return html`<div role="group" aria-label=${g.label} key=${g.id}>
               <div class="hit-head" role="presentation">${g.label}</div>
-              ${mine.map((e) => html`<${Option} key=${e.id} e=${e} active=${!!entries[at] && entries[at].id === e.id} now=${now} onPick=${pick} />`)}
+              ${mine.map((e) => html`<${Option} key=${e.id} e=${e} active=${!!entries[at] && entries[at].id === e.id} now=${now} onPick=${pick} stale=${s.state === 'loading'} />`)}
             </div>`;
           })}
         </div>
