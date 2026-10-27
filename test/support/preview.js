@@ -72,9 +72,13 @@ const pell = ['Pell', 'Invented', '0491 570 191'];
     invented.leads.carbarnau.push(lead);
     invented.conversations.push({ row: rawConversation(id, lead, who, { direction: 'IN', at: now - 5 * MIN, body: ask }), messages: [rawMessage(id * 10, id, 'IN', ask, 5 * MIN, now)] });
   }
-  // The nameless text from 11 hours ago is left out, so Oldham (below) is one of the ten newest waiting.
-  invented.conversations = invented.conversations.filter((c) => c.row.id !== 209);
-  // Oldham wrote 30 hours ago and is still waiting. Among the ten newest waiting, so the suggestion is written ahead.
+  // Maria (the sold car) is left out of the preview and a number with no customer record takes a place, so that Oldham
+  // is the tenth newest waiting when the first suggestions are written.
+  invented.conversations = invented.conversations.filter((c) => c.row.id !== 209 && c.row.id !== 210);
+  // A number with no customer record and no name: listed, but nothing is written for it unasked.
+  invented.conversations.push({ row: rawConversation(793, null, ['', '', '0491 570 193'], { direction: 'IN', at: now - 12 * MIN, body: 'Hi, is the Hiace still for sale?' }), messages: [rawMessage(7930, 793, 'IN', 'Hi, is the Hiace still for sale?', 12 * MIN, now)] });
+  // Oldham wrote 30 hours ago and is still waiting. At the first writing-ahead pass he is the tenth newest waiting, so his
+  // suggestion is written then. The people added later push him out of the ten; the suggestion stays.
   const oldham = ['Oldham', 'Invented', '0491 570 192'];
   const lead = rawLead(792, 792, oldham, now, { stocks: ['1800'], agoMs: 31 * 3600e3 });
   invented.leads.carbarnau.push(lead);
