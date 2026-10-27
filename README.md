@@ -720,14 +720,13 @@ cursor is. Photos and videos open large in a viewer you can move through with th
 A link that is for you only, such as a supplier's, can be opened but not copied or added to a
 reply. Its **Customer** tab shows **How far they have got** in a sentence and the facts that
 **Shaped the reply, never stated**, and **What Wheelman used** lists the model, the provider and
-what was read to write the suggestion. **Find a car** opens any other car in the panel as
+what was read to write the suggestion. A car found by search opens in the panel as
 **Another car**, with a button back to the customer.
 
 The **search box** in the top bar looks across customers, cars and the words in messages, in
 every section. A Dashboard result opens on the new page. A Marketplace, Imports or Auction
-result says **Opens on the old page** and goes there until those sections move over. The
-**Remember** note, the line that says how far to trust a suggestion, and removable blocks come
-later.
+result says **Opens on the old page** and goes there until those sections move over.
+Remember, the source of each fact, and removable blocks come in a later update.
 
 ### The top bar
 
@@ -1974,8 +1973,8 @@ wheelman/
 │       ├── index.html                 the one page
 │       ├── vendor/                    Preact and htm, one file, the only code from elsewhere
 │       ├── css/                       tokens, base, components, views, panel, viewer, search, in layers
-│       └── js/                        model · route · store · panelstore · searchstore · autosave
-│                                      · api, and ui/ (the pieces on screen: top bar, search, list,
+│       └── js/                        main · model · route · hashsync · store · panelstore · searchstore
+│                                      · listview · insertlink · autosave · api, and ui/ (the pieces on screen: top bar, search, list,
 │                                      conversation, message box, panel with its tabs, viewer)
 ├── prototype/                         the redesign as a clickable demo on invented data: the design
 │                                      the new page is built from. Open prototype.cmd opens it
