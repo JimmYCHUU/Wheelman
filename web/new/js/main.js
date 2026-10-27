@@ -5,7 +5,7 @@ import { createStore } from './store.js';
 import { createPanelStore } from './panelstore.js';
 import { createSearchStore } from './searchstore.js';
 import { parseRoute } from './route.js';
-import { storeStep, addressAfter, leavesRun, sheetStep, sheetOnPop, isSheetEntry, withSheet } from './hashsync.js';
+import { storeStep, addressAfter, leavesRun, sheetStep, sheetFirst, sheetOnPop, isSheetEntry, withSheet } from './hashsync.js';
 import { html, render } from './ui/html.js';
 import { App } from './ui/app.js';
 import { readTheme, applyTheme } from './ui/topbar.js';
@@ -105,16 +105,19 @@ window.addEventListener('hashchange', () => {
 // decided there is none): a half-booted store has no key, and a reload then would lose it.
 let prev = null;
 let booted = false;
+let sheetGoing = false; // a reply run's step on a phone closes the sheet first; the address follows when its entry has gone
 function follow() {
-  if (!booted) return;
+  if (!booted || sheetGoing) return;
   const s = store.get();
   const next = addressAfter(prev, location.hash, s);
+  if (sheetFirst({ narrow: NARROW.matches, entry: history.state, run: s.run, next })) { sheetGoing = true; setPanel(false); return; }
   prev = { section: s.section, chip: s.chip, key: s.key, run: s.run };
   if (next === null) return;
   history.replaceState(null, '', next);
   window.dispatchEvent(new HashChangeEvent('hashchange')); // replaceState says nothing to the page's own route
 }
 store.subscribe(follow);
+window.addEventListener('popstate', () => { if (sheetGoing) { sheetGoing = false; follow(); } });
 
 actions.boot(parseRoute(location.hash), { wide: innerWidth >= 1280 }).catch(() => { /* the list shows its own error state */ }).finally(() => { booted = true; follow(); });
 setInterval(() => actions.refresh(), 20000);

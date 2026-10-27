@@ -3,6 +3,7 @@
 import { html, useState, useRef, useLayoutEffect, useEffect } from './html.js';
 import { whoLabel } from '../model.js';
 import { hashFor } from '../route.js';
+import { visibleRows } from '../store.js';
 import { MenuButton } from './menu.js';
 import { clock, dayKey, dayLabel, money, km, plural } from '../../../lib/format.js';
 
@@ -152,14 +153,21 @@ function RunBar({ run, actions }) {
   </div>`;
 }
 
-/** The end of a reply run: its one sentence, and Back to the list (which takes the focus, and reads the sentence). */
+/**
+ * The end of a reply run: its one sentence, Start again while more are waiting on the list, and Back
+ * to the list. The first button takes the focus and reads the sentence with its name, once.
+ */
 function RunEnd({ state, actions }) {
-  const button = useRef(null);
-  useEffect(() => { if (button.current) button.current.focus(); }, []);
+  const first = useRef(null);
+  useEffect(() => { if (first.current) first.current.focus(); }, []);
+  const again = state.runMore > 0 && visibleRows(state).length > 0;
   const back = () => { actions.endRun(); location.hash = hashFor({ section: state.section, chip: state.chip }); };
   return html`<div class="chat-body run-end">
-    <p class="run-words" id="run-words" role="status">${state.runSummary}</p>
-    <button type="button" class="btn" ref=${button} aria-describedby="run-words" onClick=${back}>Back to the list</button>
+    <p class="run-words" id="run-words">${state.runSummary}</p>
+    <div class="run-acts">
+      ${again ? html`<button type="button" class="btn" ref=${first} aria-describedby="run-words" onClick=${() => actions.startRun()}>Start again</button>` : null}
+      <button type="button" class="btn" ref=${again ? null : first} aria-describedby=${again ? null : 'run-words'} onClick=${back}>Back to the list</button>
+    </div>
   </div>`;
 }
 

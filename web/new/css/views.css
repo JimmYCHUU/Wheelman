@@ -50,6 +50,7 @@
   .runbar .btn.quiet { color: var(--ink); }
   .run-end { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s-4); text-align: center; }
   .run-end .run-words { margin: 0; font-size: var(--fs-16); font-weight: var(--fw-semi); color: var(--ink); }
+  .run-acts { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-2); }
 
   /* the message box: the editor scrolls when the reply is long; the checks and the buttons stay in view */
   .box { flex: none; max-height: 66%; display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-2) var(--s-3) var(--s-3); border-top: 1px solid var(--line); }

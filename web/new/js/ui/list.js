@@ -48,13 +48,15 @@ function Row({ row, view, selected, tabbable, onOpen }) {
 }
 
 /**
- * Above Needs reply: how many are waiting, and Start replying. How long the oldest has waited is said
- * once every waiting row is loaded (the list comes newest first, so until then it is not known).
+ * Above Needs reply: how many are waiting, and Start replying (gone from the moment a run starts, and
+ * when no row on the list is left for a run to take). How long the oldest has waited is said once
+ * every waiting row is loaded (the list comes newest first, so until then it is not known).
  */
 function RunOffer({ state, now, onStart }) {
   const n = waitingCount(state);
-  if (state.chip !== 'waiting' || state.run || state.listState !== 'ready' || !n) return null;
-  const oldest = (state.total || 0) <= state.rows.length ? oldestWaiting(visibleRows(state)) : null;
+  const rows = visibleRows(state);
+  if (state.chip !== 'waiting' || state.run || state.listState !== 'ready' || !n || !rows.length) return null;
+  const oldest = (state.total || 0) <= state.rows.length ? oldestWaiting(rows) : null;
   return html`<p class="run-start">
     <span class="num">${n} waiting${oldest ? ', oldest ' + ago(oldest, now) : ''}</span>
     <span class="sep" aria-hidden="true">·</span>

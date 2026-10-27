@@ -21,10 +21,11 @@ export function storeStep(route, s) {
 
 /**
  * Whether an address the person reached (Back, ‹ List, a tab, a chip, a row, a link) leaves the
- * reply run, or its summary: anything but the run's own conversation does, quietly.
+ * reply run: anything but the run's own conversation does, quietly. Any address at all puts away
+ * the summary at the end of a run.
  */
 export function leavesRun(route, s) {
-  if (!s.run && !s.runSummary) return false;
+  if (!s.run) return !!s.runSummary;
   return !(route.section === s.section && route.chip === s.chip && route.key === s.key);
 }
 
@@ -66,6 +67,14 @@ export function sheetStep({ narrow, open, entry }) {
   return entry ? 'back' : 'set';
 }
 
+/**
+ * Whether the sheet must close before the address is written: a reply run's step on a phone with
+ * the sheet's entry on top. Written over, that entry would keep the sheet's place in history, and
+ * Back would then go to the customer before. So the sheet closes (its entry goes) and the address
+ * follows once it has gone.
+ */
+export const sheetFirst = ({ narrow, entry, run, next }) => !!narrow && isSheetEntry(entry) && !!run && next !== null;
+
 /** After Back or forward on a phone, whether the sheet is open (its entry's own); null to leave the panel. */
 export function sheetOnPop({ narrow, entry }) {
   return narrow ? !!entry : null;
@@ -78,12 +87,13 @@ export function sheetOnPop({ narrow, entry }) {
  * names none: a chip changed alone leaves the address as it is (on a phone, the list stays), and an
  * address that names another list or conversation is ahead of the store, which is on its way.
  *
- * A reply run's step (a new state.run) puts its customer in place of the address on screen, even
- * one the store already had open (on a phone showing the list), so one Back leaves the run. Between
- * steps nothing is written, so an address the person has just reached stays theirs.
+ * A reply run's step (a new state.run, once the store has its customer) puts that customer in place
+ * of the address on screen, even one the store already had open (on a phone showing the list), so
+ * one Back leaves the run. Between steps nothing is written, so an address the person has just
+ * reached stays theirs.
  */
 export function addressAfter(prev, hash, s) {
-  const step = !!(s.run && s.key) && (!prev || prev.key !== s.key || prev.run !== s.run);
+  const step = !!(s.run && s.key && s.key === s.run.key) && (!prev || prev.key !== s.key || prev.run !== s.run);
   if (!step && prev && s.key === prev.key) return null;
   const at = parseRoute(hash);
   if (at.section !== s.section || at.chip !== s.chip || (at.key && !step)) return null;

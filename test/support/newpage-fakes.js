@@ -27,9 +27,10 @@ export const draft = (id, o = {}) => ({ id, status: 'ready', reply: 'Hello from 
 
 /**
  * A fake server: handlers by "METHOD path" (prefix match on GET paths), a call log, and failures on
- * demand. stored: what the browser already keeps (key to value) when the page opens.
+ * demand. stored: what the browser already keeps (key to value) when the page opens; now: the
+ * store's clock (1000 throughout unless a test moves it).
  */
-export function setup(over = {}, { stored = {} } = {}) {
+export function setup(over = {}, { stored = {}, now = () => 1000 } = {}) {
   const calls = [];
   const data = {
     rows: [row('c:1'), row('c:2')],
@@ -80,7 +81,7 @@ export function setup(over = {}, { stored = {} } = {}) {
     const edit = p.match(/^\/api\/drafts\/(\d+)\/edit$/);
     if (edit) keepEdit(Number(edit[1]), b.text);
   };
-  const store = createStore({ api, clipboard, storage, now: () => 1000, timers, keepalive });
+  const store = createStore({ api, clipboard, storage, now, timers, keepalive });
   return { store, calls, data, timers, written, clipboard, mem, storage, beacons };
 }
 export const paths = (calls) => calls.map((c) => (c.body === undefined ? 'GET ' : 'POST ') + c.path);

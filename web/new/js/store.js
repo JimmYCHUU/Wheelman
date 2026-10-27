@@ -24,7 +24,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     section: 'dashboard', chip: 'waiting', rows: [], total: 0, counts: {}, unread: {}, listState: 'loading', listError: '',
     limit: 20, key: null, item: null, itemState: 'idle', typed: null, save: { state: 'idle', at: null },
     overridden: false, done: read(DONE_KEY), doneAt: read(DONE_AT_KEY), status: null, toast: null, context: null,
-    writing: null, remembered: [], closedNotes: [], run: null, runSummary: null,
+    writing: null, remembered: [], closedNotes: [], run: null, runSummary: null, runMore: 0,
   };
   const listeners = new Set();
   const draftId = (item) => (item && item.draft ? item.draft.id : null);
@@ -163,7 +163,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
   }
 
   // The reply run (web/new/js/runstore.js). Its opens are the store's own; the person's end it.
-  const runner = createRunner({ get: () => state, set, now, open: (key) => show(key), refresh, close });
+  const runner = createRunner({ get: () => state, set, now, open: (key) => show(key), close });
   const open = (key, o) => { runner.end(); return show(key, o); };
 
   async function show(key, { followup } = {}) {
@@ -285,22 +285,25 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     return true;
   }
 
-  async function copy() {
+  // In a reply run a copy waits its turn, and the next customer opens once it worked (runstore.js).
+  const copy = () => runner.copy(state.key, copyNow);
+
+  /** Copies the reply in the box, and says whether it was copied. */
+  async function copyNow() {
     const { key, item } = state;
-    if (!item) return;
+    if (!item) return false;
     const value = text();
     const fu = /^fu:(\d+)$/.exec(item.anchor || '');
-    await copyText(value, async () => {
+    return copyText(value, () => {
       // The server keeps every reply copied, the person's own text beside a suggestion that could not
-      // be written too, and closes a follow-up that was copied (its anchor is fu:<id>).
-      if (item.draft && value.trim()) { try { await api('/api/drafts/' + item.draft.id + '/copied', { text: value }); } catch { /* the copy itself worked */ } }
+      // be written too, and closes a follow-up that was copied (its anchor is fu:<id>). Nothing waits for it.
+      if (item.draft && value.trim()) api('/api/drafts/' + item.draft.id + '/copied', { text: value }).catch(() => { /* the copy itself worked */ });
       saveDone({ ...state.done, [key]: item.anchor }, { ...state.doneAt, [key]: now() });
       // A follow-up leaves Follow-ups on the server once it is copied, so it is put back there.
       const left = blanksIn(value).length;
       toast(left ? 'Copied, with ' + plural(left, 'blank') + ' still to fill' : 'Copied', fu
         ? { label: 'Put back in Follow-ups', run: () => restoreFollowUp(Number(fu[1]), key) }
         : { label: 'Put back in Needs reply', run: () => putBack(key) });
-      await runner.copied(key); // in a reply run, the next customer
     });
   }
 
@@ -360,6 +363,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
       const out = await api('/api/items/' + key + '/dismiss', {});
       if (out.item && key === state.key) set({ item: out.item });
       toast('Dismissed', { label: 'Undo', run: () => restore(key) });
+      await runner.dismissed(key); // in a reply run, the next customer
       await refresh();
     } catch (e) { toast(e.message); }
   }
