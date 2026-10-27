@@ -36,7 +36,7 @@ export function viewerGroups(stockNo, media) {
 
 /** Copy link and Add to reply for a link a customer may have; Open and "For you only" for the supplier's. */
 function LinkActions({ kind, label, link, shareable, open, act }) {
-  if (!shareable) return html`<div class="media-actions">${outLink(link, 'Open', 'btn small')}<span class="for-you">For you only</span></div>`;
+  if (!shareable) return html`<div class="media-actions">${outLink(link, 'Open', 'btn small', 'Open, for you only')}<span class="for-you">For you only</span></div>`;
   return html`<div class="media-actions">
     ${open ? outLink(link, 'Open') : null}
     <button type="button" class="btn small quiet" onClick=${() => act.copy(link)}>Copy link</button>
@@ -77,12 +77,12 @@ function PhotoGroup({ id, title, stockNo, photos, show, empty, view }) {
   const mine = photos.some((p) => p.shareable === false);
   return html`<section class="car-sec">
     <div class="sec-head"><h4>${title}</h4>
-      ${left > 0 ? html`<button type="button" class="link-btn" onClick=${(e) => view(id, 0, e.currentTarget)}>See all ${photos.length}</button>` : null}
+      ${left > 0 ? html`<button type="button" class="link-btn" onClick=${(e) => view(id, 0, e.currentTarget)} aria-label=${'See all ' + photos.length + (photos[0].shareable === false ? ', for you only' : '')}>See all ${photos.length}</button>` : null}
     </div>
     ${photos.length ? html`<div class="photo-grid">${shown.map((p, i) => {
       const more = left > 0 && i === shown.length - 1;
       return html`<button type="button" class="photo-tile" key=${p.id} onClick=${(e) => view(id, i, e.currentTarget)}
-        aria-label=${more ? 'See all ' + photos.length + ' photos' : p.label + (p.shareable === false ? ', for you only' : '')} title=${more ? null : 'See ' + p.label + ' large'}>
+        aria-label=${more ? 'See all ' + photos.length + ' photos' + (p.shareable === false ? ', for you only' : '') : p.label + (p.shareable === false ? ', for you only' : '')} title=${more ? null : 'See ' + p.label + ' large'}>
         <img src=${pictureSrc(stockNo, p.id)} alt="" loading="lazy" decoding="async" />
         ${more ? html`<span class="photo-more num" aria-hidden="true">+${left + 1}</span>` : null}
         ${p.shareable === false ? html`<span class="tile-tag" aria-hidden="true">For you only</span>` : null}
@@ -169,6 +169,7 @@ export function CarTab({ car, media, other, backTo, looking, now, act }) {
   useEffect(() => { if (stock && (!other || other.state === 'ready')) act.load(String(stock)); }, [stock, other && other.state]);
   // The viewer: where it opens and the tile that opened it, so the focus can go back there.
   const [seen, setSeen] = useState(null);
+  useEffect(() => { setSeen(null); }, [stock]); // another car: its photos are not shown under the old car's title
   // The groups are taken when it opens, so a media refresh that fails behind it does not take it away.
   const view = (group, index, opener) => setSeen({ group, index, opener, groups: viewerGroups(car.stockNo, media || {}) });
   const back = other ? html`<div class="car-other">
