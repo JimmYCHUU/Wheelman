@@ -692,10 +692,11 @@ async function api(req, res, url) {
 
   // One search across every section that is on, the stock list and the words in messages.
   if (req.method === 'GET' && p === '/api/search') {
+    // Auction's All is To do and In progress only: its Finished orders are found too.
     const rowsOf = (s) => {
       if (!sectionOn(s)) return null;
       const r = sectionRows(s);
-      return r.all || [...r.waiting, ...r.quiet, ...r.other];
+      return s === 'auction' ? [...r.waiting, ...r.quiet, ...r.other] : r.all;
     };
     return send(res, 200, searchAll(url.searchParams.get('q'), { rowsOf }));
   }

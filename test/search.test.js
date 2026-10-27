@@ -79,6 +79,20 @@ test('search treats % _ and quotes as plain text', async () => {
   assert.equal((await search('\\\\')).messages.length, 0);
 });
 
+test("customer search finds an auction order under Finished", async () => {
+  const order = normalize.normalizeOrder({
+    id: 9601, orderNo: 'AS-9601', stage: 'CANCELLED', source: 'LIVE_AUCTION', lotPhase: 'SOURCING', depositState: 'NONE',
+    cancelledAt: new Date(now - 2 * 24 * HOUR).toISOString(), createdAt: new Date(now - 20 * 24 * HOUR).toISOString(),
+    invoiceTo: { firstName: 'Wilhelmina', lastName: 'Finished', mobileNumber: '0491 570 132', email: 'wilhelmina@example.com' },
+    reqMake: 'Toyota', reqModel: 'Alphard', reqModelCode: 'AGH30', items: [], payments: [],
+  });
+  db.upsertOrder(order, { now });
+  const { customers } = await search('wilhelmina');
+  const hit = customers.find((r) => r.key === 'ao:9601');
+  assert.ok(hit, JSON.stringify(customers));
+  assert.deepEqual([hit.section, hit.state], ['auction', 'closed']);
+});
+
 test('a query under 2 characters returns nothing', async () => {
   for (const q of ['', ' a ', 'z']) assert.deepEqual(await search(q), { customers: [], cars: [], messages: [] });
   assert.deepEqual((await get('/api/search')).body, { customers: [], cars: [], messages: [] });
