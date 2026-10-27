@@ -233,9 +233,9 @@ test('trustLine names a fact not in the records', () => {
   assert.equal(trustLine(withFacts(two, 'It is $29,990.'), 'It is $29,990.').text, '2 facts not in your records');
 });
 
-test('trustLine says typed text is not checked', () => {
+test('trustLine says text changed since it was checked, and own text beside no suggestion is not checked', () => {
   const d = withFacts(facts2);
-  assert.deepEqual(trustLine(d, 'My own words'), { tone: 'none', text: 'What you typed has not been checked.' });
+  assert.deepEqual(trustLine(d, 'My own words'), { tone: 'none', text: 'Changed since it was checked.' });
   assert.deepEqual(trustLine(null, 'My own words'), { tone: 'none', text: 'What you typed has not been checked.' });
   const bad = withFacts([{ label: '', value: '$1', source: 'not found in the records', ok: false }], 'It is $1.');
   assert.equal(trustLine(bad, 'It is $2.').tone, 'none', 'typed text is never called checked or failed');
@@ -260,14 +260,18 @@ test('trustLine is green only when nothing else is wrong', () => {
   assert.equal(trustLine(withFacts(facts2, blankReply), blankReply).tone, 'none', 'a blank still to fill');
 });
 
-test('trustLine: typed text, however small the change, is not checked', () => {
+test('trustLine: any change, however small, is changed since it was checked', () => {
   const blankReply = 'The price is [PRICE?].';
   const d = withFacts(facts2, blankReply);
-  const unchecked = { tone: 'none', text: 'What you typed has not been checked.' };
-  assert.deepEqual(trustLine(d, 'The price is $25,990.'), unchecked, 'a filled blank is typed text');
+  const changed = { tone: 'none', text: 'Changed since it was checked.' };
+  assert.deepEqual(trustLine(d, 'The price is $25,990.'), changed, 'a filled blank');
   const d2 = withFacts(facts2, 'Hello, the car is here.');
-  assert.deepEqual(trustLine(d2, 'Hello, the car is here!'), unchecked, 'one character');
-  assert.deepEqual(trustLine({ ...withFacts(facts2, ''), status: 'failed' }, 'Mine'), unchecked, 'beside a failed suggestion');
+  assert.deepEqual(trustLine(d2, 'Hello, the car is here!'), changed, 'one character');
+  // A block removed is no typing, and the line does not say it is.
+  const withBlock = withFacts(facts2, 'Hello, the car is here.\n\nRegards,\nTeam Carbarn');
+  assert.deepEqual(trustLine(withBlock, 'Hello, the car is here.'), changed, 'a block removed');
+  // Beside a suggestion that could not be written, the text is all the person's own.
+  assert.deepEqual(trustLine({ ...withFacts(facts2, ''), status: 'failed' }, 'Mine'), { tone: 'none', text: 'What you typed has not been checked.' }, 'beside a failed suggestion');
 });
 
 import { rememberOffer, scopeWords, ruleWords, lessonLines } from '../web/new/js/model.js';

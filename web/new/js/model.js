@@ -264,22 +264,27 @@ export function saveWords({ save, draft, typed }) {
   return '';
 }
 
+// Beside no suggestion, the text is all the person's own. Beside one, any difference (typing, or a
+// block removed) means the check no longer holds.
 const UNCHECKED = 'What you typed has not been checked.';
+const CHANGED = 'Changed since it was checked.';
 
 /** A traced figure with the sentence's own punctuation taken off the end. */
 const shown = (v) => String(v).replace(/[.,;:!?]+$/, '');
 
 /**
- * The trust line under the message box. Typed text is never called checked, whatever the facts say.
- * For Wheelman's own text it counts the facts the server traced (only those it listed, so the count
- * may understate, never overstate), counts the ones not in the records, and is green only when no
- * check is failing, warning or waiting for a blank.
+ * The trust line under the message box. Text that differs from Wheelman's own, typed or with a block
+ * removed, is never called checked, whatever the facts say. For Wheelman's own text it counts the
+ * facts the server traced (only those it listed, so the count may understate, never overstate),
+ * counts the ones not in the records, and is green only when no check is failing, warning or
+ * waiting for a blank.
  */
 export function trustLine(draft, text) {
   const t = String(text ?? '');
   if (!t.trim()) return null;
   const ready = draft && draft.status === 'ready' ? draft : null;
-  if (!ready || t !== ready.reply) return { tone: 'none', text: UNCHECKED };
+  if (!ready) return { tone: 'none', text: UNCHECKED };
+  if (t !== ready.reply) return { tone: 'none', text: CHANGED };
   const facts = Array.isArray(ready.facts) ? ready.facts : [];
   if (!facts.length) return { tone: 'none', text: 'No figures or links to check.' };
   const n = (k) => (k === 1 ? '1 fact' : `${k} facts`);
