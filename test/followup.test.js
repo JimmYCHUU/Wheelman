@@ -3,7 +3,7 @@
 // our reply. The follow-up is written when the conversation is opened from the Follow-ups list,
 // copied by a person, and never learned from. Every name, number and car here is invented; the
 // phone numbers are in the 0491 570 1xx range reserved for fiction.
-import test, { before, after } from 'node:test';
+import test, { before, after, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,6 +21,11 @@ const DAY = 24 * HOUR;
 // A fixed "now": two in the afternoon, Sydney time, today (or yesterday while today's is still to
 // come), so every due time the engine works out lands inside working hours whatever the clock says.
 const NOW = (() => { const d = parseDashboardTime(`${sydneyDay(Date.now())}T14:00`); return d <= Date.now() ? d : d - DAY; })();
+// The sync and the HTTP routes read the real clock (Date.now()), and the engine moves every due time
+// to a sensible hour, so a follow-up made at night would be due only in the morning. The whole file
+// therefore runs on this one daytime clock. Only Date is faked: setTimeout, which the stand-ins and
+// the server need, keeps running, and the process ends with the test run, which restores the clock.
+mock.timers.enable({ apis: ['Date'], now: NOW });
 
 let standins, config, db, sync, items, followup, normalize, st, checks, app, base;
 const ai = aiBehaviour();
