@@ -5,7 +5,8 @@ import { CHIPS, rowView } from '../model.js';
 import { hashFor, parseRoute } from '../route.js';
 import { openAction } from '../hashsync.js';
 import { visibleRows, waitingCount } from '../store.js';
-import { initials, hue } from '../../../lib/format.js';
+import { oldestWaiting } from '../runstore.js';
+import { initials, hue, ago } from '../../../lib/format.js';
 
 const EMPTY = {
   waiting: 'No one is waiting.',
@@ -46,6 +47,21 @@ function Row({ row, view, selected, tabbable, onOpen }) {
   </button>`;
 }
 
+/**
+ * Above Needs reply: how many are waiting, and Start replying. How long the oldest has waited is said
+ * once every waiting row is loaded (the list comes newest first, so until then it is not known).
+ */
+function RunOffer({ state, now, onStart }) {
+  const n = waitingCount(state);
+  if (state.chip !== 'waiting' || state.run || state.listState !== 'ready' || !n) return null;
+  const oldest = (state.total || 0) <= state.rows.length ? oldestWaiting(visibleRows(state)) : null;
+  return html`<p class="run-start">
+    <span class="num">${n} waiting${oldest ? ', oldest ' + ago(oldest, now) : ''}</span>
+    <span class="sep" aria-hidden="true">·</span>
+    <button type="button" class="btn small" onClick=${onStart}>Start replying</button>
+  </p>`;
+}
+
 function Skeleton() {
   return html`<div class="skeleton" role="status" aria-label="Loading conversations">
     ${[0, 1, 2, 3, 4, 5].map((i) => html`<div class="skel" key=${i}><i class="round"></i><span class="lines"><i></i><i></i></span></div>`)}
@@ -70,6 +86,9 @@ export function List({ state, actions, now, section = 'dashboard' }) {
     if (todo === 'view') return; // the store has it open; the address switches the view
     actions.open(row.key, state.chip === 'followups' && row.followUp ? { followup: row.followUp.id } : undefined);
   };
+  // Start replying is an entry of its own, which the run's first customer then takes, so one Back
+  // from anywhere in the run comes back here (web/new/js/hashsync.js).
+  const start = () => { history.pushState(null, '', location.href); actions.startRun(); };
   const onKey = (e) => {
     const keys = { ArrowDown: 1, ArrowUp: -1, Home: 'first', End: 'last' };
     if (!(e.key in keys) || !rows.length) return;
@@ -92,6 +111,7 @@ export function List({ state, actions, now, section = 'dashboard' }) {
       </button>`)}
     </div>
     ${failed ? html`<p class="problem" role="alert">${PROBLEM}</p>` : null}
+    <${RunOffer} state=${state} now=${now} onStart=${start} />
     <div class="rows" ref=${box} onKeyDown=${onKey}>
       ${loading ? html`<${Skeleton} />` : null}
       ${!loading && !failed && rows.length === 0 ? html`<p class="empty">${EMPTY[state.chip]}</p>` : null}

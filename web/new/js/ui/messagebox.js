@@ -8,11 +8,14 @@ import { Trust } from './trust.js';
 import { Editor, focusFirstBlank, focusText } from './editor.js';
 import { cutBlock, putBackText } from '../segments.js';
 
-/** Ctrl+Enter (Cmd+Enter on a Mac) runs main.current, unless focus is in a field outside the editor. */
+/**
+ * Ctrl+Enter (Cmd+Enter on a Mac) runs main.current, unless focus is in a field outside the editor.
+ * A key held down runs it once: in a reply run, Copy opens the next customer, who must be read first.
+ */
 function useCtrlEnter(main, editor) {
   useEffect(() => {
     const on = (e) => {
-      if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey) || e.defaultPrevented || !main.current) return;
+      if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey) || e.repeat || e.defaultPrevented || !main.current) return;
       const a = document.activeElement;
       const inEditor = !!(a && editor.current && editor.current.contains(a));
       const typing = !!a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));

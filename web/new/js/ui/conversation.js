@@ -1,6 +1,6 @@
 // The conversation: who it is with, the car, and the messages. Everything from a message is shown as
 // text; only an http or https address becomes a link.
-import { html, useState, useRef, useLayoutEffect } from './html.js';
+import { html, useState, useRef, useLayoutEffect, useEffect } from './html.js';
 import { whoLabel } from '../model.js';
 import { hashFor } from '../route.js';
 import { MenuButton } from './menu.js';
@@ -143,14 +143,37 @@ function Thread({ item, name, now, older }) {
   </div>`;
 }
 
+/** The reply run, above the conversation: where it is (announced as it changes), Skip and End run. */
+function RunBar({ run, actions }) {
+  return html`<div class="runbar" role="group" aria-label="Reply run">
+    <span class="run-place" role="status">Reply run · <span class="num">${run.at} of ${run.of}</span></span>
+    <button type="button" class="btn small quiet" onClick=${() => actions.skipRun()}>Skip</button>
+    <button type="button" class="btn small quiet" onClick=${() => actions.endRun()}>End run</button>
+  </div>`;
+}
+
+/** The end of a reply run: its one sentence, and Back to the list (which takes the focus, and reads the sentence). */
+function RunEnd({ state, actions }) {
+  const button = useRef(null);
+  useEffect(() => { if (button.current) button.current.focus(); }, []);
+  const back = () => { actions.endRun(); location.hash = hashFor({ section: state.section, chip: state.chip }); };
+  return html`<div class="chat-body run-end">
+    <p class="run-words" id="run-words" role="status">${state.runSummary}</p>
+    <button type="button" class="btn" ref=${button} aria-describedby="run-words" onClick=${back}>Back to the list</button>
+  </div>`;
+}
+
 /** details: the panel as the conversation sees it: { open, media, toggle(), photos() } (web/new/js/ui/app.js). */
 export function Conversation({ state, actions, now, details }) {
-  if (!state.key) return html`<div class="chat-body"><p class="empty">${WELCOME}</p></div>`;
-  if (state.itemState === 'error') return html`<div class="chat-body"><p class="empty" role="alert">${OPEN_FAILED}</p></div>`;
+  if (state.runSummary) return html`<${RunEnd} state=${state} actions=${actions} />`;
+  // The run bar comes first whatever is below it, so it stays on screen while the next customer opens.
+  const bar = state.run ? html`<${RunBar} run=${state.run} actions=${actions} />` : null;
+  if (!state.key) return html`${bar}<div class="chat-body"><p class="empty">${WELCOME}</p></div>`;
+  if (state.itemState === 'error') return html`${bar}<div class="chat-body"><p class="empty" role="alert">${OPEN_FAILED}</p></div>`;
   const item = state.item;
-  if (!item) return html`<div class="chat-body"><p class="empty" role="status">Opening…</p></div>`;
+  if (!item) return html`${bar}<div class="chat-body"><p class="empty" role="status">Opening…</p></div>`;
   const name = item.name || item.phone || item.email || 'Customer';
-  return html`<${Head} state=${state} actions=${actions} details=${details} />
+  return html`${bar}<${Head} state=${state} actions=${actions} details=${details} />
     ${item.vehicle ? html`<${CarStrip} vehicle=${item.vehicle} details=${details} />` : null}
     <${Thread} item=${item} name=${name} now=${now} older=${actions.older} key=${state.key} />`;
 }

@@ -25,8 +25,11 @@ export function fakeTimers() {
 export const row = (key, o = {}) => ({ key, name: 'Sam ' + key, phone: '0491 570 101', anchor: 'a-' + key, unread: 1, ...o });
 export const draft = (id, o = {}) => ({ id, status: 'ready', reply: 'Hello from Wheelman', edited: null, checks: [], ...o });
 
-/** A fake server: handlers by "METHOD path" (prefix match on GET paths), a call log, and failures on demand. */
-export function setup(over = {}) {
+/**
+ * A fake server: handlers by "METHOD path" (prefix match on GET paths), a call log, and failures on
+ * demand. stored: what the browser already keeps (key to value) when the page opens.
+ */
+export function setup(over = {}, { stored = {} } = {}) {
   const calls = [];
   const data = {
     rows: [row('c:1'), row('c:2')],
@@ -49,7 +52,10 @@ export function setup(over = {}) {
     if (edit) { keepEdit(Number(edit[1]), body.text); return { ok: true }; }
     if (body === undefined) {
       if (path === '/api/status') return { missing: [], lastSync: { ok: true, at: 0 } };
-      if (path.startsWith('/api/items?')) return { items: data.rows, total: data.rows.length, counts: data.counts, unread: { dashboard: 2 }, sections: {}, section: 'dashboard' };
+      if (path.startsWith('/api/items?')) {
+        const limit = Number(new URLSearchParams(path.split('?')[1]).get('limit')) || Infinity;
+        return { items: data.rows.slice(0, limit), total: data.rows.length, counts: data.counts, unread: { dashboard: 2 }, sections: {}, section: 'dashboard' };
+      }
       const t = path.match(/^\/api\/items\/[^/]+\/thread\?shown=(\d+)&limit=(\d+)$/);
       if (t) return data.thread(Number(t[1]), Number(t[2]));
       const m = path.match(/^\/api\/items\/([^?]+)/);
@@ -64,7 +70,7 @@ export function setup(over = {}) {
   const timers = fakeTimers();
   const written = [];
   const clipboard = { fail: false, async writeText(t) { if (this.fail) throw new Error('denied'); written.push(t); } };
-  const mem = new Map();
+  const mem = new Map(Object.entries(stored));
   const storage = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, v) };
   const beacons = [];
   // The last edit as the page closes or hides: logged at once, then kept or failed like any other.

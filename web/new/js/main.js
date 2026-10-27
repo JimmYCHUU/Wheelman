@@ -5,7 +5,7 @@ import { createStore } from './store.js';
 import { createPanelStore } from './panelstore.js';
 import { createSearchStore } from './searchstore.js';
 import { parseRoute } from './route.js';
-import { storeStep, addressAfter, sheetStep, sheetOnPop, isSheetEntry, withSheet } from './hashsync.js';
+import { storeStep, addressAfter, leavesRun, sheetStep, sheetOnPop, isSheetEntry, withSheet } from './hashsync.js';
 import { html, render } from './ui/html.js';
 import { App } from './ui/app.js';
 import { readTheme, applyTheme } from './ui/topbar.js';
@@ -89,9 +89,12 @@ applyTheme(readTheme(), storage);
 render(html`<${App} store=${store} panel=${panel} setPanel=${setPanel} search=${search} />`, document.getElementById('app'));
 
 // The store follows the address: another chip or another conversation, from Back, forward, a pasted
-// link, or a row or chip pressed (web/new/js/hashsync.js).
+// link, or a row or chip pressed (web/new/js/hashsync.js). Any address but the reply run's own
+// conversation ends the run quietly.
 window.addEventListener('hashchange', () => {
-  const step = storeStep(parseRoute(location.hash), store.get());
+  const route = parseRoute(location.hash);
+  if (leavesRun(route, store.get())) actions.endRun();
+  const step = storeStep(route, store.get());
   if (!step) return;
   if (step.chip) actions.setChip(step.chip, { key: step.key });
   else actions.open(step.open, { followup: step.followup });
@@ -106,7 +109,7 @@ function follow() {
   if (!booted) return;
   const s = store.get();
   const next = addressAfter(prev, location.hash, s);
-  prev = { section: s.section, chip: s.chip, key: s.key };
+  prev = { section: s.section, chip: s.chip, key: s.key, run: s.run };
   if (next === null) return;
   history.replaceState(null, '', next);
   window.dispatchEvent(new HashChangeEvent('hashchange')); // replaceState says nothing to the page's own route

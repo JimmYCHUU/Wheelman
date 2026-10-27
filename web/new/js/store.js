@@ -6,6 +6,7 @@ import { blanksIn } from '../../lib/blank.js';
 import { plural } from '../../lib/format.js';
 import { visibleRows, followUpOf, waitingCount } from './listview.js';
 import { createRemember } from './remember.js';
+import { createRunner } from './runstore.js';
 
 export { visibleRows, followUpOf, waitingCount };
 
@@ -23,7 +24,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     section: 'dashboard', chip: 'waiting', rows: [], total: 0, counts: {}, unread: {}, listState: 'loading', listError: '',
     limit: 20, key: null, item: null, itemState: 'idle', typed: null, save: { state: 'idle', at: null },
     overridden: false, done: read(DONE_KEY), doneAt: read(DONE_AT_KEY), status: null, toast: null, context: null,
-    writing: null, remembered: [], closedNotes: [],
+    writing: null, remembered: [], closedNotes: [], run: null, runSummary: null,
   };
   const listeners = new Set();
   const draftId = (item) => (item && item.draft ? item.draft.id : null);
@@ -161,7 +162,11 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     } catch { /* the conversation on screen stays as it was */ }
   }
 
-  async function open(key, { followup } = {}) {
+  // The reply run (web/new/js/runstore.js). Its opens are the store's own; the person's end it.
+  const runner = createRunner({ get: () => state, set, now, open: (key) => show(key), refresh, close });
+  const open = (key, o) => { runner.end(); return show(key, o); };
+
+  async function show(key, { followup } = {}) {
     flush();
     if (holdKey && holdKey !== key) await release();
     const seq = ++openSeq;
@@ -183,19 +188,20 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
   // Another list. Chosen, Follow-ups opens the first one and writes it if nothing is written or being
   // written. From the address (a key, or null: Back, forward), only that conversation opens, if any.
   async function setChip(id, { key } = {}) {
+    runner.end();
     set({ chip: id });
     await refresh();
     if (state.chip !== id) return; // another chip was chosen meanwhile
     if (key !== undefined) { // with its follow-up, and nothing is written by itself
       const followup = followUpOf(state, key);
-      if (key && (key !== state.key || (followup || null) !== followupId)) await open(key, { followup });
+      if (key && (key !== state.key || (followup || null) !== followupId)) await show(key, { followup });
       return;
     }
     if (id !== 'followups') return;
     const first = state.rows[0];
     if (!first) { set({ key: null, item: null, itemState: 'idle' }); return; }
     const fu = first.followUp && first.followUp.id;
-    await open(first.key, { followup: fu });
+    await show(first.key, { followup: fu });
     if (state.itemState === 'ready' && state.item && !state.item.draft && !state.item.writing) await write({ followup: fu });
   }
 
@@ -206,13 +212,16 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     await refresh();
     if ((route.section || state.section) !== state.section) return;
     const key = route.key || (wide && visibleRows(state)[0] ? visibleRows(state)[0].key : null);
-    if (key) await open(key, { followup: followUpOf(state, key) });
+    if (key) await show(key, { followup: followUpOf(state, key) });
   }
 
   async function more() {
     set({ limit: state.limit + 20 });
     await refresh();
   }
+
+  /** No conversation open: what was typed goes out first, and an open on its way is not taken. */
+  function close() { flush(); openSeq++; set({ key: null, item: null, itemState: 'idle', typed: null, context: null, save: { state: 'idle', at: null } }); }
 
   // ---- writing
 
@@ -291,6 +300,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
       toast(left ? 'Copied, with ' + plural(left, 'blank') + ' still to fill' : 'Copied', fu
         ? { label: 'Put back in Follow-ups', run: () => restoreFollowUp(Number(fu[1]), key) }
         : { label: 'Put back in Needs reply', run: () => putBack(key) });
+      await runner.copied(key); // in a reply run, the next customer
     });
   }
 
@@ -324,20 +334,10 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     } catch (e) { toast(e.message); }
   }
 
-  /** A car's photo, video or document link, from the panel. */
+  /** A car's photo, video or document link, from the panel; the customer's number or email address. */
   const copyLink = (url) => copyText(url, () => toast('Link copied'));
-
-  async function copyNumber() {
-    const number = state.item && state.item.phone;
-    if (!number) return;
-    await copyText(number, () => toast('Number copied'));
-  }
-
-  async function copyEmail() {
-    const address = state.item && state.item.email;
-    if (!address) return;
-    await copyText(address, () => toast('Email copied'));
-  }
+  const copyNumber = async () => { if (state.item && state.item.phone) await copyText(state.item.phone, () => toast('Number copied')); };
+  const copyEmail = async () => { if (state.item && state.item.email) await copyText(state.item.email, () => toast('Email copied')); };
 
   /** Load older messages: the twenty before the ones shown, put in front. */
   async function older() {
@@ -382,6 +382,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     actions: {
       boot, refresh, setChip, more, open, type, flush, write, tell, holdTell, instead, copy, copyNumber, copyEmail, older, dismiss, dismissFollowUp,
       putBack, restore, restoreFollowUp, copyLink, toast, remember, justOnce, switchLesson,
+      startRun: runner.start, skipRun: runner.skip, endRun: runner.end,
       clear: () => type(''),
       bringBack: () => type((state.item && state.item.draft && state.item.draft.reply) || ''),
       override: () => set({ overridden: true }),

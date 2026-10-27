@@ -20,6 +20,15 @@ export function storeStep(route, s) {
 }
 
 /**
+ * Whether an address the person reached (Back, ‹ List, a tab, a chip, a row, a link) leaves the
+ * reply run, or its summary: anything but the run's own conversation does, quietly.
+ */
+export function leavesRun(route, s) {
+  if (!s.run && !s.runSummary) return false;
+  return !(route.section === s.section && route.chip === s.chip && route.key === s.key);
+}
+
+/**
  * What choosing a conversation (a row, a search result) does: 'none' when it is open and the address
  * already says so; 'view' when the store has it open but the address does not (a phone showing the
  * list), so only the address is written and the view switches, nothing is reopened (what is typed
@@ -64,15 +73,20 @@ export function sheetOnPop({ narrow, entry }) {
 
 /**
  * The address to put in place of the one on screen after the store changed, or null to leave it.
- * prev is the store's { section, chip, key } at the last sync, null at the first one (after the
- * boot). Only a conversation the store opened by itself goes in, and only into an address that
+ * prev is the store's { section, chip, key, run } at the last sync, null at the first one (after
+ * the boot). Only a conversation the store opened by itself goes in, and only into an address that
  * names none: a chip changed alone leaves the address as it is (on a phone, the list stays), and an
  * address that names another list or conversation is ahead of the store, which is on its way.
+ *
+ * A reply run's step (a new state.run) puts its customer in place of the address on screen, even
+ * one the store already had open (on a phone showing the list), so one Back leaves the run. Between
+ * steps nothing is written, so an address the person has just reached stays theirs.
  */
 export function addressAfter(prev, hash, s) {
-  if (prev && s.key === prev.key) return null;
+  const step = !!(s.run && s.key) && (!prev || prev.key !== s.key || prev.run !== s.run);
+  if (!step && prev && s.key === prev.key) return null;
   const at = parseRoute(hash);
-  if (at.section !== s.section || at.chip !== s.chip || at.key) return null;
+  if (at.section !== s.section || at.chip !== s.chip || (at.key && !step)) return null;
   const next = hashFor({ section: s.section, chip: s.chip, key: s.key });
   return next === hash ? null : next;
 }

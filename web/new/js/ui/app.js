@@ -85,7 +85,7 @@ export function App({ store, panel, setPanel, search, now = Date.now }) {
     <${TopBar} state=${state} tab=${section.id} onTab=${onTab} now=${now()} inert=${overlay}
       search=${search} onOpen=${openResult} onCar=${openCar} />
     ${section.ready
-      ? html`<main class=${'work' + (shown && !overlay ? ' with-panel' : '')} data-view=${route.key ? 'chat' : 'list'}>
+      ? html`<main class=${'work' + (shown && !overlay ? ' with-panel' : '')} data-view=${route.key || state.runSummary ? 'chat' : 'list'}>
           <section class="tile list-col" aria-label="Conversations" inert=${overlay}>
             <${List} state=${state} actions=${store.actions} now=${now()} section=${section.id} />
           </section>
