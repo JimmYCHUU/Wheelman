@@ -5,7 +5,7 @@
 import { html, useState, useEffect, useRef, useLayoutEffect } from './html.js';
 import { boxText, boxView, liveChecks, checkLines, mainAction, insteadOptions, trustLine, wordsLine, saveWords, segments } from '../model.js';
 import { Editor, focusFirstBlank, focusText } from './editor.js';
-import { cutBlock, restoreBlock } from '../segments.js';
+import { cutBlock, putBackText } from '../segments.js';
 
 /** Ctrl+Enter (Cmd+Enter on a Mac) runs main.current, unless focus is in a field outside the editor. */
 function useCtrlEnter(main, editor) {
@@ -134,19 +134,21 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
   const bringBack = () => { refocus.current = true; actions.bringBack(); };
 
   // Remove: a block goes with the blank line that joined it, and the caret goes where it was. Put
-  // back returns it while the same suggestion is in this box, into the text as it is by then.
+  // back returns it while the reply it came out of is still in this box (see putBackText), and says
+  // so when it is not.
   const inBox = useRef(null);
   inBox.current = { text, id: d ? d.id : null };
   useEffect(() => () => { inBox.current = null; }, []);
   const remove = (block, was) => {
     const out = cutBlock(was, block);
     if (out.at === -1) return;
-    const id = d ? d.id : null;
+    const removal = { text: out.text, id: d ? d.id : null, block, was };
     if (reply && reply.current) reply.current.land(out.text, out.at);
     actions.type(out.text);
     actions.toast('Removed', { label: 'Put back', run: () => {
-      const now = inBox.current;
-      if (now && now.id === id) actions.type(restoreBlock(now.text, block, was));
+      const back = putBackText(inBox.current, removal);
+      if (back === null) actions.toast('Nothing put back: that reply is no longer in the box');
+      else actions.type(back);
     } });
   };
 

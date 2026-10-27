@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { segments, joinSegments } from '../web/new/js/model.js';
-import { boxSegments, removeBlock, cutBlock, restoreBlock } from '../web/new/js/segments.js';
+import { boxSegments, removeBlock, cutBlock, restoreBlock, putBackText } from '../web/new/js/segments.js';
 
 const AI = 'Good morning Sam,\n\nThanks for your message about the Hiace.';
 const PRICE = 'The price is [PRICE?] drive away.\nYou are welcome to book a time: https://www.example.com/book';
@@ -57,13 +57,35 @@ test('boxSegments marks each block found word for word', () => {
 test('an edited block becomes plain text', () => {
   const edited = REPLY.replace('drive away', 'on the road');
   assert.deepEqual(kinds(boxSegments(edited, PARTS)), ['text', 'blank', 'text', 'block:Sign-off'], 'only the sign-off is still word for word');
-  // A filled blank is a change of words too.
-  assert.deepEqual(blocksOf(REPLY.replace('[PRICE?]', '$25,990')).map((b) => b.label), ['Sign-off']);
   // Words typed on the block's own line make it plain: on screen it would no longer be a region of its own.
   assert.deepEqual(blocksOf(AI + '\n\nCall me. ' + SIGN).map((b) => b.label), []);
   assert.deepEqual(blocksOf(AI + '\n\n' + SIGN + ' Thanks').map((b) => b.label), []);
   // A block taken out entirely is simply not there.
   assert.deepEqual(blocksOf(AI + '\n\n' + SIGN).map((b) => b.label), ['Sign-off']);
+});
+
+test('a filled blank keeps the block', () => {
+  const filled = REPLY.replace('[PRICE?]', '$25,990');
+  const [price, sign] = blocksOf(filled);
+  assert.deepEqual([price.label, sign.label], ['Price reply', 'Sign-off']);
+  // The block's text is what is in the box now, the price in it; it has no pill left.
+  assert.equal(price.text, PRICE.replace('[PRICE?]', '$25,990'));
+  assert.equal(filled.slice(price.start, price.end), price.text);
+  assert.deepEqual(kinds(price.inner), ['text']);
+  // Still a blank, filled with something else, or several blanks: still the block.
+  assert.equal(blocksOf(REPLY.replace('[PRICE?]', 'thirty thousand dollars'))[0].label, 'Price reply');
+  const offer = 'Pay the deposit here: [DEPOSIT LINK?]\nThe ship leaves on [DATE?].';
+  const parts = [{ kind: 'block', label: 'Auction offer', text: offer, why: '' }];
+  const done = offer.replace('[DEPOSIT LINK?]', 'https://pay.example.com/abc').replace('[DATE?]', '3 November');
+  assert.deepEqual(boxSegments(done, parts).map((x) => x.kind), ['block']);
+  assert.deepEqual(boxSegments('Hello.\n\n' + offer.replace('[DATE?]', '3 November'), parts).map((x) => x.kind), ['text', 'block']);
+  // A fill never reaches past its own line, and the words around the blanks must still be the block's.
+  assert.deepEqual(blocksOf(REPLY.replace('[PRICE?]', '$25,990\nor near')).map((b) => b.label), ['Sign-off']);
+  assert.deepEqual(blocksOf(REPLY.replace('[PRICE?] drive away', '$25,990 on the road')).map((b) => b.label), ['Sign-off']);
+  // A block that is only a blank is found word for word only, never as any line at all.
+  const only = [{ kind: 'block', label: 'Links you asked for', text: '[WHICH CAR?]', why: '' }];
+  assert.deepEqual(boxSegments('Hello.\n\nSee you.', only).map((x) => x.kind), ['text']);
+  assert.deepEqual(boxSegments('Hello.\n\n[WHICH CAR?]', only).map((x) => x.kind), ['text', 'block']);
 });
 
 test('removing a block keeps the typed text and Put back restores it', () => {
@@ -112,6 +134,42 @@ test('removing a block keeps the typed text and Put back restores it', () => {
   assert.equal(restoreBlock(AI, price, AI), AI);
   // Found again from the end when the text before it changed length.
   assert.equal(removeBlock(REPLY, { ...price, start: 3 }), REPLY.replace('\n\n' + PRICE, ''));
+  // A filled block is removed and put back as it is, the price in it.
+  const filled = REPLY.replace('[PRICE?]', '$25,990');
+  const [full] = blocksOf(filled);
+  assert.equal(removeBlock(filled, full), AI + '\n\n' + SIGN);
+  assert.equal(restoreBlock(AI + '\n\n' + SIGN, full, filled), filled);
+});
+
+test('Put back leaves a blank line between the block and the text on both sides', () => {
+  const was = ['Hello.', PRICE, 'See you soon.'].join('\n\n');
+  const [price] = blocksOf(was);
+  // One line break taken out of the blank line after where it was: the block still stands apart.
+  assert.equal(restoreBlock('Hello.\nSee you soon.', price, was), was);
+  // Both sides changed, one line break before the sign-off: a blank line on each side.
+  assert.equal(restoreBlock('Hi there.\nRegards,\nThe team', price, was), 'Hi there.\n\n' + PRICE + '\n\nRegards,\nThe team');
+  // At the end, after text that ends with a line break: one more, and nothing after it.
+  assert.equal(restoreBlock('All new words.\n', price, was), 'All new words.\n\n' + PRICE + '\n');
+  // The first block goes back first, with a blank line after it.
+  const first = PRICE + '\n\nSee you soon.';
+  const [b] = blocksOf(first);
+  assert.equal(restoreBlock('Changed: see you soon.', b, first), PRICE + '\n\nChanged: see you soon.');
+  assert.equal(restoreBlock('\nSee you soon.', b, first), first, 'at the start, with a blank line after it');
+});
+
+test('Put back says when it cannot: the reply it came out of is no longer in the box', () => {
+  const [price] = blocksOf(REPLY);
+  const left = removeBlock(REPLY, price);
+  const removal = { text: left, id: 7, block: price, was: REPLY };
+  // The box text unchanged since the remove: put back, whatever the draft is now.
+  assert.equal(putBackText({ text: left, id: 7 }, removal), REPLY);
+  assert.equal(putBackText({ text: left, id: 8 }, removal), REPLY, 'a new suggestion arrived while the text stayed');
+  // The same suggestion, typed in since: put back into the text as it is.
+  const typed = left.replace('Good morning', 'Hello');
+  assert.equal(putBackText({ text: typed, id: 7 }, removal), REPLY.replace('Good morning', 'Hello'));
+  // Another suggestion and other text, or the box gone (another conversation): nothing.
+  assert.equal(putBackText({ text: 'Another reply.', id: 8 }, removal), null);
+  assert.equal(putBackText(null, removal), null);
 });
 
 test('blanks inside a block are still pills', () => {

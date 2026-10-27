@@ -7,11 +7,13 @@
 //
 // A block Wheelman's rules added (the price reply, the sign-off; web/new/js/segments.js) is a run of
 // those same pieces drawn inside a tinted region with its label and Remove. The pieces stay one list
-// over the one text, so every offset (the caret, Add to reply) is an offset into the whole text. A
-// block's words stay editable; once they are changed, the next rebuild draws them as plain text.
+// over the one text (web/new/js/editorpieces.js), so every offset (the caret, Add to reply) is an
+// offset into the whole text. A block's words stay editable; once they are changed, the next
+// rebuild draws them as plain text. Typing that joins a block's line to the text beside it rebuilds
+// at once, so what is on screen is always what is copied.
 import { html, useRef, useState, useEffect, useLayoutEffect } from './html.js';
-import { joinSegments, fillBlank, blankWords, plainPaste } from '../model.js';
-import { boxSegments } from '../segments.js';
+import { blankWords, plainPaste } from '../model.js';
+import { pieces, partsKey, textOf, shape, endsAt, breaksBlockLine, lengthOf, startOf } from '../editorpieces.js';
 
 /** Whether this browser keeps an editable element to plain text (paste and Enter then stay plain). */
 const PLAIN = (() => {
@@ -21,48 +23,6 @@ const PLAIN = (() => {
     return el.contentEditable === 'plaintext-only';
   } catch { return false; }
 })();
-
-/**
- * The box text as pieces, with a text piece before, between and after the blanks, so there is
- * always somewhere to type, in the text around the blocks and in each block. Each piece's `block`
- * is the number of the block it is in (null outside the blocks); blocks: each one's label and why.
- */
-function pieces(text, parts) {
-  const list = [];
-  const blocks = [];
-  const add = (segs, block) => {
-    const from = list.length;
-    for (const s of segs) {
-      if (s.kind === 'blank' && (list.length === from || list[list.length - 1].kind === 'blank')) list.push({ kind: 'text', text: '', block });
-      list.push(s.kind === 'blank' ? { ...s, value: '', block } : { ...s, block });
-    }
-    if (list.length === from || list[list.length - 1].kind === 'blank') list.push({ kind: 'text', text: '', block });
-  };
-  let run = [];
-  for (const s of boxSegments(text, parts)) {
-    if (s.kind !== 'block') { run.push(s); continue; }
-    if (run.length) add(run, null);
-    run = [];
-    blocks.push({ label: s.label, why: s.why });
-    add(s.inner, blocks.length - 1);
-  }
-  if (run.length || !list.length) add(run, null);
-  return { list, blocks };
-}
-
-/** The blocks of the draft's parts, for knowing when new parts would draw the text differently. */
-const partsKey = (parts) => (parts || []).filter((p) => p && p.kind !== 'ai').map((p) => p.label + '\n' + p.text).join('\u0000');
-
-/** The text the pieces make: what is typed in a pill fills its blank, and an empty pill stays a blank. */
-function textOf(list) {
-  let segs = list;
-  list.forEach((p, i) => { if (p.kind === 'blank' && p.value.trim()) segs = fillBlank(segs, i, p.value); });
-  return joinSegments(segs);
-}
-
-/** What is on screen, for knowing when a rebuild would change it: the blocks, and the words in each. */
-const shape = (list, blocks) => JSON.stringify([blocks.map((b) => b.label),
-  list.map((p) => [p.block, p.kind === 'blank' ? p.raw + (p.value.trim() ? '=' : '') : p.block === null ? '' : p.text])]);
 
 // A line break at the very end of the text shows only with one more after it, so the browser adds
 // one there when Enter is pressed at the end. In the last piece, a newline at the end of what is on
@@ -134,7 +94,7 @@ function TextPiece({ text, only, last, ends, onText }) {
   };
   return html`<span class="seg" ref=${ref} contenteditable=${PLAIN ? 'plaintext-only' : 'true'} role="textbox" aria-multiline="true"
     aria-label="Reply text, you can change it" spellcheck="true" data-placeholder=${only ? 'Type your reply' : null}
-    onInput=${(e) => onText(readText(e.currentTarget, ends))} onKeyDown=${keys} onbeforeinput=${beforeInput} onPaste=${paste} onDrop=${(e) => e.preventDefault()}></span>`;
+    onInput=${(e) => onText(readText(e.currentTarget, ends), e.isComposing)} onKeyDown=${keys} onbeforeinput=${beforeInput} onPaste=${paste} onDrop=${(e) => e.preventDefault()}></span>`;
 }
 
 function Pill({ piece, onValue, onKey }) {
@@ -145,10 +105,6 @@ function Pill({ piece, onValue, onKey }) {
     onInput=${(e) => onValue(e.currentTarget.value)} onKeyDown=${onKey} />`;
 }
 
-// The caret as an offset into the box text, for Add to reply: a filled pill counts as its value, an
-// empty one as its blank, the same text textOf() makes.
-const lengthOf = (p) => (p.kind === 'blank' ? (p.value.trim() ? p.value.trim().length : p.raw.length) : p.text.length);
-const startOf = (list, i) => list.slice(0, i).reduce((n, p) => n + lengthOf(p), 0);
 // The pieces on screen, in the order of the list, inside the blocks too.
 const pieceEls = (root) => [...root.querySelectorAll('.seg, .blank-pill')];
 
@@ -289,10 +245,18 @@ export function Editor({ text, parts, onChange, onRemove, bad, root, handle }) {
     putCaret(root.current, s.pieces, at);
   });
 
-  const set = (i, patch) => {
+  const set = (i, patch, composing = false) => {
     s.pieces = s.pieces.map((p, n) => (n === i ? { ...p, ...patch } : p));
     s.text = textOf(s.pieces);
     onChange(s.text);
+    // Typed beside a block so that its line now runs on into this text: drawn again at once (the
+    // block becomes plain text), with the caret where it was, so the screen is what is copied. Not
+    // while a keyboard's input method is composing: the input that ends it comes next.
+    if (composing || !breaksBlockLine(s.pieces, i)) return;
+    const at = caretOf(root.current, s.pieces);
+    s.land = { text: s.text, at: at === null ? startOf(s.pieces, i + 1) : at };
+    build();
+    redraw((n) => n + 1);
   };
 
   // Focus left the editor: a filled pill becomes text, a blank typed into the text becomes a pill,
@@ -344,10 +308,9 @@ export function Editor({ text, parts, onChange, onRemove, bad, root, handle }) {
 
   const list = s.pieces;
   const only = list.length === 1;
-  const ends = (i) => i === list.length - 1 || (list[i].block !== null && list[i + 1].block !== list[i].block);
   const draw = (p, i) => (p.kind === 'blank'
     ? html`<${Pill} key=${s.rev + '-' + i} piece=${p} onValue=${(value) => set(i, { value })} onKey=${tab} />`
-    : html`<${TextPiece} key=${s.rev + '-' + i} text=${p.text} only=${only} last=${i === list.length - 1} ends=${ends(i)} onText=${(t) => set(i, { text: t })} />`);
+    : html`<${TextPiece} key=${s.rev + '-' + i} text=${p.text} only=${only} last=${i === list.length - 1} ends=${endsAt(list, i)} onText=${(t, composing) => set(i, { text: t }, composing)} />`);
   const drawn = [];
   for (let i = 0; i < list.length;) {
     const b = list[i].block;
