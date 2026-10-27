@@ -34,9 +34,10 @@ function unreadTotal(state) {
  * store: the main store; panel: the panel store; setPanel(open) opens or closes the panel (on a
  * phone, through history: web/new/js/main.js).
  */
-export function App({ store, panel, setPanel, now = Date.now }) {
+export function App({ store, panel, setPanel, search, now = Date.now }) {
   const state = useStore(store);
   const pstate = useStore(panel);
+  useStore(search);
   const route = useRoute();
   const mode = useMode();
   const reply = useRef(null);
@@ -58,8 +59,24 @@ export function App({ store, panel, setPanel, now = Date.now }) {
     photos: () => { panel.actions.back(); panel.actions.setTab('car'); setPanel(true); },
   };
 
+  // A search result. A Dashboard conversation opens as a list row does (the address first, so Back
+  // undoes it); another section has no address on the new page, so its result opens the old page.
+  const openResult = (r) => {
+    if (r.section !== 'dashboard') { location.assign('/'); return; }
+    location.hash = hashFor({ section: 'dashboard', chip: state.chip, key: r.key });
+    store.actions.open(r.key);
+  };
+  // A car opens in the panel as "Another car": the panel opens the way the Details button opens it
+  // (on a phone as a history entry, so Back closes the sheet), then shows the car.
+  const openCar = (car) => {
+    if (route.section !== 'dashboard') location.hash = hashFor({ section: 'dashboard', chip: state.chip, key: state.key });
+    setPanel(true);
+    panel.actions.showCar(String(car.stockNo));
+  };
+
   return html`<div class="shell">
-    <${TopBar} state=${state} tab=${section.id} onTab=${onTab} now=${now()} inert=${overlay} />
+    <${TopBar} state=${state} tab=${section.id} onTab=${onTab} now=${now()} inert=${overlay}
+      search=${search} onOpen=${openResult} onCar=${openCar} />
     ${section.ready
       ? html`<main class=${'work' + (shown && !overlay ? ' with-panel' : '')} data-view=${route.key ? 'chat' : 'list'}>
           <section class="tile list-col" aria-label="Conversations" inert=${overlay}>

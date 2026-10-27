@@ -2,6 +2,7 @@
 import { html, useState, useEffect, useRef } from './html.js';
 import { SECTIONS, statusWords, statusAnnouncement } from '../model.js';
 import { MenuButton } from './menu.js';
+import { Search } from './search.js';
 
 const THEME_KEY = 'wheelman.new.theme';
 const THEMES = [
@@ -34,7 +35,7 @@ function StatusLive({ status }) {
 }
 
 /** inert: the bar waits while a drawer or sheet is open over the page. */
-export function TopBar({ state, tab, onTab, now, inert = false }) {
+export function TopBar({ state, tab, onTab, now, inert = false, search, onOpen, onCar }) {
   const [theme, setTheme] = useState(readTheme);
   const status = statusWords(state.status, now);
   const choose = (id) => { setTheme(id); applyTheme(id); };
@@ -53,6 +54,7 @@ export function TopBar({ state, tab, onTab, now, inert = false }) {
         })}
       </div>
     </nav>
+    ${search ? html`<${Search} search=${search} onOpen=${onOpen} onCar=${onCar} now=${now} />` : null}
     <div class=${'status ' + status.tone}>
       <span class=${'dot ' + status.tone} aria-hidden="true"></span><span class="words">${status.text}</span><${StatusLive} status=${status} />
     </div>

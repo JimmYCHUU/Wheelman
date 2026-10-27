@@ -100,6 +100,9 @@
     --page-edge: 16px;
     --edit-edge: 1.5px;
     --tell-w: 240px;
+    --search-w: 280px;
+    --hits-w: 440px;
+    --hits-h: 70dvh;
     /* the viewer: photos and videos are judged on a dark ground in both themes, as in any photo app */
     --viewer-bg: #030f1c;
     --viewer-bar: #071a2d;

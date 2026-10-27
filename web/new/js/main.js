@@ -3,11 +3,13 @@
 import { createApi } from './api.js';
 import { createStore } from './store.js';
 import { createPanelStore } from './panelstore.js';
+import { createSearchStore } from './searchstore.js';
 import { parseRoute } from './route.js';
 import { storeStep, addressAfter, sheetStep, sheetOnPop, isSheetEntry, withSheet } from './hashsync.js';
 import { html, render } from './ui/html.js';
 import { App } from './ui/app.js';
 import { readTheme, applyTheme } from './ui/topbar.js';
+import { focusSearch } from './ui/search.js';
 
 const storage = {
   getItem(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -51,6 +53,17 @@ window.addEventListener('popstate', () => {
   const open = sheetOnPop({ narrow: NARROW.matches, entry: isSheetEntry(history.state) });
   if (open !== null && open !== panel.get().open) panel.actions.toggle(open);
 });
+const search = createSearchStore({ api, timers: { set: (fn, ms) => setTimeout(fn, ms), clear: (id) => clearTimeout(id) } });
+
+// "/" goes to the search box, unless the person is typing somewhere or a dialog is open.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+  const t = e.target;
+  if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+  if (document.querySelector('dialog[open]')) return;
+  e.preventDefault();
+  focusSearch();
+});
 // Escape closes a drawer or sheet; the column on a wide window stays.
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || e.defaultPrevented || WIDE.matches || !panel.get().open) return;
@@ -73,7 +86,7 @@ store.subscribe(() => {
 });
 
 applyTheme(readTheme(), storage);
-render(html`<${App} store=${store} panel=${panel} setPanel=${setPanel} />`, document.getElementById('app'));
+render(html`<${App} store=${store} panel=${panel} setPanel=${setPanel} search=${search} />`, document.getElementById('app'));
 
 // The store follows the address: another chip or another conversation, from Back, forward, a pasted
 // link, or a row or chip pressed (web/new/js/hashsync.js).
