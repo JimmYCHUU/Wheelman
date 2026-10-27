@@ -151,6 +151,8 @@ function draftOf(item) {
     needsHuman: (draft.needsHuman || []).filter((n) => n && n.marker && n.reason).map((n) => ({ marker: String(n.marker), reason: String(n.reason) })),
     // What the reply is for: the one next step it offers, and where the customer is on the way to a sale.
     nextStep: draft.next_step || '', rung: draft.rung || '', rungLabel: RUNG_LABELS[draft.rung] || '',
+    // The reply's parts: the AI's words and each block code added, with its label and why (src/parts.js).
+    parts: draft.context?.parts || null,
   } : null;
 }
 

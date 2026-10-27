@@ -20,6 +20,7 @@ import { LEFTOVER_LABEL } from './practice.js';
 import { tagMarketplaceLinks } from './marketplace.js';
 import { mediaForReply } from './vehiclemedia.js';
 import { inventedLiterals, unknownMarkers, restoreAnswer, restoreFacts, maskFacts, hasFactMarker, markerForFigure, factShaped, netFacts } from './factmarkers.js';
+import { partsOf, blockOf, reasonIn } from './parts.js';
 
 /**
  * What a reply may legitimately quote, split by how far it can be trusted.
@@ -299,6 +300,14 @@ function assessAnswer(item, prompt, json, { plan = null, chat = false, email = f
   const signOff = chat ? '' : plan && block ? block : again ? '' : block || config.signOff;
   // The price reply or the invitation sits under the AI's lines, before the standard block or the sign-off.
   const reply = finishReply(extras ? `${text.trim()}\n\n${extras}` : text, item.lead, { now, signOff, chat: chatStyled, greeting: offer || !again || instructed });
+  // What code added under the AI's lines, in the order it sits in the reply, each with why (src/parts.js).
+  const closing = signOff !== block ? 'signoff' : offer ? 'offer' : 'first';
+  const blocks = [
+    links && blockOf('links', links, reasonIn(asked.lines[0])),
+    price && blockOf('price', price, reasonIn(prompt.price.lines[0])),
+    invite && blockOf('invite', invite, reasonIn(prompt.inspection.why)),
+    signOff && blockOf(closing, signOff, offer ? plan.lines[1] : undefined),
+  ].filter(Boolean);
   let checks = checkDraft({
     channel: item.channel,
     reply, body,
@@ -351,7 +360,7 @@ function assessAnswer(item, prompt, json, { plan = null, chat = false, email = f
   if (buyer) checks = [...checks.filter((c) => c.level !== 'ok'), buyer];
   // A follow-up: Carbarn named, nothing filler, never "did you come" (src/followup.js).
   if (item.followUp) { const fu = followUpChecks({ body, kind: item.followUp.kind }); if (fu.length) checks = [...checks.filter((c) => c.level !== 'ok'), ...fu]; }
-  return { body, reply, checks };
+  return { body, reply, checks, blocks };
 }
 
 // One write at a time for one customer message. A second plain write while one is under way (the
@@ -483,6 +492,8 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
     // Nothing of the customer's own to answer: the first reply is the standard wording, no AI needed.
     if (plan?.stage === 'ask' && plan.ready) {
       const reply = [restore(plan.ready, item.lead), plan.tail].filter(Boolean).join('\n\n');
+      // Its closing lines (address, phone, hours, sign-off) are the first-reply details.
+      context.parts = partsOf(reply, plan.tail ? [blockOf('first', plan.tail)] : []);
       const d = { ...base, status: 'ready', reply, needsHuman: [], factsUsed: [], nextStep: 'asked what they are looking for', checks: [{ level: 'ok', code: 'ok', message: 'Standard wording for a new import enquiry.', tokens: [] }], provider: 'none', model: 'standard wording', exampleIds: [] };
       return persist(d);
     }
@@ -598,12 +609,16 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
     // The AI's own reading of an ordinary enquiry: it may think the customer wants a car found in
     // Japan. The page then offers to treat it as an import enquiry; nothing changes by itself.
     context.aiImport = !chat && !email && !item.order && !item.imports && answer.import_enquiry === true;
+    // On Marketplace, links to our website say they came from Facebook. Added after the checks,
+    // which compare links without the tag.
+    const reply = chat ? tagMarketplaceLinks(best.reply) : best.reply;
+    // The reply's parts, found in it as it stands: the AI's words and each block code added. On
+    // Marketplace each block's links are tagged as the reply's are, so the parts still join to it.
+    context.parts = partsOf(reply, (best.blocks || []).map((b) => (chat ? { ...b, text: tagMarketplaceLinks(b.text) } : b)));
     const draft = {
       ...base,
       status: 'ready',
-      // On Marketplace, links to our website say they came from Facebook. Added after the checks,
-      // which compare links without the tag.
-      reply: chat ? tagMarketplaceLinks(best.reply) : best.reply,
+      reply,
       needsHuman: Array.isArray(answer.needs_human) ? answer.needs_human : [],
       // What was looked up for an import email, for the page's research notes.
       research: rendered ? rendered.panel : null,
