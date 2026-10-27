@@ -72,6 +72,13 @@ const pell = ['Pell', 'Invented', '0491 570 191'];
     invented.leads.carbarnau.push(lead);
     invented.conversations.push({ row: rawConversation(id, lead, who, { direction: 'IN', at: now - 5 * MIN, body: ask }), messages: [rawMessage(id * 10, id, 'IN', ask, 5 * MIN, now)] });
   }
+  // The nameless text from 11 hours ago is left out, so Oldham (below) is one of the ten newest waiting.
+  invented.conversations = invented.conversations.filter((c) => c.row.id !== 209);
+  // Oldham wrote 30 hours ago and is still waiting. Among the ten newest waiting, so the suggestion is written ahead.
+  const oldham = ['Oldham', 'Invented', '0491 570 192'];
+  const lead = rawLead(792, 792, oldham, now, { stocks: ['1800'], agoMs: 31 * 3600e3 });
+  invented.leads.carbarnau.push(lead);
+  invented.conversations.push({ row: rawConversation(792, lead, oldham, { direction: 'IN', at: now - 30 * 3600e3, body: 'Is the Voxy still for sale?' }), messages: [rawMessage(7920, 792, 'IN', 'Is the Voxy still for sale?', 30 * 3600e3, now)] });
 }
 const standins = await startStandins({ world: invented, ai });
 const { config } = await import('../../src/config.js');
@@ -117,6 +124,8 @@ const { parseDashboardTime, sydneyDay } = await import('../../src/time.js');
   db.upsertConversation({ id: quiet, phone: '+61491570171', channel: 'SMS', status: 'OPEN', leadId: quiet, customerName: 'Quietly Invented', latestDirection: 'OUT', latestAt: visit - 25 * HOUR, latestBody: 'x' });
   (await import('../../src/followup.js')).refreshFollowUps();
 }
+// The people just added are waiting too: the ten newest get their suggestions written ahead, as in daily use.
+await worker.draftWaiting();
 
 setTimeout(async () => {
   const now = Date.now();

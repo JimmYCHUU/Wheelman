@@ -157,6 +157,12 @@ can be compared on the Review page.
         └─────────────────────────────────────────────────────┘
 ```
 
+The ten newest waiting Dashboard conversations are written ahead whatever the age of the
+customer's last message, so the ones the reply run opens first are ready. Every other check still
+applies (no customer record, a photo with no words, a held Prompt, a recent failure, the daily
+and busy limits), and a draft that keeps failing is given up on after three tries. Marketplace
+chats are written as before.
+
 Every suggestion is stored in SQLite with the checks it passed or failed and the model that
 wrote it. When the reply later appears in the dashboard conversation, Wheelman compares what
 was really sent with what it suggested.
@@ -743,6 +749,19 @@ offers no Undo, so the lesson you had stays on. Remember is not offered on a fol
 Auction section, because those teach nothing. **Just this once** keeps nothing. **What Wheelman
 used** now also lists the lessons it followed and the rules that applied. A list of all lessons
 comes in a later update.
+
+On **Needs reply**, the top of the list says how many are waiting, with **Start replying**. The
+**reply run** takes the ten newest waiting, the ones already written ahead, and opens the oldest
+first. **Copy** copies the reply, marks the customer done and opens the next one. **Skip** moves
+on without marking anyone done, and **End run** stops. When it ends, a line says what happened,
+for example **All answered: 5 copied, 1 skipped, 1 answered elsewhere.** or **Run finished:** with
+how many more are waiting and **Start again**. Nothing is sent by the run.
+
+A customer who was answered somewhere else leaves **Needs reply** by itself and says who answered
+on **All**: **Answered on the phone**, **Answered by** the sender's name **on the dashboard**, **Answered by an
+auto-reply** or **Answered with Wheelman's suggestion**, with the time. If you have the
+conversation open when that happens, it says **No reply needed**, and **Write a reply anyway**
+brings the message box back. A run skips such customers when it reaches them.
 
 The **search box** in the top bar looks across customers, cars and the words in messages, in
 every section. A Dashboard result opens on the new page. A Marketplace, Imports or Auction
@@ -2142,6 +2161,12 @@ used word for word), Remember lessons go into texts and emails but never Marketp
 lessons can be switched off and are counted when used, and a route lists them. Checked on the
 automated tests and in a browser on invented data. The page that lists all lessons is not built
 yet.
+
+27 October 2026, later still: the new page gained the reply run, answered elsewhere, and
+suggestions written ahead for the ten newest waiting Dashboard customers whatever the age of their
+message. The server gained an `answered` field on rows and conversations; nothing else about it
+changed, and Marketplace drafting is as before. Checked on the automated tests and in a browser on
+invented data. Not yet used over a working day.
 
 ### Open questions for Carbarn
 
