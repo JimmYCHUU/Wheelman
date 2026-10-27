@@ -701,6 +701,53 @@ What to know:
 
 ## The page
 
+### The new page
+
+A new page is being built beside this one, at http://127.0.0.1:3210/new/. The old page has a
+quiet link, **Try the new page**, next to the cog. For now the new page covers the Dashboard
+texts: the list (Needs reply, Follow-ups and All), the open conversation, and the message box
+with its fill-in blanks, **Instead**, the "Tell Wheelman what to say…" line, and **Copy**, with
+**Put back in Needs reply**. Marketplace, Imports and Auction are tabs on the new page too, but
+each shows a line and a link to that section on the old page. The old page stays at the normal
+address until the switch-over, and nothing else about it has changed. The new page is built from
+`prototype/`.
+
+Beside the open conversation is the **deal panel** (a column on a wide screen, a drawer on a
+medium one, a sheet from the bottom on a phone; it remembers whether you left it open). Its
+**Car** tab shows the car the customer asked about: photos, auction photos, videos and documents,
+each with **Copy link** and **Add to reply**, which puts the link into the message box where the
+cursor is. Photos and videos open large in a viewer you can move through with the arrow keys.
+A link that is for you only, such as a supplier's, can be opened but not copied or added to a
+reply. Its **Customer** tab shows **How far they have got**: five steps from enquiry to sold,
+with where the record says they are. It also shows the facts that **Shaped the reply, never
+stated**, and **What Wheelman used** lists the model, the provider and what was read to write the
+suggestion. A car found by search opens in the panel as **Another car**, with a button back to
+the customer.
+
+In the message box, the parts Wheelman's code builds are shown in the reply with a label and a
+**Remove** button: **Price reply**, **Invitation to see the car**, **First-reply details**,
+**Links you asked for**, **Sign-off** and **Auction offer**. A removed block can be brought back
+with **Put back**, and what you typed beside a block is copied as shown. Under the reply, the
+**trust line** says how many facts were checked. It is green only when nothing is wrong; if a
+figure or link cannot be traced to our records, it says so in red and names how many facts are
+not in your records. Once the text differs from what Wheelman wrote, whether you typed in it or
+removed a block, it reads **Changed since it was checked.** Open it to see each fact and where it
+came from: the stock record, our earlier messages, business facts, the website, what the
+customer said, your instruction or your wording file.
+
+After you ask Wheelman to rewrite with **Tell Wheelman what to say…**, it offers **Remember for**
+that kind of reply. Choosing it keeps your instruction as a lesson for later texts or emails of
+that kind, never for Marketplace chats, and **Undo** switches the lesson off again. If the same
+instruction was already remembered for that kind of reply, it says **Already remembered** and
+offers no Undo, so the lesson you had stays on. Remember is not offered on a follow-up or in the
+Auction section, because those teach nothing. **Just this once** keeps nothing. **What Wheelman
+used** now also lists the lessons it followed and the rules that applied. A list of all lessons
+comes in a later update.
+
+The **search box** in the top bar looks across customers, cars and the words in messages, in
+every section. A Dashboard result opens on the new page. A Marketplace, Imports or Auction
+result says **Opens on the old page** and goes there until those sections move over.
+
 ### The top bar
 
 - **The sections** are tabs in the middle of the top bar: **Dashboard** (leads and text messages),
@@ -876,7 +923,8 @@ The suggestion waits in the message box, marked **not sent**. The box is an edit
   the text differs from the suggestion.
 - **Copy reply** copies what is in the box. `Ctrl + Enter` also copies, and so does selecting
   the whole text and pressing `Ctrl + C`. When you had changed the text, Wheelman learns from
-  the change.
+  the change. Copied unchanged, with no blank left, it counts as **Good reply** (see
+  [How Wheelman learns](#how-wheelman-learns)).
 - **Rewrite** takes an instruction, for example `offer $27,500` or `make it shorter`. It
   changes this reply only, and replaces what is in the box. A prompt you typed while a
   suggestion landed by itself is waiting here, ready to write again.
@@ -1436,8 +1484,25 @@ what the team really sends. **How to say it** comes from the two voices.
   yourself counts the same way. When the reply later appears in the dashboard conversation,
   what was really sent replaces what was copied. Typing alone teaches nothing: a half-written
   change that was never copied, approved or sent is not learned from.
+- **Copying as written.** Copying a reply with no blank left and no change counts as approval,
+  the same as **Good reply**, on either page. Spacing, the sign-off and our address block at the
+  end are not counted as changes, so removing the **Sign-off** block still counts as no change,
+  and so does removing the **First-reply details** when no other block sits above them. Removing
+  any other block, such as the **Price reply**, is a change, and Wheelman learns from it as from
+  an edit. A copy is not approval when a check failed (**Copy anyway**), when the reply is your
+  template or standard wording used word for word, when it is one of the standard replies the
+  team sends to everyone, or once you marked it **Could be better**. **Could be better**, or
+  taking the rating away, takes a copy's approval back as it does a **Good reply**.
+- **Remember.** On the new page, a rewrite you ask for with **Tell Wheelman what to say…** can be
+  remembered for that kind of reply in that channel. The lesson is put into every later request
+  of that kind, the same conversation included. Remember lessons apply to texts and emails, never
+  to Marketplace chats. Each time a lesson is used it is counted, and it can be switched off,
+  after which it is never used. Remembering the same instruction again keeps the one lesson.
+  **Just this once** stores nothing. Marketplace, the phone-only list, auction orders, follow-ups
+  and the Auction section teach nothing, so Remember is not offered there.
 - **Only what you changed.** A suggestion used word for word is Wheelman's own text, so it
-  is not kept as an example of how the team writes.
+  is not kept as an example of how the team writes. Copying it unchanged counts as approval
+  instead (see **Copying as written** above).
 - **Only the reply to that message.** A sent reply counts for a suggestion only if it directly
   follows the message the suggestion answered. If the customer wrote again first, the
   suggestion is marked as overtaken and nothing is learned. One lesson per customer message.
@@ -1711,6 +1776,7 @@ claim outside what the records allow; and the block or the proof that was due.
 | `npm run fetch-website` | Saves the website's policy pages. `-- --all` for every guide, blog post and import page |
 | `npm run import-history` | Loads the saved history in `data/raw` into the database |
 | `npm test` | Runs the automated checks |
+| `node test/support/preview.js` | Runs Wheelman on invented data at http://127.0.0.1:3211/new/ to look at the new page. Nothing real is read or sent |
 
 ## Where your files live
 
@@ -1928,6 +1994,7 @@ wheelman/
 │   ├── log.js                         what went wrong, written to data/wheelman.log
 │   ├── checks.js · drafter.js         figures and links traced, blanks, greeting once a day
 │   ├── firstreply.js · promises.js    the standard first reply; promises, days and places
+│   ├── parts.js                       finds the blocks Wheelman's code built in a finished reply
 │   ├── worker.js                      the loop: read, note what was sent, draft what is waiting
 │   ├── server.js                      the local page's data, on 127.0.0.1 only; the team's sign-in
 │   ├── share.js                       sharing with the team: the Cloudflare tunnel, the sign-in cookie
@@ -1940,7 +2007,16 @@ wheelman/
 │   │                                  (the Car tab) · Viewer (photos and videos large) · FindCar
 │   ├── lib/                           blank.js: what a blank is, shared with the server's checks;
 │   │                                  insert.js: where Add to reply puts a link; copy.js: every word
-│   └── assets/                        brand.svg: the mark, placed with <use>
+│   ├── assets/                        brand.svg: the mark, placed with <use>
+│   └── new/                           the new page, at /new/ (Dashboard texts first)
+│       ├── index.html                 the one page
+│       ├── vendor/                    Preact and htm, one file, the only code from elsewhere
+│       ├── css/                       tokens, base, components, views, panel, viewer, search, in layers
+│       └── js/                        main · model · route · hashsync · store · panelstore · searchstore
+│                                      · listview · insertlink · autosave · api · segments (the reply as
+│                                      text and blocks) · editorpieces · lessons · remember, and ui/ (the
+│                                      pieces on screen: top bar, search, list, conversation, message box,
+│                                      trust line, panel with its tabs, viewer)
 ├── prototype/                         the redesign as a clickable demo on invented data: the design
 │                                      the new page is built from. Open prototype.cmd opens it
 ├── scripts/                           check-login · check-model · replay · report · measure
@@ -2049,6 +2125,23 @@ keeping its name and its history. The engine comes first, behind today's page. A
 follows beside the old one, section by section, and the old page goes only after Carbarn says
 yes. `prototype/` is the clickable design on invented data. `npm run measure` counts what each
 stage is judged on.
+
+26 October 2026, later: the new page for Dashboard texts is at `/new/`, built from the prototype.
+Checked on the automated tests and in a browser on invented data. Not yet used over a working day.
+
+27 October 2026: the new page gained the deal panel (the Car and Customer tabs, the viewer, What
+Wheelman used) and one search across customers, cars and message words in every section. The
+server gained a search route and a stage on each conversation; nothing else about it changed.
+Checked on the automated tests and in a browser on invented data. Marketplace, Imports and Auction
+still open on the old page.
+
+27 October 2026, later: the new page's message box shows Wheelman's blocks with Remove and Put
+back, a trust line with where each fact came from, and Remember after a rewrite. On the server,
+copying a draft unchanged counts as approval (not past a failed check, nor for your own wording
+used word for word), Remember lessons go into texts and emails but never Marketplace chats,
+lessons can be switched off and are counted when used, and a route lists them. Checked on the
+automated tests and in a browser on invented data. The page that lists all lessons is not built
+yet.
 
 ### Open questions for Carbarn
 

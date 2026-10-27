@@ -273,7 +273,8 @@ test('Dismiss and Put back', async () => {
 });
 
 test('Check now refreshes the follow-ups', async () => {
-  const key = replied(17, 'Liam', { stocks: ['1159'] });
+  // Timestamps are taken from the same clock the sync counts the quiet days on (Date.now()), so the result does not depend on the hour.
+  const key = replied(17, 'Liam', { stocks: ['1159'], inAt: Date.now() - 62 * HOUR, outAt: Date.now() - 61 * HOUR });
   // No AI key for the moment, so the check writes no suggestions in the background while later tests script the AI.
   const apiKey = config.llm.gemini.apiKey;
   config.llm.gemini.apiKey = '';
