@@ -70,6 +70,9 @@ export function withoutSignOff(text) {
  */
 export const comparable = (text) => withoutSignOff(stripLocationBlock(withoutSignOff(text)));
 
+/** A standard reply the team sends to everyone (the wording file's canned list): it teaches nothing about answering this customer. */
+const canned = (body, rawText) => loadExclusions().canned.some((re) => re.test(rawText) || re.test(body));
+
 /** Reasons a reply should not become an example. Takes the comparable form. Returns '' when it is fine. */
 function unsuitable(body, rawText) {
   if (!body) return 'empty';
@@ -77,8 +80,7 @@ function unsuitable(body, rawText) {
   if (wordCount(body) < 2) return 'too short';
   if (body.length > 900) return 'too long';
   if (/\b\d{3}[\s-]?\d{3}\b[^\n]{0,30}\b\d{6,10}\b/.test(body) || /\bbsb\b/i.test(body)) return 'contains bank details';
-  // A standard reply the team sends to everyone teaches nothing about answering this customer.
-  if (loadExclusions().canned.some((re) => re.test(rawText) || re.test(body))) return 'standard wording';
+  if (canned(body, rawText)) return 'standard wording';
   return '';
 }
 
@@ -175,18 +177,31 @@ export function onCopied(item, draftId, text) {
   if (!canLearnFrom(draft.item_key) || !canLearnFrom(item?.itemKey)) { recordCopiedTime(draftId); return { learned: false, why: NOT_HERE }; }
   recordCopied(draftId, String(text || '').slice(0, 4000));
   // Copied as Wheelman wrote it, with no blank left: the person says it is right, as Good reply did.
-  // Not where nothing teaches (the Auction section), nor once it was marked not usable.
-  if (copiedAsWritten(draft, text) && teachesHere(item) && !writtenInAuction(draft) && draft.rating !== 'bad') {
+  // Not where nothing teaches (the Auction section).
+  if (copiedAsWritten(draft, text) && approvableCopy(draft, text) && teachesHere(item) && !writtenInAuction(draft)) {
     setDraftRating(draftId, 'good');
     return { ...onApproved(item, draftId, true), approved: true };
   }
   return learnFrom(item, draft, text, 'copied');
 }
 
-/** The copied text is the suggestion as written (spacing and the sign-off aside), and no blank is left in it. */
+/** The copied text is the suggestion as written (spacing, the sign-off and the address block aside), and no blank is left in it. */
 function copiedAsWritten(draft, text) {
   const written = squash(comparable(draft.reply));
   return !!written && squash(comparable(text)) === written && blanksIn(text).length === 0;
+}
+
+/**
+ * Whether a copy as written says the reply is right. Not when a check failed (Copy anyway is no
+ * approval), not for code's own wording (a template word for word, the standard wording: provider
+ * 'none'), not for a canned reply, and not once it was rated anything but Good reply (Could be
+ * better, Not usable).
+ */
+function approvableCopy(draft, text) {
+  if ((draft.checks || []).some((c) => c && c.level === 'fail')) return false;
+  if (draft.provider === 'none') return false;
+  if (canned(comparable(text), String(text || ''))) return false;
+  return !draft.rating || draft.rating === 'good';
 }
 
 /** The text in the message box: what the person typed over the suggestion, or the suggestion itself. */

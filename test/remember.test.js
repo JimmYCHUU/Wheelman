@@ -268,3 +268,95 @@ test("a draft records the lessons applied and the rules that fired, and each les
   assert.equal((await lessons()).find((l) => l.id === lesson.id).usedCount, 2);
   db.switchLesson(lesson.id, false);
 });
+
+// ---- the final review's fixes ----------------------------------------------------------------
+
+/** Has Wheelman write the same suggestion on both attempts, so a check that fails the first time still fails. */
+async function writeTwice(key, reply) {
+  const answer = { reply, needs_human: [], facts_used: [], hold: false };
+  ai.script = [answer, answer];
+  const out = await post(`/api/items/${key}/draft`, { instruction: '' });
+  assert.equal(out.ok, true, out.error);
+  ai.script = [];
+  return out.item.draft;
+}
+const copy = (id, text) => post(`/api/drafts/${id}/copied`, { text });
+const rate = (id, rating) => post(`/api/drafts/${id}/rating`, { rating });
+
+test('copying as written is no approval past a failed check', async () => {
+  const key = customer(16, 'Pia', 'Does the Noah have a sunroof?');
+  const d = await writeTwice(key, 'Hello {{NAME}},\nYes, and it has done only 120,000 km.');
+  assert.ok(d.checks.some((c) => c.level === 'fail'), 'a check failed');
+  // Copy anyway: the text is copied as Wheelman wrote it.
+  const out = await copy(d.id, d.reply);
+  assert.equal(out.approved, undefined);
+  assert.equal(db.getDraft(d.id).rating || '', '');
+  assert.equal(db.getLearned(d.id), null, 'nothing kept as approved, and nothing as an example');
+});
+
+test("copying code's own wording as written is no approval", async () => {
+  const key = customer(17, 'Quin', 'Is the Noah still available?');
+  // A template used word for word, or the standard wording: provider 'none'.
+  const id = db.insertDraft({ itemKey: key, anchorKey: items.itemFromKey(key).anchorKey, situation: 'availability', reply: 'Hello Quin,\nYes, the Noah is still available.', status: 'ready', checks: [], provider: 'none', model: 'your wording' });
+  const out = await copy(id, 'Hello Quin,\nYes, the Noah is still available.');
+  assert.equal(out.approved, undefined);
+  assert.equal(db.getDraft(id).rating || '', '');
+  assert.equal(db.getLearned(id), null);
+});
+
+test('copying as written is no approval once it was rated Could be better or Not usable', async () => {
+  for (const [n, first, rating] of [[18, 'Rex', 'edit'], [19, 'Sol', 'bad']]) {
+    const key = customer(n, first, 'Does the Noah have cruise control?');
+    const d = await write(key, 'Hello {{NAME}},\nYes, the Noah has cruise control.');
+    assert.equal((await rate(d.id, rating)).ok, true);
+    const out = await copy(d.id, d.reply);
+    assert.equal(out.approved, undefined, rating);
+    assert.equal(db.getDraft(d.id).rating, rating, 'the rating stands');
+    assert.equal(db.getLearned(d.id), null, rating);
+  }
+});
+
+test('a copy-approval is taken back by Not usable, Could be better, or taking the rating away', async () => {
+  const approve = async (n, first) => {
+    const key = customer(n, first, 'Does the Noah have a spare tyre?');
+    const d = await write(key, 'Hello {{NAME}},\nYes, the Noah has a full-size spare tyre.');
+    assert.equal((await copy(d.id, d.reply)).approved, true);
+    assert.equal(db.getLearned(d.id).source, 'approved');
+    return d;
+  };
+  const bad = await approve(20, 'Tao');
+  await rate(bad.id, 'bad');
+  assert.equal(db.getLearned(bad.id), null, 'Not usable');
+
+  const coached = await approve(21, 'Una');
+  const advice = await post(`/api/drafts/${coached.id}/advice`, { note: 'Shorter, and mention the jack is included.' });
+  assert.equal(advice.learned, true, advice.why);
+  assert.equal(db.getDraft(coached.id).rating, 'edit');
+  assert.equal(db.getLearned(coached.id), null, 'Could be better');
+
+  const cleared = await approve(22, 'Vee');
+  await rate(cleared.id, '');
+  assert.equal(db.getLearned(cleared.id), null, "rating ''");
+});
+
+test('copying with a block removed: the sign-off, or the first-reply details alone, count as no change; the price reply does not', async () => {
+  const blocks = (d) => d.parts.filter((p) => p.kind === 'block').map((p) => p.label);
+  const without = (d, label) => d.parts.filter((p) => p.label !== label).map((p) => p.text).join('\n\n');
+  // An ongoing conversation, first reply today: the sign-off.
+  const key = customer(24, 'Xia', 'Does the Noah have a sunroof?');
+  const f = await write(key, 'Hello {{NAME}},\nNo, the Noah has no sunroof.');
+  assert.deepEqual(blocks(f), ['Sign-off']);
+  assert.equal((await copy(f.id, without(f, 'Sign-off'))).approved, true, 'the sign-off removed');
+  // A brand-new enquiry with no other block: the first-reply details (the address block and what sits above it).
+  const key2 = customer(32, 'Gil', 'Hi, does the Noah have eight seats?', { ongoing: false });
+  const g = await write(key2, 'Hello {{NAME}},\nYes, the Noah seats eight.');
+  assert.deepEqual(blocks(g), ['First-reply details']);
+  assert.equal((await copy(g.id, without(g, 'First-reply details'))).approved, true, 'the first-reply details removed');
+  // A brand-new enquiry about the price: the price reply removed is a change, learned as a copy.
+  const key3 = customer(23, 'Wes', 'Hi, what is your best price on the Noah?', { ongoing: false });
+  const e = await write(key3, 'Hello {{NAME}},\nThanks for asking about the Noah.');
+  assert.deepEqual(blocks(e), ['Price reply', 'First-reply details']);
+  const out = await copy(e.id, without(e, 'Price reply'));
+  assert.equal(out.approved, undefined, 'the price reply removed is a change');
+  assert.equal(db.getLearned(e.id).source, 'copied');
+});
