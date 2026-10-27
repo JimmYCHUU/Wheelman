@@ -7,7 +7,8 @@ import { MenuButton } from './menu.js';
 import { clock, dayKey, dayLabel, money, km, plural } from '../../../lib/format.js';
 
 const WELCOME = 'Choose a customer on the left.';
-const FAILED = 'This conversation could not be opened.';
+/** The conversation column's words when it could not be opened; the panel says the same. */
+export const OPEN_FAILED = 'This conversation could not be opened.';
 const NEAR_BOTTOM = 80;
 
 /** Text in pieces: plain text, and the web addresses in it as links. */
@@ -145,7 +146,7 @@ function Thread({ item, name, now, older }) {
 /** details: the panel as the conversation sees it: { open, media, toggle(), photos() } (web/new/js/ui/app.js). */
 export function Conversation({ state, actions, now, details }) {
   if (!state.key) return html`<div class="chat-body"><p class="empty">${WELCOME}</p></div>`;
-  if (state.itemState === 'error') return html`<div class="chat-body"><p class="empty" role="alert">${FAILED}</p></div>`;
+  if (state.itemState === 'error') return html`<div class="chat-body"><p class="empty" role="alert">${OPEN_FAILED}</p></div>`;
   const item = state.item;
   if (!item) return html`<div class="chat-body"><p class="empty" role="status">Opening…</p></div>`;
   const name = item.name || item.phone || item.email || 'Customer';

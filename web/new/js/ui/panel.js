@@ -7,6 +7,7 @@ import { placeLink } from '../insertlink.js';
 import { CarTab } from './cartab.js';
 import { CustomerTab } from './customertab.js';
 import { UsedTab } from './usedtab.js';
+import { OPEN_FAILED } from './conversation.js';
 
 const WIDE = '(min-width: 1280px)';
 const DRAWER = '(min-width: 900px)';
@@ -97,7 +98,7 @@ export function Panel({ state, pstate, panel, actions, mode, setPanel, reply, no
   let body;
   const here = tab === 'car' ? other : null;
   if (!state.key && !here) body = html`<p class="empty">Open a conversation to see ${NONE[tab]} here.</p>`;
-  else if (state.key && !item && !here) body = html`<p class="empty" role="status">Opening…</p>`;
+  else if (state.key && !item && !here) body = html`<p class="empty" role="status">${state.itemState === 'error' ? OPEN_FAILED : 'Opening…'}</p>`;
   else if (tab === 'customer') body = html`<${CustomerTab} item=${item} act=${{ copyNumber: actions.copyNumber, copyEmail: actions.copyEmail }} />`;
   else if (tab === 'used') body = html`<${UsedTab} item=${item} />`;
   else {
