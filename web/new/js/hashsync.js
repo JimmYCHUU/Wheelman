@@ -30,6 +30,15 @@ export function openAction(storeKey, routeKey, key) {
   return routeKey === key ? 'none' : 'view';
 }
 
+/**
+ * Whether the conversation the store has open is on screen. From 900 px it sits beside the list. On
+ * a phone it is on screen only when the address names it: showing the list (‹ List), the store keeps
+ * it open and hidden, so nothing may be added to its reply unseen.
+ */
+export function conversationOnScreen({ narrow, storeKey, routeKey }) {
+  return !!storeKey && (!narrow || routeKey === storeKey);
+}
+
 // The panel on a phone is a sheet over the conversation, and the sheet is a history entry of its
 // own (the address stays the conversation's, the entry's state says { sheet: true }). Back closes
 // it and nothing else moves: the address before it is the same, so storeStep has nothing to do.

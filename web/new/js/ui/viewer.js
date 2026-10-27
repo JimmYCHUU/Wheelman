@@ -13,7 +13,8 @@ const COPIED_FOR = 2000;
  * title: the car's name; groups: [{ id: 'car'|'auction'|'videos', label, items: [{ kind: 'picture'|'video',
  * label, src, poster, link, plainLink, playable, shareable }] }]; group and index: where it opens;
  * opener: the tile to give the focus back to; onCopy(link) returns false when the copy failed;
- * onAdd(item, groupId, link) puts the link in the reply (the viewer has closed by then); onClose().
+ * onAdd(item, groupId, link) puts the link in the reply (the viewer has closed by then), null for no
+ * Add to reply (no conversation on screen); onClose().
  */
 export function Viewer({ title, groups, group, index, opener, onCopy, onAdd, onClose }) {
   const full = groups.filter((g) => g.items.length);
@@ -105,7 +106,7 @@ export function Viewer({ title, groups, group, index, opener, onCopy, onAdd, onC
       <span class="viewer-grow"></span>
       ${mine ? html`<span class="for-you">For you only</span>` : null}
       ${mine ? null : html`<button type="button" class="btn" onClick=${copy}><span aria-live="polite">${copied || 'Copy link'}</span></button>`}
-      ${mine ? null : html`<button type="button" class="btn" title="Put this link in the reply, on its own line, where your cursor was" onClick=${add}>Add to reply</button>`}
+      ${mine || !onAdd ? null : html`<button type="button" class="btn" title="Put this link in the reply, on its own line, where your cursor was" onClick=${add}>Add to reply</button>`}
       <a class="btn" href=${link} target="_blank" rel="noopener noreferrer">Open original</a>
     </div>
     <ul class="viewer-strip" aria-label=${g.label}>

@@ -3,7 +3,7 @@
 import { html, useState, useEffect, useRef } from './html.js';
 import { SECTIONS } from '../model.js';
 import { parseRoute, hashFor } from '../route.js';
-import { openAction } from '../hashsync.js';
+import { openAction, conversationOnScreen } from '../hashsync.js';
 import { TopBar } from './topbar.js';
 import { Toast } from './toast.js';
 import { List } from './list.js';
@@ -52,6 +52,9 @@ export function App({ store, panel, setPanel, search, now = Date.now }) {
   // rest of the page waits behind it), only with a conversation or another car to show.
   const shown = section.ready && pstate.open && (mode === 'column' || !!state.key || !!pstate.other);
   const overlay = shown && mode !== 'column';
+  // On a phone showing the list, the store keeps the last conversation open and hidden: the panel then
+  // offers no Add to reply, so nothing is put in a reply that is not on screen.
+  const onScreen = conversationOnScreen({ narrow: mode === 'sheet', storeKey: state.key, routeKey: route.key });
   const details = {
     open: shown,
     media: pstate.media,
@@ -91,7 +94,7 @@ export function App({ store, panel, setPanel, search, now = Date.now }) {
             <${MessageBox} state=${state} actions=${store.actions} reply=${reply} />
           </section>
           ${shown ? html`<${Panel} state=${state} pstate=${pstate} panel=${panel} actions=${store.actions} mode=${mode}
-            setPanel=${setPanel} reply=${reply} now=${now()} />` : null}
+            setPanel=${setPanel} reply=${reply} now=${now()} onScreen=${onScreen} />` : null}
         </main>`
       : html`<main class="work" data-view="list">
           <section class="tile list-col" aria-label=${section.label}>

@@ -1,7 +1,7 @@
 // Keeping the new page's address and its store in step (web/new/js/hashsync.js). Invented data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { openAction, addressAfter, storeStep, sheetStep, sheetOnPop, isSheetEntry, withSheet } from '../web/new/js/hashsync.js';
+import { openAction, conversationOnScreen, addressAfter, storeStep, sheetStep, sheetOnPop, isSheetEntry, withSheet } from '../web/new/js/hashsync.js';
 import { parseRoute } from '../web/new/js/route.js';
 
 /** The store as the sync sees it. */
@@ -104,4 +104,15 @@ test('choosing the open conversation never reopens it', () => {
   assert.equal(openAction('c:1', 'c:1', 'c:2'), 'open'); // another conversation
   assert.equal(openAction(null, null, 'c:2'), 'open');
   assert.equal(storeStep(parseRoute('#/dashboard/waiting/c%3A1'), { section: 'dashboard', chip: 'waiting', key: 'c:1' }), null);
+});
+
+test('the open conversation is on screen beside the list, and on a phone only when the address names it', () => {
+  // From 900 px the list and the conversation are side by side.
+  assert.equal(conversationOnScreen({ narrow: false, storeKey: 'c:1', routeKey: null }), true);
+  // A phone showing the list (‹ List): the store keeps the conversation open, hidden.
+  assert.equal(conversationOnScreen({ narrow: true, storeKey: 'c:1', routeKey: null }), false);
+  assert.equal(conversationOnScreen({ narrow: true, storeKey: 'c:1', routeKey: 'c:1' }), true);
+  // The address is ahead of the store, which is opening another one: not this one yet.
+  assert.equal(conversationOnScreen({ narrow: true, storeKey: 'c:1', routeKey: 'c:2' }), false);
+  assert.equal(conversationOnScreen({ narrow: false, storeKey: null, routeKey: null }), false);
 });

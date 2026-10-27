@@ -47,9 +47,11 @@ function Tabs({ tab, onTab }) {
 
 /**
  * state: the main store's; pstate and panel: the panel store's state and the store; actions: the
- * main store's; reply: the editor's handle for Add to reply; setPanel(open) opens or closes it.
+ * main store's; reply: the editor's handle for Add to reply; setPanel(open) opens or closes it;
+ * onScreen: whether the open conversation is on screen (on a phone showing the list it is open but
+ * hidden, and there is then no Add to reply).
  */
-export function Panel({ state, pstate, panel, actions, mode, setPanel, reply, now }) {
+export function Panel({ state, pstate, panel, actions, mode, setPanel, reply, now, onScreen = true }) {
   const box = useRef(null);
   const overlay = mode !== 'column';
   const close = () => setPanel(false);
@@ -87,7 +89,7 @@ export function Panel({ state, pstate, panel, actions, mode, setPanel, reply, no
     load: (s) => panel.actions.media(s),
     refresh: () => panel.actions.media(String(stock), { fresh: true }),
     copy: (url) => actions.copyLink(url),
-    add,
+    add: onScreen ? add : null, // null: the Car tab says to open a conversation first
     back: () => panel.actions.back(),
     retryOther: () => panel.actions.showCar(other.stockNo),
   };

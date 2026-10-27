@@ -14,6 +14,8 @@ const KIND = { pdf: 'PDF', image: 'Picture', album: 'Google Photos album', file:
 const TONE = { available: 'good', reserved: 'warn', sold: 'bad' };
 const READING = 'Reading the photos, videos and documents';
 const ADD_TITLE = 'Put this link in the reply, on its own line, where your cursor was';
+// No conversation on screen (a phone showing the list): there is no reply to add a link to.
+const NO_ADD = 'Open a conversation to add this to a reply.';
 
 export const pictureSrc = (stockNo, id) => '/api/vehicles/' + encodeURIComponent(stockNo) + '/picture/' + id;
 const cap = (x) => { const w = String(x || '').trim().toLowerCase(); return w ? w[0].toUpperCase() + w.slice(1) : ''; };
@@ -40,7 +42,7 @@ function LinkActions({ kind, label, link, shareable, open, act }) {
   return html`<div class="media-actions">
     ${open ? outLink(link, 'Open') : null}
     <button type="button" class="btn small quiet" onClick=${() => act.copy(link)}>Copy link</button>
-    <button type="button" class="btn small" title=${ADD_TITLE} onClick=${() => act.add(replyLabel(kind, label), link)}>Add to reply</button>
+    ${act.add ? html`<button type="button" class="btn small" title=${ADD_TITLE} onClick=${() => act.add(replyLabel(kind, label), link)}>Add to reply</button>` : null}
   </div>`;
 }
 
@@ -169,7 +171,7 @@ function NoCar({ looking }) {
 /**
  * car: the car shown (the conversation's, or "Another car"); media: the panel store's media for it;
  * other: the panel store's "Another car"; backTo: the conversation's name, for "Back to <name>";
- * act: { load(stockNo), refresh(), copy(url), add(label, url), back(), retryOther() }.
+ * act: { load(stockNo), refresh(), copy(url), add(label, url) or null when no conversation is on screen, back(), retryOther() }.
  */
 export function CarTab({ car, media, other, backTo, looking, now, act }) {
   const stock = other ? other.stockNo : car && car.stockNo;
@@ -190,11 +192,12 @@ export function CarTab({ car, media, other, backTo, looking, now, act }) {
   const busy = m.state === 'loading';
   const included = car.included || [];
   return html`${back}
+    ${act.add ? null : html`<p class="fine">${NO_ADD}</p>`}
     <${Top} car=${car} media=${m} view=${view} />
     <${Media} car=${car} media=${m} act=${act} view=${view} />
     ${seen ? html`<${Viewer} title=${car.title || 'Stock ' + car.stockNo} groups=${seen.groups} group=${seen.group}
       index=${seen.index} opener=${seen.opener} onClose=${() => setSeen(null)} onCopy=${act.copy}
-      onAdd=${(it, from, url) => act.add(replyLabel(it.kind === 'video' ? 'video' : from === 'auction' ? 'auction' : 'picture', it.label), url)} />` : null}
+      onAdd=${act.add ? (it, from, url) => act.add(replyLabel(it.kind === 'video' ? 'video' : from === 'auction' ? 'auction' : 'picture', it.label), url) : null} />` : null}
     ${included.length ? html`<section class="car-sec"><h4>Included with this car</h4>
       <ul class="included">${included.map((x, i) => html`<li key=${i}>${x}</li>`)}</ul>
     </section>` : null}
