@@ -107,8 +107,8 @@ export function Panel({ state, pstate, panel, actions, mode, setPanel, reply, no
     <aside id="deal-panel" ref=${box} class=${'tile panel ' + mode} tabindex="-1" aria-label="Details"
       role=${overlay ? 'dialog' : null} aria-modal=${overlay ? 'true' : null}>
       <div class="panel-head">
+        <div class="panel-title"><h2>Details</h2><button type="button" class="btn quiet small" onClick=${close}>Close</button></div>
         <${Tabs} tab=${tab} onTab=${panel.actions.setTab} />
-        <button type="button" class="btn quiet small" onClick=${close}>Close</button>
       </div>
       <div class="panel-body" id="panel-body" role="tabpanel" aria-labelledby=${'tab-' + tab} key=${tab + '|' + (stock || '')}>${body}</div>
     </aside>`;

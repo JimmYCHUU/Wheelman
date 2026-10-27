@@ -11,11 +11,10 @@ const row = (label, value) => (value ? [html`<dt key=${label}>${label}</dt>`, ht
 /** The five steps, the current one in words and colour, then where that was read from. */
 function Stage({ item }) {
   const line = stageLine(item);
-  const now = line.steps[line.current];
   return html`<section class="car-sec"><h4>How far they have got</h4>
     <ol class="stage">${line.steps.map((step, i) => html`<li key=${step} class=${i < line.current ? 'done' : i === line.current ? 'now' : ''}
       aria-current=${i === line.current ? 'step' : null}>${step}${i === line.current ? html`<span class="stage-now"> · now</span>` : null}</li>`)}</ol>
-    <p class="fine">Now: ${now}.${line.source ? ' ' + line.source + '.' : ' Nothing on file says more yet.'}</p>
+    <p class="fine">${line.source ? line.source + '.' : 'Nothing on file says more yet.'}</p>
   </section>`;
 }
 
@@ -46,7 +45,7 @@ export function CustomerTab({ item, act }) {
     ${item.looking ? html`<section class="car-sec"><h4>Asking about</h4><${Asked} looking=${item.looking} /></section>` : null}
     ${stage ? html`<${Stage} item=${item} />` : null}
     ${insider.length ? html`<section class="car-sec"><h4>Shaped the reply, never stated</h4>
-      <ul class="included">${insider.map((x) => html`<li key=${x}>${x}</li>`)}</ul>
+      <ul class="included">${insider.map((x) => html`<li key=${x}>${x[0].toUpperCase() + x.slice(1)}</li>`)}</ul>
       <p class="fine">Wheelman used what our records show to choose what to say. It does not say any of it to the customer.</p>
     </section>` : null}`;
 }
