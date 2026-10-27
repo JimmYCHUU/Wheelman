@@ -195,9 +195,36 @@ test('an open conversation answered elsewhere says so', () => {
 test('typed text is kept when the conversation is answered elsewhere', () => {
   const answered = { how: 'dashboard', by: 'Alex', at: 1000 };
   const o = { item: item({ state: 'answered', answered, draft: draft({ createdAt: 10 }) }), typed: true };
-  assert.deepEqual(boxView(o), { kind: 'editor', context: 'The customer was answered elsewhere. Your text is kept.' });
+  // elsewhere: no reply is needed, so the box offers no copy as its main button (messagebox.js).
+  assert.deepEqual(boxView(o), { kind: 'editor', context: 'The customer was answered elsewhere. Your text is kept.', elsewhere: true });
   const saved = { item: item({ state: 'answered', answered, draft: draft({ createdAt: 10, edited: 'My words' }) }) };
   assert.equal(boxView(saved).kind, 'editor', 'an edit saved before a reload is kept too');
   assert.equal(boxView(saved).context, 'The customer was answered elsewhere. Your text is kept.');
+  assert.equal(boxView(saved).elsewhere, true);
   assert.equal(boxView({ item: item({ draft: draft() }), typed: true }).context, '', 'not answered: no line');
+  assert.equal('elsewhere' in boxView({ item: item({ draft: draft() }), typed: true }), false);
+  // A reply written anyway after the answer, then edited, is the person's reply: no line, and Copy as ever.
+  assert.deepEqual(boxView({ item: item({ state: 'answered', answered, draft: draft({ createdAt: 2000 }) }), typed: true }), { kind: 'editor', context: '' });
+});
+
+test("a reply sent with Wheelman's suggestion is told as that: no suggestion under it, and never answered elsewhere", () => {
+  const at = Date.parse('2026-10-26T23:00:00Z'); // 10:00 am in Sydney
+  const now = at + 600000;
+  const answered = { how: 'wheelman', by: '', at };
+  const words = "Answered with Wheelman's suggestion " + clock(at) + '. No reply needed.';
+  const view = (o, typed = false) => boxView({ item: item({ state: 'answered', answered, ...o }), typed, now });
+  // Copied as written and sent: the anchor moved on, and the suggestion that went out is not shown again.
+  for (const v of [view({ draft: null }), view({ draft: draft({ createdAt: at - 600000 }) }), view({ draft: null, lastSuggestion: 'Hello [PRICE?].' })]) {
+    assert.equal(v.kind, 'quiet');
+    assert.equal(v.sentence, words);
+    assert.ok(!v.suggestion, 'no box of the suggestion that was here');
+    assert.deepEqual(v.button, { label: 'Write a reply anyway', act: 'write', main: false });
+  }
+  // Edited, copied and sent: the same quiet line, though the text typed is still in the store.
+  assert.equal(view({ draft: null }, true).kind, 'quiet');
+  assert.equal(view({ draft: null }, true).sentence, words);
+  assert.equal(view({ draft: draft({ createdAt: at - 600000, edited: 'My words' }) }).sentence, words, 'an edit saved before a reload too');
+  // A reply written anyway after the answer is in the editor, with no line and Copy as ever.
+  assert.deepEqual(view({ draft: draft({ createdAt: at + 5000 }) }), { kind: 'editor', context: '' });
+  assert.deepEqual(view({ draft: draft({ createdAt: at + 5000 }) }, true), { kind: 'editor', context: '' });
 });

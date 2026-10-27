@@ -107,7 +107,7 @@ function Quiet({ state, actions, item, view }) {
   return html`<div class="box" role="group" aria-label="Message box">
     <${Context} context=${state.context} />
     <p class=${'box-note ' + view.tone} role="status">${view.sentence}</p>
-    ${view.suggestion ? html`<div class="ghost"><span class="ghost-label">Wheelman's suggestion, not used</span><p>${view.suggestion}</p></div>` : null}
+    ${view.suggestion ? html`<div class="ghost"><span class="ghost-label">The suggestion that was here</span><p>${view.suggestion}</p></div>` : null}
     ${view.tell || b ? html`<div class="foot">
       ${view.tell ? html`<${Tell} onSend=${tell} holdTell=${actions.holdTell} button="Write from this" />` : null}
       <div class="right">${b ? html`<button type="button" class=${'btn' + (b.main ? ' main' : '')} onClick=${run[b.act]}>${b.label}</button>` : null}</div>
@@ -137,7 +137,10 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
     if (action.kind === 'fill') fill();
     else actions.copy({});
   };
-  main.current = run;
+  // Answered elsewhere, the text kept: no reply is needed, so no copy is the main button. In a reply
+  // run Next is, and Ctrl+Enter with it: the run moves on and counts this one as answered elsewhere.
+  const next = view.elsewhere && state.run && state.run.key === state.key ? () => actions.skipRun() : null;
+  main.current = view.elsewhere ? next : run;
   // Copy anyway: the person's own decision. Offered only while no blank is empty, so it copies.
   const copyAnyway = () => {
     actions.override();
@@ -208,7 +211,8 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
             ? (d && d.reply ? html`<button type="button" class="btn" onClick=${bringBack}>Bring back the suggestion</button>` : null)
             : html`<button type="button" class="btn quiet" onClick=${clear}>Clear</button>`}
           ${action && action.secondary ? html`<button type="button" class="btn quiet" onClick=${() => actions.copy({ withBlanks: true })}>${action.secondary}</button>` : null}
-          ${action ? html`<button type="button" class="btn main" disabled=${action.kind === 'blocked'} title=${action.kind === 'blocked' ? null : action.label + ' (Ctrl+Enter)'} onClick=${run}>${action.label}</button>` : null}
+          ${action ? html`<button type="button" class=${view.elsewhere ? 'btn' : 'btn main'} disabled=${action.kind === 'blocked'} title=${view.elsewhere || action.kind === 'blocked' ? null : action.label + ' (Ctrl+Enter)'} onClick=${run}>${action.label}</button>` : null}
+          ${next ? html`<button type="button" class="btn main" title="Next (Ctrl+Enter)" onClick=${next}>Next</button>` : null}
         </div>
       </div>
       <${Note} state=${state} actions=${actions} item=${item} />

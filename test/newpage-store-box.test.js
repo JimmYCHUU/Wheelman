@@ -3,7 +3,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStore } from '../web/new/js/store.js';
-import { mainAction, boxText } from '../web/new/js/model.js';
+import { mainAction, boxText, boxView } from '../web/new/js/model.js';
+import { clock } from '../web/lib/format.js';
 import { settle, fakeTimers, setup, draft, row, paths } from './support/newpage-fakes.js';
 
 test('a write in flight is known by its key until it ends, even when it fails', async () => {
@@ -463,4 +464,33 @@ test('answered elsewhere while open: the suggestion that was there is kept to sh
   await b.store.actions.refresh();
   assert.equal(b.store.get().typed, 'My own words');
   assert.equal(b.store.get().context, null, 'the box says the customer was answered elsewhere, not that a message arrived');
+});
+
+test("a reply copied from Wheelman and sent: the next refresh says so, with nothing under it, and what was typed stays in the store", async () => {
+  const at = Date.parse('2026-10-26T23:00:00Z'); // 10:00 am in Sydney
+  const view = (s) => boxView({ item: s.item, writing: s.writing === s.key, done: s.done[s.key] === s.item.anchor, doneAt: s.doneAt[s.key], typed: s.typed !== null, now: at + 600000 });
+  const sent = (a) => { a.data.items['c:1'] = { ...a.data.items['c:1'], anchor: 'a-after', state: 'answered', answered: { how: 'wheelman', by: '', at }, draft: null }; };
+  const words = "Answered with Wheelman's suggestion " + clock(at) + '. No reply needed.';
+
+  // Copied as written, then sent on the dashboard or the phone.
+  const a = setup();
+  await a.store.actions.open('c:1');
+  await a.store.actions.copy();
+  sent(a);
+  await a.store.actions.refresh();
+  const v = view(a.store.get());
+  assert.equal(v.kind, 'quiet');
+  assert.equal(v.sentence, words);
+  assert.ok(!v.suggestion, 'the reply that went out is not shown again as a suggestion');
+
+  // Edited, copied, sent: the same line, and the edit is not thrown away.
+  const b = setup();
+  await b.store.actions.open('c:1');
+  b.store.actions.type('Hello from Wheelman, and the price is $9,990');
+  await b.store.actions.copy();
+  sent(b);
+  await b.store.actions.refresh();
+  assert.equal(view(b.store.get()).kind, 'quiet');
+  assert.equal(view(b.store.get()).sentence, words);
+  assert.equal(b.store.get().typed, 'Hello from Wheelman, and the price is $9,990');
 });

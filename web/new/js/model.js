@@ -222,7 +222,8 @@ const PUT_BACK_FOLLOW_UP = { label: 'Put back in Follow-ups', act: 'restore-foll
  * whatever arrives (a new message with no suggestion yet, Wheelman writing in the background, or a
  * failure); only a write from here, done, opted out and dismissed take the box over. A suggestion
  * that could not be written beside text the person typed (now, or saved before a reload) is told in
- * the editor view's failure line, and the text stays.
+ * the editor view's failure line, and the text stays. elsewhere: true on the editor view when the
+ * customer was answered somewhere else and the text kept is no reply anyone needs.
  */
 export function boxView({ item, writing = false, done = false, doneAt = null, typed = false, now } = {}) {
   if (!item) return { kind: 'none' };
@@ -244,11 +245,18 @@ export function boxView({ item, writing = false, done = false, doneAt = null, ty
   if (item.dismissed && item.state === 'awaiting') {
     return say('You dismissed this conversation. It comes back by itself if the customer writes again.', { label: 'Put back in Needs reply', act: 'restore', main: false });
   }
-  // Answered by someone else (a follow-up in hand is told as itself): what the person typed stays; else nothing is waiting.
-  const elsewhere = item.state === 'answered' && !fu && !!item.answered && !!answeredWords(item.answered, now);
+  // Answered (a follow-up in hand is told as itself). A suggestion written after the answer was asked
+  // for by the person, so it is theirs to use. Answered with Wheelman's own suggestion, copied then
+  // sent, nothing is waiting and nothing is shown again, whatever is typed (it stays in the store).
+  // Answered by someone else, what the person typed stays; else nothing is waiting.
+  const words = item.state === 'answered' && !fu ? answeredWords(item.answered, now) : '';
+  const asked = !!words && !!d && d.createdAt > item.answered.at;
+  const anyway = { label: 'Write a reply anyway', act: 'write', main: false };
+  if (words && !asked && item.answered.how === 'wheelman') return say(words + '. No reply needed.', anyway, { tell: true });
+  const elsewhere = !!words && !asked;
   const own = typed || (typeof d?.edited === 'string' && d.edited.trim() !== '');
   const context = mine ? 'Follow-up: ' + fu.reason : elsewhere && own ? 'The customer was answered elsewhere. Your text is kept.' : '';
-  if (kept || (elsewhere && own)) return { kind: 'editor', context, ...(failure ? { failure } : {}) };
+  if (kept || (elsewhere && own)) return { kind: 'editor', context, ...(elsewhere && own ? { elsewhere: true } : {}), ...(failure ? { failure } : {}) };
   if (item.writing) return { kind: 'writing' };
   if (fu) {
     if (mine && ready) return { kind: 'editor', context: 'Follow-up: ' + fu.reason };
@@ -256,13 +264,9 @@ export function boxView({ item, writing = false, done = false, doneAt = null, ty
     return say(fu.reason + '. A follow-up is due. Nothing is sent by itself: write it, check it, then copy it.',
       { label: 'Write the follow-up', act: 'write-followup', main: true }, { tell: true });
   }
-  // A suggestion written after the answer was asked for by the person, so it is theirs to use.
-  if (elsewhere && !(d && d.createdAt > item.answered.at)) {
-    return say(answeredWords(item.answered, now) + '. No reply needed.', { label: 'Write a reply anyway', act: 'write', main: false }, { tell: true, suggestion: ready ? boxText(d) : item.lastSuggestion || '' });
-  }
+  if (elsewhere) return say(words + '. No reply needed.', anyway, { tell: true, suggestion: ready ? boxText(d) : item.lastSuggestion || '' });
   if (item.state !== 'awaiting' && !ready) {
-    return say(item.state === 'answered' ? 'We have replied. Nothing is waiting here.' : item.note || 'No reply needed.',
-      { label: 'Write a reply anyway', act: 'write', main: false }, { tell: true });
+    return say(item.state === 'answered' ? 'We have replied. Nothing is waiting here.' : item.note || 'No reply needed.', anyway, { tell: true });
   }
   if (d && d.status === 'failed') return failed('A suggestion could not be written.');
   if (!ready) return say('No suggestion yet.', { label: 'Write it now', act: 'write', main: true }, { tell: true });
