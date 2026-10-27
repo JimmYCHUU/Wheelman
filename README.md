@@ -160,8 +160,9 @@ can be compared on the Review page.
 The ten newest waiting Dashboard conversations are written ahead whatever the age of the
 customer's last message, so the ones the reply run opens first are ready. Every other check still
 applies (no customer record, a photo with no words, a held Prompt, a recent failure, the daily
-and busy limits), and a draft that keeps failing is given up on after three tries. Marketplace
-chats are written as before.
+and busy limits). A draft that fails is tried again, at most three times an hour; once the
+customer's message is more than a day old, three failures in all end the tries (asking for it on
+the page still works). Marketplace chats are written as before.
 
 Every suggestion is stored in SQLite with the checks it passed or failed and the model that
 wrote it. When the reply later appears in the dashboard conversation, Wheelman compares what
@@ -752,16 +753,24 @@ comes in a later update.
 
 On **Needs reply**, the top of the list says how many are waiting, with **Start replying**. The
 **reply run** takes the ten newest waiting, the ones already written ahead, and opens the oldest
-first. **Copy** copies the reply, marks the customer done and opens the next one. **Skip** moves
-on without marking anyone done, and **End run** stops. When it ends, a line says what happened,
-for example **All answered: 5 copied, 1 skipped, 1 answered elsewhere.** or **Run finished:** with
-how many more are waiting and **Start again**. Nothing is sent by the run.
+first; one you copied already is among the ten but is not opened again. **Copy** copies the reply,
+marks the customer done and opens the next one. **Skip** moves on without marking anyone done,
+**Dismiss** moves on too, and **End run** stops. When it ends, a line says what happened. It begins
+**All answered:** only when every customer was copied or answered somewhere else, for example
+**All answered: 5 copied, 1 answered elsewhere.**, and otherwise **Run finished:**, for example
+**Run finished: 4 copied, 2 skipped, 1 dismissed.** When more are waiting beyond the run it says
+how many and offers **Start again**, which takes the ten newest still waiting, skipped ones
+included, and says so after a run that skipped anyone. While the ten newest are all ones you
+copied, **Start replying** and **Start again** wait until those replies show on the dashboard.
+Nothing is sent by the run.
 
 A customer who was answered somewhere else leaves **Needs reply** by itself and says who answered
 on **All**: **Answered on the phone**, **Answered by** the sender's name **on the dashboard**, **Answered by an
 auto-reply** or **Answered with Wheelman's suggestion**, with the time. If you have the
 conversation open when that happens, it says **No reply needed**, and **Write a reply anyway**
-brings the message box back. A run skips such customers when it reaches them.
+brings the message box back. Text you were typing when someone else answered stays, with **Copy
+reply** as a plain button; in a run **Next** is the main one. A run passes over such customers
+when it reaches them; one no longer on the loaded page is opened, and says whether it still waits.
 
 The **search box** in the top bar looks across customers, cars and the words in messages, in
 every section. A Dashboard result opens on the new page. A Marketplace, Imports or Auction
