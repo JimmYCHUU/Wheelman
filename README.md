@@ -730,15 +730,19 @@ In the message box, the parts Wheelman's code builds are shown in the reply with
 with **Put back**, and what you typed beside a block is copied as shown. Under the reply, the
 **trust line** says how many facts were checked. It is green only when nothing is wrong; if a
 figure or link cannot be traced to our records, it says so in red and names how many facts are
-not in your records. Open it to see each fact and where it came from: the stock record, our
-earlier messages, business facts, the website, what the customer said, your instruction or your
-wording file.
+not in your records. Once the text differs from what Wheelman wrote, whether you typed in it or
+removed a block, it reads **Changed since it was checked.** Open it to see each fact and where it
+came from: the stock record, our earlier messages, business facts, the website, what the
+customer said, your instruction or your wording file.
 
 After you ask Wheelman to rewrite with **Tell Wheelman what to say…**, it offers **Remember for**
-that kind of reply. Choosing it keeps your instruction as a lesson for later replies of that
-kind, and **Undo** switches the lesson off again. **Just this once** keeps nothing. **What
-Wheelman used** now also lists the lessons it followed and the rules that applied. A list of all
-lessons comes in a later update.
+that kind of reply. Choosing it keeps your instruction as a lesson for later texts or emails of
+that kind, never for Marketplace chats, and **Undo** switches the lesson off again. If the same
+instruction was already remembered for that kind of reply, it says **Already remembered** and
+offers no Undo, so the lesson you had stays on. Remember is not offered on a follow-up or in the
+Auction section, because those teach nothing. **Just this once** keeps nothing. **What Wheelman
+used** now also lists the lessons it followed and the rules that applied. A list of all lessons
+comes in a later update.
 
 The **search box** in the top bar looks across customers, cars and the words in messages, in
 every section. A Dashboard result opens on the new page. A Marketplace, Imports or Auction
@@ -919,7 +923,8 @@ The suggestion waits in the message box, marked **not sent**. The box is an edit
   the text differs from the suggestion.
 - **Copy reply** copies what is in the box. `Ctrl + Enter` also copies, and so does selecting
   the whole text and pressing `Ctrl + C`. When you had changed the text, Wheelman learns from
-  the change.
+  the change. Copied unchanged, with no blank left, it counts as **Good reply** (see
+  [How Wheelman learns](#how-wheelman-learns)).
 - **Rewrite** takes an instruction, for example `offer $27,500` or `make it shorter`. It
   changes this reply only, and replaces what is in the box. A prompt you typed while a
   suggestion landed by itself is waiting here, ready to write again.
@@ -1480,15 +1485,24 @@ what the team really sends. **How to say it** comes from the two voices.
   what was really sent replaces what was copied. Typing alone teaches nothing: a half-written
   change that was never copied, approved or sent is not learned from.
 - **Copying as written.** Copying a reply with no blank left and no change counts as approval,
-  the same as **Good reply**.
+  the same as **Good reply**, on either page. Spacing, the sign-off and our address block at the
+  end are not counted as changes, so removing the **Sign-off** block still counts as no change,
+  and so does removing the **First-reply details** when no other block sits above them. Removing
+  any other block, such as the **Price reply**, is a change, and Wheelman learns from it as from
+  an edit. A copy is not approval when a check failed (**Copy anyway**), when the reply is your
+  template or standard wording used word for word, when it is one of the standard replies the
+  team sends to everyone, or once you marked it **Could be better**. **Could be better**, or
+  taking the rating away, takes a copy's approval back as it does a **Good reply**.
 - **Remember.** On the new page, a rewrite you ask for with **Tell Wheelman what to say…** can be
   remembered for that kind of reply in that channel. The lesson is put into every later request
-  of that kind, the same conversation included. Each time a lesson is used it is counted, and it
-  can be switched off, after which it is never used. **Just this once** stores nothing.
-  Marketplace, the phone-only list and auction orders teach nothing, so Remember is not offered
-  there.
+  of that kind, the same conversation included. Remember lessons apply to texts and emails, never
+  to Marketplace chats. Each time a lesson is used it is counted, and it can be switched off,
+  after which it is never used. Remembering the same instruction again keeps the one lesson.
+  **Just this once** stores nothing. Marketplace, the phone-only list, auction orders, follow-ups
+  and the Auction section teach nothing, so Remember is not offered there.
 - **Only what you changed.** A suggestion used word for word is Wheelman's own text, so it
-  is not kept as an example of how the team writes.
+  is not kept as an example of how the team writes. Copying it unchanged counts as approval
+  instead (see **Copying as written** above).
 - **Only the reply to that message.** A sent reply counts for a suggestion only if it directly
   follows the message the suggestion answered. If the customer wrote again first, the
   suggestion is marked as overtaken and nothing is learned. One lesson per customer message.
@@ -2123,9 +2137,11 @@ still open on the old page.
 
 27 October 2026, later: the new page's message box shows Wheelman's blocks with Remove and Put
 back, a trust line with where each fact came from, and Remember after a rewrite. On the server,
-copying a draft unchanged counts as approval, lessons can be switched off and are counted when
-used, and a route lists them. Checked on the automated tests and in a browser on invented data.
-The page that lists all lessons is not built yet.
+copying a draft unchanged counts as approval (not past a failed check, nor for your own wording
+used word for word), Remember lessons go into texts and emails but never Marketplace chats,
+lessons can be switched off and are counted when used, and a route lists them. Checked on the
+automated tests and in a browser on invented data. The page that lists all lessons is not built
+yet.
 
 ### Open questions for Carbarn
 
