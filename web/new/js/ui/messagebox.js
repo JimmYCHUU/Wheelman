@@ -5,6 +5,7 @@
 import { html, useState, useEffect, useRef, useLayoutEffect } from './html.js';
 import { boxText, boxView, liveChecks, checkLines, mainAction, insteadOptions, trustLine, wordsLine, saveWords, segments } from '../model.js';
 import { Editor, focusFirstBlank, focusText } from './editor.js';
+import { cutBlock, restoreBlock } from '../segments.js';
 
 /** Ctrl+Enter (Cmd+Enter on a Mac) runs main.current, unless focus is in a field outside the editor. */
 function useCtrlEnter(main, editor) {
@@ -132,6 +133,23 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
   const clear = () => { refocus.current = true; actions.clear(); };
   const bringBack = () => { refocus.current = true; actions.bringBack(); };
 
+  // Remove: a block goes with the blank line that joined it, and the caret goes where it was. Put
+  // back returns it while the same suggestion is in this box, into the text as it is by then.
+  const inBox = useRef(null);
+  inBox.current = { text, id: d ? d.id : null };
+  useEffect(() => () => { inBox.current = null; }, []);
+  const remove = (block, was) => {
+    const out = cutBlock(was, block);
+    if (out.at === -1) return;
+    const id = d ? d.id : null;
+    if (reply && reply.current) reply.current.land(out.text, out.at);
+    actions.type(out.text);
+    actions.toast('Removed', { label: 'Put back', run: () => {
+      const now = inBox.current;
+      if (now && now.id === id) actions.type(restoreBlock(now.text, block, was));
+    } });
+  };
+
   // Green only for Wheelman's own text as the server checked it; anything typed says it was not checked.
   const trust = !lines.fails.length && !lines.warns.length && !lines.inputs.length ? trustLine(d, text) : null;
   const note = saveWords({ save: state.save, draft: item.draft, typed: state.typed });
@@ -147,7 +165,8 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
         ${note ? html`<span class=${'save-note' + (state.save.state === 'failed' ? ' bad' : '')}>${note}</span>` : null}
         <span class="count num">${wordsLine(text)}</span>
       </div>
-      <${Editor} text=${text} onChange=${actions.type} bad=${lines.fails.length > 0 && !state.overridden} root=${editor} handle=${reply} />
+      <${Editor} text=${text} parts=${d ? d.parts : null} onChange=${actions.type} onRemove=${remove}
+        bad=${lines.fails.length > 0 && !state.overridden} root=${editor} handle=${reply} />
     </div>
     <div class="box-foot">
       ${empty ? null : html`<div class="checks">

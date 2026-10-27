@@ -67,6 +67,12 @@
   .blank-pill::placeholder { color: var(--warn); opacity: 1; font-weight: var(--fw-bold); }
   .blank-pill:focus { border-style: solid; }
   .blank-pill.filled { border-style: solid; border-color: var(--good); background: var(--good-soft); }
+  /* a block Wheelman's rules added: a tinted region on a line of its own, its label and Remove above its words */
+  .editor .block { display: inline-block; width: 100%; vertical-align: top; padding: var(--s-1) var(--s-3) var(--s-2); border: 1px solid var(--block-line); border-radius: var(--r-bubble); background: var(--block); }
+  .block-head { display: flex; align-items: center; gap: var(--s-2); white-space: normal; font-size: var(--fs-12); font-weight: var(--fw-semi); color: var(--ink-2); cursor: default; user-select: none; }
+  .block-label { flex: 1; min-width: 0; }
+  .block-head .btn { flex: none; }
+  .block-body { font-size: var(--fs-13); }
   .editor.writing { display: grid; gap: var(--s-2); cursor: default; }
   .editor.writing i { display: block; height: var(--s-3); border-radius: var(--r-tag); background: var(--line); animation: shimmer 1.4s infinite var(--ease); }
   .editor.writing i:nth-child(1) { width: 92%; }
