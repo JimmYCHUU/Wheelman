@@ -86,6 +86,10 @@ export function isHeld(itemKey, now = Date.now()) {
 }
 
 /** Failed tries for one customer message in the last hour. Older ones no longer count, so it is tried again later. */
+function attemptsEver(itemKey, anchorKey) {
+  return openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key = ? AND anchor_key = ? AND status = 'failed'").get(itemKey, anchorKey).n;
+}
+
 function attemptsFor(itemKey, anchorKey, now = Date.now()) {
   return openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key = ? AND anchor_key = ? AND status = 'failed' AND created_at >= ?").get(itemKey, anchorKey, now - 60 * 60 * 1000).n;
 }
@@ -244,6 +248,9 @@ export async function draftWaiting({ max = 25 } = {}) {
       if (existing && existing.status === 'failed') {
         if (Date.now() - existing.created_at < RETRY_FAILED_AFTER_MS) continue;
         if (attemptsFor(item.itemKey, item.anchorKey) >= MAX_ATTEMPTS) continue;
+        // Written ahead past the age gate: three failures in all, whenever they happened, end the retries.
+        // (Write it now on the page still works; it does not come through here.)
+        if (ahead.has(item.itemKey) && Date.now() - (item.lastInboundAt || 0) > config.autoDraftMaxAgeHours * 3600e3 && attemptsEver(item.itemKey, item.anchorKey) >= MAX_ATTEMPTS) continue;
       }
       if (usage().remaining <= 0) { state.pausedUntil = Date.now() + 30 * 60 * 1000; break; }
       // A failed write from the owner's prompt is tried again with the prompt, not without it.

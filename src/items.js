@@ -1,6 +1,6 @@
 // Builds the list of "work items": customers who have said something and are waiting for a reply.
 
-import { openDb, isDismissed, getLead, getLeadByConversation, getLeadByPhone, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor, getMailThread, getMailMessages, listMailThreads, itemRuling, itemMove, movedKeys, getAuctionOrder, liveOrderCustomers, getFollowUp, openFollowUpFor } from './db.js';
+import { openDb, isDismissed, oldRowsStamp, dashboardCandidates, getLead, getLeadByConversation, getLeadByPhone, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor, getMailThread, getMailMessages, listMailThreads, itemRuling, itemMove, movedKeys, getAuctionOrder, liveOrderCustomers, getFollowUp, openFollowUpFor } from './db.js';
 import { orderKey, orderMarks, orderStatus, orderRow, occasionFor, listOrderRows, MESSAGES } from './orders.js';
 import { sameMessage, windowFor } from './phone.js';
 import { phoneKeys } from './normalize.js';
@@ -928,16 +928,41 @@ export function listItems({ maxAgeHours = config.draftMaxAgeHours, olderThanHour
 
 /**
  * The keys of the Dashboard conversations the Waiting list shows first: waiting on us, not set
- * aside, newest message first, the same order and exclusions as the list (sectionRows in
- * server.js, which the worker cannot import without a cycle). The newest few are searched in
- * widening windows, so a busy day does not read every conversation ever stored.
+ * aside, newest message first, the same exclusions as the list (sectionRows in server.js, which
+ * the worker cannot import without a cycle). Candidates come from the database newest first and
+ * are built in pages, only until the next page cannot hold anything newer than the count-th one
+ * found, and never more than `cap` in one pass. The answer is kept until the database changes in a
+ * way that touches a conversation (oldRowsStamp), so an unchanged database costs no rebuild.
+ * newestWaitingKeys.stats says how many were built by the last uncached pass and how often the cache served.
  */
-export function newestWaitingKeys(count = 10) {
-  let keys = [];
-  for (const hours of [config.draftMaxAgeHours, 14 * 24, Infinity]) {
-    keys = listItems({ states: ['awaiting'], maxAgeHours: hours, limit: Infinity })
-      .filter((i) => !isDismissed(i.itemKey, i.anchorKey)).map((i) => i.itemKey);
-    if (keys.length >= count) break;
+const waitingCache = { stamp: null, count: 0, cap: 0, keys: [] };
+export function newestWaitingKeys(count = 10, { cap = 300, pageSize = 50 } = {}) {
+  const stamp = oldRowsStamp();
+  const stats = newestWaitingKeys.stats;
+  if (waitingCache.stamp === stamp && waitingCache.count === count && waitingCache.cap === cap) { stats.hits++; return [...waitingCache.keys]; }
+  const candidates = dashboardCandidates();
+  const found = [];
+  const seen = new Set();
+  const newest = (a, b) => (b.lastInboundAt || b.lastActivityAt) - (a.lastInboundAt || a.lastActivityAt);
+  let built = 0;
+  for (let at = 0; at < candidates.length && built < cap; at += pageSize) {
+    for (const c of candidates.slice(at, Math.min(at + pageSize, at + (cap - built)))) {
+      built++;
+      const item = itemFromKey(c.key);
+      if (!item || seen.has(item.itemKey)) continue;
+      seen.add(item.itemKey);
+      if (item.section !== 'dashboard' || item.underOrder || item.state !== 'awaiting' || isDismissed(item.itemKey, item.anchorKey)) continue;
+      found.push(item);
+    }
+    found.sort(newest);
+    const next = candidates[at + pageSize];
+    // Nothing further down can be newer than what is already the count-th found.
+    if (found.length >= count && (!next || next.t <= (found[count - 1].lastInboundAt || found[count - 1].lastActivityAt))) break;
   }
-  return keys.slice(0, count);
+  const keys = found.slice(0, count).map((i) => i.itemKey);
+  Object.assign(waitingCache, { stamp: oldRowsStamp(), count, cap, keys });
+  stats.built = built;
+  stats.misses++;
+  return [...keys];
 }
+newestWaitingKeys.stats = { built: 0, hits: 0, misses: 0 };

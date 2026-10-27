@@ -442,6 +442,20 @@ export function oldRowsStamp() {
       (SELECT COUNT(*) || ':' || IFNULL(MAX(updated_at), 0) FROM mail_messages) AS stamp`).get().stamp;
 }
 
+/**
+ * Every key a Dashboard conversation could have, newest activity first, from three quick reads of
+ * ids and times (no conversation is built). The time is a guide for paging, not the final order.
+ */
+export function dashboardCandidates() {
+  const out = [];
+  for (const r of stmt('SELECT id, latest_at AS t FROM conversations').all()) out.push({ key: `c:${r.id}`, t: r.t || 0 });
+  for (const r of stmt('SELECT id, conversation_id AS cid, MAX(IFNULL(lead_at, 0), IFNULL(updated_at, 0)) AS t FROM leads').all()) out.push({ key: r.cid ? `c:${r.cid}` : `l:${r.id}`, t: r.t || 0 });
+  for (const r of stmt('SELECT id, latest_at AS t FROM phone_threads WHERE conversation_id IS NULL AND lead_id IS NULL').all()) out.push({ key: `ph:${r.id}`, t: r.t || 0 });
+  // Conversations moved here from another section: few, and their activity is not known yet.
+  for (const key of movedKeys('dashboard')) out.push({ key, t: Infinity });
+  return out.sort((a, b) => b.t - a.t);
+}
+
 export function getMeta(key, fallback = null) {
   const row = stmt('SELECT value FROM meta WHERE key = ?').get(key);
   return row ? JSON.parse(row.value) : fallback;

@@ -123,3 +123,78 @@ test('the daily limit still stops the pass', async () => {
     worker.state.pausedUntil = 0;
   }
 });
+
+// ---- finding the ten cheaply -----------------------------------------------------------------
+
+const addWaiting = (id, minsOld, extra = {}) => {
+  const at = Date.now() - minsOld * MIN;
+  const phone = `+61491570${String(id).slice(-3)}`;
+  db.upsertLead({ id: id + 5000, conversationId: id, firstName: `N${id}`, lastName: 'Test', phone, email: '', source: 'carsales', status: 'FOLLOW_UP', platform: extra.platform || 'CARSALES', state: 'NSW', leadAt: at, updatedAt: at, stocks: [], inquiries: [] });
+  db.upsertConversation({ id, phone, channel: 'SMS', status: 'OPEN', leadId: id + 5000, customerName: `N${id} Test`, latestDirection: 'IN', latestAt: at, latestBody: 'x' });
+  db.upsertMessage({ id: id + 9000, conversationId: id, direction: 'IN', body: 'Is it still available?', sentBy: null, status: 'SENT', mediaType: null, at, importedAt: at });
+  return `c:${id}`;
+};
+
+test('a waiting conversation older than the usual window is still found when fewer than ten are newer', () => {
+  const old = addWaiting(1001, 20 * 24 * 60);
+  const older = addWaiting(1002, 90 * 24 * 60);
+  const keys = items.newestWaitingKeys(40);
+  assert.ok(keys.includes(old) && keys.includes(older));
+  assert.ok(keys.indexOf(old) < keys.indexOf(older), 'newest first');
+  assert.equal(keys.at(-1), older);
+});
+
+test('one pass builds no more than the cap', () => {
+  const keys = items.newestWaitingKeys(40, { cap: 5, pageSize: 2 });
+  assert.ok(items.newestWaitingKeys.stats.built <= 5, String(items.newestWaitingKeys.stats.built));
+  assert.ok(keys.length <= 5);
+});
+
+test('an unchanged database reuses the answer, and a change rebuilds it', () => {
+  const first = items.newestWaitingKeys(10);
+  const { built, hits, misses } = items.newestWaitingKeys.stats;
+  assert.deepEqual(items.newestWaitingKeys(10), first);
+  const after = items.newestWaitingKeys.stats;
+  assert.equal(after.hits, hits + 1);
+  assert.equal(after.misses, misses);
+  assert.equal(after.built, built);
+  addWaiting(1003, 1);
+  assert.equal(items.newestWaitingKeys(10)[0], 'c:1003');
+  assert.equal(items.newestWaitingKeys.stats.misses, misses + 1);
+});
+
+test('Imports, moved-out and dismissed conversations are treated as the Waiting list treats them', () => {
+  const imports = addWaiting(1004, 2, { platform: config.dashboard.importsPlatform });
+  const moved = addWaiting(1005, 3);
+  const dismissed = addWaiting(1006, 4);
+  const i5 = items.itemFromKey(moved);
+  db.setItemMove(i5.itemKey, i5.lead?.id ?? null, 'auction');
+  const i6 = items.itemFromKey(dismissed);
+  db.dismiss(i6.itemKey, i6.anchorKey);
+  const keys = items.newestWaitingKeys(10);
+  for (const k of [imports, moved, dismissed]) assert.ok(!keys.includes(k), `${k} is not on the Dashboard's Waiting list`);
+  const list = items.listItems({ states: ['awaiting'], maxAgeHours: Infinity, limit: Infinity })
+    .filter((i) => !db.isDismissed(i.itemKey, i.anchorKey)).map((i) => i.itemKey).slice(0, 10);
+  assert.deepEqual(keys, list);
+});
+
+test('a draft that keeps failing is written ahead only three times in all', async () => {
+  const fails = (key, n) => {
+    const it = items.itemFromKey(key);
+    for (let i = 0; i < n; i++) {
+      const id = db.insertDraft({ itemKey: it.itemKey, anchorKey: it.anchorKey, status: 'failed', error: 'busy' });
+      db.openDb().prepare('UPDATE drafts SET created_at = ? WHERE id = ?').run(Date.now() - (3 + i) * 24 * HOUR, id);
+    }
+    return db.latestDraft(it.itemKey, it.anchorKey)?.id;
+  };
+  const three = addWaiting(1010, 26 * 60 + 1); // past the age gate, newest of all but the ones above
+  const two = addWaiting(1011, 26 * 60 + 2);
+  const threeLast = fails(three, 3);
+  const twoLast = fails(two, 2);
+  assert.ok(items.newestWaitingKeys(10).includes(three) && items.newestWaitingKeys(10).includes(two));
+  await worker.draftWaiting();
+  const latest = (k) => { const it = items.itemFromKey(k); return db.latestDraft(it.itemKey, it.anchorKey); };
+  assert.equal(latest(three).id, threeLast, 'three failures in all: not tried again');
+  assert.notEqual(latest(two).id, twoLast, 'two failures: tried again');
+  assert.equal(latest(two).status, 'ready');
+});
