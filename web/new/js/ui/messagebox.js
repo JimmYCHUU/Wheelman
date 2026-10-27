@@ -173,7 +173,7 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
     </div>
     <div class="box-foot">
       ${empty ? null : html`<div class="checks">
-        ${trust ? html`<${Trust} line=${trust} key=${d ? d.id : 'none'} />` : null}
+        ${trust ? html`<${Trust} line=${trust} id=${d ? d.id : 'none'} key=${d ? d.id : 'none'} />` : null}
         ${lines.fails.map((m, i) => html`<p class="check bad" key=${'f' + i}><span>${m}</span>
           ${state.overridden || blanks ? null : html`<button type="button" class="btn small" onClick=${copyAnyway}>Copy anyway</button>`}</p>`)}
         ${[...lines.warns, ...lines.inputs].map((m, i) => html`<p class="check warn" key=${'w' + i}>${m}</p>`)}

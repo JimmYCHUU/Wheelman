@@ -225,10 +225,12 @@ test('trustLine names a fact not in the records', () => {
   const d = withFacts([facts2[0], bad], 'It is $29,990.');
   const line = trustLine(d, 'It is $29,990.');
   assert.equal(line.tone, 'bad');
-  assert.equal(line.text, '$29,990 is not in your records.');
+  assert.equal(line.text, '1 fact not in your records');
   assert.equal(line.facts.length, 2);
   const comma = { label: '', value: '$29,990,', source: 'not found in the records', ok: false };
-  assert.equal(trustLine(withFacts([comma], 'It is $29,990, ok.'), 'It is $29,990, ok.').text, '$29,990 is not in your records.', 'a trailing comma is not part of the figure');
+  assert.equal(trustLine(withFacts([comma], 'It is $29,990, ok.'), 'It is $29,990, ok.').text, '1 fact not in your records');
+  const two = [bad, { ...bad, value: '$1' }];
+  assert.equal(trustLine(withFacts(two, 'It is $29,990.'), 'It is $29,990.').text, '2 facts not in your records');
 });
 
 test('trustLine says typed text is not checked', () => {
@@ -244,4 +246,26 @@ test('factLine: label, value and source, or the value once; a failing fact in re
   assert.equal(factLine(facts2[1]), 'https://example.test/car/1800 · from your wording file');
   assert.equal(factLine({ label: '', value: '$29,990', source: 'not found in the records', ok: false }), '$29,990 · not in your records');
   assert.equal(factLine({ label: '$31,900', value: '$31,900', source: 'business facts', ok: true }), '$31,900 · from business facts');
+});
+
+test('trustLine is green only when nothing else is wrong', () => {
+  const reply = 'The price is $31,900.';
+  const plain = trustLine(withFacts(facts2, reply), reply);
+  assert.equal(plain.tone, 'good');
+  const failing = { ...withFacts(facts2, reply), checks: [{ level: 'fail', code: 'x', tokens: [], message: 'Check this.' }] };
+  assert.deepEqual([trustLine(failing, reply).tone, trustLine(failing, reply).text], ['none', '2 facts checked']);
+  const warning = { ...withFacts(facts2, reply), checks: [{ level: 'warn', code: 'x', tokens: [], message: 'Hmm.' }] };
+  assert.equal(trustLine(warning, reply).tone, 'none');
+  const blankReply = 'The price is [PRICE?], see $31,900.';
+  assert.equal(trustLine(withFacts(facts2, blankReply), blankReply).tone, 'none', 'a blank still to fill');
+});
+
+test('trustLine: typed text, however small the change, is not checked', () => {
+  const blankReply = 'The price is [PRICE?].';
+  const d = withFacts(facts2, blankReply);
+  const unchecked = { tone: 'none', text: 'What you typed has not been checked.' };
+  assert.deepEqual(trustLine(d, 'The price is $25,990.'), unchecked, 'a filled blank is typed text');
+  const d2 = withFacts(facts2, 'Hello, the car is here.');
+  assert.deepEqual(trustLine(d2, 'Hello, the car is here!'), unchecked, 'one character');
+  assert.deepEqual(trustLine({ ...withFacts(facts2, ''), status: 'failed' }, 'Mine'), unchecked, 'beside a failed suggestion');
 });

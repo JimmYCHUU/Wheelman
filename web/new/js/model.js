@@ -272,7 +272,8 @@ const shown = (v) => String(v).replace(/[.,;:!?]+$/, '');
 /**
  * The trust line under the message box. Typed text is never called checked, whatever the facts say.
  * For Wheelman's own text it counts the facts the server traced (only those it listed, so the count
- * may understate, never overstate), or names the first one not in the records.
+ * may understate, never overstate), counts the ones not in the records, and is green only when no
+ * check is failing, warning or waiting for a blank.
  */
 export function trustLine(draft, text) {
   const t = String(text ?? '');
@@ -281,9 +282,13 @@ export function trustLine(draft, text) {
   if (!ready || t !== ready.reply) return { tone: 'none', text: UNCHECKED };
   const facts = Array.isArray(ready.facts) ? ready.facts : [];
   if (!facts.length) return { tone: 'none', text: 'No figures or links to check.' };
-  const bad = facts.find((f) => f.ok === false);
-  if (bad) return { tone: 'bad', text: `${shown(bad.value)} is not in your records.`, facts };
-  return { tone: 'good', text: facts.length === 1 ? '1 fact checked' : `${facts.length} facts checked`, facts };
+  const n = (k) => (k === 1 ? '1 fact' : `${k} facts`);
+  const notFound = facts.filter((f) => f.ok === false).length;
+  if (notFound) return { tone: 'bad', text: `${n(notFound)} not in your records`, facts };
+  // Green only while nothing else is wrong: no failed check, no warning, no blank to fill.
+  const lines = checkLines(liveChecks(ready, t));
+  const clear = !lines.fails.length && !lines.warns.length && !lines.inputs.length && !blanksIn(t).length;
+  return { tone: clear ? 'good' : 'none', text: `${n(facts.length)} checked`, facts };
 }
 
 /** One fact in the opened list: where it came from, or in red words that it is not in the records. */
