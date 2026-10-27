@@ -1479,8 +1479,8 @@ what the team really sends. **How to say it** comes from the two voices.
   yourself counts the same way. When the reply later appears in the dashboard conversation,
   what was really sent replaces what was copied. Typing alone teaches nothing: a half-written
   change that was never copied, approved or sent is not learned from.
-- **Copying as written.** On the new page, copying a reply with no blank left and no change
-  counts as approval, the same as **Good reply**.
+- **Copying as written.** Copying a reply with no blank left and no change counts as approval,
+  the same as **Good reply**.
 - **Remember.** On the new page, a rewrite you ask for with **Tell Wheelman what to say…** can be
   remembered for that kind of reply in that channel. The lesson is put into every later request
   of that kind, the same conversation included. Each time a lesson is used it is counted, and it
