@@ -130,6 +130,10 @@ test('a written draft carries its parts and the reply is unchanged', async () =>
   assert.equal(joined(draft.parts), draft.reply);
   // Kept with the draft itself, so they come back with it later.
   assert.deepEqual(db.getDraft(draft.id).context.parts, draft.parts);
+  // The draft's facts: the booking link is from the stock record, the price reply's own figures from the wording file.
+  assert.ok(Array.isArray(draft.facts) && draft.facts.length > 0, JSON.stringify(draft.facts));
+  assert.ok(draft.facts.some((f) => f.value === `${VELL}#inspection=onsite` && f.source === 'the stock record' && f.ok), JSON.stringify(draft.facts));
+  assert.ok(draft.facts.every((f) => f.ok), JSON.stringify(draft.facts));
 });
 
 test("a Marketplace draft's parts carry the same link tags as its reply", async () => {

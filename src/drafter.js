@@ -3,7 +3,7 @@
 import { buildPrompt, writtenToday, requestOwnText } from './prompt.js';
 import { complete, LlmError } from './llm.js';
 import { logLine } from './log.js';
-import { finishReply, fixGreeting, checkDraft, retryNote, stripModelSignOff, confirmsTime, worst, chatStyle, dropGreeting, emailChecks, followUpChecks, numbersIn } from './checks.js';
+import { finishReply, fixGreeting, checkDraft, retryNote, stripModelSignOff, confirmsTime, worst, chatStyle, dropGreeting, emailChecks, followUpChecks, numbersIn, traceFacts } from './checks.js';
 import { researchFor, renderResearch } from './importquery.js';
 import { config } from './config.js';
 import { redact, restore } from './redact.js';
@@ -38,7 +38,17 @@ function allowedMaterial(item, prompt) {
   const alts = prompt.alternatives.map((a) => `${a.title} ${a.odometer} km $${a.price} ${a.url}`).join('\n');
   // The inspection booking links count as ours only when the customer asked to see the car.
   const booking = (prompt.inspection?.urls || []).join('\n');
+  // The same material by where it came from, for the page's list of facts (traceFacts in src/checks.js).
+  // The car's own links (booking, media, its model page) count with its record; the research and the import pages with the website.
+  const pieces = [
+    { source: 'the stock record', text: [prompt.vehicleText, alts, booking, (prompt.media?.links || []).map((l) => l.url).join('\n'), prompt.sameModelUrl || '', `${config.site.baseUrl}/used-cars`].join('\n') },
+    { source: 'our earlier messages', text: ours },
+    { source: 'business facts', text: prompt.businessFactsText || '' },
+    { source: 'the website', text: [prompt.websiteText, (prompt.importUrls || []).join('\n'), prompt.researchText || ''].filter(Boolean).join('\n') },
+    { source: 'what the customer said', text: [theirs, prompt.unconfirmedText || ''].join('\n') },
+  ];
   return {
+    pieces,
     // The research for an import email is ours to state: its figures and links came from our website.
     // The car's media links the customer asked for are ours too: they came from the car's own record.
     trusted: [prompt.vehicleText, alts, booking, (prompt.media?.links || []).map((l) => l.url).join('\n'), prompt.sameModelUrl || '', `${config.site.baseUrl}/used-cars`, (prompt.importUrls || []).join('\n'), prompt.researchText || '', ours, prompt.user.split('=== VEHICLE FACTS ===')[0]].join('\n'),
@@ -524,10 +534,12 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
     context.practice = (prompt.practiceIds || []).length;
     const allowed = allowedMaterial(item, prompt);
     // The auction car, its link and its figures are ours to state: they came from the live auction.
-    if (plan?.stage === 'offer') allowed.trusted += `\n${plan.tail}\n${plan.lines.join('\n')}`;
+    // What the owner typed, and the offer, the order and the template, are pieces of their own for the list of facts.
+    allowed.pieces.push({ source: 'your instruction', text: staffSaid });
+    if (plan?.stage === 'offer') { allowed.trusted += `\n${plan.tail}\n${plan.lines.join('\n')}`; allowed.pieces.push({ source: 'your wording file', text: `${plan.tail}\n${plan.lines.join('\n')}` }); }
     // The order's own amounts are ours to state: code puts them where the AI left their markers.
     // So is everything a template says: it is the owner's own wording with our records' facts.
-    if (plan?.stage === 'order' || plan?.stage === 'template') allowed.trusted += `\n${plan.trustedText}`;
+    if (plan?.stage === 'order' || plan?.stage === 'template') { allowed.trusted += `\n${plan.trustedText}`; allowed.pieces.push({ source: 'your wording file', text: plan.trustedText }); }
     const said = saidIn(item);
     // What the website says about the process (we inspect before bidding, VIA before shipping) is
     // ours to promise, and an auction date in the research is a known day.
@@ -615,6 +627,14 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
     // The reply's parts, found in it as it stands: the AI's words and each block code added. On
     // Marketplace each block's links are tagged as the reply's are, so the parts still join to it.
     context.parts = partsOf(reply, (best.blocks || []).map((b) => (chat ? { ...b, text: tagMarketplaceLinks(b.text) } : b)));
+    // Each figure and link in the AI's part, traced to where it came from (traceFacts in src/checks.js),
+    // and the figures and links in each block. The checks the draft already has say which failed.
+    const aiPart = context.parts[0]?.kind === 'ai' ? context.parts[0].text : reply;
+    const failTokens = best.checks.filter((c) => ['figure', 'customer-figure', 'price-floor', 'link', 'figure-raw'].includes(c.code)).flatMap((c) => c.tokens || []);
+    const marked = [];
+    if (prompt.factMarkers) restoreFacts(String(result.json.reply || '').replace(/\\n/g, '\n'), prompt.factMarkers, { used: marked });
+    const stockLinks = [...(prompt.inspection?.urls || []), prompt.inspection?.url, prompt.price?.inspectionUrl, prompt.standard?.vehicleUrl, prompt.standard?.inspectionUrl, item.vehicles[0]?.url, ...(prompt.media?.links || []).map((l) => l.url)].filter(Boolean);
+    context.facts = traceFacts(aiPart, allowed.pieces, failTokens, { blocks: context.parts.filter((p) => p.kind === 'block'), stockLinks, marked });
     const draft = {
       ...base,
       status: 'ready',

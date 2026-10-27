@@ -153,6 +153,8 @@ function draftOf(item) {
     nextStep: draft.next_step || '', rung: draft.rung || '', rungLabel: RUNG_LABELS[draft.rung] || '',
     // The reply's parts: the AI's words and each block code added, with its label and why (src/parts.js).
     parts: draft.context?.parts || null,
+    // Each figure and link in the AI's part and in the blocks, with where it came from (traceFacts in src/checks.js).
+    facts: draft.context?.facts || [],
   } : null;
 }
 
