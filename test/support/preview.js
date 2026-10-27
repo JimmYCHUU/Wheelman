@@ -16,8 +16,9 @@ applyTestEnv({ DAILY_DRAFT_LIMIT: '200' });
 
 // The stand-in model answers a draft with a plain reply that leaves one price blank. A follow-up
 // gets one that names Carbarn first, as the follow-up checks want; a draft written from Tell
-// Wheelman gets a shorter one, so the rewrite shows. Two instructions are for seeing the rarer
-// states: "fail this one" makes the model fail, and "use a wrong figure" gives a price that is not
+// Wheelman gets a shorter one, so the rewrite shows. Three instructions are for seeing the rarer
+// states: "fail this one" makes the model fail, "use the right figure" gives the car's own price and link,
+// and "use a wrong figure" gives a price that is not
 // in the records, so the check fails.
 const said = (req) => (req.messages || []).map((m) => String(m.content || '')).join('\n');
 const ai = aiBehaviour({
@@ -25,6 +26,7 @@ const ai = aiBehaviour({
     const prompt = said(req);
     const told = /=== INSTRUCTION FROM OUR STAFF FOR THIS DRAFT ===/.test(prompt);
     if (told && /fail this one/i.test(prompt)) return { status: 503, message: 'The model is overloaded.' };
+    if (told && /use the right figure/i.test(prompt)) return { reply: 'The price is $31,900. See it here: https://www.carbarn.com.au/vehicles/toyota/voxy/zrr85w/1800', needs_human: [], facts_used: [], hold: false };
     if (told && /use a wrong figure/i.test(prompt)) return { reply: 'The price is $31,990, and we can book you in to see it.', needs_human: [], facts_used: [], hold: false };
     // A template to fit to the customer (between <<< and >>>) comes back as it is, as in the tests.
     const template = prompt.match(/<<<\n([\s\S]*?)\n>>>/);

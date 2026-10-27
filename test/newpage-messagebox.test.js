@@ -2,7 +2,7 @@
 // about the text in the box, the save note and the word count. Invented data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { blankWords, wordsChanged, liveChecks, boxView, trustLine, plainPaste, wordsLine, saveWords, mainAction } from '../web/new/js/model.js';
+import { blankWords, wordsChanged, liveChecks, boxView, plainPaste, wordsLine, saveWords, mainAction } from '../web/new/js/model.js';
 import { clock } from '../web/lib/format.js';
 
 const AT = Date.parse('2026-10-26T22:40:00Z'); // 9:40 am in Sydney
@@ -146,19 +146,6 @@ test('boxView keeps the editor while there is typed text: a new message, its wri
   assert.equal(typed({ state: 'optout' }).sentence, 'This customer asked not to be contacted. Do not reply.');
   assert.equal(typed({ dismissed: true }).button.act, 'restore');
   assert.equal(boxView({ item: item({ anchor: 'fu:5', followUp: { id: 5, reason: 'x', done: 'copied' } }), typed: true }).button.act, 'restore-followup');
-});
-
-test('trustLine: green only for Wheelman\'s own text as checked, untouched', () => {
-  const ok = { level: 'ok', code: 'ok', tokens: [], message: 'Figures and links match your records.' };
-  const plain = draft({ reply: 'Hello, the car is here.', checks: [ok] });
-  assert.deepEqual(trustLine(plain, 'Hello, the car is here.'), { tone: 'good', text: 'Figures and links match your records.' });
-  const blank = draft({ reply: 'The price is [PRICE?].', checks: [ok] });
-  assert.deepEqual(trustLine(blank, 'The price is $25,990.'), { tone: 'quiet', text: 'What you typed has not been checked.' }, 'a filled blank is typed text');
-  assert.deepEqual(trustLine(plain, 'Hello, the car is here!'), { tone: 'quiet', text: 'What you typed has not been checked.' });
-  assert.equal(trustLine(draft({ reply: 'Hello.', checks: [] }), 'Hello.'), null, 'untouched without the ok line: neither');
-  assert.deepEqual(trustLine(draft({ reply: '', checks: [], status: 'failed' }), 'Mine'), { tone: 'quiet', text: 'What you typed has not been checked.' }, 'beside a failed suggestion the text is theirs');
-  assert.deepEqual(trustLine(null, 'My own words'), { tone: 'quiet', text: 'What you typed has not been checked.' });
-  assert.equal(trustLine(plain, '   '), null);
 });
 
 test('plainPaste: Windows line ends and non-breaking spaces become plain ones', () => {

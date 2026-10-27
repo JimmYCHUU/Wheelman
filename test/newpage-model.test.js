@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SECTIONS, CHIPS, rowView, whoLabel, segments, joinSegments, fillBlank, boxText, checkLines,
-  mainAction, statusWords, statusAnnouncement, insteadOptions, wordCount, stageLine, leadStatusWords, sourceWords, providerWords, writtenBy,
+  mainAction, statusWords, statusAnnouncement, insteadOptions, wordCount, stageLine, leadStatusWords, sourceWords, providerWords, writtenBy, trustLine, factLine,
 } from '../web/new/js/model.js';
 
 const NOW = Date.parse('2026-10-26T02:00:00Z');
@@ -199,4 +199,49 @@ test('writtenBy names the model and its provider in words', () => {
   assert.equal(writtenBy({ provider: 'none' }), 'Written from your wording, with no AI.');
   assert.equal(writtenBy({ provider: 'something-else', model: 'model-z' }), 'Written by model-z.');
   assert.equal(writtenBy({}), 'Written by the AI model.');
+});
+
+const facts2 = [
+  { label: 'Price', value: '$31,900', source: 'the stock record', ok: true },
+  { label: '', value: 'https://example.test/car/1800', source: 'your wording file', ok: true },
+];
+const withFacts = (facts, reply = 'The price is $31,900.') => ({ status: 'ready', reply, facts, checks: [] });
+
+test('trustLine counts checked facts', () => {
+  const d = withFacts(facts2);
+  assert.deepEqual(trustLine(d, d.reply), { tone: 'good', text: '2 facts checked', facts: facts2 });
+  assert.equal(trustLine(withFacts([facts2[0]]), 'The price is $31,900.').text, '1 fact checked');
+});
+
+test('trustLine with no facts says so', () => {
+  const none = trustLine(withFacts([]), 'The price is $31,900.');
+  assert.deepEqual(none, { tone: 'none', text: 'No figures or links to check.' });
+  assert.equal(trustLine({ status: 'ready', reply: 'Hi.', checks: [] }, 'Hi.').text, 'No figures or links to check.');
+  assert.equal(trustLine(withFacts(facts2), '  '), null, 'an empty box has no line');
+});
+
+test('trustLine names a fact not in the records', () => {
+  const bad = { label: '', value: '$29,990', source: 'not found in the records', ok: false };
+  const d = withFacts([facts2[0], bad], 'It is $29,990.');
+  const line = trustLine(d, 'It is $29,990.');
+  assert.equal(line.tone, 'bad');
+  assert.equal(line.text, '$29,990 is not in your records.');
+  assert.equal(line.facts.length, 2);
+  const comma = { label: '', value: '$29,990,', source: 'not found in the records', ok: false };
+  assert.equal(trustLine(withFacts([comma], 'It is $29,990, ok.'), 'It is $29,990, ok.').text, '$29,990 is not in your records.', 'a trailing comma is not part of the figure');
+});
+
+test('trustLine says typed text is not checked', () => {
+  const d = withFacts(facts2);
+  assert.deepEqual(trustLine(d, 'My own words'), { tone: 'none', text: 'What you typed has not been checked.' });
+  assert.deepEqual(trustLine(null, 'My own words'), { tone: 'none', text: 'What you typed has not been checked.' });
+  const bad = withFacts([{ label: '', value: '$1', source: 'not found in the records', ok: false }], 'It is $1.');
+  assert.equal(trustLine(bad, 'It is $2.').tone, 'none', 'typed text is never called checked or failed');
+});
+
+test('factLine: label, value and source, or the value once; a failing fact in red words', () => {
+  assert.equal(factLine(facts2[0]), 'Price · $31,900 · from the stock record');
+  assert.equal(factLine(facts2[1]), 'https://example.test/car/1800 · from your wording file');
+  assert.equal(factLine({ label: '', value: '$29,990', source: 'not found in the records', ok: false }), '$29,990 · not in your records');
+  assert.equal(factLine({ label: '$31,900', value: '$31,900', source: 'business facts', ok: true }), '$31,900 · from business facts');
 });

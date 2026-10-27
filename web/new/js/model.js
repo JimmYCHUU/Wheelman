@@ -266,18 +266,32 @@ export function saveWords({ save, draft, typed }) {
 
 const UNCHECKED = 'What you typed has not been checked.';
 
+/** A traced figure with the sentence's own punctuation taken off the end. */
+const shown = (v) => String(v).replace(/[.,;:!?]+$/, '');
+
 /**
- * The quiet line under the checks: green only for Wheelman's own text, untouched, when the server's
- * checks found everything matching (their "ok" line). Anything typed, a filled blank too, was never
- * checked, and says so.
+ * The trust line under the message box. Typed text is never called checked, whatever the facts say.
+ * For Wheelman's own text it counts the facts the server traced (only those it listed, so the count
+ * may understate, never overstate), or names the first one not in the records.
  */
 export function trustLine(draft, text) {
   const t = String(text ?? '');
   if (!t.trim()) return null;
   const ready = draft && draft.status === 'ready' ? draft : null;
-  if (!ready || t !== ready.reply) return { tone: 'quiet', text: UNCHECKED };
-  const ok = (ready.checks || []).find((c) => c.level === 'ok');
-  return ok ? { tone: 'good', text: ok.message } : null;
+  if (!ready || t !== ready.reply) return { tone: 'none', text: UNCHECKED };
+  const facts = Array.isArray(ready.facts) ? ready.facts : [];
+  if (!facts.length) return { tone: 'none', text: 'No figures or links to check.' };
+  const bad = facts.find((f) => f.ok === false);
+  if (bad) return { tone: 'bad', text: `${shown(bad.value)} is not in your records.`, facts };
+  return { tone: 'good', text: facts.length === 1 ? '1 fact checked' : `${facts.length} facts checked`, facts };
+}
+
+/** One fact in the opened list: where it came from, or in red words that it is not in the records. */
+export function factLine(f) {
+  const value = shown(f.value);
+  if (f.ok === false) return `${value} · not in your records`;
+  const name = f.label && f.label !== f.value ? `${f.label} · ` : '';
+  return `${name}${value} · from ${f.source}`;
 }
 
 /** Pasted text as plain text: Windows line ends and non-breaking spaces made plain. */

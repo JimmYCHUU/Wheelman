@@ -4,6 +4,7 @@
 // into the dashboard. When there is no suggestion to show, one sentence says why, with one button.
 import { html, useState, useEffect, useRef, useLayoutEffect } from './html.js';
 import { boxText, boxView, liveChecks, checkLines, mainAction, insteadOptions, trustLine, wordsLine, saveWords, segments } from '../model.js';
+import { Trust } from './trust.js';
 import { Editor, focusFirstBlank, focusText } from './editor.js';
 import { cutBlock, putBackText } from '../segments.js';
 
@@ -152,8 +153,8 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
     } });
   };
 
-  // Green only for Wheelman's own text as the server checked it; anything typed says it was not checked.
-  const trust = !lines.fails.length && !lines.warns.length && !lines.inputs.length ? trustLine(d, text) : null;
+  // The summary above the checks: facts counted for Wheelman's own text, or that typed text was not checked.
+  const trust = trustLine(d, text);
   const note = saveWords({ save: state.save, draft: item.draft, typed: state.typed });
 
   return html`<div class="box" role="group" aria-label="Message box">
@@ -172,10 +173,10 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
     </div>
     <div class="box-foot">
       ${empty ? null : html`<div class="checks">
+        ${trust ? html`<${Trust} line=${trust} key=${d ? d.id : 'none'} />` : null}
         ${lines.fails.map((m, i) => html`<p class="check bad" key=${'f' + i}><span>${m}</span>
           ${state.overridden || blanks ? null : html`<button type="button" class="btn small" onClick=${copyAnyway}>Copy anyway</button>`}</p>`)}
         ${[...lines.warns, ...lines.inputs].map((m, i) => html`<p class="check warn" key=${'w' + i}>${m}</p>`)}
-        ${trust ? html`<p class=${'check ' + trust.tone}>${trust.text}</p>` : null}
       </div>`}
       ${options.length ? html`<div class="instead"><span>Instead:</span>
         ${options.map((o) => html`<button type="button" class="opt" key=${o.id} onClick=${() => actions.instead(o.id)}>${o.label}</button>`)}
