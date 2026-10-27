@@ -1,0 +1,61 @@
+/* The viewer: a car's photos and videos large, over the page, on a dark ground in both themes. */
+@layer views {
+  .viewer {
+    width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0;
+    background: var(--viewer-bg); color: var(--viewer-ink);
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+  }
+  .viewer[open] { display: grid; animation: viewer-in var(--t-panel) var(--ease); }
+  .viewer::backdrop { background: var(--viewer-bg); }
+  @keyframes viewer-in { from { opacity: 0; } }
+
+  .viewer-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); padding: var(--s-2) var(--s-3) var(--s-2) var(--s-5); background: var(--viewer-bar); border-bottom: 1px solid var(--viewer-line); }
+  .viewer-title { flex: 0 1 auto; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-14); font-weight: var(--fw-semi); }
+  .viewer-groups, .viewer-voice { display: flex; gap: var(--s-hair); padding: var(--s-hair); border-radius: var(--r-pill); background: var(--viewer-btn); }
+  .viewer-group { min-height: var(--control); padding: 0 var(--s-3); border: 0; border-radius: var(--r-pill); background: transparent; color: var(--viewer-muted); font-size: var(--fs-13); font-weight: var(--fw-semi); white-space: nowrap; }
+  .viewer-group.is-on { background: var(--viewer-btn-hover); color: var(--viewer-ink); }
+  .viewer-close { margin-left: auto; }
+
+  .viewer .btn { border-color: var(--viewer-line); background: var(--viewer-btn); color: var(--viewer-ink); text-decoration: none; }
+  .viewer .btn:hover { background: var(--viewer-btn-hover); }
+  .viewer .for-you { background: var(--viewer-btn); color: var(--viewer-muted); }
+
+  .viewer-stage { position: relative; min-height: 0; display: grid; grid-template-columns: var(--viewer-nav) minmax(0, 1fr) var(--viewer-nav); align-items: center; gap: var(--s-3); padding: var(--s-4); }
+  .viewer-figure { grid-column: 2; grid-row: 1; position: relative; align-self: stretch; margin: 0; min-width: 0; min-height: 0; }
+  .viewer-media { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; }
+  video.viewer-media { background: var(--viewer-bg); }
+  .viewer-note { position: absolute; left: 0; right: 0; bottom: var(--s-4); text-align: center; color: var(--viewer-muted); }
+  .viewer-nav { grid-row: 1; width: var(--viewer-nav); height: var(--viewer-nav); padding: 0; border: 0; border-radius: var(--r-pill); display: grid; place-items: center; background: var(--viewer-btn); color: var(--viewer-ink); font-size: var(--fs-24); line-height: 1; }
+  .viewer-nav.prev { grid-column: 1; }
+  .viewer-nav.next { grid-column: 3; }
+  .viewer-nav:hover { background: var(--viewer-btn-hover); }
+  .viewer-nav:active { transform: scale(0.94); }
+
+  .viewer-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); padding: var(--s-2) var(--s-5); border-top: 1px solid var(--viewer-line); background: var(--viewer-bar); }
+  .viewer-caption { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-1) var(--s-3); margin: 0; }
+  .viewer-caption span { color: var(--viewer-muted); font-size: var(--fs-13); }
+  .viewer-grow { flex: 1; }
+
+  .viewer-strip { list-style: none; margin: 0; display: flex; gap: var(--s-2); overflow-x: auto; padding: var(--s-3) var(--s-5) var(--s-4); background: var(--viewer-bar); scrollbar-color: var(--viewer-line) transparent; }
+  .viewer-strip li { flex: none; }
+  .viewer-thumb { position: relative; width: var(--strip-thumb-w); height: var(--strip-thumb-h); padding: 0; border: 2px solid transparent; border-radius: var(--r-tag); overflow: hidden; display: grid; place-items: center; background: var(--viewer-btn); color: var(--viewer-muted); font-size: var(--fs-12); opacity: 0.6; }
+  .viewer-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .viewer-thumb.is-on { opacity: 1; border-color: var(--accent); }
+  .viewer-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 0 var(--s-1); border-radius: var(--r-pill); background: var(--scrim); color: var(--on-scrim); font-size: var(--fs-12); font-weight: var(--fw-bold); }
+
+  @media (max-width: 899px) {
+    /* the buttons sit over the picture's edges, so the picture keeps the width of the phone */
+    .viewer-head { padding-left: var(--s-3); }
+    .viewer-title { flex: 1; }
+    .viewer-groups { order: 3; }
+    .viewer-stage { grid-template-columns: minmax(0, 1fr); padding: var(--s-2); }
+    .viewer-figure, .viewer-nav.prev, .viewer-nav.next { grid-column: 1; grid-row: 1; }
+    .viewer-nav { z-index: 1; width: var(--touch); height: var(--touch); font-size: var(--fs-18); }
+    .viewer-nav.prev { justify-self: start; }
+    .viewer-nav.next { justify-self: end; }
+    .viewer-bar { padding: var(--s-2) var(--s-3); }
+    .viewer-strip { padding: var(--s-2) var(--s-3) var(--s-3); }
+    .viewer-group { min-height: var(--touch); }
+    .viewer-voice .viewer-group { min-height: var(--touch); }
+  }
+}

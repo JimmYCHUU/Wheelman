@@ -100,6 +100,17 @@
     --page-edge: 16px;
     --edit-edge: 1.5px;
     --tell-w: 240px;
+    /* the viewer: photos and videos are judged on a dark ground in both themes, as in any photo app */
+    --viewer-bg: #030f1c;
+    --viewer-bar: #071a2d;
+    --viewer-ink: #eef4fa;
+    --viewer-muted: #a9bccf;
+    --viewer-line: #1b3550;
+    --viewer-btn: #0f2840;
+    --viewer-btn-hover: #173654;
+    --viewer-nav: 48px;
+    --strip-thumb-w: 80px;
+    --strip-thumb-h: 56px;
   }
 
   @media (max-width: 899px) {

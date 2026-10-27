@@ -33,7 +33,7 @@
 
   /* the Car tab */
   .car-top { display: grid; gap: var(--s-1); }
-  .hero { position: relative; display: block; aspect-ratio: 4 / 3; margin-bottom: var(--s-2); border-radius: var(--r-box); overflow: hidden; background: var(--surface-sunk); }
+  .hero { position: relative; display: block; width: 100%; padding: 0; border: 0; aspect-ratio: 4 / 3; margin-bottom: var(--s-2); border-radius: var(--r-box); overflow: hidden; background: var(--surface-sunk); }
   .hero img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .hero.loading { animation: shimmer 1.4s infinite var(--ease); }
   .hero-count { position: absolute; right: var(--s-2); bottom: var(--s-2); padding: var(--s-hair) var(--s-2); border-radius: var(--r-pill); background: var(--scrim); color: var(--on-scrim); font-size: var(--fs-12); font-weight: var(--fw-bold); }
@@ -48,12 +48,13 @@
   .car-sec h4 { margin: 0; font-size: var(--fs-13); font-weight: var(--fw-bold); color: var(--ink-2); }
   .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); }
   .photo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-1); }
-  .photo-tile { position: relative; display: block; aspect-ratio: 4 / 3; padding: 0; border: 0; border-radius: var(--r-tag); overflow: hidden; background: var(--surface-sunk); }
+  .photo-tile { position: relative; display: block; width: 100%; aspect-ratio: 4 / 3; padding: 0; border: 0; border-radius: var(--r-tag); overflow: hidden; background: var(--surface-sunk); }
   .photo-tile img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .photo-more { position: absolute; inset: 0; display: grid; place-items: center; background: var(--scrim); color: var(--on-scrim); font-size: var(--fs-16); font-weight: var(--fw-bold); }
+  .tile-tag { position: absolute; left: var(--s-1); bottom: var(--s-1); padding: 0 var(--s-1); border-radius: var(--r-tag); background: var(--scrim); color: var(--on-scrim); font-size: var(--fs-12); font-weight: var(--fw-semi); }
   .media-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); }
   .media-row { display: flex; align-items: flex-start; gap: var(--s-3); padding: var(--s-2); border-radius: var(--r-bubble); background: var(--surface-quiet); }
-  .poster { position: relative; flex: none; display: block; width: var(--poster-w); aspect-ratio: 16 / 9; border-radius: var(--r-tag); overflow: hidden; background: var(--surface-sunk); }
+  .poster { position: relative; flex: none; display: block; padding: 0; border: 0; width: var(--poster-w); aspect-ratio: 16 / 9; border-radius: var(--r-tag); overflow: hidden; background: var(--surface-sunk); }
   .poster img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .poster .play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: var(--s-hair) var(--s-2); border-radius: var(--r-pill); background: var(--scrim); color: var(--on-scrim); font-size: var(--fs-12); font-weight: var(--fw-bold); }
   .media-main { flex: 1; min-width: 0; display: grid; gap: var(--s-1); }

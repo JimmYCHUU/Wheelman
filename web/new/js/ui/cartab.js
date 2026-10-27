@@ -6,6 +6,7 @@
 import { html, useState, useEffect } from './html.js';
 import { money, km, ago, plural } from '../../../lib/format.js';
 import { replyLabel } from '../insertlink.js';
+import { Viewer } from './viewer.js';
 
 const SHOW = { car: 9, auction: 6 };
 const KIND = { pdf: 'PDF', image: 'Picture', album: 'Google Photos album', file: 'File' };
@@ -20,6 +21,19 @@ const web = (u) => (/^https?:\/\//i.test(String(u || '')) ? u : '');
 const outLink = (href, words, cls = 'btn small quiet', label = null) =>
   html`<a class=${cls} href=${href} target="_blank" rel="noopener noreferrer" aria-label=${label}>${words}</a>`;
 
+/** The viewer's groups for a car's media: the same photos and videos the Car tab lists, in the same order. */
+export function viewerGroups(stockNo, media) {
+  const pic = (p) => ({ kind: 'picture', label: p.label, src: pictureSrc(stockNo, p.id), link: p.link, shareable: p.shareable !== false });
+  const photos = media.photos || [];
+  return [
+    { id: 'car', label: 'Photos', items: photos.filter((p) => p.group === 'car').map(pic) },
+    { id: 'auction', label: 'Auction photos', items: photos.filter((p) => p.group === 'auction').map(pic) },
+    { id: 'videos', label: 'Videos', items: (media.videos || []).filter((v) => web(v.link)).map((v) => ({
+      kind: 'video', label: v.label, link: v.link, plainLink: web(v.plainLink) || '', playable: v.playable, shareable: v.shareable !== false,
+      poster: v.poster ? pictureSrc(stockNo, v.poster) : '' })) },
+  ];
+}
+
 /** Copy link and Add to reply for a link a customer may have; Open and "For you only" for the supplier's. */
 function LinkActions({ kind, label, link, shareable, open, act }) {
   if (!shareable) return html`<div class="media-actions">${outLink(link, 'Open', 'btn small')}<span class="for-you">For you only</span></div>`;
@@ -31,7 +45,7 @@ function LinkActions({ kind, label, link, shareable, open, act }) {
 }
 
 /** The main photo with its count, the name, the two lines of facts, the availability and the listing. */
-function Top({ car, media }) {
+function Top({ car, media, view }) {
   const photos = media.photos ? media.photos.filter((p) => p.group === 'car') : [];
   const auction = media.photos ? media.photos.filter((p) => p.group === 'auction') : [];
   const hero = photos[0] || auction[0];
@@ -43,10 +57,10 @@ function Top({ car, media }) {
   const listing = web(car.url);
   return html`<div class="car-top">
     ${hero
-      ? html`<a class="hero" href=${pictureSrc(car.stockNo, hero.id)} target="_blank" rel="noopener noreferrer" title="Open the photo full size">
+      ? html`<button type="button" class="hero" title="See the photos large" onClick=${(e) => view(photos.length ? 'car' : 'auction', 0, e.currentTarget)}>
           <img src=${pictureSrc(car.stockNo, hero.id)} alt=${'Photo of the ' + name} decoding="async" />
           <span class="hero-count num">${plural(photos.length || auction.length, 'photo')}</span>
-        </a>`
+        </button>`
       : media.state === 'loading' ? html`<div class="hero loading" role="status" aria-label=${READING}></div>` : null}
     <h3 class="car-name">${name}</h3>
     <p class="car-meta num" title=${priced ? money(car.price) + ', government charges extra' : null}>${meta}</p>
@@ -57,39 +71,35 @@ function Top({ car, media }) {
 }
 
 /** A group of photos: the first few, the last of them a "+N" tile; "See all N" shows every one. */
-function PhotoGroup({ title, stockNo, photos, show, empty }) {
-  const [all, setAll] = useState(false);
-  const shown = all ? photos : photos.slice(0, show);
+function PhotoGroup({ id, title, stockNo, photos, show, empty, view }) {
+  const shown = photos.slice(0, show);
   const left = photos.length - shown.length;
   const mine = photos.some((p) => p.shareable === false);
-  const seeAll = () => setAll(true);
   return html`<section class="car-sec">
     <div class="sec-head"><h4>${title}</h4>
-      ${left > 0 ? html`<button type="button" class="link-btn" onClick=${seeAll}>See all ${photos.length}</button>` : null}
+      ${left > 0 ? html`<button type="button" class="link-btn" onClick=${(e) => view(id, 0, e.currentTarget)}>See all ${photos.length}</button>` : null}
     </div>
     ${photos.length ? html`<div class="photo-grid">${shown.map((p, i) => {
-      const src = pictureSrc(stockNo, p.id);
-      if (left > 0 && i === shown.length - 1) {
-        return html`<button type="button" class="photo-tile" key=${p.id} onClick=${seeAll} aria-label=${'Show all ' + photos.length + ' photos'}>
-          <img src=${src} alt="" loading="lazy" decoding="async" /><span class="photo-more num" aria-hidden="true">+${left + 1}</span>
-        </button>`;
-      }
-      return html`<a class="photo-tile" key=${p.id} href=${src} target="_blank" rel="noopener noreferrer" title=${'Open ' + p.label + ' full size'}>
-        <img src=${src} alt=${p.label} loading="lazy" decoding="async" />
-      </a>`;
+      const more = left > 0 && i === shown.length - 1;
+      return html`<button type="button" class="photo-tile" key=${p.id} onClick=${(e) => view(id, i, e.currentTarget)}
+        aria-label=${more ? 'See all ' + photos.length + ' photos' : p.label} title=${more ? null : 'See ' + p.label + ' large'}>
+        <img src=${pictureSrc(stockNo, p.id)} alt="" loading="lazy" decoding="async" />
+        ${more ? html`<span class="photo-more num" aria-hidden="true">+${left + 1}</span>` : null}
+        ${p.shareable === false ? html`<span class="tile-tag" aria-hidden="true">For you only</span>` : null}
+      </button>`;
     })}</div>` : html`<p class="fine">${empty}</p>`}
-    ${mine ? html`<p class="fine"><span class="for-you">For you only</span> These show our supplier's address, so they have no Copy link or Add to reply.</p>` : null}
+    ${mine ? html`<p class="fine"><span class="for-you">For you only</span> Photos marked this way show our supplier's address: you can open them, but they cannot be copied or added to a reply.</p>` : null}
   </section>`;
 }
 
-function Videos({ stockNo, videos, act }) {
+function Videos({ stockNo, videos, act, view }) {
   const list = videos.filter((v) => web(v.link));
   return html`<section class="car-sec"><h4>Videos</h4>
     ${list.length ? html`<ul class="media-list">${list.map((v, i) => html`<li class="media-row" key=${i}>
-      <a class="poster" href=${v.link} target="_blank" rel="noopener noreferrer" aria-label=${'Play ' + v.label}>
+      <button type="button" class="poster" aria-label=${'Play ' + v.label} onClick=${(e) => view('videos', i, e.currentTarget)}>
         ${v.poster ? html`<img src=${pictureSrc(stockNo, v.poster)} alt="" loading="lazy" decoding="async" />` : null}
         <span class="play" aria-hidden="true">Play</span>
-      </a>
+      </button>
       <div class="media-main">
         <span class="media-name">${v.label}</span>
         <${LinkActions} kind="video" label=${v.label} link=${v.link} shareable=${v.shareable !== false} act=${act} />
@@ -118,7 +128,7 @@ const Problem = ({ text, busy, onRetry }) => html`<div class="car-problem" role=
 </div>`;
 
 /** The photos, videos and documents, or why they are not there. Older ones stay below a failed read. */
-function Media({ car, media, act }) {
+function Media({ car, media, act, view }) {
   const busy = media.state === 'loading';
   if (!media.photos) {
     if (busy || !media.state) return html`<div class="car-sec" role="status" aria-label=${READING}><i class="skel-line"></i><i class="skel-line"></i><i class="skel-line"></i></div>`;
@@ -128,11 +138,11 @@ function Media({ car, media, act }) {
   const problem = media.state === 'error' ? media.error + ' These are from earlier.' : media.error;
   return html`
     ${problem ? html`<${Problem} text=${problem} busy=${busy} onRetry=${act.refresh} />` : null}
-    <${PhotoGroup} title="Photos" stockNo=${car.stockNo} photos=${media.photos.filter((p) => p.group === 'car')} show=${SHOW.car} empty="No photos of this car on the dashboard yet." />
+    <${PhotoGroup} id="car" title="Photos" stockNo=${car.stockNo} photos=${media.photos.filter((p) => p.group === 'car')} show=${SHOW.car} view=${view} empty="No photos of this car on the dashboard yet." />
     ${media.photos.some((p) => p.group === 'auction')
-      ? html`<${PhotoGroup} title="Auction photos" stockNo=${car.stockNo} photos=${media.photos.filter((p) => p.group === 'auction')} show=${SHOW.auction} />`
+      ? html`<${PhotoGroup} id="auction" title="Auction photos" stockNo=${car.stockNo} photos=${media.photos.filter((p) => p.group === 'auction')} show=${SHOW.auction} view=${view} />`
       : null}
-    <${Videos} stockNo=${car.stockNo} videos=${media.videos || []} act=${act} />
+    <${Videos} stockNo=${car.stockNo} videos=${media.videos || []} act=${act} view=${view} />
     <${Documents} documents=${media.documents || []} act=${act} />`;
 }
 
@@ -157,6 +167,9 @@ function NoCar({ looking }) {
 export function CarTab({ car, media, other, backTo, looking, now, act }) {
   const stock = other ? other.stockNo : car && car.stockNo;
   useEffect(() => { if (stock && (!other || other.state === 'ready')) act.load(String(stock)); }, [stock, other && other.state]);
+  // The viewer: where it opens and the tile that opened it, so the focus can go back there.
+  const [seen, setSeen] = useState(null);
+  const view = (group, index, opener) => setSeen({ group, index, opener });
   const back = other ? html`<div class="car-other">
     <span><b>Another car</b> · Stock ${other.stockNo}</span>
     <button type="button" class="link-btn" onClick=${act.back}>${backTo ? 'Back to ' + backTo : 'Close this car'}</button>
@@ -168,8 +181,11 @@ export function CarTab({ car, media, other, backTo, looking, now, act }) {
   const busy = m.state === 'loading';
   const included = car.included || [];
   return html`${back}
-    <${Top} car=${car} media=${m} />
-    <${Media} car=${car} media=${m} act=${act} />
+    <${Top} car=${car} media=${m} view=${view} />
+    <${Media} car=${car} media=${m} act=${act} view=${view} />
+    ${seen && m.photos ? html`<${Viewer} title=${car.title || 'Stock ' + car.stockNo} groups=${viewerGroups(car.stockNo, m)} group=${seen.group}
+      index=${seen.index} opener=${seen.opener} onClose=${() => setSeen(null)} onCopy=${act.copy}
+      onAdd=${(it, from, url) => act.add(replyLabel(it.kind === 'video' ? 'video' : from === 'auction' ? 'auction' : 'picture', it.label), url)} />` : null}
     ${included.length ? html`<section class="car-sec"><h4>Included with this car</h4>
       <ul class="included">${included.map((x, i) => html`<li key=${i}>${x}</li>`)}</ul>
     </section>` : null}
