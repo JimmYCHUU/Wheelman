@@ -3,7 +3,7 @@
 
 import { config, missingSettings } from './config.js';
 import { syncAll, syncMarketplace } from './sync.js';
-import { listItems, itemFromKey, buildOrderItem, orderRows } from './items.js';
+import { listItems, itemFromKey, newestWaitingKeys, buildOrderItem, orderRows } from './items.js';
 import { prepareOrders } from './ordermessages.js';
 import { refreshFollowUps } from './followup.js';
 import { draftFor } from './drafter.js';
@@ -212,7 +212,15 @@ export async function draftWaiting({ max = 25 } = {}) {
   try {
     // Dashboard customers first. Marketplace chats follow, within their own allowance,
     // so a busy Marketplace day cannot use up the requests the dashboard needs.
-    const queue = listItems({ states: ['awaiting'] });
+    // The ten newest waiting conversations are written ahead however old their last message is
+    // (every other gate still applies); the usual queue follows without visiting them twice.
+    const queue = [];
+    const ahead = new Set();
+    for (const key of newestWaitingKeys(10)) {
+      const item = itemFromKey(key, { autoDraftMaxAgeHours: Infinity });
+      if (item && item.state === 'awaiting') { queue.push(item); ahead.add(key); }
+    }
+    queue.push(...listItems({ states: ['awaiting'] }).filter((i) => !ahead.has(i.itemKey)));
     // Then Auction: the import and auction enquiries listed there, and the orders whose customer
     // has texted since we last wrote. (A message pasted from WhatsApp is answered as it is pasted.)
     queue.push(...listItems({ source: 'auction', states: ['awaiting'] }));
