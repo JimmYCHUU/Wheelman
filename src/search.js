@@ -56,6 +56,15 @@ function messagesMatching(q, sectionOf) {
 }
 
 /**
+ * A number typed the local way (0491 570 131) in the form the dashboard stores (+61491570131), as
+ * digits, or '' when what was typed is not one. Three digits or more, as rowMatches asks.
+ */
+export function internationalDigits(typed) {
+  const digits = String(typed || '').replace(/\D/g, '');
+  return digits.length >= 3 && digits[0] === '0' ? '61' + digits.slice(1) : '';
+}
+
+/**
  * searchAll(q, { limit, rowsOf }): { customers, cars, messages }. rowsOf(section) gives the list
  * rows of a section, or null when it is switched off (the server passes its own cached lists).
  */
@@ -63,6 +72,8 @@ export function searchAll(q, { limit = 20, rowsOf = () => null } = {}) {
   const typed = String(q || '').trim().slice(0, 200);
   const out = { customers: [], cars: [], messages: [] };
   if (typed.length < 2) return out;
+  const intl = internationalDigits(typed);
+  const matches = (r) => rowMatches(r, typed) || (!!intl && rowMatches(r, intl));
   const sectionOf = new Map();
   const seen = new Set();
   for (const section of SECTION_ORDER) {
@@ -70,7 +81,7 @@ export function searchAll(q, { limit = 20, rowsOf = () => null } = {}) {
     if (!rows) continue;
     for (const r of rows) {
       sectionOf.set(r.key, section);
-      if (seen.has(r.key) || out.customers.length >= limit || !rowMatches(r, typed)) continue;
+      if (seen.has(r.key) || out.customers.length >= limit || !matches(r)) continue;
       seen.add(r.key);
       out.customers.push({ ...r, section });
     }

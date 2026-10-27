@@ -121,6 +121,16 @@ test('a source that is switched off is not searched: the phone add-on, Marketpla
   }
 });
 
+test('a full local phone number finds the customer stored with +61', async () => {
+  const key = customer(10, 'Xanthe', '0491 570 131', [['IN', 'Hello', HOUR]]);
+  for (const q of ['0491 570 131', '0491570131', '570 131', '+61 491 570 131']) {
+    assert.ok((await search(q)).customers.some((r) => r.key === key), q);
+  }
+  assert.ok(!(await search('0491 570 139')).customers.some((r) => r.key === key));
+  const { internationalDigits } = await import('../src/search.js');
+  assert.deepEqual(['0491 570 131', '491 570 131', '05', 'Voxy 2019'].map(internationalDigits), ['61491570131', '', '', '']);
+});
+
 test("customer search finds an auction order under Finished", async () => {
   const order = normalize.normalizeOrder({
     id: 9601, orderNo: 'AS-9601', stage: 'CANCELLED', source: 'LIVE_AUCTION', lotPhase: 'SOURCING', depositState: 'NONE',
