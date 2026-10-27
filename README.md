@@ -718,15 +718,17 @@ medium one, a sheet from the bottom on a phone; it remembers whether you left it
 each with **Copy link** and **Add to reply**, which puts the link into the message box where the
 cursor is. Photos and videos open large in a viewer you can move through with the arrow keys.
 A link that is for you only, such as a supplier's, can be opened but not copied or added to a
-reply. Its **Customer** tab shows **How far they have got** in a sentence and the facts that
-**Shaped the reply, never stated**, and **What Wheelman used** lists the model, the provider and
-what was read to write the suggestion. A car found by search opens in the panel as
-**Another car**, with a button back to the customer.
+reply. Its **Customer** tab shows **How far they have got**: five steps from enquiry to sold,
+with where the record says they are. It also shows the facts that **Shaped the reply, never
+stated**, and **What Wheelman used** lists the model, the provider and what was read to write the
+suggestion. A car found by search opens in the panel as **Another car**, with a button back to
+the customer.
+
+**Remember**, the source of each fact, and removable blocks come in a later update.
 
 The **search box** in the top bar looks across customers, cars and the words in messages, in
 every section. A Dashboard result opens on the new page. A Marketplace, Imports or Auction
 result says **Opens on the old page** and goes there until those sections move over.
-Remember, the source of each fact, and removable blocks come in a later update.
 
 ### The top bar
 
