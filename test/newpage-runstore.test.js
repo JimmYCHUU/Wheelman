@@ -3,7 +3,7 @@
 // and endRun), and the address while it goes on (web/new/js/hashsync.js). Invented data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRun, nextKey, runSummary, oldestWaiting, RUN_SIZE, SETTLE_MS } from '../web/new/js/runstore.js';
+import { createRun, nextKey, runSummary, oldestWaiting, skipLabel, RUN_SIZE, SETTLE_MS } from '../web/new/js/runstore.js';
 import { visibleRows } from '../web/new/js/store.js';
 import { addressAfter, leavesRun, sheetFirst, withSheet } from '../web/new/js/hashsync.js';
 import { parseRoute } from '../web/new/js/route.js';
@@ -386,4 +386,24 @@ test('the summary leaves out the zero parts', async () => {
   // Back to the list: the summary goes, and the store keeps no run.
   a.store.actions.endRun();
   assert.equal(a.store.get().runSummary, null);
+});
+
+test('an open conversation answered elsewhere says so and the run moves on', async () => {
+  const a = waiting();
+  await a.store.actions.refresh();
+  await a.store.actions.startRun();
+  assert.equal(a.store.get().key, 'c:3');
+  // c:3 is answered from the phone while it is open.
+  a.data.items['c:3'] = { ...a.data.items['c:3'], state: 'answered', answered: { how: 'phone', by: '', at: 900 } };
+  a.data.rows = a.data.rows.filter((r) => r.key !== 'c:3');
+  a.data.counts = { ...a.data.counts, waiting: 2 };
+  await a.store.actions.refresh();
+  assert.equal(a.store.get().item.answered.how, 'phone');
+  assert.equal(skipLabel(a.store.get()), 'Next');
+  await a.store.actions.skipRun();
+  assert.equal(a.store.get().key, 'c:2');
+  assert.equal(skipLabel(a.store.get()), 'Skip');
+  await copyLater(a);
+  await copyLater(a);
+  assert.equal(a.store.get().runSummary, 'All answered: 2 copied, 1 answered elsewhere.', 'counted as answered elsewhere, not skipped');
 });

@@ -4,6 +4,7 @@ import { html, useState, useRef, useLayoutEffect, useEffect } from './html.js';
 import { whoLabel } from '../model.js';
 import { hashFor } from '../route.js';
 import { visibleRows } from '../store.js';
+import { skipLabel } from '../runstore.js';
 import { MenuButton } from './menu.js';
 import { clock, dayKey, dayLabel, money, km, plural } from '../../../lib/format.js';
 
@@ -144,11 +145,11 @@ function Thread({ item, name, now, older }) {
   </div>`;
 }
 
-/** The reply run, above the conversation: where it is (announced as it changes), Skip and End run. */
-function RunBar({ run, actions }) {
+/** The reply run, above the conversation: where it is (announced as it changes), Skip (Next once the customer was answered elsewhere) and End run. */
+function RunBar({ run, actions, label }) {
   return html`<div class="runbar" role="group" aria-label="Reply run">
     <span class="run-place" role="status">Reply run · <span class="num">${run.at} of ${run.of}</span></span>
-    <button type="button" class="btn small quiet" onClick=${() => actions.skipRun()}>Skip</button>
+    <button type="button" class="btn small quiet" onClick=${() => actions.skipRun()}>${label}</button>
     <button type="button" class="btn small quiet" onClick=${() => actions.endRun()}>End run</button>
   </div>`;
 }
@@ -175,7 +176,7 @@ function RunEnd({ state, actions }) {
 export function Conversation({ state, actions, now, details }) {
   if (state.runSummary) return html`<${RunEnd} state=${state} actions=${actions} />`;
   // The run bar comes first whatever is below it, so it stays on screen while the next customer opens.
-  const bar = state.run ? html`<${RunBar} run=${state.run} actions=${actions} />` : null;
+  const bar = state.run ? html`<${RunBar} run=${state.run} actions=${actions} label=${skipLabel(state)} />` : null;
   if (!state.key) return html`${bar}<div class="chat-body"><p class="empty">${WELCOME}</p></div>`;
   if (state.itemState === 'error') return html`${bar}<div class="chat-body"><p class="empty" role="alert">${OPEN_FAILED}</p></div>`;
   const item = state.item;

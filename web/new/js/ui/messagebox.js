@@ -107,6 +107,7 @@ function Quiet({ state, actions, item, view }) {
   return html`<div class="box" role="group" aria-label="Message box">
     <${Context} context=${state.context} />
     <p class=${'box-note ' + view.tone} role="status">${view.sentence}</p>
+    ${view.suggestion ? html`<div class="ghost"><span class="ghost-label">Wheelman's suggestion, not used</span><p>${view.suggestion}</p></div>` : null}
     ${view.tell || b ? html`<div class="foot">
       ${view.tell ? html`<${Tell} onSend=${tell} holdTell=${actions.holdTell} button="Write from this" />` : null}
       <div class="right">${b ? html`<button type="button" class=${'btn' + (b.main ? ' main' : '')} onClick=${run[b.act]}>${b.label}</button>` : null}</div>
@@ -219,7 +220,7 @@ function Box({ state, actions, item, reply }) {
   const editor = useRef(null);
   const main = useRef(null);
   useCtrlEnter(main, editor);
-  const view = boxView({ item, writing: state.writing === state.key, done: state.done[state.key] === item.anchor, doneAt: state.doneAt[state.key], typed: state.typed !== null });
+  const view = boxView({ item, writing: state.writing === state.key, done: state.done[state.key] === item.anchor, doneAt: state.doneAt[state.key], typed: state.typed !== null, now: Date.now() });
   if (view.kind !== 'editor') main.current = null;
   if (view.kind === 'writing') return html`<${Writing} state=${state} />`;
   if (view.kind === 'quiet') return html`<${Quiet} state=${state} actions=${actions} item=${item} view=${view} />`;

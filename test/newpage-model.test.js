@@ -3,9 +3,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SECTIONS, CHIPS, rowView, whoLabel, segments, joinSegments, fillBlank, boxText, checkLines,
-  mainAction, statusWords, statusAnnouncement, insteadOptions, wordCount, stageLine, leadStatusWords, sourceWords, providerWords, writtenBy, trustLine, factLine,
+  mainAction, answeredWords, statusWords, statusAnnouncement, insteadOptions, wordCount, stageLine, leadStatusWords, sourceWords, providerWords, writtenBy, trustLine, factLine,
 } from '../web/new/js/model.js';
 
+import { clock } from '../web/lib/format.js';
 const NOW = Date.parse('2026-10-26T02:00:00Z');
 const row = (o = {}) => ({ key: 'k1', name: 'Sam Test', phone: '0491 570 101', email: '', anchor: 'a1', phoneOnly: false,
   lastAt: NOW - 60000, unread: 2, preview: { who: 'customer', text: 'Is it available?', media: 0 }, flag: 'none', car: '2019 Test Car', ...o });
@@ -330,4 +331,29 @@ test('lessonLines gives each lesson with its day in Sydney time', () => {
     { text: 'Do not mention finance', from: 'from yesterday' }, { text: 'Keep it short', from: 'from Tuesday 20 October' }, { text: 'Old', from: '' },
   ]);
   assert.deepEqual(lessonLines(null), []);
+});
+
+test('answeredWords says how, by whom and when', () => {
+  const at = Date.parse('2026-10-26T23:42:00Z'); // 10:42 am in Sydney, the same day as NOW
+  const now = Date.parse('2026-10-27T01:00:00Z');
+  assert.equal(answeredWords({ how: 'phone', by: '', at }, now), 'Answered on the phone ' + clock(at));
+  assert.equal(answeredWords({ how: 'dashboard', by: 'Alex', at }, now), 'Answered by Alex on the dashboard ' + clock(at));
+  assert.equal(answeredWords({ how: 'dashboard', by: '', at }, now), 'Answered on the dashboard ' + clock(at));
+  assert.equal(answeredWords({ how: 'auto', by: '', at }, now), 'Answered by an auto-reply ' + clock(at));
+  assert.equal(answeredWords({ how: 'wheelman', by: 'Alex', at }, now), "Answered with Wheelman's suggestion " + clock(at));
+  assert.match(answeredWords({ how: 'phone', by: '', at }, at + 3 * 86400000), /^Answered on the phone \w+$/, 'an earlier day reads as the list time does');
+  assert.equal(answeredWords(null, now), '');
+  assert.equal(answeredWords({ how: 'other', by: '', at }, now), '');
+});
+
+test("an answered row's reason on All", () => {
+  const at = NOW - 3600000;
+  const answered = { how: 'phone', by: '', at };
+  assert.equal(rowView(row({ state: 'answered', answered }), { now: NOW }).reason, answeredWords(answered, NOW));
+  assert.match(rowView(row({ state: 'answered', answered }), { now: NOW }).reason, /^Answered on the phone /);
+  // Answered with only a staff note after the customer: no answered words, the reason is as before.
+  assert.equal(rowView(row({ state: 'answered', answered: null, phoneOnly: true }), { now: NOW }).reason, 'Phone only');
+  assert.equal(rowView(row({ state: 'answered', answered: null }), { now: NOW }).reason, '');
+  // A follow-up is still told as a follow-up.
+  assert.equal(rowView(row({ state: 'answered', answered, followUp: { reason: 'Inspection passed' } }), { now: NOW }).reason, 'Follow-up: Inspection passed');
 });

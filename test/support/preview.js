@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { applyTestEnv } from './env.js';
 import { startStandins, aiBehaviour } from './standins.js';
-import { world } from './fixtures.js';
+import { world, rawLead, rawConversation, rawMessage, STAFF } from './fixtures.js';
 import { pointConfigAt } from './wire.js';
 
 const PORT = 3211;
@@ -59,6 +59,20 @@ invented.vehicleRecords = { ...invented.vehicleRecords, [VOXY]: {
     { id: 92, documentType: 'EXPORT_CERTIFICATE', url: 'https://fastlycb.s3.ap-southeast-2.amazonaws.com/docs/invented-voxy-export.pdf', active: true },
   ] },
 } };
+// Two more invented people, waiting at the start. About a minute later they are answered elsewhere, to
+// see the page change: Wynn by a colleague on the dashboard (the stand-in dashboard gets the reply and the
+// next check reads it), Pell from the phone (the add-on's report, posted to the app as the add-on does).
+const ANSWER_AFTER_MS = 60e3;
+const wynn = ['Wynn', 'Invented', '0491 570 190'];
+const pell = ['Pell', 'Invented', '0491 570 191'];
+{
+  const now = Date.now(), MIN = 60e3;
+  for (const [id, who, ask] of [[790, wynn, 'Is the Voxy still available?'], [791, pell, 'Can I see the Voxy tomorrow?']]) {
+    const lead = rawLead(id, id, who, now, { stocks: ['1800'], agoMs: 3 * 3600e3 });
+    invented.leads.carbarnau.push(lead);
+    invented.conversations.push({ row: rawConversation(id, lead, who, { direction: 'IN', at: now - 5 * MIN, body: ask }), messages: [rawMessage(id * 10, id, 'IN', ask, 5 * MIN, now)] });
+  }
+}
 const standins = await startStandins({ world: invented, ai });
 const { config } = await import('../../src/config.js');
 pointConfigAt(config, standins, { port: PORT, sessionPath: path.join(os.tmpdir(), `wheelman-preview-session-${process.pid}.json`) });
@@ -103,6 +117,23 @@ const { parseDashboardTime, sydneyDay } = await import('../../src/time.js');
   db.upsertConversation({ id: quiet, phone: '+61491570171', channel: 'SMS', status: 'OPEN', leadId: quiet, customerName: 'Quietly Invented', latestDirection: 'OUT', latestAt: visit - 25 * HOUR, latestBody: 'x' });
   (await import('../../src/followup.js')).refreshFollowUps();
 }
+
+setTimeout(async () => {
+  const now = Date.now();
+  const conv = invented.conversations.find((c) => c.row.id === 790);
+  const reply = rawMessage(7901, 790, 'OUT', 'Hi Wynn, yes it is. Come and see it any day this week.', 0, now, STAFF.alex);
+  conv.messages.push(reply);
+  Object.assign(conv.row, { latestMessageDirection: 'OUT', latestMessageAt: reply.providerCreatedAt, latestMessageBody: reply.body });
+  const text = 'Hi Pell, tomorrow is fine. See you at 10.';
+  try {
+    await fetch(`http://127.0.0.1:${PORT}/api/phone/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+      v: 1, seenAt: now, hidden: true, path: '/web/conversations', signedOut: false, found: { listItems: 1, parsed: 1 },
+      threads: [{ ref: 'p1', name: pell[2], kind: 'number', unread: false, latest: { direction: 'out', text, media: null, truncated: false, when: 'now', at: now, precision: 'minute' } }],
+    }) });
+  } catch (e) { console.log('Preview: the phone report was not accepted: ' + e.message); }
+  await worker.runSync();
+  console.log('Preview: Wynn was answered on the dashboard and Pell from the phone.');
+}, ANSWER_AFTER_MS);
 
 let closing = false;
 process.on('SIGINT', async () => {

@@ -18,6 +18,18 @@ export const CHIPS = [
   { id: 'all', label: 'All' },
 ];
 
+/**
+ * Who answered a customer instead of us, in words: "Answered on the phone 10:42". The time is the clock
+ * today and the list's own time on an earlier day (listTime). '' for nobody, or a way not known.
+ */
+export function answeredWords(answered, now) {
+  if (!answered) return '';
+  const when = listTime(answered.at, now);
+  const by = answered.by ? ' by ' + answered.by : '';
+  const text = { phone: 'Answered on the phone', dashboard: 'Answered' + by + ' on the dashboard', auto: 'Answered by an auto-reply', wheelman: "Answered with Wheelman's suggestion" }[answered.how];
+  return text ? (text + ' ' + when).trim() : '';
+}
+
 /** What one list row shows. doneAnchor is the anchor of the row just copied, waiting to show on the dashboard. */
 export function rowView(row, { now, doneAnchor } = {}) {
   const done = doneAnchor !== undefined && doneAnchor !== null && doneAnchor === row.anchor;
@@ -28,6 +40,7 @@ export function rowView(row, { now, doneAnchor } = {}) {
   let reason = '';
   if (done) reason = 'Copied, waiting for it to show on the dashboard';
   else if (row.followUp) reason = 'Follow-up: ' + row.followUp.reason;
+  else if (row.state === 'answered' && answeredWords(row.answered, now)) reason = answeredWords(row.answered, now);
   else if (row.flag === 'fail') reason = 'Check failed';
   else if (row.flag === 'input') reason = 'Blank to fill';
   else if (row.flag === 'error') reason = 'Not written yet';
@@ -211,7 +224,7 @@ const PUT_BACK_FOLLOW_UP = { label: 'Put back in Follow-ups', act: 'restore-foll
  * that could not be written beside text the person typed (now, or saved before a reload) is told in
  * the editor view's failure line, and the text stays.
  */
-export function boxView({ item, writing = false, done = false, doneAt = null, typed = false } = {}) {
+export function boxView({ item, writing = false, done = false, doneAt = null, typed = false, now } = {}) {
   if (!item) return { kind: 'none' };
   const d = item.draft || null;
   const ready = !!d && d.status === 'ready';
@@ -231,13 +244,21 @@ export function boxView({ item, writing = false, done = false, doneAt = null, ty
   if (item.dismissed && item.state === 'awaiting') {
     return say('You dismissed this conversation. It comes back by itself if the customer writes again.', { label: 'Put back in Needs reply', act: 'restore', main: false });
   }
-  if (kept) return { kind: 'editor', context: mine ? 'Follow-up: ' + fu.reason : '', ...(failure ? { failure } : {}) };
+  // Answered by someone else (a follow-up in hand is told as itself): what the person typed stays; else nothing is waiting.
+  const elsewhere = item.state === 'answered' && !fu && !!item.answered && !!answeredWords(item.answered, now);
+  const own = typed || (typeof d?.edited === 'string' && d.edited.trim() !== '');
+  const context = mine ? 'Follow-up: ' + fu.reason : elsewhere && own ? 'The customer was answered elsewhere. Your text is kept.' : '';
+  if (kept || (elsewhere && own)) return { kind: 'editor', context, ...(failure ? { failure } : {}) };
   if (item.writing) return { kind: 'writing' };
   if (fu) {
     if (mine && ready) return { kind: 'editor', context: 'Follow-up: ' + fu.reason };
     if (mine && d && d.status === 'failed') return failed('The follow-up could not be written.');
     return say(fu.reason + '. A follow-up is due. Nothing is sent by itself: write it, check it, then copy it.',
       { label: 'Write the follow-up', act: 'write-followup', main: true }, { tell: true });
+  }
+  // A suggestion written after the answer was asked for by the person, so it is theirs to use.
+  if (elsewhere && !(d && d.createdAt > item.answered.at)) {
+    return say(answeredWords(item.answered, now) + '. No reply needed.', { label: 'Write a reply anyway', act: 'write', main: false }, { tell: true, suggestion: ready ? boxText(d) : item.lastSuggestion || '' });
   }
   if (item.state !== 'awaiting' && !ready) {
     return say(item.state === 'answered' ? 'We have replied. Nothing is waiting here.' : item.note || 'No reply needed.',

@@ -14,6 +14,10 @@ const since = (r, now) => r.waitingSince || r.lastAt || now;
 /** A row still waiting on us: not answered, by us or anyone else. */
 const isWaiting = (r) => !r.answered && (r.state === undefined || r.state === 'awaiting');
 
+/** The run's current customer was answered by someone else while open: the run bar's Skip is Next. */
+const answeredNow = (s) => !!s.run && s.key === s.run.key && !!s.item && s.item.state === 'answered' && !!s.item.answered;
+export const skipLabel = (s) => (answeredNow(s) ? 'Next' : 'Skip');
+
 /** When the longest-waiting of these rows started waiting, or null for none. */
 export function oldestWaiting(rows) {
   const times = rows.filter(isWaiting).map((r) => since(r, 0)).filter(Boolean);
@@ -128,12 +132,13 @@ export function createRunner({ get, set, now, open, close }) {
       await advance(r);
     },
 
-    /** Skip: the next customer, and this one stays in Needs reply. */
+    /** Skip: the next customer, and this one stays in Needs reply. Past one answered elsewhere it is Next, which counts that. */
     async skip() {
       const r = run;
       if (!r || stepping) return;
       stepping = true;
-      r.skipped++;
+      if (answeredNow(get())) r.elsewhere++;
+      else r.skipped++;
       await advance(r);
     },
 

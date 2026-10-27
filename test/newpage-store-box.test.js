@@ -445,3 +445,22 @@ test('Just this once closes the line and sends nothing', async () => {
   assert.deepEqual(a.store.get().closedNotes, [11]);
   assert.equal(a.calls.length, 0);
 });
+
+test('answered elsewhere while open: the suggestion that was there is kept to show, and typed text is kept without a new-message line', async () => {
+  const answered = { how: 'phone', by: '', at: 5000 };
+  const a = setup();
+  await a.store.actions.open('c:1');
+  a.data.items['c:1'] = { ...a.data.items['c:1'], anchor: 'a-after', state: 'answered', answered, draft: null };
+  await a.store.actions.refresh();
+  assert.equal(a.store.get().item.lastSuggestion, 'Hello from Wheelman');
+  await a.store.actions.refresh();
+  assert.equal(a.store.get().item.lastSuggestion, 'Hello from Wheelman', 'it stays through the next refresh');
+
+  const b = setup();
+  await b.store.actions.open('c:1');
+  b.store.actions.type('My own words');
+  b.data.items['c:1'] = { ...b.data.items['c:1'], anchor: 'a-after', state: 'answered', answered, draft: null };
+  await b.store.actions.refresh();
+  assert.equal(b.store.get().typed, 'My own words');
+  assert.equal(b.store.get().context, null, 'the box says the customer was answered elsewhere, not that a message arrived');
+});

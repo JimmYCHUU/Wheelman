@@ -110,10 +110,14 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
 
   // ---- the list and the open conversation
 
-  function takeItem(fresh) {
+  function takeItem(taken) {
     const old = state.item;
+    // Answered by someone else: its anchor moved on and the suggestion went with it, so the one that was there is kept to show.
+    const elsewhere = taken.state === 'answered' && !!taken.answered;
+    const was = (old && old.draft && old.draft.status === 'ready' && old.draft.reply) || (old && old.lastSuggestion) || '';
+    const fresh = elsewhere && !taken.draft && was ? { ...taken, lastSuggestion: was } : taken;
     const changed = old && ((old.draft && old.draft.id) !== (fresh.draft && fresh.draft.id) || old.anchor !== fresh.anchor);
-    if (changed && state.typed !== null) {
+    if (changed && state.typed !== null && !elsewhere) {
       // The typed text stays. Its replacement is offered only once there is a suggestion to use.
       const ready = !!(fresh.draft && fresh.draft.status === 'ready');
       set({ item: fresh, context: { message: NEW_MESSAGE, action: ready ? { label: 'Use the new suggestion', run: useSuggestion } : null } });

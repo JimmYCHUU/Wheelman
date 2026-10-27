@@ -115,6 +115,9 @@
   .box-note { margin: 0; padding: var(--s-3); border-radius: var(--r-box); background: var(--surface-quiet); color: var(--ink-2); }
   .box-note.good { background: var(--good-soft); color: var(--good); font-weight: var(--fw-semi); }
   .box-note.bad { background: var(--bad-soft); color: var(--bad); font-weight: var(--fw-semi); }
+  .ghost { display: flex; flex-direction: column; gap: var(--s-1); padding: var(--s-3); border: 1px dashed var(--line-strong); border-radius: var(--r-box); color: var(--ink-3); }
+  .ghost-label { font-size: var(--fs-12); font-weight: var(--fw-semi); }
+  .ghost p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
   /* the list */
   .list-inner { display: flex; flex-direction: column; min-height: 0; flex: 1; }
@@ -132,7 +135,7 @@
   .row .car { font-size: var(--fs-12); color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .sub { font-size: var(--fs-13); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .meta { display: flex; flex-direction: column; align-items: flex-end; gap: var(--s-1); font-size: var(--fs-12); color: var(--ink-3); white-space: nowrap; align-self: start; }
-  .reason { justify-self: start; max-width: 100%; font-size: var(--fs-12); font-weight: var(--fw-semi); padding: var(--s-hair) var(--s-2); border-radius: var(--r-tag); background: var(--surface-sunk); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reason { justify-self: start; max-width: 100%; font-size: var(--fs-12); font-weight: var(--fw-semi); padding: var(--s-hair) var(--s-2); border-radius: var(--r-tag); background: var(--surface-sunk); color: var(--ink-2); overflow-wrap: anywhere; }
   .reason.good { background: var(--good-soft); color: var(--good); }
   .reason.warn { background: var(--warn-soft); color: var(--warn); }
   .reason.bad { background: var(--bad-soft); color: var(--bad); }

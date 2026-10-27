@@ -90,7 +90,7 @@ export function vehicles(now = Date.now()) {
 
 // ---- leads and text conversations, as the dashboard sends them ----------------------------------
 
-const rawLead = (id, conversationId, who, now, { platform = 'CARSALES', source = 'Carsales', stocks = [], inquiries = [], status = 'NEW', agoMs = 2 * HOUR, leadScore = null, utmSource = '', utmMedium = '', utmCampaign = '', others = {} } = {}) => ({
+export const rawLead = (id, conversationId, who, now, { platform = 'CARSALES', source = 'Carsales', stocks = [], inquiries = [], status = 'NEW', agoMs = 2 * HOUR, leadScore = null, utmSource = '', utmMedium = '', utmCampaign = '', others = {} } = {}) => ({
   id, conversationId, customerFirstName: who[0], customerLastName: who[1], customerPhone: who[2], customerEmail: email(who[0]),
   leadSourceDto: { leadSource: source }, leadStatus: status, platform,
   leadDate: sydneyNaive(now - agoMs), updatedAt: sydneyNaive(now - agoMs + 5 * MIN),
@@ -100,12 +100,12 @@ const rawLead = (id, conversationId, who, now, { platform = 'CARSALES', source =
   inquiries: inquiries.map((q, i) => ({ id: id * 10 + i, inquiryType: q.type || source, customerQuerySubject: q.subject || 'Vehicle enquiry', customerQuery: q.text, stockNo: q.stockNo || '', platform, leadDate: sydneyNaive(now - (q.agoMs ?? agoMs)), status, comments: [], canonicalUrl: q.url || '',
     financeStatus: q.financeStatus ?? null, weeklyRepaymentAtTime: q.weeklyRepayment ?? null, stockStatus: q.stockStatus ?? null, actionType: q.actionType ?? null, sourceBlock: q.sourceBlock ?? null, videoViewed: q.videoViewed ?? null })),
 });
-const rawConversation = (id, lead, who, { direction, at, body }, { phone = who?.[2] } = {}) => ({
+export const rawConversation = (id, lead, who, { direction, at, body }, { phone = who?.[2] } = {}) => ({
   id, phoneNumber: intl(phone), channel: 'SMS', status: 'OPEN',
   lead: lead ? { id: lead.id, customerName: `${who[0]} ${who[1]}`, platform: lead.platform, currentStatus: lead.leadStatus, customerEmail: lead.customerEmail } : null,
   latestMessageDirection: direction, latestMessageAt: sydneyNaive(at), latestMessageBody: body,
 });
-const rawMessage = (id, conversationId, direction, body, agoMs, now, sentBy = null) => ({
+export const rawMessage = (id, conversationId, direction, body, agoMs, now, sentBy = null) => ({
   id, conversationId, direction, body, sentBy, status: 'SENT', mediaType: null,
   providerCreatedAt: sydneyNaive(now - agoMs), createdAt: sydneyNaive(now - agoMs + 4000),
 });

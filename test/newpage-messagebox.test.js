@@ -2,7 +2,7 @@
 // about the text in the box, the save note and the word count. Invented data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { blankWords, wordsChanged, liveChecks, boxView, plainPaste, wordsLine, saveWords, mainAction } from '../web/new/js/model.js';
+import { answeredWords, blankWords, wordsChanged, liveChecks, boxView, plainPaste, wordsLine, saveWords, mainAction } from '../web/new/js/model.js';
 import { clock } from '../web/lib/format.js';
 
 const AT = Date.parse('2026-10-26T22:40:00Z'); // 9:40 am in Sydney
@@ -172,4 +172,32 @@ test('boxView shows a failed suggestion beside the kept text, and after a reload
   assert.equal(boxView({ item: item({ draft: failed() }) }).kind, 'quiet');
   assert.equal(boxView({ item: item({ draft: failed({ edited: '' }) }) }).kind, 'quiet');
   assert.equal('failure' in boxView({ item: item() }), false);
+});
+
+test('an open conversation answered elsewhere says so', () => {
+  const ago = Date.parse('2026-10-26T23:42:00Z');
+  const answered = { how: 'phone', by: '', at: ago };
+  const now = ago + 600000;
+  const before = draft({ createdAt: ago - 600000 });
+  const v = boxView({ item: item({ state: 'answered', answered, draft: before }), now });
+  assert.equal(v.kind, 'quiet');
+  assert.equal(v.sentence, answeredWords(answered, now) + '. No reply needed.');
+  assert.deepEqual(v.button, { label: 'Write a reply anyway', act: 'write', main: false });
+  assert.equal(v.suggestion, 'Hello [PRICE?].', 'the suggestion that was there is shown under it, read-only');
+  assert.equal(boxView({ item: item({ state: 'answered', answered, draft: null }), now }).suggestion, '');
+  assert.equal(boxView({ item: item({ state: 'answered', answered, draft: null }), now }).kind, 'quiet');
+  // A reply written anyway, after the answer, is in the editor.
+  assert.equal(boxView({ item: item({ state: 'answered', answered, draft: draft({ createdAt: ago + 5000 }) }), now }).kind, 'editor');
+  // Answered with only a staff note: today's words.
+  assert.equal(boxView({ item: item({ state: 'answered', answered: null, draft: null }), now }).sentence, 'We have replied. Nothing is waiting here.');
+});
+
+test('typed text is kept when the conversation is answered elsewhere', () => {
+  const answered = { how: 'dashboard', by: 'Alex', at: 1000 };
+  const o = { item: item({ state: 'answered', answered, draft: draft({ createdAt: 10 }) }), typed: true };
+  assert.deepEqual(boxView(o), { kind: 'editor', context: 'The customer was answered elsewhere. Your text is kept.' });
+  const saved = { item: item({ state: 'answered', answered, draft: draft({ createdAt: 10, edited: 'My words' }) }) };
+  assert.equal(boxView(saved).kind, 'editor', 'an edit saved before a reload is kept too');
+  assert.equal(boxView(saved).context, 'The customer was answered elsewhere. Your text is kept.');
+  assert.equal(boxView({ item: item({ draft: draft() }), typed: true }).context, '', 'not answered: no line');
 });
