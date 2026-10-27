@@ -10,12 +10,15 @@ export function createRemember({ api, get, set, toast }) {
     try { return (await api('/api/lessons/' + id + '/switch', { on })).lesson; } catch (e) { toast(e.message); return null; }
   }
 
+  // A lesson that was already there and switched on is left as it was: this press made nothing for
+  // Undo to take back, so the toast offers none.
   async function remember(scope) {
     const d = draftOf();
     if (!d) return;
     try {
-      const { lesson } = await api('/api/drafts/' + d.id + '/remember', { scope });
+      const { lesson, wasOn } = await api('/api/drafts/' + d.id + '/remember', { scope });
       set({ remembered: [...without(get().remembered, d.id), d.id], closedNotes: [...without(get().closedNotes, d.id), d.id] });
+      if (wasOn) { toast('Already remembered for ' + scopeWords(scope)); return; }
       toast('Remembered for ' + scopeWords(scope), { label: 'Undo', run: async () => {
         if (await switchLesson(lesson.id, false)) set({ remembered: without(get().remembered, d.id), closedNotes: without(get().closedNotes, d.id) });
       } });

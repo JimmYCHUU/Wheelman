@@ -424,6 +424,18 @@ test('a Remember lesson never reaches a Marketplace request; a Could be better l
   db.switchLesson(id, false);
 });
 
+test('the conversation sends its situation key, which is a scope Remember accepts', async () => {
+  const key = customer(28, 'Bea', 'Can I come and inspect the Noah on Saturday?');
+  const item = (await get(`/api/items/${key}`)).item;
+  assert.equal(item.situationKey, items.itemFromKey(key).situation.primary);
+  assert.equal(item.situationKey, 'inspection_booking');
+  assert.equal(item.situation, 'Inspection or test drive');
+  const d = await write(key, 'Hello {{NAME}},\nSaturday works.', { instruction: 'Always offer Saturday morning first.' });
+  const out = await post(`/api/drafts/${d.id}/remember`, { scope: item.situationKey });
+  assert.equal(out.status, 200, out.error);
+  db.switchLesson(out.lesson.id, false);
+});
+
 test('a lesson count that cannot be written leaves the ready suggestion as the only one saved', async () => {
   const from = customer(29, 'Cy', 'Is the Noah a hybrid?');
   const t = await write(from, 'Hello {{NAME}},\nNo, the Noah runs on petrol.', { instruction: 'Name the fuel type in the first sentence.' });

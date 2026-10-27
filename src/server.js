@@ -346,6 +346,8 @@ function present(item) {
   const draft = draftOf(item);
   return {
     ...summary(item),
+    // The situation's key (SITUATIONS in src/situations.js) beside its label: the new page's Remember scope.
+    situationKey: item.situation.primary,
     note: item.note,
     // The sale stage, when there is one: the new page's stage line reads it.
     deal: item.deal ? { stage: item.deal.stage, stageText: item.deal.stageText, source: item.deal.source } : null,

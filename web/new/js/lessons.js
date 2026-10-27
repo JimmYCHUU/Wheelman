@@ -2,47 +2,46 @@
 // Pure functions, no DOM. (The store calls the server; see store.js.)
 import { dayLabel } from '../../lib/format.js';
 
-// A conversation's situation reaches the page as its label only, so the label finds the key the server's
-// scopes use (SITUATIONS in src/situations.js), with the short words Remember names it by.
-const KINDS = {
-  'Complaint or dispute': ['complaint', 'complaints'],
-  'After the sale (paperwork, pickup, delivery)': ['after_sale', 'questions after the sale'],
-  'Price, discount or offer': ['price_negotiation', 'price questions'],
-  'Trade-in': ['trade_in', 'trade-in questions'],
-  'Finance': ['finance', 'finance questions'],
-  'Deposit or holding the car': ['deposit_hold', 'deposit and holding questions'],
-  'Delivery or interstate buyer': ['delivery_interstate', 'delivery and interstate questions'],
-  'Inspection or test drive': ['inspection_booking', 'inspection and test drive requests'],
-  'Kilometres, history and condition': ['history_kms', 'questions about kilometres and history'],
-  'Registration, roadworthy and on-road costs': ['rego_roadworthy', 'registration and roadworthy questions'],
-  'Warranty': ['warranty', 'warranty questions'],
-  'Photos or video': ['photos_video', 'photo and video requests'],
-  'Importing or sourcing a car from Japan': ['import_sourcing', 'import enquiries'],
-  'Features and specifications': ['vehicle_details', 'questions about features'],
-  'Location and opening hours': ['location_hours', 'questions about location and hours'],
-  'Is it still available': ['availability', 'availability questions'],
-  'General enquiry': ['general', 'general enquiries'],
+// The short words Remember names each scope by, for its button and its toast. The keys are the
+// server's scopes (SITUATIONS in src/situations.js, and 'general'); the conversation says which is
+// its own in situationKey.
+const WORDS = {
+  complaint: 'complaints',
+  after_sale: 'questions after the sale',
+  price_negotiation: 'price questions',
+  trade_in: 'trade-in questions',
+  finance: 'finance questions',
+  deposit_hold: 'deposit and holding questions',
+  delivery_interstate: 'delivery and interstate questions',
+  inspection_booking: 'inspection and test drive requests',
+  history_kms: 'questions about kilometres and history',
+  rego_roadworthy: 'registration and roadworthy questions',
+  warranty: 'warranty questions',
+  photos_video: 'photo and video requests',
+  import_sourcing: 'import enquiries',
+  vehicle_details: 'questions about features',
+  location_hours: 'questions about location and hours',
+  availability: 'availability questions',
+  general: 'general enquiries',
 };
 
 const EVERY = 'every reply';
 
 /** The words a scope is remembered for, for the toast: "price questions". */
-export function scopeWords(scope) {
-  const hit = Object.values(KINDS).find(([key]) => key === scope);
-  return hit ? hit[1] : EVERY;
-}
+export const scopeWords = (scope) => (Object.hasOwn(WORDS, scope) ? WORDS[scope] : EVERY);
 
 /**
  * Remember is offered for a Dashboard reply that was written from an instruction and not yet remembered:
- * { scope, label } or null. remembered: the drafts remembered in this visit.
+ * { scope, label } or null. Not for a follow-up or a conversation in Auction, which teach nothing.
+ * The scope is the conversation's situationKey, or every reply when it has none the server knows.
+ * remembered: the drafts remembered in this visit.
  */
 export function rememberOffer(item, draft, remembered = []) {
   if (!item || !draft || !draft.instruction) return null;
   if (!/^(c|l|em):/.test(String(item.key || ''))) return null;
+  if (/^fu:/.test(String(item.anchor || '')) || item.section === 'auction') return null;
   if (remembered.includes(draft.id)) return null;
-  const kind = item.situation ? KINDS[item.situation] : null;
-  if (item.situation && !kind) return null;
-  const scope = kind ? kind[0] : 'any';
+  const scope = Object.hasOwn(WORDS, item.situationKey) ? item.situationKey : 'any';
   return { scope, label: 'Remember for ' + scopeWords(scope) };
 }
 

@@ -270,25 +270,45 @@ test('trustLine: typed text, however small the change, is not checked', () => {
   assert.deepEqual(trustLine({ ...withFacts(facts2, ''), status: 'failed' }, 'Mine'), unchecked, 'beside a failed suggestion');
 });
 
-import { rememberOffer, ruleWords, lessonLines } from '../web/new/js/model.js';
+import { rememberOffer, scopeWords, ruleWords, lessonLines } from '../web/new/js/model.js';
 import { SITUATIONS } from '../src/situations.js';
 
 test('rememberOffer is offered only for a Dashboard draft with an instruction', () => {
-  const item = { key: 'c:1', situation: 'Price, discount or offer' };
+  const item = { key: 'c:1', anchor: 'm:12', section: 'dashboard', situation: 'Price, discount or offer', situationKey: 'price_negotiation' };
   const d = { id: 5, instruction: 'Do not mention finance' };
   assert.deepEqual(rememberOffer(item, d), { scope: 'price_negotiation', label: 'Remember for price questions' });
   assert.deepEqual(rememberOffer({ key: 'em:9' }, d), { scope: 'any', label: 'Remember for every reply' });
-  assert.deepEqual(rememberOffer({ key: 'l:3', situation: 'General enquiry' }, d), { scope: 'general', label: 'Remember for general enquiries' });
+  assert.deepEqual(rememberOffer({ key: 'l:3', situation: 'General enquiry', situationKey: 'general' }, d), { scope: 'general', label: 'Remember for general enquiries' });
   assert.equal(rememberOffer(item, { id: 5 }), null);
-  assert.equal(rememberOffer({ key: 'm:1', situation: item.situation }, d), null);
+  assert.equal(rememberOffer({ key: 'm:1', situationKey: item.situationKey }, d), null);
   assert.equal(rememberOffer({ key: 'ip:1' }, d), null);
   assert.equal(rememberOffer(item, d, [5]), null);
   assert.equal(rememberOffer(item, null), null);
 });
 
-test('every situation the server names is a scope the page can remember for', () => {
-  for (const s of Object.values(SITUATIONS)) assert.ok(rememberOffer({ key: 'c:1', situation: s.label }, { id: 1, instruction: 'x' }), s.label);
-  for (const [key, s] of Object.entries(SITUATIONS)) assert.equal(rememberOffer({ key: 'c:1', situation: s.label }, { id: 1, instruction: 'x' }).scope, key);
+test('rememberOffer is not offered on a follow-up or in Auction, which teach nothing', () => {
+  const d = { id: 5, instruction: 'Do not mention finance' };
+  const item = { key: 'c:1', anchor: 'm:12', section: 'dashboard', situationKey: 'price_negotiation' };
+  assert.equal(rememberOffer({ ...item, anchor: 'fu:3' }, d), null, 'a follow-up');
+  assert.equal(rememberOffer({ ...item, section: 'auction' }, d), null, 'a conversation listed in Auction');
+  assert.equal(rememberOffer({ ...item, key: 'em:4', section: 'auction' }, d), null, 'an import email moved to Auction');
+  assert.ok(rememberOffer({ ...item, section: 'importquery' }, d), 'Imports still teaches');
+});
+
+test('every situation the server names has words, and is the scope Remember is offered for', () => {
+  for (const key of [...Object.keys(SITUATIONS), 'general']) {
+    assert.notEqual(scopeWords(key), 'every reply', key);
+    assert.equal(rememberOffer({ key: 'c:1', situationKey: key }, { id: 1, instruction: 'x' }).scope, key);
+  }
+  assert.equal(scopeWords('any'), 'every reply');
+});
+
+test('an import conversation whose label is its stage still gets Remember for its own kind, or every reply', () => {
+  const d = { id: 1, instruction: 'Always give the deposit band.' };
+  assert.deepEqual(rememberOffer({ key: 'em:9', situation: 'Waiting for their answer', situationKey: 'import_sourcing' }, d), { scope: 'import_sourcing', label: 'Remember for import enquiries' });
+  assert.deepEqual(rememberOffer({ key: 'em:9', situation: 'Waiting for their answer' }, d), { scope: 'any', label: 'Remember for every reply' });
+  assert.deepEqual(rememberOffer({ key: 'em:9', situationKey: 'not_a_kind' }, d), { scope: 'any', label: 'Remember for every reply' }, 'a key the server would refuse');
+  assert.deepEqual(rememberOffer({ key: 'em:9', situationKey: 'constructor' }, d), { scope: 'any', label: 'Remember for every reply' });
 });
 
 test('ruleWords says one plain sentence for each rule that fired', () => {

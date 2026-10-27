@@ -382,7 +382,7 @@ test('a copy with blanks still to fill says how many, as the old page did', asyn
 });
 
 const withInstruction = (a, extra = {}) => {
-  a.data.items['c:1'] = { ...a.data.items['c:1'], key: 'c:1', situation: 'Price, discount or offer', draft: draft(11, { instruction: 'Do not mention finance', ...extra }) };
+  a.data.items['c:1'] = { ...a.data.items['c:1'], key: 'c:1', situation: 'Price, discount or offer', situationKey: 'price_negotiation', draft: draft(11, { instruction: 'Do not mention finance', ...extra }) };
 };
 
 test('remember posts the scope and Undo switches the lesson off', async () => {
@@ -402,6 +402,28 @@ test('remember posts the scope and Undo switches the lesson off', async () => {
   const off = a.calls.find((c) => c.path === '/api/lessons/4/switch');
   assert.deepEqual(off.body, { on: false });
   assert.deepEqual(a.store.get().remembered, []);
+});
+
+test('remember of a lesson that was already on offers no Undo, so it cannot switch that lesson off', async () => {
+  const a = setup();
+  withInstruction(a);
+  a.data.on = { '/api/drafts/11/remember': () => ({ lesson: { id: 4, do: 'Do not mention finance', scope: 'price_negotiation', off: false }, wasOn: true }) };
+  await a.store.actions.open('c:1');
+  await a.store.actions.remember('price_negotiation');
+  assert.equal(a.store.get().toast.message, 'Already remembered for price questions');
+  assert.equal(a.store.get().toast.action, null, 'no Undo');
+  assert.deepEqual(a.store.get().remembered, [11], 'the line closes all the same');
+  assert.ok(!a.calls.some((c) => c.path === '/api/lessons/4/switch'), 'nothing switched off');
+
+  // Made, or switched back on, by this press (wasOn false): Undo is offered and switches it off.
+  a.data.on = {
+    '/api/drafts/11/remember': () => ({ lesson: { id: 4, do: 'Do not mention finance', scope: 'price_negotiation', off: false }, wasOn: false }),
+    '/api/lessons/4/switch': (b) => ({ lesson: { id: 4, off: !b.on } }),
+  };
+  await a.store.actions.remember('price_negotiation');
+  assert.equal(a.store.get().toast.action.label, 'Undo');
+  await a.store.get().toast.action.run();
+  assert.deepEqual(a.calls.find((c) => c.path === '/api/lessons/4/switch').body, { on: false });
 });
 
 test('a refused remember shows its sentence', async () => {
