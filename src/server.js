@@ -1037,13 +1037,19 @@ async function api(req, res, url) {
   }
 
   // Undo for Dismiss: the conversation goes back to Waiting. For an auction order it also undoes
-  // "copied": the message that was due is due again, and leaves the thread.
+  // "copied": the message that was due is due again, and leaves the thread. { draftId? }: the
+  // suggestion the page copied, when it is this order's: its message is put back instead (a reply,
+  // or a message picked that was not the one due). Without it, the message at the order's anchor now.
   m = p.match(itemRoute('/restore'));
   if (req.method === 'POST' && m) {
+    const body = await readBody(req);
     const item = itemFromKey(m[1]);
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
     undismiss(item.itemKey);
-    if (item.order) uncopy(item.itemKey, item.anchorKey);
+    if (item.order) {
+      const copied = Number(body.draftId) > 0 ? getDraft(Number(body.draftId)) : null;
+      uncopy(item.itemKey, copied && copied.item_key === item.itemKey ? copied.anchor_key : item.anchorKey);
+    }
     return send(res, 200, { ok: true, item: present(itemFromKey(m[1]) || item) });
   }
 

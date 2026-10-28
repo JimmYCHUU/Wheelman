@@ -344,6 +344,60 @@ test('Copy for WhatsApp, or Copy reply when the order is answered by text, and P
   assert.equal(boxViewOf(s, NOW).sentence, 'No message is due for this order right now. Choose a message to write it anyway.');
 });
 
+test('Undo after Dismiss and Put back after Copy bring back what was typed, and Put back names the suggestion copied', async () => {
+  const a = await opened(orderItem({ draft: ready(41) }));
+  const restores = [];
+  let land = null;
+  a.data.on = {
+    ['/api/items/' + KEY + '/restore']: (body) => { restores.push(body); return { ok: true, item: a.data.items[KEY] }; },
+    ['/api/items/' + KEY + '/dismiss']: () => ({ ok: true }),
+    // The copy's own record is slow to land the first time.
+    '/api/drafts/41/copied': () => new Promise((resolve) => { land = () => { land = null; resolve({ ok: true }); }; }),
+  };
+  const words = 'Hello Omar, we bid $12,000.';
+  a.store.actions.type(words);
+  await a.store.actions.copy();
+  await settle();
+  assert.equal(a.store.get().typed, null);
+  // Put back pressed at once waits for the copy to be recorded, then names it.
+  const back = a.store.get().toast.action.run();
+  await settle();
+  assert.deepEqual(restores, [], 'not before the copy is recorded');
+  land();
+  await back;
+  assert.deepEqual(restores, [{ draftId: 41 }]);
+  let s = a.store.get();
+  assert.deepEqual([s.typed, boxViewOf(s, NOW).kind, s.done[KEY]], [words, 'editor', undefined]);
+
+  // Copied again, and put back from the box's own button while it says Copied: the same.
+  a.data.on['/api/drafts/41/copied'] = () => ({ ok: true });
+  await a.store.actions.copy();
+  await settle();
+  assert.equal(boxViewOf(a.store.get(), NOW).button.act, 'restore');
+  await a.store.actions.restore();
+  assert.deepEqual(restores.at(-1), { draftId: 41 });
+  assert.equal(a.store.get().typed, words);
+
+  // Dismissed with the text typed, then Undo: nothing copied is named, and the words come back.
+  await a.store.actions.dismiss();
+  assert.equal(a.store.get().typed, null);
+  await a.store.get().toast.action.run();
+  await settle();
+  assert.deepEqual(restores.at(-1), {});
+  s = a.store.get();
+  assert.deepEqual([s.typed, boxViewOf(s, NOW).kind], [words, 'editor']);
+
+  // Copied with nothing typed: Put back shows the suggestion, and puts nothing else in the box.
+  const b = await opened(orderItem({ draft: ready(41) }));
+  b.data.on = { ['/api/items/' + KEY + '/restore']: (body) => ({ ok: true, item: b.data.items[KEY], body }) };
+  await b.store.actions.copy();
+  await settle();
+  await b.store.get().toast.action.run();
+  await settle();
+  assert.equal(b.store.get().typed, null);
+  assert.deepEqual(b.calls.filter((c) => c.path.endsWith('/restore')).map((c) => c.body), [{ draftId: 41 }]);
+});
+
 test('Their texts go to Dashboard and back, with Undo', async () => {
   const a = await opened();
   const moves = [];

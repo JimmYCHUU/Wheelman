@@ -497,6 +497,51 @@ test('a message we sent by hand can be added, a wrong paste removed, and a reply
   assert.deepEqual([after.order.replying, after.unanswered], [false, 0]);
 });
 
+test('Put back in To do after copying a picked message puts that message back', async () => {
+  // The new page's own store, talking to this server.
+  const { createStore } = await import('../web/new/js/store.js');
+  const { createApi } = await import('../web/new/js/api.js');
+  const { fakeTimers } = await import('./support/newpage-fakes.js');
+  const mem = new Map();
+  const store = createStore({
+    api: createApi({ fetch: (p, init) => fetch(base + p, init), go: () => {} }),
+    clipboard: { writeText: async () => {} },
+    storage: { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, v) },
+    now: Date.now, timers: fakeTimers(), keepalive: async () => {},
+  });
+  const copies = async () => (await get('/api/items/ao:504?message=payment_due')).item.thread.filter((e) => e.by === 'Copied from Wheelman').map((e) => e.text);
+  const until = async (ok) => { for (let i = 0; i < 200 && !(await ok()); i++) await new Promise((r) => setTimeout(r, 10)); };
+
+  // Order 504 has Car secured due. Payment due is picked instead, a line of Jim's is added, and it is copied.
+  await store.actions.open('ao:504');
+  assert.equal(store.get().item.order.message, 'secured');
+  await store.actions.instead('payment_due');
+  const picked = store.get().item;
+  assert.deepEqual([picked.order.message, picked.anchor, picked.draft.status], ['payment_due', 'out:own-payment_due', 'ready']);
+  const words = picked.draft.reply + '\nThanks, Pia.';
+  store.actions.type(words);
+  await store.actions.copy();
+  assert.equal(store.get().typed, null);
+  await until(async () => (await copies()).includes(words));
+  assert.ok((await copies()).includes(words));
+
+  // The route as before, with no suggestion named, puts back the message due now: the copy stays.
+  assert.equal((await post('/api/items/ao:504/restore')).status, 200);
+  assert.ok((await copies()).includes(words), 'without draftId only the message due is put back');
+  assert.equal((await post('/api/items/ao:504/restore', { draftId: 99999999 })).status, 200, 'a suggestion that is not this order\'s is ignored');
+  assert.ok((await copies()).includes(words));
+
+  // Put back in To do from the page names the suggestion copied: that message is put back, with Jim's words.
+  const toast = store.get().toast;
+  assert.equal(toast.action.label, 'Put back in To do');
+  await toast.action.run();
+  assert.deepEqual(await copies(), []);
+  const s = store.get();
+  assert.deepEqual([s.typed, s.done['ao:504'], s.item.order.message], [words, undefined, 'payment_due']);
+  // The message due is as it was.
+  assert.equal((await get('/api/items/ao:504')).item.order.due, 'Send: car secured');
+});
+
 test('nothing is learned from the Auction section', async () => {
   const before = [db.countRows('learned'), db.countRows('advice')];
   const it = (await get('/api/items/ao:503')).item;

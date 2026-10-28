@@ -149,7 +149,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
   const runner = createRunner({ get: () => state, set, now, open: (key) => show(key), close });
   const hold = createHold({ api, get: () => state, timers });
   const { copy, putBack, restore, restoreFollowUp, copyLink, copyNumber, copyEmail, dismiss, dismissFollowUp } =
-    createFinish({ api, clipboard, storage, now, get: () => state, set, toast, text, refresh, runner });
+    createFinish({ api, clipboard, storage, now, get: () => state, set, toast, text, refresh, runner, type });
   // Send on Facebook (web/new/js/sender.js): only when its button is pressed, never by a key.
   const sender = createSender({ api, get: () => state, set, toast, text, refresh, take: takeItem, now, shown });
   const { send } = sender;
