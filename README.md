@@ -163,9 +163,9 @@ applies (no customer record, a photo with no words, a held Prompt, a recent fail
 and busy limits). A draft that fails is tried again, at most three times an hour; once the
 customer's message is more than a day old, three failures in all end the tries (asking for it on
 the page still works). Facebook Marketplace chats are not written in the background: each is
-written when it is opened, on both pages, however old the buyer's message. A photo with no words, a chat not marked as a
-buyer and an archived chat are not written on open. If the writing is refused, the box says why
-and offers Try again. Imports and Auction are written as before.
+written when it is opened, on both pages, however old the buyer's message. A photo with no words,
+a chat not marked as a buyer and an archived chat are not written on open. If the writing is
+refused, the box says why and offers Try again. Imports and Auction are written as before.
 
 Every suggestion is stored in SQLite with the checks it passed or failed and the model that
 wrote it. When the reply later appears in the dashboard conversation, Wheelman compares what
@@ -725,12 +725,17 @@ page until the next update. The old page stays at the normal address until the s
 new page is built from `prototype/`.
 
 **Send on Facebook** is the only send on the new page, and it goes only when you press it. It
-reads **Sending…**, then **Sent** with the time. If it fails, the box says why and offers **Try
-again**. A send that may have gone is never sent twice: Wheelman reads Marketplace and the chat
-first. If the engine took the reply but did not deliver it, the box says it did not reach the
-buyer and offers **Send it again**, and the row reads **Not delivered**. When the chat is off
-screen, a failure appears as a message with **Open**, and the row reads **Not sent** or **Not
-confirmed**. A sent reply cannot be taken back. Ctrl+Enter copies and never sends.
+reads **Sending…**, then the box says **Sent on Facebook** at the time it went. If it fails, the
+box says why and offers **Try again**. A send that may have gone is never sent twice. When
+Marketplace does not answer in time, Wheelman remembers, while it is running, that the reply may
+have gone. Before that chat is sent to again, from this page after a reload, from the old page or
+from another computer, Wheelman reads Marketplace afresh and looks at the chat. If the reply is
+there, nothing more is sent and Wheelman says it has gone already. If the engine took the reply
+but did not deliver it, the box says it did not reach the buyer, shows that reply with **Copy**,
+and offers **Send it again**, and the row reads **Not delivered**. When the chat is off screen, a
+failure appears as a message with **Open**, and the row reads **Not sent** or **Not confirmed**. A
+sent reply cannot be taken back. Ctrl+Enter never sends: in a Facebook chat it does nothing while
+the main button is **Send on Facebook**, and in the other sections it copies the reply.
 
 Beside the open conversation is the **deal panel** (a column on a wide screen, a drawer on a
 medium one, a sheet from the bottom on a phone; it remembers whether you left it open). Its
