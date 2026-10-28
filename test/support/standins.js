@@ -157,8 +157,13 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
 
   // The content engine: three GET addresses, and the one reply address its own inbox page uses. A
   // reply is queued (status "queued") for the engine's phone to type into the chat; a test marks it
-  // sent. world.engineRefusesSend makes the engine refuse; world.workerOnline = false means the
-  // phone is offline, so the reply is queued until it is back.
+  // sent. world.engineRefusesSend makes the engine refuse; world.refuseSendOnce (a Set of chat ids)
+  // makes it refuse each one's next reply, once; world.workerOnline = false means the phone is
+  // offline, so the reply is queued until it is back; world.nextReplyId gives the next reply's
+  // record that id, once (one Wheelman's database cannot keep, to see the reply taken all the same);
+  // world.replyDelayMs makes it queue the next reply and answer that late, once (Wheelman may stop
+  // waiting first); world.failDeliveryOnce (a Set of chat ids) makes it take each one's next reply
+  // and fail to deliver it, once (its status "failed", counted on the chat).
   const engine = await listen(async (req, res) => {
     const body = await readBody(req);
     const url = new URL(req.url, 'http://x');
@@ -167,6 +172,7 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
     const reply = url.pathname.match(/^\/inbox\/conversations\/(\d+)\/reply$/);
     if (req.method === 'POST' && reply) {
       if (world.engineRefusesSend) return json(res, 503, { detail: 'the phone is offline' });
+      if (world.refuseSendOnce && world.refuseSendOnce.delete(Number(reply[1]))) return json(res, 503, { detail: 'the phone is offline' });
       const c = chats.get(Number(reply[1]));
       if (!c) return json(res, 404, { error: 'not found' });
       let parsed = {};
@@ -174,19 +180,31 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
       const text = String(parsed.text || '').trim();
       if (!text) return json(res, 400, { error: 'text is required' });
       const at = new Date().toISOString();
-      const id = Math.max(0, ...[...chats.values()].flatMap((x) => x.messages.map((m) => Number(m.id) || 0))) + 1;
-      const message = { id, direction: 'out', source: 'dashboard', text, status: 'queued', sent_via: '', error: '', artifact: '', artifact_url: '', phone_ts: null, sent_at: null, seen_at: null, created_at: at, has_media: false, mentions: [], attachments: [] };
+      const id = world.nextReplyId !== undefined ? world.nextReplyId : Math.max(0, ...[...chats.values()].flatMap((x) => x.messages.map((m) => Number(m.id) || 0))) + 1;
+      delete world.nextReplyId;
+      const undelivered = !!(world.failDeliveryOnce && world.failDeliveryOnce.delete(Number(reply[1])));
+      const message = { id, direction: 'out', source: 'dashboard', text, status: undelivered ? 'failed' : 'queued', sent_via: '', error: '', artifact: '', artifact_url: '', phone_ts: null, sent_at: null, seen_at: null, created_at: at, has_media: false, mentions: [], attachments: [] };
       c.messages.push(message);
-      Object.assign(c.row, { last_direction: 'out', last_message_at: at, last_outbound_at: at, unread: false, pending_outbound: (c.row.pending_outbound || 0) + 1 });
+      Object.assign(c.row, { last_direction: 'out', last_message_at: at, last_outbound_at: at, unread: false },
+        undelivered ? { failed_outbound: (c.row.failed_outbound || 0) + 1 } : { pending_outbound: (c.row.pending_outbound || 0) + 1 });
+      const late = world.replyDelayMs;
+      delete world.replyDelayMs;
+      if (late) await new Promise((r) => setTimeout(r, late));
       return json(res, 200, { message, worker_online: world.workerOnline !== false });
     }
     if (req.method !== 'GET') return json(res, 405, { error: 'no' });
     if (url.pathname === '/inbox/devices') { res.writeHead(302, { location: '/inbox/conversations' }); return res.end(); }
     if (url.pathname === '/inbox/conversations') {
+      // world.listDown makes the list answer 503. world.listWait (a promise) holds the answer until it
+      // settles, as the list stood when it was asked: a read stays under way, and misses what the
+      // engine records meanwhile.
+      if (world.listDown) return json(res, 503, { error: 'Service Unavailable' });
       const all = [...chats.values()].map((c) => c.row).sort((a, b) => Date.parse(b.last_message_at) - Date.parse(a.last_message_at));
       const offset = Number(url.searchParams.get('offset')) || 0;
       const limit = Number(url.searchParams.get('limit')) || 50;
-      return json(res, 200, { conversations: all.slice(offset, offset + limit), total: all.length, limit, offset });
+      const page = JSON.parse(JSON.stringify({ conversations: all.slice(offset, offset + limit), total: all.length, limit, offset }));
+      if (world.listWait) await world.listWait;
+      return json(res, 200, page);
     }
     const m = url.pathname.match(/^\/inbox\/conversations\/(\d+)$/);
     if (m && chats.has(Number(m[1]))) {

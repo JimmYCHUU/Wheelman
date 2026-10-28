@@ -15,6 +15,7 @@ import { availability } from './normalize.js';
 import { firstNameOf, isPlaceholderName } from './redact.js';
 import { signedName } from './signature.js';
 import { rowMatches } from '../web/lib/search.js';
+import { searchAll } from './search.js';
 import { RUNG_LABELS } from './selling.js';
 import { teachesHere } from './learn.js';
 import { validateMailReport, storeMailThread } from './mail.js';
@@ -27,12 +28,13 @@ import { vehicleMedia, vehiclePicture, findCars, carSummary, VIDEO_HOSTS } from 
 import { logLine } from './log.js';
 import { businessFactsForPrompt, loadBusinessFacts } from './knowledge.js';
 import * as worker from './worker.js';
-import { onCopied, onRated, onApproved, onAdvice, onEdited } from './learn.js';
+import { onCopied, onRated, onApproved, onAdvice, onEdited, onRemember, canLearnFrom } from './learn.js';
 import { displayNameFor } from './people.js';
+import { answeredBy, lastCustomerEntry, replyShown } from './answered.js';
 import { reservedByAnother } from './deal.js';
 import { wantedFrom, enquiryStage } from './imports.js';
 import { SECTIONS, sectionOn, movesFor, onImportsList } from './placement.js';
-import { learnedStats } from './db.js';
+import { learnedStats, listLessons, switchLesson } from './db.js';
 import { validateReport, storePhoneReport } from './phone.js';
 import { sendReply, fetchConversation, normalizeMpMessage, tagMarketplaceLinks } from './marketplace.js';
 import { storeMpConversation } from './sync.js';
@@ -150,6 +152,13 @@ function draftOf(item) {
     needsHuman: (draft.needsHuman || []).filter((n) => n && n.marker && n.reason).map((n) => ({ marker: String(n.marker), reason: String(n.reason) })),
     // What the reply is for: the one next step it offers, and where the customer is on the way to a sale.
     nextStep: draft.next_step || '', rung: draft.rung || '', rungLabel: RUNG_LABELS[draft.rung] || '',
+    // The reply's parts: the AI's words and each block code added, with its label and why (src/parts.js).
+    parts: draft.context?.parts || null,
+    // Each figure and link in the AI's part and in the blocks, with where it came from (traceFacts in src/checks.js).
+    facts: draft.context?.facts || [],
+    // The owner's lessons the request carried ({ adviceId, n, do, scope, at }), and which of code's rules shaped the reply.
+    lessonsApplied: draft.context?.lessons || [],
+    rules: draft.context?.rules || null,
   } : null;
 }
 
@@ -165,9 +174,19 @@ function flagLevel(draft) {
 /** A follow-up as the page sees it: why it is due, and what became of it ('' while it is open). */
 const followUpOf = (r) => ({ id: r.id, kind: r.kind, reason: r.reason, dueAt: r.due_at, done: r.done_how || '', template: r.template });
 
+/**
+ * How a conversation was answered ({ how, by, at }), or null while it is not answered. The
+ * suggestion compared is the one for the customer message our reply answered.
+ */
+function answeredOf(item) {
+  if (item.state !== 'answered') return null;
+  const customer = lastCustomerEntry(item.timeline);
+  return answeredBy(item.timeline, customer ? latestDraft(item.itemKey, customer.key) : null, displayNameFor);
+}
+
 /** One row in the conversation list. Deliberately small. */
 function summary(item) {
-  if (item.order) return { ...item.orderRow, anchor: item.anchorKey, flag: flagLevel(draftOf(item)) };
+  if (item.order) return { ...item.orderRow, anchor: item.anchorKey, answered: null, flag: flagLevel(draftOf(item)) };
   const draft = draftOf(item);
   const last = item.timeline[item.timeline.length - 1];
   const lastShown = [...item.timeline].reverse().find((e) => !e.internal) || last;
@@ -182,6 +201,8 @@ function summary(item) {
     replyComing: !!item.marketplace?.replyComing,
     anchor: item.anchorKey,
     state: item.state,
+    // Who answered it, when it is answered: 'wheelman', 'auto', 'phone' or 'dashboard'.
+    answered: answeredOf(item),
     // Seen only on the phone: the dashboard has no conversation for this number.
     phoneOnly: !!item.phoneOnly,
     dismissed: isDismissed(item.itemKey, item.anchorKey),
@@ -307,7 +328,7 @@ function presentOrder(item) {
     ...summary(item),
     note: '', channel: 'auction', marketplace: null, mail: null, teaches: false,
     firstName: firstNameOf(item.lead), source: 'Auction order', leadStatus: '', location: '', email: item.lead.email || '',
-    noLead: false, autoDraft: false, autoReason: '', firstReply: item.isFirstReply, looking: null, vehicle: null,
+    noLead: false, autoDraft: false, autoReason: '', writeOnOpen: false, firstReply: item.isFirstReply, looking: null, vehicle: null,
     order: orderOf(item),
     // Its messages are in order.messages, gated by where the order stands.
     templates: [],
@@ -338,7 +359,11 @@ function present(item) {
   const draft = draftOf(item);
   return {
     ...summary(item),
+    // The situation's key (SITUATIONS in src/situations.js) beside its label: the new page's Remember scope.
+    situationKey: item.situation.primary,
     note: item.note,
+    // The sale stage, when there is one: the new page's stage line reads it.
+    deal: item.deal ? { stage: item.deal.stage, stageText: item.deal.stageText, source: item.deal.source } : null,
     channel: item.channel,
     marketplace: marketplaceOf(item),
     mail: mailOf(item),
@@ -352,6 +377,10 @@ function present(item) {
     noLead: !item.hasLeadRecord,
     autoDraft: item.autoDraft,
     autoReason: item.autoReason,
+    // A Facebook buyer waiting on us: never written in the background, so both pages write it when
+    // it is opened (web/lib/onopen.js), however old the message. Not an archived chat, one not
+    // marked as a buyer, or a photo with no words.
+    writeOnOpen: item.channel === 'marketplace' && item.autoDraft && item.state === 'awaiting',
     firstReply: item.isFirstReply,
     // The follow-up in hand (opened from the Follow-ups list: the anchor is then "fu:<id>"), or the
     // one that is due for this conversation; null when there is none.
@@ -391,6 +420,10 @@ const olderCache = new Map();
 // Marketplace chats with a reply on its way to the engine right now, so a second press of Send
 // while the first is still being answered cannot send the same reply twice.
 const sendingNow = new Set();
+// Marketplace chats whose last send the engine did not answer in time, so the reply may have gone:
+// { text, anchor, draftId, at } by key. The next send on that chat, from any page, first has a fresh
+// Marketplace read and looks for that reply (kept in memory: a restart forgets it).
+const mayHaveGone = new Map();
 const ALL_STATES = ['awaiting', 'answered', 'ack', 'closed', 'optout', 'other'];
 // Conversations with activity in the last fortnight are rebuilt whenever anything is written;
 // older ones only when something a row depends on has changed (see oldRowsStamp).
@@ -670,6 +703,16 @@ async function api(req, res, url) {
   }
 
   if (req.method === 'POST' && p === '/api/sync') {
+    // { marketplace: true }, from the new page before a Facebook send that follows one that failed
+    // or could not be told: Marketplace only, waiting for a read under way rather than taking the
+    // one before it, with no dashboard check and nothing written. A read that fails is said, so
+    // the page posts nothing. Any other body, or none, is Check now as it always was.
+    const body = await readBody(req).catch(() => ({}));
+    if (body && body.marketplace === true) {
+      const read = await worker.runMarketplaceSync({ wait: true });
+      if (!read || !read.ok) return send(res, 502, { error: read ? read.message : 'Marketplace is switched off.' });
+      return send(res, 200, worker.statusReport());
+    }
     await Promise.all([worker.runSync(), worker.runMarketplaceSync()]);
     worker.updateOutcomes();
     if (config.followUp.on) { try { refreshFollowUps(); } catch (e) { logLine('followups', `Finding follow-ups failed: ${e.message}`); } }
@@ -685,6 +728,17 @@ async function api(req, res, url) {
     const item = itemFromKey(m[1], { message: m[1].startsWith('ao:') ? asked || '' : asked, followUp: Number(url.searchParams.get('followup')) || undefined });
     if (!item) return send(res, 404, { error: 'That conversation was not found.' });
     return send(res, 200, { item: present(item) });
+  }
+
+  // One search across every section that is on, the stock list and the words in messages.
+  if (req.method === 'GET' && p === '/api/search') {
+    // Auction's All is To do and In progress only: its Finished orders are found too.
+    const rowsOf = (s) => {
+      if (!sectionOn(s)) return null;
+      const r = sectionRows(s);
+      return s === 'auction' ? [...r.waiting, ...r.quiet, ...r.other] : r.all;
+    };
+    return send(res, 200, searchAll(url.searchParams.get('q'), { rowsOf }));
   }
 
   // Find a car: cars from the stored stock list matching a stock number or words of the title.
@@ -790,22 +844,62 @@ async function api(req, res, url) {
     if (sendingNow.has(item.itemKey)) return send(res, 409, { error: 'This reply is already on its way.' });
     sendingNow.add(item.itemKey);
     try {
-      const out = await sendReply(item.marketplace.id, text);
+      // The last send on this chat may have gone (the engine did not answer in time): Marketplace is
+      // read afresh and the chat looked at first, whichever page sends. That reply in the chat, with
+      // nothing from the buyer since: 409, and nothing is sent twice. Not there: it is sent as normal.
+      // Marketplace not read: nothing is sent, and the note stays for the next try.
+      const unsure = mayHaveGone.get(item.itemKey);
+      if (unsure) {
+        const read = await worker.runMarketplaceSync({ wait: true });
+        if (!read || !read.ok) return send(res, 502, { error: `Wheelman could not read the Marketplace chat first. ${read ? read.message : 'Marketplace is switched off.'}` });
+        mayHaveGone.delete(item.itemKey);
+        const now = itemFromKey(m[1]) || item;
+        if (replyShown(now.timeline, unsure.anchor, unsure.text, config.marketplace.linkSource)) {
+          // It went from here: its suggestion is marked as sent, as it would have been then.
+          try {
+            const draft = unsure.draftId ? getDraft(unsure.draftId) : null;
+            if (draft && draft.item_key === item.itemKey) { onEdited(now, draft.id, unsure.text); recordSentHere(draft.id, unsure.at); }
+          } catch (e) { logLine('marketplace', `${item.itemKey}: the reply had gone, but the suggestion could not be marked as sent: ${e.message}`); }
+          logLine('marketplace', `${item.itemKey}: a reply that timed out had gone, so the next send was not sent again`);
+          return send(res, 409, { error: 'This reply has gone already.', gone: true });
+        }
+      }
+      let out;
+      try {
+        out = await sendReply(item.marketplace.id, text);
+      } catch (e) {
+        // The engine refused, or could not be reached: 502. It did not answer in time, so it may
+        // have taken the reply: 504, which a page reads as an outcome it cannot tell. Then the chat
+        // is noted, and Marketplace is read once the answer is sent, so the chat shows the reply if
+        // the engine has it.
+        logLine('marketplace', `${item.itemKey}: the reply ${e.mayHaveGone ? 'may not have been sent' : 'could not be sent'}. ${e.message}`);
+        if (!e.mayHaveGone) return send(res, 502, { error: e.message });
+        mayHaveGone.set(item.itemKey, { text, anchor: item.anchorKey, draftId: Number(body.draftId) || null, at: Date.now() });
+        send(res, 504, { error: e.message });
+        worker.runMarketplaceSync({ wait: true }).catch(() => { /* the next read brings it */ });
+        return;
+      }
+      // The engine has the reply: it has gone. What follows is Wheelman's own record of it, and a
+      // step that fails there is logged, never answered as "not sent" (a page would offer it again).
+      const note = (what, step) => { try { step(); } catch (e) { logLine('marketplace', `${item.itemKey}: the reply was sent, but ${what}: ${e.message}`); } };
       // The suggestion it came from: what was in the box is kept with it, and that Send was pressed.
-      const draft = Number(body.draftId) ? getDraft(Number(body.draftId)) : null;
-      if (draft && draft.item_key === item.itemKey) { onEdited(item, draft.id, text); recordSentHere(draft.id); }
+      note('the suggestion could not be marked as sent', () => {
+        const draft = Number(body.draftId) ? getDraft(Number(body.draftId)) : null;
+        if (draft && draft.item_key === item.itemKey) { onEdited(item, draft.id, text); recordSentHere(draft.id); }
+      });
       // The engine's record of the queued reply goes into the thread at once; then the chat is read
       // again so everything else is current too. If that read fails, the next check brings it.
-      if (out.message && Number.isInteger(Number(out.message.id))) appendMpMessage(item.marketplace.id, normalizeMpMessage(out.message, 0, item.marketplace.id));
+      note('it could not be put in the chat', () => {
+        if (out.message && Number.isInteger(Number(out.message.id))) appendMpMessage(item.marketplace.id, normalizeMpMessage(out.message, 0, item.marketplace.id));
+      });
       try {
         const detail = await fetchConversation(item.marketplace.id);
         if (detail?.conversation?.id === item.marketplace.id) storeMpConversation(detail.conversation, detail.messages || []);
       } catch (e) { logLine('marketplace', `${item.itemKey}: the reply was sent, but the chat could not be read back: ${e.message}`); }
       logLine('marketplace', `${item.itemKey}: a reply was sent from the page (${text.length} characters)${out.workerOnline ? '' : '; the engine\'s phone is offline, so it is queued'}`);
-      return send(res, 200, { ok: true, queued: !out.workerOnline, item: present(itemFromKey(m[1]) || item) });
-    } catch (e) {
-      logLine('marketplace', `${item.itemKey}: the reply could not be sent. ${e.message}`);
-      return send(res, 502, { error: e.message });
+      let shown = null;
+      note('the chat could not be shown', () => { shown = present(itemFromKey(m[1]) || item); });
+      return send(res, 200, { ok: true, queued: !out.workerOnline, item: shown });
     } finally { sendingNow.delete(item.itemKey); }
   }
 
@@ -983,6 +1077,30 @@ async function api(req, res, url) {
     return send(res, 200, { item: present(itemFromKey(draft.item_key) || item), ok: next.status === 'ready', error: next.error || '', learned: true, lessons: result.lessons || [], pending: !!result.pending });
   }
 
+  // "Remember": the instruction this suggestion was written from becomes a lesson for every later
+  // reply of its kind. "Just this once" is no call at all: nothing is stored.
+  m = p.match(/^\/api\/drafts\/(\d+)\/remember$/);
+  if (req.method === 'POST' && m) {
+    const body = await readBody(req);
+    const draft = getDraft(Number(m[1]));
+    if (!draft) return send(res, 404, { error: 'Suggestion not found.' });
+    // A Marketplace chat, a phone-only text or an auction order is refused without being looked up.
+    const out = onRemember(canLearnFrom(draft.item_key) ? itemFromKey(draft.item_key) : null, draft.id, body.scope);
+    // wasOn: the lesson was already there and switched on, so this press changed nothing Undo could take back.
+    return out.error ? send(res, out.status || 400, { error: out.error }) : send(res, 200, { lesson: out.lesson, wasOn: out.wasOn });
+  }
+
+  // Every lesson, newest first, each with its kind, channel, scope, date, off switch and use.
+  if (req.method === 'GET' && p === '/api/lessons') return send(res, 200, { lessons: listLessons() });
+
+  m = p.match(/^\/api\/lessons\/(\d+)\/switch$/);
+  if (req.method === 'POST' && m) {
+    const body = await readBody(req);
+    if (typeof body.on !== 'boolean') return send(res, 400, { error: 'Say whether to switch the lesson on or off.' });
+    const lesson = switchLesson(Number(m[1]), body.on);
+    return lesson ? send(res, 200, { lesson }) : send(res, 404, { error: 'That lesson was not found.' });
+  }
+
   // The Review page's runs: real conversations written two ways, and the owner's votes. The runs
   // hold real customer text, so they are never served through the team link.
   if (p === '/api/review' || p.startsWith('/api/review/')) {
@@ -1003,7 +1121,8 @@ async function api(req, res, url) {
 
 function serveStatic(res, url) {
   if (url.pathname === '/favicon.ico') { res.writeHead(204, { 'cache-control': 'max-age=86400' }); return res.end(); }
-  const rel = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\/+/, '');
+  // A path ending in / serves that folder's index.html (/ itself, and /new/ for the new page).
+  const rel = url.pathname.replace(/^\/+/, '') + (url.pathname.endsWith('/') ? 'index.html' : '');
   const file = path.resolve(config.webDir, rel);
   if (!file.startsWith(path.resolve(config.webDir) + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return send(res, 404, 'Not found', 'text/plain; charset=utf-8');
   send(res, 200, fs.readFileSync(file), TYPES[path.extname(file)] || 'application/octet-stream');
@@ -1076,6 +1195,7 @@ export function startServer() {
       }
       if (url.pathname.startsWith('/api/')) return await api(req, res, url);
       if (req.method !== 'GET') return send(res, 405, { error: 'Not allowed' });
+      if (url.pathname === '/new') { res.writeHead(303, { location: '/new/', 'cache-control': 'no-store' }); return res.end(); }
       return serveStatic(res, url);
     } catch (e) {
       send(res, 500, { error: e.message });

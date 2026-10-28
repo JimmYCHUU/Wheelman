@@ -21,6 +21,7 @@ import { openViewer } from './views/Viewer.js';
 import { MoveMenu } from './views/MoveMenu.js';
 import { TemplatePicker, showsPicked, pickHolds, fillsIn } from './views/TemplatePicker.js';
 import { linkLine, placeLine } from './lib/insert.js';
+import { writesOnOpen, noSuggestionKey } from './lib/onopen.js';
 
 // ---- state -------------------------------------------------------------------
 
@@ -771,14 +772,15 @@ function renderComposer(item, els, { arriving = false } = {}) {
   }
   // Nothing written yet: two buttons. Prompt, to say what the reply should say first, and Write it
   // now. A failed try is tried again with the prompt it had. While the free models are busy or
-  // used up, the line says when Wheelman tries again instead of "within a few minutes".
+  // used up, the line says when Wheelman tries again instead of "within a few minutes". A Facebook
+  // chat, which nothing writes in the background, says it has no suggestion yet (web/lib/onopen.js).
   if (!d || d.status !== 'ready') {
     const failed = d && d.status === 'failed';
     const retry = retryFor(item);
     const line = failed ? `A suggestion could not be written. ${d.error}`
       : item.autoReason || (item.autoDraft && retry > Date.now()
         ? t(item.channel === 'marketplace' ? 'composer.retry.marketplace' : state.status?.retryWhy === 'daily' ? 'composer.retry.daily' : 'composer.retry.busy', { time: clock(retry) })
-        : t('composer.waiting'));
+        : t(noSuggestionKey(item)));
     const prompt = promptControls(item, { instruction: failed ? d.instruction || '' : '' });
     box.append(h('div', { class: `quiet ${failed ? 'bad' : ''}`.trim() },
       h('p', { text: line }),
@@ -1810,8 +1812,9 @@ async function open(key, followUpId = null, { write: writeNow = true } = {}) {
     markRead(item);
     if (item.vehicle && (!state.media.has(String(item.vehicle.stockNo)) || state.media.get(String(item.vehicle.stockNo)).status === 'error')) loadMedia(item.vehicle.stockNo);
     renderChat({ toBottom: true });
-    // Opened from the Follow-ups list: the follow-up is written now, unless it already is.
-    if (writeNow && state.followUp && followUpToWrite(item)) write(item, '');
+    // Opened from the Follow-ups list: the follow-up is written now, unless it already is. A waiting
+    // Facebook buyer, never written in the background, is written now too (web/lib/onopen.js).
+    if (writeNow && (state.followUp ? followUpToWrite(item) : writesOnOpen(item))) write(item, '');
     if (narrow()) $('.thread')?.focus({ preventScroll: true });
   } catch (e) {
     toast(e.message);

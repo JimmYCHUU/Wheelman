@@ -249,7 +249,14 @@ test('a sale is kept as a small digest: no amount, no name, no readable phone or
   assert.equal(row.paid, 'part');
   assert.equal(row.stock_no, '1300');
   assert.ok(row.sold_at > 0);
-  const stored = JSON.stringify([row, db.openDb().prepare('SELECT * FROM vehicles WHERE id = 7').get()]);
+  // The hashes are salted for each database and updated_at is the clock, so a short figure can turn
+  // up in them by chance: they are checked for what they are, and every other column is searched.
+  const vehicle = db.openDb().prepare('SELECT * FROM vehicles WHERE id = 7').get();
+  for (const h of [row.phone_hash, row.email_hash]) assert.match(h, /^[0-9a-f]{32}$/, 'a hash, never the number or address itself');
+  for (const t of [row.updated_at, vehicle.updated_at]) assert.ok(Number.isInteger(t), 'a time, and nothing else');
+  const { phone_hash: _p, email_hash: _e, updated_at: _s, ...saleText } = row;
+  const { updated_at: _v, ...vehicleText } = vehicle;
+  const stored = JSON.stringify([saleText, vehicleText]);
   for (const secret of ['Zed', 'Buyer', '411222333', '0411', 'example.com', 'Example.com', '31750', '987654', '4321', '21000', '1500000', 'ZZZ99Q', 'paymentSummary', 'salesInfo'])
     assert.ok(!stored.includes(secret), `stored: ${secret}`);
 

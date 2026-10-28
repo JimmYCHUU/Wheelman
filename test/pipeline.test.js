@@ -387,14 +387,17 @@ test("marking a copied suggestion not usable makes Wheelman forget it", async ()
   assert.equal(db.allLearned().some((r) => r.draft_id === id), false);
 });
 
-test("a suggestion used word for word is not kept as an example, and there is one lesson per customer message", async () => {
+test("a suggestion used word for word counts as approval, is not kept as an example, and there is one lesson per customer message", async () => {
   const { items, db } = await load();
   const learn = await import("../src/learn.js");
   const item = items.buildItem({ conversationId: 206 });
   const a = db.insertDraft({ itemKey: item.itemKey, anchorKey: item.anchorKey, situation: "price_negotiation", reply: "Hi Max,\nThe price is as advertised.\n\nRegards,\nTeam Carbarn", status: "ready", checks: [] });
+  // Copied as written, it is approved (as Good reply did): shown as the owner's approved reply, not as an example of how the team writes.
   const unchanged = learn.onCopied(item, a, "Hi Max,\nThe price is as advertised.\n\nRegards,\nTeam Carbarn");
-  assert.equal(unchanged.learned, false);
-  assert.match(unchanged.why, /unchanged/);
+  assert.equal(unchanged.approved, true);
+  assert.equal(db.getDraft(a).rating, "good");
+  assert.equal(db.getLearned(a).source, "approved");
+  assert.ok(!learn.learnedExamples({ situations: ["price_negotiation"], primary: "price_negotiation", text: "Is the price as advertised?", firstReply: false }, 6).some((e) => e.id === `learned-${a}`));
 
   assert.equal(learn.onCopied(item, a, "Hi Max,\nThe price is as advertised and includes six months of registration.").learned, true);
   const b = db.insertDraft({ itemKey: item.itemKey, anchorKey: item.anchorKey, situation: "price_negotiation", reply: "Hi Max,\nSecond attempt.", status: "ready", checks: [] });

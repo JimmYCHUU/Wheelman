@@ -1,0 +1,13 @@
+/* What a section adds to the conversation: for a Facebook chat, what the engine's auto-reply is doing
+   (the pills after the messages, each a sentence in its colour), a reply the engine's phone is still
+   sending, and a listing that is not in the stock list. In the views layer, beside the pills and
+   strips of views.css that these build on. Tokens only. */
+@layer views {
+  .pill.engine { font-weight: var(--fw-semi); }
+  .pill.engine.info { background: var(--accent-soft); color: var(--ink); }
+  .pill.engine.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.engine.bad { background: var(--bad-soft); color: var(--bad); }
+  .bubble .by.sending { font-style: italic; color: var(--ink-2); }
+  .carstrip .unlisted { color: var(--ink-2); font-weight: var(--fw-semi); }
+  .asked dd a { overflow-wrap: anywhere; }
+}
