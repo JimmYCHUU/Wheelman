@@ -100,6 +100,11 @@ export function sectionBox(args = {}) {
     const after = unseen ? ' Wheelman cannot see this reply in the chat yet.' : typing;
     return { kind: 'quiet', tone: unseen ? '' : 'good', sentence: 'Sent on Facebook ' + sentWhen(sent, now) + '.' + after, button: ANYWAY, tell: true };
   }
+  // An email with suggestions switched off and none in hand: why, and nothing to write or copy.
+  const offered = view.kind === 'quiet' && !!view.button && (view.button.act === 'write' || view.button.act === 'retry');
+  if (offered && item.mail && item.mail.draftsOff && item.state === 'awaiting' && !item.dismissed && !(item.draft && item.draft.status === 'ready')) {
+    return { kind: 'quiet', tone: '', sentence: item.autoReason || 'Suggested replies for emails are switched off.', button: null, tell: false };
+  }
   const refused = stillAbout(item, writeFailed) && !(item.draft && item.draft.status === 'ready');
   if (!refused) return view;
   if (view.kind === 'editor') return { ...view, failure: [sentence(writeFailed.message), 'Your text is kept.'].filter(Boolean).join(' ') };

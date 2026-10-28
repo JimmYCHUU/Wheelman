@@ -151,6 +151,17 @@ const { parseDashboardTime, sydneyDay } = await import('../../src/time.js');
   db.upsertConversation({ id: quiet, phone: '+61491570171', channel: 'SMS', status: 'OPEN', leadId: quiet, customerName: 'Quietly Invented', latestDirection: 'OUT', latestAt: visit - 25 * HOUR, latestBody: 'x' });
   (await import('../../src/followup.js')).refreshFollowUps();
 }
+// Hollis wrote to Gmail about importing a Hiace, posted the way the Gmail add-on posts a thread: one of
+// the three messages was folded by Gmail, so the row, the panel and the research notes can be seen.
+{
+  const mailer = await import('../../src/mail.js');
+  const now = Date.now(), HOUR = 3600e3;
+  mailer.storeMailThread(mailer.validateMailReport({ v: 1, kind: 'mail', thread: { ref: 'thread-f:preview-hollis' }, subject: 'Importing a Toyota Hiace GDH206', seenAt: now, messages: [
+    { ref: 'msg-f:ph1', fromEmail: 'hollis@example.com', fromName: 'Hollis Invented', text: 'Hi, can you import a Toyota Hiace GDH206 for me? What would it cost?', at: now - 5 * HOUR },
+    { ref: 'msg-f:ph2', fromEmail: 'hollis@example.com', fromName: 'Hollis Invented', text: '', collapsed: true, at: now - 4 * HOUR },
+    { ref: 'msg-f:ph3', fromEmail: 'hollis@example.com', fromName: 'Hollis Invented', text: 'Also, how long would it take to arrive in Sydney?', at: now - 1 * HOUR },
+  ] }, { now }), { now });
+}
 // The people just added are waiting too: the ten newest get their suggestions written ahead, as in daily use.
 await worker.draftWaiting();
 

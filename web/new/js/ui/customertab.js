@@ -5,6 +5,7 @@ import { html } from './html.js';
 import { stageLine, leadStatusWords, sourceWords } from '../model.js';
 import { marketplaceRows } from '../fbchat.js';
 import { Asked } from './cartab.js';
+import { emailRows } from '../emailview.js';
 
 /** A row of the customer's details; nothing at all when the value is not known. */
 const row = (label, value) => (value ? [html`<dt key=${label}>${label}</dt>`, html`<dd key=${label + '='}>${value}</dd>`] : null);
@@ -29,6 +30,15 @@ function Marketplace({ m }) {
       <ul class="included">${notes.items.map((n, i) => html`<li key=${i}>${n}</li>`)}</ul>
       <p class="fine">${notes.fine}</p>
     </section>` : null}`;
+}
+
+/** An email: its subject, who wrote, the model asked about, how many messages, and whether Gmail folded any. */
+function Email({ mail }) {
+  const { rows, folded } = emailRows(mail);
+  return html`<section class="car-sec"><h4>Email</h4>
+    <dl class="asked">${rows.map((r) => row(r.label, r.value))}</dl>
+    ${folded ? html`<p class="fine">${folded}</p>` : null}
+  </section>`;
 }
 
 /**
@@ -56,6 +66,7 @@ export function CustomerTab({ item, act }) {
       ${item.noLead ? html`<p class="fine">No customer record. This number has no customer in the dashboard.</p>` : null}
     </section>
     ${item.marketplace ? html`<${Marketplace} m=${item.marketplace} />` : null}
+    ${item.mail ? html`<${Email} mail=${item.mail} />` : null}
     ${item.looking ? html`<section class="car-sec"><h4>Asking about</h4><${Asked} looking=${item.looking} /></section>` : null}
     ${stage ? html`<${Stage} item=${item} />` : null}
     ${insider.length ? html`<section class="car-sec"><h4>Shaped the reply, never stated</h4>

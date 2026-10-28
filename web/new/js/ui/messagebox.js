@@ -4,8 +4,11 @@
 // from here, and only when Send on Facebook is pressed; every other reply is copied, then pasted
 // where it goes. When there is no suggestion to show, one sentence says why, with one button.
 import { html, useState, useEffect, useRef, useLayoutEffect } from './html.js';
-import { boxText, liveChecks, checkLines, insteadOptions, trustLine, wordsLine, saveWords, segments, rememberOffer } from '../model.js';
+import { boxText, liveChecks, checkLines, trustLine, wordsLine, saveWords, segments, rememberOffer } from '../model.js';
 import { boxViewOf } from '../boxsections.js';
+import { messageOptions } from '../messages.js';
+import { MenuButton } from './menu.js';
+import { Research } from './research.js';
 import { replyChannel, mainFor, sendFor, sendingNow, sendFailedWords } from '../channel.js';
 import { Trust } from './trust.js';
 import { Editor, focusFirstBlank, focusText } from './editor.js';
@@ -151,7 +154,7 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
   const locked = sendingNow(item, state.sending[state.key]);
   const failedSend = sending && sending.state === 'failed' ? sending : null;
   const action = empty ? null : mainFor({ item, text, checks: live, overridden: state.overridden, sending });
-  const options = insteadOptions(item);
+  const { shown: options, more } = messageOptions(item);
 
   const fill = () => focusFirstBlank(editor.current);
   // Send on Facebook: a blank still in the text sends nothing, and the caret goes to it.
@@ -230,8 +233,9 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
           ${state.overridden || blanks ? null : html`<button type="button" class="btn small" onClick=${anyway}>${facebook ? 'Send anyway' : 'Copy anyway'}</button>`}</p>`)}
         ${[...lines.warns, ...lines.inputs].map((m, i) => html`<p class="check warn" key=${'w' + i}>${m}</p>`)}
       </div>`}
-      ${options.length ? html`<div class="instead"><span>Instead:</span>
+      ${options.length || more.length ? html`<div class="instead"><span>Instead:</span>
         ${options.map((o) => html`<button type="button" class="opt" disabled=${locked} key=${o.id} onClick=${() => actions.instead(o.id)}>${o.label}</button>`)}
+        ${more.length && !locked ? html`<${MenuButton} label="More messages" items=${more.map((o) => ({ label: o.label, run: () => actions.instead(o.id) }))} />` : null}
       </div>` : null}
       <div class="foot">
         <${Tell} disabled=${locked} onSend=${(v) => actions.tell(v)} holdTell=${actions.holdTell} button="Rewrite" />
@@ -246,6 +250,7 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
         </div>
       </div>
       <${Note} state=${state} actions=${actions} item=${item} />
+      ${d ? html`<${Research} research=${d.research} />` : null}
     </div>
   </div>`;
 }

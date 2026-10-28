@@ -88,7 +88,8 @@ const pastedInDashboard = (row) => /^[cl]:/.test(String((row && row.key) || ''))
  * it was when it failed: "Not sent" in red when it was refused, "Not confirmed" in amber when
  * Wheelman could not tell whether it went. Then a reply sent from here that did not reach the buyer
  * (opts.unconfirmed, the store's note for this row) says "Not delivered" in red, while the chat
- * still waits on the message it answered and nothing was copied for it since.
+ * still waits on the message it answered and nothing was copied for it since. An email Gmail had
+ * folded (row.collapsed) says "Folded in Gmail" (amber) next.
  */
 export function sectionRowView(row, opts, section) {
   const view = rowView(row, opts);
@@ -101,6 +102,8 @@ export function sectionRowView(row, opts, section) {
   if (note && note.outcome === 'undelivered' && note.anchor === row.anchor && row.state === 'awaiting' && !view.done) {
     return { ...view, reason: 'Not delivered', channel: rowChannelWord(row, section), tone: 'bad' };
   }
+  // An email Gmail had folded is only partly read: that comes before every reason but done and a failed send.
+  if (row.collapsed && !view.done) return { ...view, reason: 'Folded in Gmail', channel: rowChannelWord(row, section), tone: 'warn' };
   const order = isOrder(row) && !view.done;
   const needsYou = !order && !view.reason && !!row.needsPerson && !!row.unanswered;
   const said = view.done && !pastedInDashboard(row) ? 'Copied' : view.reason;
