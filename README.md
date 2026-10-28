@@ -716,9 +716,9 @@ What to know:
 A new page is being built beside this one, at http://127.0.0.1:3210/new/. The old page has a
 quiet link, **Try the new page**, next to the cog. All four sections open on the new page, each
 with its own lists: Dashboard has Needs reply, Follow-ups and All, and Auction has To do, In
-progress and Finished. Only Marketplace can be switched off, and then it has no tab. In each, the open conversation
-has the message box with its fill-in blanks, **Instead**, the "Tell Wheelman what to say…" line,
-and one main button for the channel: **Copy reply** for a text, **Copy for Gmail** for an email,
+progress and Finished. Only Marketplace can be switched off, and then it has no tab. In each, the
+open conversation has the message box with its fill-in blanks, **Instead**, the "Tell Wheelman
+what to say…" line, and one main button for the channel: **Copy reply** for a text, **Copy for Gmail** for an email,
 **Copy for WhatsApp** for an auction order, and **Send on Facebook** for a Marketplace buyer.
 **Put back in Needs reply** is on Dashboard. The old page stays at the normal address until the
 switch-over. The new page is built from `prototype/`.
@@ -739,15 +739,17 @@ Imports. **Stock enquiry** moves it back (a Facebook chat goes back to Marketpla
 customer** dismisses it. The page follows the conversation, and for nine seconds a toast offers
 **Undo**, which puts the type and the section back. A reply you had not touched is written again
 for the new type; words you typed are kept as they are. An auction order has no type to choose,
-and nothing is moved into Marketplace or, by hand, into Auction.
+and nothing is moved into Marketplace or, by hand, into Auction, except an order customer's own
+texts, from the order's **Their texts**.
 
 **Auction** holds auction orders. The open order has the **Which message?** choices for its
-stage, the first one being a reply to what they wrote, and **Paste what they wrote**, which opens
-a box with **We sent this** and **They wrote this**: a pasted message of theirs is answered, and
+stage (a reply to what they wrote comes first when they have written and a reply is due), and
+**Paste what they wrote**, which opens a box with **We sent this** and **They wrote this**: a pasted message of theirs is answered, and
 **Remove** takes a pasted one out again. **Copy for WhatsApp** copies the message, and the toast
-offers **Put back in To do**. The panel's **Order** tab shows the stage, what they asked for, the auction car, what is
-charged and paid, and **Their texts**, with the button that answers those texts in Dashboard (and back). Nothing is learned
-from an order, so Remember is never offered there.
+offers **Put back in To do**. The panel's **Order** tab shows the stage, what they asked for, the
+auction car, what is charged and paid, and **Their texts**, with the button that answers those
+texts in Dashboard (and back). Nothing is learned from an order, so Remember is never offered
+there.
 
 **Send on Facebook** is the only send on the new page, and it goes only when you press it. It
 reads **Sending…**, then the box says **Sent on Facebook** at the time it went. If it fails, the
@@ -792,8 +794,9 @@ After you ask Wheelman to rewrite with **Tell Wheelman what to say…**, it offe
 that kind of reply. Choosing it keeps your instruction as a lesson for later texts or emails of
 that kind, never for Marketplace chats, and **Undo** switches the lesson off again. If the same
 instruction was already remembered for that kind of reply, it says **Already remembered** and
-offers no Undo, so the lesson you had stays on. Remember is not offered on a follow-up or in the
-Auction section, because those teach nothing. **Just this once** keeps nothing. **What Wheelman
+offers no Undo, so the lesson you had stays on. Remember is not offered on a follow-up, in the
+Auction section or on a lead from the dashboard's Imports list while it is in Imports, because
+those teach nothing. **Just this once** keeps nothing. **What Wheelman
 used** now also lists the lessons it followed and the rules that applied. A list of all lessons
 comes in a later update.
 
@@ -1200,8 +1203,7 @@ marked "due now"; the first choice is the reply to what they wrote. Each is writ
 wording with what the enquiry says (the car, years, kilometres, budget), the deposit amount a
 blank since there is no order yet, and fitted to the customer as an order's is. The leads on the
 dashboard's Imports list are not here: they are listed in Import Query (Imports on the new page),
-with these same messages. **One row per customer:** once a customer has an order
-under way, the order stands for them and the conversation it reads (the one on the order's
+with these same messages. **One row per customer:** once a customer has an order under way, the order stands for them and the conversation it reads (the one on the order's
 number, else its lead's) is no longer a row of its own. A text or website enquiry from them
 since the order opened (within the last week) puts the order in To do as a reply to what they
 wrote, written for a text and pasted into the dashboard; our text back answers it, and Dismiss
@@ -1332,8 +1334,8 @@ Customers also ask about importing by email to the business mailbox: whether a m
 imported, what it would land for, how the process works. The mailbox holds much else besides, so
 Wheelman does not read it. Instead you hand each import enquiry over yourself: open the email in
 Gmail, press **Send to Wheelman**, and the whole thread appears in the Import Query section (it
-also lists the leads on the dashboard's Imports list) in the usual conversation, the customer on the left and the team's replies on the right. Nothing in
-Gmail changes.
+also lists the leads on the dashboard's Imports list) in the usual conversation, the customer on
+the left and the team's replies on the right. Nothing in Gmail changes.
 
 - **One press per thread.** The button reads the subject and every message that is open on the
   page: who sent it, when, and its text, with the quoted history under a reply left out. A
@@ -1536,7 +1538,8 @@ From dashboard leads and conversations, the website and the dashboard's records,
 import email threads sent from Gmail, each kind kept to itself (see the Import Query section).
 Never from Marketplace, never from the phone, and not from the Auction section: its messages
 come from a wording file, and what a customer wrote on WhatsApp is pasted in, not read from
-the dashboard. Never from a follow-up either: its wording is yours in
+the dashboard. Nor from a lead on the dashboard's Imports list while it is in Imports: those
+are answered from the same wording and teach nothing. Never from a follow-up either: its wording is yours in
 `voice/dashboard-messages.md`, and copying one teaches nothing.
 
 Wheelman learns two different things from two different places. **What to say** comes from
