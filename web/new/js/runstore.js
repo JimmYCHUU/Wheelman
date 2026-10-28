@@ -14,6 +14,9 @@ const since = (r, now) => r.waitingSince || r.lastAt || now;
 /** A row still waiting on us: not answered, by us or anyone else. */
 const isWaiting = (r) => !r.answered && (r.state === undefined || r.state === 'awaiting');
 
+/** The loaded rows are the whole list, not a page cut short. */
+const complete = (s) => s.rows.length >= (s.total || 0);
+
 /** The run's current customer was answered by someone else while open: the run bar's Skip is Next. */
 const answeredNow = (s) => !!s.run && s.key === s.run.key && !!s.item && s.item.state === 'answered' && !!s.item.answered;
 export const skipLabel = (s) => (answeredNow(s) ? 'Next' : 'Skip');
@@ -103,19 +106,21 @@ export function createRunner({ get, set, now, open, close }) {
 
   /**
    * The customers waiting beyond the run: all of them, less the run's own the count still holds:
-   * on the page, the ones still in Needs reply (the copied ones are left out of it already); off
-   * the page, the ones copied or skipped.
+   * on the page, the ones still in Needs reply (the copied ones are left out of it already); off a
+   * page cut short, the ones copied or skipped. Missing from the whole list, the server no longer
+   * counts them (the reply showed on the dashboard), so they are not taken off again.
    */
   function more(r) {
     const s = get();
     const loaded = new Set(s.rows.map((x) => x.key));
     const still = new Set(visibleRows(s).map((x) => x.key));
-    return Math.max(0, waitingCount(s) - r.queue.filter((k) => (loaded.has(k) ? still.has(k) : r.listed.has(k))).length);
+    const cut = !complete(s);
+    return Math.max(0, waitingCount(s) - r.queue.filter((k) => (loaded.has(k) ? still.has(k) : cut && r.listed.has(k))).length);
   }
 
   async function advance(r) {
     const s = get();
-    const key = nextKey(r, visibleRows(s), s.rows.length >= (s.total || 0));
+    const key = nextKey(r, visibleRows(s), complete(s));
     if (key === null) {
       const left = more(r);
       run = null;

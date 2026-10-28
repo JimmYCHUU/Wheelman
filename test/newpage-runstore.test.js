@@ -335,6 +335,30 @@ test('a customer pushed off a page cut short is opened, not counted as answered 
   assert.equal(a.store.get().runSummary, 'All answered: 9 copied, 1 answered elsewhere. 17 more waiting.');
 });
 
+test('on a complete list, a run customer whose reply showed on the dashboard is not taken off the count twice', async () => {
+  // Twelve waiting, all loaded; the run copies its ten, and the first five replies show on the
+  // dashboard during the run, so the server drops them from the list and from the count.
+  const a = waiting(12);
+  await a.store.actions.refresh();
+  await a.store.actions.startRun();
+  const copied = [];
+  for (let k = 0; k < 10; k++) {
+    copied.push(a.store.get().key);
+    if (k === 5) {
+      const gone = new Set(copied.slice(0, 5));
+      a.data.rows = a.data.rows.filter((r) => !gone.has(r.key));
+      a.data.counts = { ...a.data.counts, waiting: a.data.rows.length };
+      for (const key of gone) a.data.items[key] = { ...a.data.items[key], anchor: 'a-after-' + key, state: 'answered', answered: { how: 'wheelman', by: '', at: 900 } };
+      await a.store.actions.refresh();
+      assert.equal(a.store.get().rows.length, a.store.get().total, 'the list is complete');
+    }
+    await copyLater(a);
+  }
+  // Seven on the server: the five copied whose replies have not shown yet, and c:11 and c:12.
+  assert.equal(a.store.get().runSummary, 'All answered: 10 copied. 2 more waiting.');
+  assert.equal(a.store.get().runMore, 2);
+});
+
 test('Start again after skipping says that it takes the skipped ones too', async () => {
   const a = waiting(5);
   a.data.rows.push(...Array.from({ length: 10 }, (_, i) => row('c:' + (20 + i), { waitingSince: 10 - i })));
