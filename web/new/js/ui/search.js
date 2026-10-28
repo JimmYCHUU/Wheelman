@@ -9,7 +9,6 @@ import { MIN_CHARS, enterPick } from '../searchstore.js';
 const SHOWN = 6;
 const INPUT_ID = 'wheelman-search';
 const LIST_ID = 'wheelman-search-results';
-const OLD_PAGE = 'Opens on the old page';
 
 export const EMPTY_WORDS = 'No match. Try a stock number or part of a phone number.';
 export const ERROR_WORDS = 'Search is not answering. Try again.';
@@ -41,25 +40,28 @@ export function focusSearch() {
   if (button) button.click();
 }
 
+/** The section a result outside the Dashboard is in, which is where it opens. */
+function Where({ section }) {
+  return section && section !== 'dashboard' ? html`<span class="hit-where">${sectionLabel(section)}</span>` : null;
+}
+
 function Option({ e, active, now, onPick, stale }) {
   const r = e.r;
   let body;
   if (e.kind === 'more') {
     body = html`<span class="hit-title">Show all ${e.count} ${e.group === 'customers' ? 'customers' : e.group}</span>`;
   } else if (e.kind === 'customers') {
-    const old = r.section !== 'dashboard';
     body = html`<span class="hit-title">${r.name || r.phone || r.email || 'Unknown number'}</span>
       <span class="hit-sub">${[r.car, r.phone].filter(Boolean).join(' · ')}</span>
-      ${old ? html`<span class="hit-old">${sectionLabel(r.section)} · ${OLD_PAGE}</span>` : null}`;
+      <${Where} section=${r.section} />`;
   } else if (e.kind === 'cars') {
     const sold = r.availability && r.availability.code === 'sold';
     const meta = ['Stock ' + r.stockNo, r.price && !sold ? money(r.price) : '', r.availability && r.availability.text ? r.availability.text : ''].filter(Boolean).join(' · ');
     body = html`<span class="hit-title">${r.title || 'Stock ' + r.stockNo}</span><span class="hit-sub num">${meta}</span>`;
   } else {
-    const old = r.section !== 'dashboard';
     body = html`<span class="hit-title">${r.name || 'Unknown'}<span class="hit-when num">${listTime(r.at, now)}</span></span>
       <span class="hit-sub">${r.who === 'us' ? 'You: ' : ''}${r.text}</span>
-      ${old ? html`<span class="hit-old">${sectionLabel(r.section)} · ${OLD_PAGE}</span>` : null}`;
+      <${Where} section=${r.section} />`;
   }
   return html`<div role="option" id=${e.id} class=${'hit' + (e.kind === 'more' ? ' more' : '')} aria-selected=${active ? 'true' : 'false'}
     onMouseDown=${(ev) => ev.preventDefault()} onClick=${() => { if (!stale) onPick(e); }}>${body}</div>`;

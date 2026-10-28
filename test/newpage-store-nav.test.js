@@ -8,17 +8,25 @@ import { setup, row, paths } from './support/newpage-fakes.js';
 
 const opened = (calls) => paths(calls).filter((p) => /^GET \/api\/items\/|^POST \/api\/items\/[^/]+\/seen$/.test(p));
 
-test('a reload on a section still on the old page loads the Dashboard list and opens nothing', async () => {
-  for (const hash of ['#/auction/waiting', '#/marketplace/all', '#/importquery/followups/c%3A1']) {
-    const a = setup();
-    await a.store.actions.boot(parseRoute(hash), { wide: true });
+test("a reload on another section loads that section's list, on a chip it has, and opens what the address names", async () => {
+  const sections = { auction: { rows: [row('ao:5'), row('ao:6')], counts: { waiting: 2 } }, marketplace: { rows: [row('mp:7')], counts: { waiting: 1 } }, importquery: { rows: [row('em:3')], counts: { waiting: 1 } } };
+  const items = { 'ao:5': { key: 'ao:5', anchor: 'a-ao:5', draft: null }, 'ao:6': { key: 'ao:6', anchor: 'a-ao:6', draft: null }, 'mp:7': { key: 'mp:7', anchor: 'a-mp:7', draft: null }, 'em:3': { key: 'em:3', anchor: 'a-em:3', draft: null } };
+  for (const [hash, want, wide] of [
+    ['#/auction/waiting', ['auction', 'waiting', 'ao:5'], true],
+    ['#/auction/other/ao%3A6', ['auction', 'other', 'ao:6'], true],
+    ['#/marketplace/all', ['marketplace', 'all', null], false],
+    ['#/importquery/followups/em%3A3', ['importquery', 'waiting', 'em:3'], false],
+  ]) {
+    const a = setup({ sections });
+    Object.assign(a.data.items, items);
+    await a.store.actions.boot(parseRoute(hash), { wide });
     await a.store.actions.refresh();
     const lists = paths(a.calls).filter((p) => p.startsWith('GET /api/items?'));
     assert.ok(lists.length >= 2, hash);
-    assert.ok(lists.every((p) => p.includes('section=dashboard')), hash + ': ' + lists.join(', '));
-    assert.deepEqual(opened(a.calls), [], hash + ': nothing opened or marked seen');
-    assert.equal(a.store.get().section, 'dashboard');
-    assert.equal(a.store.get().key, null);
+    assert.ok(lists.every((p) => p.includes('section=' + want[0] + '&tab=' + want[1])), hash + ': ' + lists.join(', '));
+    const s = a.store.get();
+    assert.deepEqual([s.section, s.chip, s.key], want, hash);
+    assert.deepEqual(opened(a.calls).filter((p) => p.startsWith('POST')), want[2] ? ['POST /api/items/' + want[2] + '/seen'] : [], hash);
   }
 });
 

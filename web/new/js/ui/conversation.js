@@ -2,6 +2,7 @@
 // text; only an http or https address becomes a link.
 import { html, useState, useRef, useLayoutEffect, useEffect } from './html.js';
 import { whoLabel, boxViewOf } from '../model.js';
+import { headLine } from '../sections.js';
 import { hashFor } from '../route.js';
 import { skipLabel, startAgain } from '../runstore.js';
 import { MenuButton } from './menu.js';
@@ -35,7 +36,7 @@ function Head({ state, actions, details }) {
   const item = state.item;
   const name = item.name || item.phone || item.email || 'Unknown number';
   const back = () => { location.hash = hashFor({ section: state.section, chip: state.chip }); };
-  const sub = item.writing ? 'Writing a suggestion…' : item.situation || '';
+  const sub = headLine(item);
   return html`<div class="chat-head">
     <button type="button" class="btn quiet back" onClick=${back} aria-label="Back to the list">‹ List</button>
     <div class="title">

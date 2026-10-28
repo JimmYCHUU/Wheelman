@@ -9,11 +9,12 @@ import { parseRoute, hashFor } from './route.js';
 import { followUpOf } from './store.js';
 
 /**
- * What the store does when the address changes: null for nothing, { chip, key } for another list
- * (and that conversation on it), or { open, followup } for another conversation on this list.
+ * What the store does when the address changes: null for nothing, { section, chip, key } for
+ * another section (its list, and that conversation there), { chip, key } for another list (and
+ * that conversation on it), or { open, followup } for another conversation on this list.
  */
 export function storeStep(route, s) {
-  if (route.section !== s.section) return null; // a section still on the old page: only its tab's note
+  if (route.section !== s.section) return { section: route.section, chip: route.chip, key: route.key };
   if (route.chip !== s.chip) return { chip: route.chip, key: route.key };
   if (route.key && route.key !== s.key) return { open: route.key, followup: followUpOf(s, route.key) };
   return null;

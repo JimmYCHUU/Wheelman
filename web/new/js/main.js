@@ -88,15 +88,16 @@ store.subscribe(() => {
 applyTheme(readTheme(), storage);
 render(html`<${App} store=${store} panel=${panel} setPanel=${setPanel} search=${search} />`, document.getElementById('app'));
 
-// The store follows the address: another chip or another conversation, from Back, forward, a pasted
-// link, or a row or chip pressed (web/new/js/hashsync.js). Any address but the reply run's own
-// conversation ends the run quietly.
+// The store follows the address: another section, chip or conversation, from Back, forward, a
+// pasted link, a search result, or a tab, row or chip pressed (web/new/js/hashsync.js). Any address
+// but the reply run's own conversation ends the run quietly.
 window.addEventListener('hashchange', () => {
   const route = parseRoute(location.hash);
   if (leavesRun(route, store.get())) actions.endRun();
   const step = storeStep(route, store.get());
   if (!step) return;
-  if (step.chip) actions.setChip(step.chip, { key: step.key });
+  if (step.section) actions.setSection(step.section, { chip: step.chip, key: step.key, wide: innerWidth >= 1280 });
+  else if (step.chip) actions.setChip(step.chip, { key: step.key });
   else actions.open(step.open, { followup: step.followup });
 });
 

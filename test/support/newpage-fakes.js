@@ -28,7 +28,8 @@ export const draft = (id, o = {}) => ({ id, status: 'ready', reply: 'Hello from 
 /**
  * A fake server: handlers by "METHOD path" (prefix match on GET paths), a call log, and failures on
  * demand. stored: what the browser already keeps (key to value) when the page opens; now: the
- * store's clock (1000 throughout unless a test moves it).
+ * store's clock (1000 throughout unless a test moves it). The Dashboard's list is data.rows and
+ * data.counts; another section's is data.sections[section] = { rows, counts } (none: an empty list).
  */
 export function setup(over = {}, { stored = {}, now = () => 1000 } = {}) {
   const calls = [];
@@ -36,9 +37,11 @@ export function setup(over = {}, { stored = {}, now = () => 1000 } = {}) {
     rows: [row('c:1'), row('c:2')],
     items: { 'c:1': { key: 'c:1', anchor: 'a-c:1', phone: '0491 570 101', draft: draft(11) }, 'c:2': { key: 'c:2', anchor: 'a-c:2', draft: null } },
     counts: { all: 2, waiting: 2, quiet: 0, other: 0, followups: 1 },
+    sections: {},
     fail: new Set(),
     ...over,
   };
+  const listOf = (section) => data.sections[section] || (section === 'dashboard' ? data : { rows: [], counts: {} });
   // An edit is kept with its suggestion, as the server does: null when it is the suggestion as written.
   const keepEdit = (id, text) => {
     for (const [k, it] of Object.entries(data.items)) {
@@ -54,8 +57,11 @@ export function setup(over = {}, { stored = {}, now = () => 1000 } = {}) {
     if (body === undefined) {
       if (path === '/api/status') return { missing: [], lastSync: { ok: true, at: 0 } };
       if (path.startsWith('/api/items?')) {
-        const limit = Number(new URLSearchParams(path.split('?')[1]).get('limit')) || Infinity;
-        return { items: data.rows.slice(0, limit), total: data.rows.length, counts: data.counts, unread: { dashboard: 2 }, sections: {}, section: 'dashboard' };
+        const q = new URLSearchParams(path.split('?')[1]);
+        const limit = Number(q.get('limit')) || Infinity;
+        const section = q.get('section') || 'dashboard';
+        const { rows, counts } = listOf(section);
+        return { items: rows.slice(0, limit), total: rows.length, counts, unread: { dashboard: 2 }, sections: {}, section };
       }
       const t = path.match(/^\/api\/items\/[^/]+\/thread\?shown=(\d+)&limit=(\d+)$/);
       if (t) return data.thread(Number(t[1]), Number(t[2]));

@@ -7,13 +7,13 @@ import { createRemember } from './remember.js';
 import { createRunner } from './runstore.js';
 import { createFinish, readDone } from './finish.js';
 import { createHold } from './hold.js';
+import { validChip } from './sections.js';
 
 export { visibleRows, followUpOf, waitingCount };
 
 const NEW_MESSAGE = 'New message from the customer. Your text is kept.';
 
 export function createStore({ api, clipboard, storage, now, timers, keepalive }) {
-  // Only the Dashboard is on the new page yet: the section never changes, whatever the address says.
   let state = {
     section: 'dashboard', chip: 'waiting', rows: [], total: 0, counts: {}, unread: {}, listState: 'loading', listError: '',
     limit: 20, key: null, item: null, itemState: 'idle', typed: null, save: { state: 'idle', at: null },
@@ -172,15 +172,22 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     if (state.itemState === 'ready' && state.item && !state.item.draft && !state.item.writing) await write({ followup: fu });
   }
 
-  // The first list and conversation, from the address. Another section's address (still on the old
-  // page) shows its tab's note only: the Dashboard's list loads, and nothing is opened or seen.
-  async function boot(route, { wide } = {}) {
-    set({ chip: route.chip || 'waiting' });
+  // Another section, from the address (a tab, a search result, Back): a run ends quietly, and what
+  // was typed goes out first (close flushes it) before the section's list loads on one of its own
+  // chips. Then the conversation the address names opens there, unless it is the one open; with
+  // none, the first row on a wide window.
+  async function setSection(id, { chip, key, wide } = {}) {
+    runner.end();
+    if (key && key === state.key) flush(); else close();
+    set({ section: id, chip: validChip(id, chip), rows: [], total: 0, listState: 'loading', limit: 20 });
     await refresh();
-    if ((route.section || state.section) !== state.section) return;
-    const key = route.key || (wide && visibleRows(state)[0] ? visibleRows(state)[0].key : null);
-    if (key) await show(key, { followup: followUpOf(state, key) });
+    if (state.section !== id) return; // another section was chosen meanwhile
+    const to = key || (wide && visibleRows(state)[0] ? visibleRows(state)[0].key : null);
+    if (to && to !== state.key) await show(to, { followup: followUpOf(state, to) });
   }
+
+  /** The first list and conversation, from the address: its section, as setSection opens it. */
+  const boot = (route, { wide } = {}) => setSection(route.section || 'dashboard', { chip: route.chip, key: route.key, wide });
 
   async function more() {
     set({ limit: state.limit + 20 });
@@ -262,7 +269,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     get: () => state,
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     actions: {
-      boot, refresh, setChip, more, open, type, flush, write, tell, holdTell: hold.holdTell, instead, copy, copyNumber, copyEmail, older, dismiss, dismissFollowUp,
+      boot, refresh, setSection, setChip, more, open, type, flush, write, tell, holdTell: hold.holdTell, instead, copy, copyNumber, copyEmail, older, dismiss, dismissFollowUp,
       putBack, restore, restoreFollowUp, copyLink, toast, remember, justOnce, switchLesson,
       startRun: runner.start, skipRun: runner.skip, endRun: runner.end,
       clear: () => type(''),

@@ -6,9 +6,9 @@ import { listOf } from '../../lib/copy.js';
 
 export const SECTIONS = [
   { id: 'dashboard', label: 'Dashboard', ready: true },
-  { id: 'marketplace', label: 'Marketplace', ready: false },
-  { id: 'importquery', label: 'Imports', ready: false },
-  { id: 'auction', label: 'Auction', ready: false },
+  { id: 'marketplace', label: 'Marketplace', ready: true },
+  { id: 'importquery', label: 'Imports', ready: true },
+  { id: 'auction', label: 'Auction', ready: true },
 ];
 
 // These ids are the server's `tab` values.

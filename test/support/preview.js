@@ -12,7 +12,9 @@ import { world, rawLead, rawConversation, rawMessage, STAFF } from './fixtures.j
 import { pointConfigAt } from './wire.js';
 
 const PORT = 3211;
-applyTestEnv({ DAILY_DRAFT_LIMIT: '200' });
+// Every section is on, as they all open on the new page: Marketplace reads the stand-in engine's
+// invented chats, and Imports takes a thread posted the way the Gmail add-on posts one (none at start).
+applyTestEnv({ DAILY_DRAFT_LIMIT: '200', MARKETPLACE_ENABLED: '1', MAIL_INTAKE: '1' });
 
 // The stand-in model answers a draft with a plain reply that leaves one price blank. A follow-up
 // gets one that names Carbarn first, as the follow-up checks want; a draft written from Tell
@@ -91,6 +93,7 @@ pointConfigAt(config, standins, { port: PORT, sessionPath: path.join(os.tmpdir()
 const worker = await import('../../src/worker.js');
 const app = await (await import('../../src/server.js')).startServer();
 await worker.runSync();
+await worker.runMarketplaceSync();
 await worker.draftWaiting();
 
 // More invented people, so the list has several pages, a long conversation and a due follow-up.

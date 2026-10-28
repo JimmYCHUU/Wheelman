@@ -131,8 +131,10 @@
   .row:hover { background: var(--surface-quiet); }
   .row[aria-current="true"] { background: var(--accent-soft); }
   .row-text { display: grid; gap: var(--s-hair); min-width: 0; }
-  .row .who { font-weight: var(--fw-semi); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .who { display: flex; align-items: baseline; gap: var(--s-2); min-width: 0; font-weight: var(--fw-semi); }
+  .row .who-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row.unread .who { font-weight: var(--fw-bold); }
+  .row .channel { flex: none; font-size: var(--fs-12); font-weight: var(--fw-semi); color: var(--ink-3); }
   .row .car { font-size: var(--fs-12); color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .sub { font-size: var(--fs-13); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .meta { display: flex; flex-direction: column; align-items: flex-end; gap: var(--s-1); font-size: var(--fs-12); color: var(--ink-3); white-space: nowrap; align-self: start; }

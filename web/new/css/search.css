@@ -16,7 +16,7 @@
   .hit-title { display: flex; justify-content: space-between; gap: var(--s-3); font-weight: var(--fw-semi); }
   .hit-when { color: var(--ink-3); font-size: var(--fs-12); font-weight: var(--fw-medium); flex: none; }
   .hit-sub { color: var(--ink-2); font-size: var(--fs-13); overflow-wrap: anywhere; }
-  .hit-old { color: var(--warn); font-size: var(--fs-12); font-weight: var(--fw-semi); }
+  .hit-where { color: var(--ink-3); font-size: var(--fs-12); font-weight: var(--fw-semi); }
 
   /* under 1100 px the box waits in a button labelled Search */
   @media (max-width: 1099px) {

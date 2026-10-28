@@ -2,6 +2,7 @@
 // deal panel) and the toast.
 import { html, useState, useEffect, useRef } from './html.js';
 import { SECTIONS } from '../model.js';
+import { chipsFor, resultAddress } from '../sections.js';
 import { parseRoute, hashFor } from '../route.js';
 import { openAction, conversationOnScreen } from '../hashsync.js';
 import { TopBar } from './topbar.js';
@@ -46,11 +47,12 @@ export function App({ store, panel, setPanel, search, now = Date.now }) {
   useEffect(() => { document.title = (unread > 0 ? '(' + unread + ') ' : '') + 'Wheelman'; }, [unread]);
 
   const section = SECTIONS.find((s) => s.id === route.section) || SECTIONS[0];
-  // A section that is not ready is only a tab and a hash: the store stays on the Dashboard.
-  const onTab = (id) => { location.hash = hashFor({ section: id, chip: state.chip, key: id === 'dashboard' ? state.key : null }); };
+  // Another tab is a new entry in the address, so Back returns to the section before: the store
+  // follows it to that section's first list (web/new/js/main.js). The tab already on screen stays.
+  const onTab = (id) => { if (id !== section.id) location.hash = hashFor({ section: id, chip: chipsFor(id)[0].id }); };
   // The panel: a column on a wide window, else a drawer or sheet over the conversation (then the
   // rest of the page waits behind it), only with a conversation or another car to show.
-  const shown = section.ready && pstate.open && (mode === 'column' || !!state.key || !!pstate.other);
+  const shown = pstate.open && (mode === 'column' || !!state.key || !!pstate.other);
   const overlay = shown && mode !== 'column';
   // On a phone showing the list, the store keeps the last conversation open and hidden: the panel then
   // offers no Add to reply, so nothing is put in a reply that is not on screen.
@@ -63,20 +65,20 @@ export function App({ store, panel, setPanel, search, now = Date.now }) {
     photos: () => { panel.actions.back(); panel.actions.setTab('car'); setPanel(true); },
   };
 
-  // A search result. A Dashboard conversation opens as a list row does (the address first, so Back
-  // undoes it); another section has no address on the new page, so its result opens the old page.
+  // A search result opens in its own section, on the list it is on (web/new/js/sections.js), the
+  // address first so Back undoes it. On the list on screen it opens as a row does: the conversation
+  // already on screen stays as it is, since opening it again would blank it and lose what is typed.
+  // Elsewhere the store follows the address to that list, then opens it.
   const openResult = (r) => {
-    if (r.section !== 'dashboard') { location.assign('/'); return; }
-    // The conversation already on screen stays as it is: opening it again would blank it and lose what is typed.
-    const todo = openAction(state.key, route.key, r.key);
+    const to = resultAddress(r);
+    const todo = to.section === state.section && to.chip === state.chip ? openAction(state.key, route.key, r.key) : 'follow';
     if (todo === 'none') return;
-    location.hash = hashFor({ section: 'dashboard', chip: state.chip, key: r.key });
+    location.hash = hashFor(to);
     if (todo === 'open') store.actions.open(r.key);
   };
   // A car opens in the panel as "Another car": the panel opens the way the Details button opens it
   // (on a phone as a history entry, so Back closes the sheet), then shows the car.
   const openCar = (car) => {
-    if (route.section !== 'dashboard') location.hash = hashFor({ section: 'dashboard', chip: state.chip, key: state.key });
     setPanel(true);
     panel.actions.showCar(String(car.stockNo));
   };
@@ -84,24 +86,17 @@ export function App({ store, panel, setPanel, search, now = Date.now }) {
   return html`<div class="shell">
     <${TopBar} state=${state} tab=${section.id} onTab=${onTab} now=${now()} inert=${overlay}
       search=${search} onOpen=${openResult} onCar=${openCar} />
-    ${section.ready
-      ? html`<main class=${'work' + (shown && !overlay ? ' with-panel' : '')} data-view=${route.key || state.runSummary ? 'chat' : 'list'}>
-          <section class="tile list-col" aria-label="Conversations" inert=${overlay}>
-            <${List} state=${state} actions=${store.actions} now=${now()} section=${section.id} />
-          </section>
-          <section class="tile chat" aria-label="Conversation" inert=${overlay}>
-            <${Conversation} state=${state} actions=${store.actions} now=${now()} details=${details} />
-            <${MessageBox} state=${state} actions=${store.actions} reply=${reply} />
-          </section>
-          ${shown ? html`<${Panel} state=${state} pstate=${pstate} panel=${panel} actions=${store.actions} mode=${mode}
-            setPanel=${setPanel} reply=${reply} now=${now()} onScreen=${onScreen} />` : null}
-        </main>`
-      : html`<main class="work" data-view="list">
-          <section class="tile list-col" aria-label=${section.label}>
-            <p class="empty">${section.label} is still on the old page.<br /><a href="/">Open it there</a></p>
-          </section>
-          <section class="tile chat" aria-hidden="true"></section>
-        </main>`}
+    <main class=${'work' + (shown && !overlay ? ' with-panel' : '')} data-view=${route.key || state.runSummary ? 'chat' : 'list'}>
+      <section class="tile list-col" aria-label="Conversations" inert=${overlay}>
+        <${List} state=${state} actions=${store.actions} now=${now()} section=${state.section} />
+      </section>
+      <section class="tile chat" aria-label="Conversation" inert=${overlay}>
+        <${Conversation} state=${state} actions=${store.actions} now=${now()} details=${details} />
+        <${MessageBox} state=${state} actions=${store.actions} reply=${reply} />
+      </section>
+      ${shown ? html`<${Panel} state=${state} pstate=${pstate} panel=${panel} actions=${store.actions} mode=${mode}
+        setPanel=${setPanel} reply=${reply} now=${now()} onScreen=${onScreen} />` : null}
+    </main>
     <${Toast} toast=${state.toast} />
   </div>`;
 }

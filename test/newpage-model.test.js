@@ -14,9 +14,9 @@ const row = (o = {}) => ({ key: 'k1', name: 'Sam Test', phone: '0491 570 101', e
 test('SECTIONS and CHIPS are the exact lists', () => {
   assert.deepEqual(SECTIONS, [
     { id: 'dashboard', label: 'Dashboard', ready: true },
-    { id: 'marketplace', label: 'Marketplace', ready: false },
-    { id: 'importquery', label: 'Imports', ready: false },
-    { id: 'auction', label: 'Auction', ready: false },
+    { id: 'marketplace', label: 'Marketplace', ready: true },
+    { id: 'importquery', label: 'Imports', ready: true },
+    { id: 'auction', label: 'Auction', ready: true },
   ]);
   assert.deepEqual(CHIPS, [{ id: 'waiting', label: 'Needs reply' }, { id: 'followups', label: 'Follow-ups' }, { id: 'all', label: 'All' }]);
 });

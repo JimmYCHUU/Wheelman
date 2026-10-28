@@ -1,22 +1,22 @@
-// The list column: the three chips, one row per conversation with its one reason in words, and the
-// states a list can be in (loading, empty, a problem, more to load).
+// The list column: the section's chips, one row per conversation with its one reason in words (and
+// its channel when it is not the section's own), and the states a list can be in (loading, empty, a
+// problem, more to load).
 import { html, useState, useRef } from './html.js';
-import { CHIPS, rowView } from '../model.js';
+import { chipsFor, emptyWords, moreLabel, sectionRowView } from '../sections.js';
 import { hashFor, parseRoute } from '../route.js';
 import { openAction } from '../hashsync.js';
 import { visibleRows, waitingCount } from '../store.js';
 import { oldestWaiting, runTakes } from '../runstore.js';
 import { initials, hue, ago } from '../../../lib/format.js';
 
-const EMPTY = {
-  waiting: 'No one is waiting.',
-  followups: 'No follow-ups are due.',
-  all: 'There are no conversations yet.',
-};
 const PROBLEM = 'Wheelman is not responding. It tries again every 20 seconds.';
 
-/** How the reason reads: green for done, red for a failed check, amber for something to fill, blue for a follow-up. */
+/**
+ * How the reason reads: the section's own tone when it has one (an order row's), else green for
+ * done, red for a failed check, amber for something to fill, blue for a follow-up.
+ */
 function toneOf(row, view) {
+  if (view.tone) return view.tone;
   if (view.done) return 'good';
   if (row.followUp) return 'info';
   if (row.flag === 'fail') return 'bad';
@@ -35,7 +35,7 @@ function Row({ row, view, selected, tabbable, onOpen }) {
       aria-current=${selected ? 'true' : null} tabindex=${tabbable ? 0 : -1} onClick=${() => onOpen(row)}>
     <${Avatar} name=${view.name} />
     <span class="row-text">
-      <span class="who">${view.name}</span>
+      <span class="who"><span class="who-name">${view.name}</span>${view.channel ? html`<span class="channel">${view.channel}</span>` : null}</span>
       ${view.car ? html`<span class="car">${view.car}</span>` : null}
       <span class="sub">${view.preview}</span>
       ${view.reason ? html`<span class=${'reason ' + tone}>${view.reason}</span>` : null}
@@ -48,15 +48,16 @@ function Row({ row, view, selected, tabbable, onOpen }) {
 }
 
 /**
- * Above Needs reply: how many are waiting, and Start replying (the line goes from the moment a run
- * starts). While a run would take nobody (the ten newest are all copied, until the replies show on
- * the dashboard) the count stays and only Start replying goes. How long the oldest has waited is said
- * once every waiting row is loaded (the list comes newest first, so until then it is not known).
+ * Above the Dashboard's Needs reply, the only list with a reply run: how many are waiting, and Start
+ * replying (the line goes from the moment a run starts). While a run would take nobody (the ten
+ * newest are all copied, until the replies show on the dashboard) the count stays and only Start
+ * replying goes. How long the oldest has waited is said once every waiting row is loaded (the list
+ * comes newest first, so until then it is not known).
  */
 function RunOffer({ state, now, onStart }) {
   const n = waitingCount(state);
   const rows = visibleRows(state);
-  if (state.chip !== 'waiting' || state.run || state.listState !== 'ready' || !n) return null;
+  if (state.section !== 'dashboard' || state.chip !== 'waiting' || state.run || state.listState !== 'ready' || !n) return null;
   const oldest = (state.total || 0) <= state.rows.length ? oldestWaiting(rows) : null;
   const start = runTakes(state) > 0;
   return html`<p class="run-start">
@@ -76,6 +77,7 @@ export function List({ state, actions, now, section = 'dashboard' }) {
   const [cursor, setCursor] = useState(null);
   const box = useRef(null);
   const rows = visibleRows(state);
+  // Needs reply (To do in Auction) and Follow-ups carry their count; the other lists do not.
   const counts = { waiting: waitingCount(state), followups: (state.counts && state.counts.followups) || 0 };
   const active = rows.some((r) => r.key === cursor) ? cursor : rows.some((r) => r.key === state.key) ? state.key : rows[0] && rows[0].key;
 
@@ -110,20 +112,20 @@ export function List({ state, actions, now, section = 'dashboard' }) {
   const left = Math.max(0, (state.total || 0) - state.rows.length);
   return html`<div class="list-inner">
     <div class="chips" role="group" aria-label="Show">
-      ${CHIPS.map((c) => html`<button type="button" class="chip" aria-pressed=${state.chip === c.id} onClick=${() => choose(c.id)}>
-        ${c.label}${c.id !== 'all' ? html`<span class="count num">${counts[c.id]}</span>` : null}
+      ${chipsFor(section).map((c) => html`<button type="button" class="chip" aria-pressed=${state.chip === c.id} onClick=${() => choose(c.id)}>
+        ${c.label}${c.id in counts ? html`<span class="count num">${counts[c.id]}</span>` : null}
       </button>`)}
     </div>
     ${failed ? html`<p class="problem" role="alert">${PROBLEM}</p>` : null}
     <${RunOffer} state=${state} now=${now} onStart=${start} />
     <div class="rows" ref=${box} onKeyDown=${onKey}>
       ${loading ? html`<${Skeleton} />` : null}
-      ${!loading && !failed && rows.length === 0 ? html`<p class="empty">${EMPTY[state.chip]}</p>` : null}
+      ${!loading && !failed && rows.length === 0 ? html`<p class="empty">${emptyWords(section, state.chip)}</p>` : null}
       ${!loading ? rows.map((r) => {
-        const view = rowView(r, { now, doneAnchor: state.done[r.key] });
+        const view = sectionRowView(r, { now, doneAnchor: state.done[r.key] }, section);
         return html`<${Row} key=${r.key} row=${r} view=${view} selected=${r.key === state.key} tabbable=${r.key === active} onOpen=${openRow} />`;
       }) : null}
-      ${!loading && left > 0 ? html`<button type="button" class="btn more" onClick=${() => actions.more()}>Load older conversations<span class="num">${left} more</span></button>` : null}
+      ${!loading && left > 0 ? html`<button type="button" class="btn more" onClick=${() => actions.more()}>${moreLabel(section)}<span class="num">${left} more</span></button>` : null}
     </div>
   </div>`;
 }

@@ -20,11 +20,14 @@ test('boot with a key leaves the address as it is', () => {
   assert.equal(addressAfter(null, '#/dashboard/waiting/c:2', S('waiting', 'c:2')), null, 'a key typed without encoding');
 });
 
-test('a section still on the old page: nothing is written and the store does not move', () => {
+test('another section: the store moves there, and nothing is written over the address on its way', () => {
+  // The address is ahead of the store, which is on its way to that section.
   assert.equal(addressAfter(null, '#/auction/waiting', S('waiting', null)), null);
   assert.equal(addressAfter(S('waiting', null), '#/marketplace/waiting', S('waiting', 'c:1')), null);
-  assert.equal(storeStep(parseRoute('#/auction/waiting'), S('waiting', 'c:1')), null);
-  assert.equal(storeStep(parseRoute('#/marketplace/all/c%3A9'), S('waiting', 'c:1')), null);
+  assert.deepEqual(storeStep(parseRoute('#/auction/waiting'), S('waiting', 'c:1')), { section: 'auction', chip: 'waiting', key: null });
+  assert.deepEqual(storeStep(parseRoute('#/marketplace/all/c%3A9'), S('waiting', 'c:1')), { section: 'marketplace', chip: 'all', key: 'c:9' });
+  // A chip the section does not have is its first one.
+  assert.deepEqual(storeStep(parseRoute('#/auction/followups'), S('followups', null)), { section: 'auction', chip: 'waiting', key: null });
 });
 
 test('a chip changed with a conversation open never puts the conversation back in the address', () => {

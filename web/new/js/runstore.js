@@ -142,10 +142,13 @@ export function createRunner({ get, set, now, open, close }) {
   }
 
   return {
-    /** Start replying (or Start again): a second press while a run is under way does nothing. */
+    /**
+     * Start replying (or Start again), on the Dashboard's Needs reply only: a second press while a
+     * run is under way does nothing.
+     */
     start() {
       const s = get();
-      if (run || s.chip !== 'waiting') return undefined;
+      if (run || s.section !== 'dashboard' || s.chip !== 'waiting') return undefined;
       const r = createRun(s.rows, now(), s.done);
       run = r;
       stepping = true;

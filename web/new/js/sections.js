@@ -1,0 +1,80 @@
+// What differs from one section to the next on the new page: its chips, its empty lists, its Load
+// more, the channel a row is on, an order row's reason, the head line and where a search result
+// opens. Pure functions (no DOM, no globals) beside model.js, which the tests import in Node.
+import { CHIPS, rowView } from './model.js';
+
+// The ids are the server's `tab` values.
+export const SECTION_CHIPS = {
+  dashboard: CHIPS,
+  marketplace: [{ id: 'waiting', label: 'Needs reply' }, { id: 'all', label: 'All' }],
+  importquery: [{ id: 'waiting', label: 'Needs reply' }, { id: 'all', label: 'All' }],
+  auction: [{ id: 'waiting', label: 'To do' }, { id: 'quiet', label: 'In progress' }, { id: 'other', label: 'Finished' }],
+};
+
+export const chipsFor = (section) => SECTION_CHIPS[section] || SECTION_CHIPS.dashboard;
+
+/** The chip, when the section has it; else the section's first. */
+export const validChip = (section, chip) => (chipsFor(section).some((c) => c.id === chip) ? chip : chipsFor(section)[0].id);
+
+const EMPTY = {
+  dashboard: { waiting: 'No one is waiting.', followups: 'No follow-ups are due.', all: 'There are no conversations yet.' },
+  marketplace: { waiting: 'No buyer is waiting.', all: 'There are no Marketplace chats yet.' },
+  importquery: { waiting: 'No one is waiting.', all: 'No import enquiries yet. In Gmail, open one and press Send to Wheelman.' },
+  auction: { waiting: 'Nothing to do.', quiet: 'No orders are under way.', other: 'No finished orders.' },
+};
+
+/** The words of a list with nothing in it. */
+export const emptyWords = (section, chip) => (EMPTY[section] || EMPTY.dashboard)[validChip(section, chip)];
+
+/** The button under a list cut short. */
+export const moreLabel = (section) => ({ auction: 'Load more orders', importquery: 'Load older enquiries' })[section] || 'Load older conversations';
+
+// The channel a conversation is on, by its key; and each section's own, which goes without saying.
+const CHANNEL = [['mp:', 'Facebook'], ['em:', 'Email'], ['ao:', 'WhatsApp']];
+const OWN = { dashboard: 'Text', marketplace: 'Facebook', importquery: 'Email', auction: 'WhatsApp' };
+
+/** The row's channel in a word, or '' when it is the section's own. */
+export function rowChannelWord(row, section) {
+  const key = String((row && row.key) || '');
+  const word = (CHANNEL.find(([p]) => key.startsWith(p)) || [null, 'Text'])[1];
+  return word === OWN[section] ? '' : word;
+}
+
+const isOrder = (row) => String((row && row.key) || '').startsWith('ao:');
+
+/**
+ * What one row shows in its section: the Dashboard's row, its channel, and the tone of its reason
+ * ('' for the list's own). An order row not just copied says what is due ("Due: …"), else where
+ * the order has got to: blue for a message of theirs to answer, amber for one of ours to send.
+ */
+export function sectionRowView(row, opts, section) {
+  const view = rowView(row, opts);
+  const order = isOrder(row) && !view.done;
+  const reason = order ? (row.due ? String(row.due).replace(/^Send: /, 'Due: ') : row.stage || '') : view.reason;
+  const tone = order && row.due ? (row.dueKind === 'reply' ? 'info' : 'warn') : '';
+  return { ...view, reason, channel: rowChannelWord(row, section), tone };
+}
+
+/** The line under the name at the head of the conversation. */
+export function headLine(item) {
+  if (item.writing) return 'Writing a suggestion…';
+  if (item.order) return ['Order ' + item.order.orderNo, item.order.prefers ? 'prefers ' + item.order.prefers : ''].filter(Boolean).join(' · ');
+  if (item.mail) return ['Email', item.mail.subject].filter(Boolean).join(' · ');
+  if (item.marketplace) return ['Marketplace', item.marketplace.account].filter(Boolean).join(' · ');
+  return item.situation || '';
+}
+
+// Auction's lists by state, as the server puts them (sectionRows in src/server.js).
+const AUCTION_LIST = { awaiting: 'waiting', answered: 'quiet', ack: 'quiet', closed: 'other', optout: 'other' };
+
+/**
+ * Where a search result opens: its own section, on the list it is on. Waiting (not dismissed) is
+ * Needs reply; anything else is All, or in Auction its own list by state. A message found has no
+ * state: All, or Auction's first list.
+ */
+export function resultAddress(r) {
+  const section = r.section || 'dashboard';
+  const state = r.state === 'awaiting' && r.dismissed ? 'answered' : r.state;
+  const chip = section === 'auction' ? validChip(section, AUCTION_LIST[state]) : state === 'awaiting' ? 'waiting' : 'all';
+  return { section, chip, key: r.key };
+}
