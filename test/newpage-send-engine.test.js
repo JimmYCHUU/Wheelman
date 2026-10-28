@@ -73,7 +73,7 @@ test('a failed send keeps the text, says why and offers Try again', async () => 
   assert.equal(mainNow(s).label, 'Try again');
   assert.equal(standins.world.chats.get(501).messages.filter((m) => m.direction === 'out').length, 0, 'nothing reached the buyer');
 
-  // Try again: the chat is read again first, then the reply goes, once.
+  // Try again: Marketplace and the chat are read again first, then the reply goes, once.
   assert.equal(await store.actions.send(), 'sent');
   s = store.get();
   const posts = standins.engineSeen.filter((r) => r.method === 'POST');
@@ -176,4 +176,53 @@ test('an engine that does not answer in time may have taken the reply: Try again
   assert.match(marketplaceSrc, /AbortSignal\.timeout\(config\.marketplace\.sendTimeoutMs \|\| 20000\)/);
   const server = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
   assert.match(server, /return send\(res, e\.mayHaveGone \? 504 : 502, \{ error: e\.message \}\);/);
+});
+
+test('POST /api/sync with marketplace reads Marketplace only, and waits for a read already under way', async () => {
+  const worker = await import('../src/worker.js');
+  const post = (body) => fetch(base + '/api/sync', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const dashboard = worker.state.lastSync;
+  // A Marketplace read under way (the background's), held at the engine's chat list.
+  let release;
+  standins.world.listWait = new Promise((r) => { release = r; });
+  const running = worker.runMarketplaceSync();
+  const earlier = worker.state.mpSync;
+  assert.equal(await worker.runMarketplaceSync(), earlier, 'any other caller still takes the earlier result at once');
+  // A pass of writing under way: draftWaiting, if it were started, would ask for one more.
+  worker.state.drafting = true;
+  worker.state.draftAgain = false;
+  try {
+    let answered = null;
+    const asked = post({ marketplace: true }).then((r) => { answered = r; return r; });
+    await new Promise((r) => setTimeout(r, 150));
+    assert.equal(answered, null, 'it waits for the read under way');
+    delete standins.world.listWait;
+    release();
+    assert.equal((await asked).status, 200);
+    const done = await running;
+    assert.notEqual(done, earlier);
+    assert.ok(done.ok);
+    assert.equal(worker.state.mpSync, done, 'the read it waited for');
+    assert.equal(worker.state.lastSync, dashboard, 'no dashboard check');
+    assert.equal(worker.state.draftAgain, false, 'nothing written');
+    // With no read under way, Marketplace is read now.
+    const seen = standins.engineSeen.length;
+    assert.equal((await post({ marketplace: true })).status, 200);
+    assert.ok(standins.engineSeen.slice(seen).some((r) => r.method === 'GET' && r.path === '/inbox/conversations'));
+    assert.notEqual(worker.state.mpSync, done);
+    assert.equal(worker.state.lastSync, dashboard);
+    // A read that fails is said, so the page posts nothing.
+    standins.world.listDown = true;
+    const down = await post({ marketplace: true });
+    delete standins.world.listDown;
+    assert.equal(down.status, 502);
+    assert.match((await down.json()).error, /^The content engine returned 503/);
+    // Every other caller, as before: the dashboard check and a pass of writing too.
+    assert.equal((await post({})).status, 200);
+    assert.notEqual(worker.state.lastSync, dashboard);
+    assert.equal(worker.state.draftAgain, true);
+  } finally {
+    worker.state.drafting = false;
+    worker.state.draftAgain = false;
+  }
 });

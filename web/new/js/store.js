@@ -22,7 +22,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
     section: 'dashboard', chip: 'waiting', rows: [], total: 0, counts: {}, sections: {}, unread: {}, listState: 'loading', listError: '',
     limit: 20, key: null, item: null, itemState: 'idle', typed: null, save: { state: 'idle', at: null },
     overridden: false, ...readDone(storage), status: null, toast: null, context: null,
-    writing: null, writeFailed: null, sending: {}, remembered: [], closedNotes: [], run: null, runSummary: null, runMore: 0, runSkipped: 0,
+    writing: null, writeFailed: null, sending: {}, unconfirmed: {}, remembered: [], closedNotes: [], run: null, runSummary: null, runMore: 0, runSkipped: 0,
   };
   const listeners = new Set();
   const draftId = (item) => (item && item.draft ? item.draft.id : null);
@@ -80,7 +80,9 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
   // ---- the list and the open conversation
 
   function takeItem(taken) {
-    // A reply whose send could not be told, now in the chat: taken with its text gone (sender.js).
+    // A reply from here that did not reach the buyer is noted; one whose send could not be told,
+    // now in the chat, is taken with its text gone (sender.js).
+    sender.seen(taken);
     if (sender.settle(taken)) return;
     const old = state.item;
     // Answered by someone else: its anchor moved on and the suggestion went with it, so the one that was there is kept to show.
@@ -160,6 +162,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
       ({ item } = await api('/api/items/' + key + (followup ? '?followup=' + followup : '')));
       if (seq !== openSeq) return;
       set({ item, itemState: 'ready', rows: state.rows.map((r) => (r.key === key ? { ...r, unread: 0 } : r)) });
+      sender.seen(item);
       api('/api/items/' + key + '/seen', {}).catch(() => {});
     } catch (e) {
       if (seq === openSeq) set({ itemState: 'error' });

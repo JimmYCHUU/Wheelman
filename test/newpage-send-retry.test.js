@@ -28,11 +28,11 @@ test('a 409 says another page is sending, and Try again posts nothing once that 
   assert.equal(sendFailedWords(s.sending['mp:1'].error, 'elsewhere'), 'Not sent from here: another page is sending a reply to this chat.');
   assert.equal(s.toast, null, 'the chat is open: the box says it');
   assert.equal(mainNow(s).label, 'Try again');
-  // The other page's reply goes: the chat is answered. Try again reads the chat first, and posts nothing.
+  // The other page's reply goes: the chat is answered. Try again reads Marketplace, then the chat, and posts nothing.
   a.data.items['mp:1'] = SENT;
   a.calls.length = 0;
   assert.equal(await a.store.actions.send(), 'replied');
-  assert.equal(paths(a.calls)[0], 'GET /api/items/mp:1', 'the chat is read before anything is posted');
+  assert.deepEqual(paths(a.calls).slice(0, 2), ['POST /api/sync', 'GET /api/items/mp:1'], 'Marketplace and the chat are read before anything is posted');
   assert.equal(sends(a).length, 0, 'no second reply');
   s = a.store.get();
   assert.deepEqual(s.sending, {});
@@ -46,7 +46,7 @@ test('a 409 says another page is sending, and Try again posts nothing once that 
   await b.store.actions.send();
   b.calls.length = 0;
   assert.equal(await b.store.actions.send(), 'failed');
-  assert.deepEqual(paths(b.calls).slice(0, 2), ['GET /api/items/mp:1', 'POST /api/items/mp:1/send']);
+  assert.deepEqual(paths(b.calls).slice(0, 3), ['POST /api/sync', 'GET /api/items/mp:1', 'POST /api/items/mp:1/send']);
 });
 
 test('an unknown outcome where the chat shows the reply on the re-read says Sent, not Not sent', async () => {
@@ -236,7 +236,7 @@ test('a failure while the phone shows the list gives the toast with Open, and th
   const row = { key: 'mp:1', anchor: 'fm:1', name: 'Liam Invented', unread: 0, state: 'awaiting', preview: { who: 'customer', text: 'Hi, is this still available?' } };
   const rowNow = () => sectionRowView(row, { now: AT, sending: a.store.get().sending['mp:1'] }, 'marketplace');
   assert.deepEqual([rowNow().reason, rowNow().tone], ['Not sent', 'bad']);
-  assert.match(source('../web/new/js/ui/list.js'), /sectionRowView\(r, \{ now, doneAnchor: state\.done\[r\.key\], sending: state\.sending\[r\.key\] \}, section\)/);
+  assert.match(source('../web/new/js/ui/list.js'), /sectionRowView\(r, \{ now, doneAnchor: state\.done\[r\.key\], sending: state\.sending\[r\.key\], unconfirmed: state\.unconfirmed\[r\.key\] \}, section\)/);
   // A failure about an earlier message, or a send on its way, is not a Not sent row.
   assert.equal(sectionRowView({ ...row, anchor: 'fm:3' }, { now: AT, sending: s.sending['mp:1'] }, 'marketplace').reason, '');
   assert.equal(sectionRowView(row, { now: AT, sending: { state: 'sending' } }, 'marketplace').reason, '');

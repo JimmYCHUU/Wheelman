@@ -46,7 +46,8 @@ export function createFinish({ api, clipboard, storage, now, get, set, toast, te
       const kept = replyChannel(item) === 'facebook' ? '' : value;
       if (item.draft && value.trim()) api('/api/drafts/' + item.draft.id + '/copied', { text: kept }).catch(() => { /* the copy itself worked */ });
       saveDone({ ...get().done, [key]: item.anchor }, { ...get().doneAt, [key]: now() });
-      // Copied after its send failed, the reply is going by hand: the failure is over (its row says Copied).
+      // Copied after its send failed, the reply is going by hand: the failure is over (its row says
+      // Copied). The chat's next Send still reads Marketplace first (state.unconfirmed, sender.js).
       const was = get().sending && get().sending[key];
       if (was && was.state === 'failed') { const sending = { ...get().sending }; delete sending[key]; set({ sending }); }
       // A follow-up leaves Follow-ups on the server once it is copied, so it is put back there.

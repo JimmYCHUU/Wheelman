@@ -126,7 +126,7 @@ export function List({ state, actions, now, section = 'dashboard' }) {
       ${loading ? html`<${Skeleton} />` : null}
       ${!loading && !failed && rows.length === 0 ? html`<p class="empty">${emptyWords(section, state.chip)}</p>` : null}
       ${!loading ? rows.map((r) => {
-        const view = sectionRowView(r, { now, doneAnchor: state.done[r.key], sending: state.sending[r.key] }, section);
+        const view = sectionRowView(r, { now, doneAnchor: state.done[r.key], sending: state.sending[r.key], unconfirmed: state.unconfirmed[r.key] }, section);
         return html`<${Row} key=${r.key} row=${r} view=${view} selected=${r.key === state.key} tabbable=${r.key === active} onOpen=${openRow} />`;
       }) : null}
       ${!loading && left > 0 ? html`<button type="button" class="btn more" onClick=${() => actions.more()}>${moreLabel(section)}<span class="num">${left} more</span></button>` : null}

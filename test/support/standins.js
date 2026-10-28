@@ -195,6 +195,10 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
     if (req.method !== 'GET') return json(res, 405, { error: 'no' });
     if (url.pathname === '/inbox/devices') { res.writeHead(302, { location: '/inbox/conversations' }); return res.end(); }
     if (url.pathname === '/inbox/conversations') {
+      // world.listWait (a promise) holds the chat list until it settles, so a read stays under way;
+      // world.listDown makes the list answer 503.
+      if (world.listWait) await world.listWait;
+      if (world.listDown) return json(res, 503, { error: 'Service Unavailable' });
       const all = [...chats.values()].map((c) => c.row).sort((a, b) => Date.parse(b.last_message_at) - Date.parse(a.last_message_at));
       const offset = Number(url.searchParams.get('offset')) || 0;
       const limit = Number(url.searchParams.get('limit')) || 50;

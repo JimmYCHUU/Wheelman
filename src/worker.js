@@ -124,14 +124,24 @@ export function runSync() {
   return dashboardCheck;
 }
 
+let marketplaceRead = null; // the Marketplace read that is under way, if any
+
 /**
  * Reads the Marketplace inbox from the content engine. It has its own state and its own errors,
  * so a problem here never stops the dashboard side, and it does not need the dashboard login.
+ * While a read is under way a caller is given the last result at once; with wait (the new page,
+ * before a Facebook send that follows one that failed or could not be told) it waits for that
+ * read to finish and is given its result instead.
  */
-export async function runMarketplaceSync() {
+export async function runMarketplaceSync({ wait = false } = {}) {
   if (!config.marketplace.enabled) return null;
-  if (state.mpSyncing) return state.mpSync;
+  if (state.mpSyncing) return wait && marketplaceRead ? marketplaceRead : state.mpSync;
   state.mpSyncing = true;
+  marketplaceRead = readMarketplace();
+  return marketplaceRead;
+}
+
+async function readMarketplace() {
   try {
     const result = await syncMarketplace();
     state.mpSync = { at: Date.now(), ok: true, message: `Checked Marketplace: ${result.chatsUpdated} chat(s) updated.`, result };
@@ -140,6 +150,7 @@ export async function runMarketplaceSync() {
     logLine('marketplace', e.message);
   } finally {
     state.mpSyncing = false;
+    marketplaceRead = null;
     setMeta('mp_sync_status', state.mpSync);
   }
   return state.mpSync;

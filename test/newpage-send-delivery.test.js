@@ -37,7 +37,7 @@ test('a reply the engine took but could not deliver says so, never Sent, and Sen
   // A plain Send is never taken for a suggestion sent from here.
   assert.equal(await a.store.actions.send(), null);
   assert.equal(sends(a).length, 0);
-  // Send it again: the chat is read first, then that suggestion's text goes, once.
+  // Send it again: Marketplace and the chat are read first, then that suggestion's text goes, once.
   let answer = null;
   a.data.on = { '/api/items/mp:1/send': () => new Promise((r) => { answer = () => { a.data.items['mp:1'] = SENT; r({ ok: true, queued: false, item: SENT }); }; }) };
   a.calls.length = 0;
@@ -46,7 +46,7 @@ test('a reply the engine took but could not deliver says so, never Sent, and Sen
   await settle();
   answer();
   assert.equal(await going, 'sent');
-  assert.deepEqual(paths(a.calls).slice(0, 2), ['GET /api/items/mp:1', 'POST /api/items/mp:1/send']);
+  assert.deepEqual(paths(a.calls).slice(0, 3), ['POST /api/sync', 'GET /api/items/mp:1', 'POST /api/items/mp:1/send']);
   assert.deepEqual(sends(a).map((c) => c.body), [{ text: TEXT, draftId: 21 }]);
   assert.equal(boxViewOf(a.store.get(), AT).sentence, TYPING);
 

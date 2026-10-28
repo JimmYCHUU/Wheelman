@@ -84,7 +84,9 @@ const pastedInDashboard = (row) => /^[cl]:/.test(String((row && row.key) || ''))
  * from the phone) go elsewhere, and say "Copied". A Facebook reply that failed (opts.sending, the
  * store's send for this row) says so before anything else, while the chat is as it was when it
  * failed: "Not sent" in red when it was refused, "Not confirmed" in amber when Wheelman could not
- * tell whether it went.
+ * tell whether it went. Then a reply sent from here that did not reach the buyer (opts.unconfirmed,
+ * the store's note for this row) says "Not delivered" in red, while the chat still waits on the
+ * message it answered and nothing was copied for it since.
  */
 export function sectionRowView(row, opts, section) {
   const view = rowView(row, opts);
@@ -92,6 +94,10 @@ export function sectionRowView(row, opts, section) {
   if (failed && failed.state === 'failed') {
     const unsure = failed.outcome === 'unknown';
     return { ...view, reason: unsure ? 'Not confirmed' : 'Not sent', channel: rowChannelWord(row, section), tone: unsure ? 'warn' : 'bad' };
+  }
+  const note = opts && opts.unconfirmed;
+  if (note && note.outcome === 'undelivered' && note.anchor === row.anchor && row.state === 'awaiting' && !view.done) {
+    return { ...view, reason: 'Not delivered', channel: rowChannelWord(row, section), tone: 'bad' };
   }
   const order = isOrder(row) && !view.done;
   const needsYou = !order && !view.reason && !!row.needsPerson && !!row.unanswered;

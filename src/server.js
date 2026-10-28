@@ -699,6 +699,16 @@ async function api(req, res, url) {
   }
 
   if (req.method === 'POST' && p === '/api/sync') {
+    // { marketplace: true }, from the new page before a Facebook send that follows one that failed
+    // or could not be told: Marketplace only, waiting for a read under way rather than taking the
+    // one before it, with no dashboard check and nothing written. A read that fails is said, so
+    // the page posts nothing. Any other body, or none, is Check now as it always was.
+    const body = await readBody(req).catch(() => ({}));
+    if (body && body.marketplace === true) {
+      const read = await worker.runMarketplaceSync({ wait: true });
+      if (!read || !read.ok) return send(res, 502, { error: read ? read.message : 'Marketplace is switched off.' });
+      return send(res, 200, worker.statusReport());
+    }
     await Promise.all([worker.runSync(), worker.runMarketplaceSync()]);
     worker.updateOutcomes();
     if (config.followUp.on) { try { refreshFollowUps(); } catch (e) { logLine('followups', `Finding follow-ups failed: ${e.message}`); } }
