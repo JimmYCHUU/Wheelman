@@ -119,6 +119,17 @@ test('the address moves the store to another section and opens the conversation 
   assert.ok(lists(b.calls).every((p) => p.includes('section=marketplace&tab=waiting')), lists(b.calls).join(', '));
 });
 
+test("another section's chips carry no counts from the one before while its list loads", async () => {
+  const a = withAuction();
+  await a.store.actions.setSection('auction', { chip: 'waiting', wide: false });
+  assert.deepEqual(a.store.get().counts, { waiting: 2, quiet: 1, other: 0 });
+  const going = a.store.actions.setSection('marketplace', { chip: 'waiting', wide: false });
+  assert.deepEqual(a.store.get().counts, {}, 'nothing from Auction on Marketplace chips');
+  assert.equal(a.store.get().listState, 'loading');
+  await going;
+  assert.deepEqual(a.store.get().counts, { all: 2, waiting: 2 });
+});
+
 test('choosing another section ends a reply run quietly', async () => {
   const a = withAuction();
   a.data.rows = [row('c:1', { waitingSince: 2000 }), row('c:2', { waitingSince: 1000 })];

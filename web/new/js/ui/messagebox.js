@@ -119,10 +119,11 @@ function Quiet({ state, actions, item, view }) {
     <${Context} context=${state.context} />
     ${resendFailed ? html`<div class="context bad" role="alert"><span>${sendFailedWords(resendFailed.error, resendFailed.outcome, { kept: false })}</span></div>` : null}
     <p class=${'box-note ' + view.tone} role="status">${view.sentence}</p>
-    ${view.suggestion ? html`<div class="ghost"><span class="ghost-label">The suggestion that was here</span><p>${view.suggestion}</p></div>` : null}
+    ${view.suggestion ? html`<div class="ghost"><span class="ghost-label">${view.suggestionLabel || 'The suggestion that was here'}</span><p>${view.suggestion}</p></div>` : null}
     ${view.tell || b ? html`<div class="foot">
       ${view.tell ? html`<${Tell} onSend=${tell} holdTell=${actions.holdTell} button="Write from this" disabled=${resending} />` : null}
-      <div class="right">${resending ? html`<button type="button" class="btn main" disabled>Sending…</button>`
+      <div class="right">${view.copy && !resending ? html`<button type="button" class="btn" onClick=${() => actions.copy({})}>Copy</button>` : null}
+        ${resending ? html`<button type="button" class="btn main" disabled>Sending…</button>`
         : b ? html`<button type="button" class=${'btn' + (b.main ? ' main' : '')} onClick=${run[b.act]}>${b.label}</button>` : null}</div>
     </div>` : null}
   </div>`;

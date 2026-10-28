@@ -2,13 +2,15 @@
 // a write from this page that the AI refused with nothing to show for it, and a Facebook reply sent.
 // Pure functions (no DOM, no globals) beside model.js, which the tests import in Node. PR 5b adds
 // its sections' states here.
-import { boxView } from './model.js';
+import { boxView, boxText } from './model.js';
 import { sentence } from './words.js';
 import { clock, listTime, daysAgo } from '../../lib/format.js';
 
 const TRY_AGAIN = { label: 'Try again', act: 'retry', main: true };
 const ANYWAY = { label: 'Write a reply anyway', act: 'write', main: false };
 const SEND_AGAIN = { label: 'Send it again', act: 'resend', main: true };
+// How long a reply sent from here may take to show in the chat before the box says it cannot see it.
+const SHOW_WITHIN = 10 * 60 * 1000;
 
 /**
  * A Facebook chat whose reply went from here (its suggestion has sentHereAt) but did not reach the
@@ -61,19 +63,26 @@ function sentWhen(at, now) {
  * as before. Writing, copied, opted out, dismissed and a follow-up done come first, as in boxView.
  * A Facebook reply sent says so, quiet and good, after Writing and before everything else, with
  * Write a reply anyway and the Tell line as for any chat answered with Wheelman's suggestion (a
- * sent reply cannot be taken back, so there is no Put back). A reply sent from here that did not
- * reach the buyer (deliveryFailed) says so in red instead, with Send it again.
+ * sent reply cannot be taken back, so there is no Put back). Still not in the chat ten minutes after
+ * it was sent, it says Wheelman cannot see it there yet, in no colour. A reply sent from here that
+ * did not reach the buyer (deliveryFailed) says so in red instead, with that reply to see, a quiet
+ * Copy and Send it again; once it was copied, the box says Copied, as its row does.
  */
 export function sectionBox(args = {}) {
   const view = boxView(args);
   const { item, writeFailed, now } = args;
-  if (view.kind !== 'writing' && deliveryFailed(item)) {
-    return { kind: 'quiet', tone: 'bad', sentence: 'The reply sent ' + sentWhen(item.draft.sentHereAt, now) + ' did not reach the buyer.', button: SEND_AGAIN, tell: true };
+  if (view.kind !== 'writing' && !args.done && deliveryFailed(item)) {
+    return {
+      kind: 'quiet', tone: 'bad', sentence: 'The reply sent ' + sentWhen(item.draft.sentHereAt, now) + ' did not reach the buyer.', button: SEND_AGAIN, tell: true,
+      suggestion: boxText(item.draft), suggestionLabel: 'The reply that did not reach the buyer', copy: true,
+    };
   }
   const sent = view.kind === 'writing' ? null : sentAt(item);
   if (sent) {
+    const unseen = item.state === 'awaiting' && now - sent >= SHOW_WITHIN;
     const typing = item.marketplace && item.marketplace.sending ? " The engine's phone is typing it into the chat." : '';
-    return { kind: 'quiet', tone: 'good', sentence: 'Sent on Facebook ' + sentWhen(sent, now) + '.' + typing, button: ANYWAY, tell: true };
+    const after = unseen ? ' Wheelman cannot see this reply in the chat yet.' : typing;
+    return { kind: 'quiet', tone: unseen ? '' : 'good', sentence: 'Sent on Facebook ' + sentWhen(sent, now) + '.' + after, button: ANYWAY, tell: true };
   }
   const refused = stillAbout(item, writeFailed) && !(item.draft && item.draft.status === 'ready');
   if (!refused) return view;

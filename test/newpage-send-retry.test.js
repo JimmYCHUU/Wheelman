@@ -210,7 +210,9 @@ test('the box cannot be edited while its reply is sending', async () => {
   assert.match(BOX, /disabled=\$\{locked\} onClick=\$\{\(\) => actions\.write\(\{ instruction: \(item\.draft && item\.draft\.instruction\) \|\| undefined \}\)\}>\$\{failedSend \? 'Write it again' : 'Try again'\}/);
   // Add to reply while it is sending says it was not added, and leaves the drawer as it is.
   const panel = source('../web/new/js/ui/panel.js');
-  assert.match(panel, /if \(actions\.type\(out\.text\) === false\) \{ actions\.toast\(NOT_ADDED\); return; \}\s*if \(overlay\) close\(\);/);
+  // The caret is told where to land only once the text is taken: a refused link leaves the editor as it was.
+  assert.match(panel, /if \(actions\.type\(out\.text\) === false\) \{ actions\.toast\(NOT_ADDED\); return; \}\s*ed\.land\(out\.text, out\.caret\);\s*if \(overlay\) close\(\);/);
+  assert.equal(panel.match(/ed\.land\(/g).length, 1);
   assert.match(panel, /const NOT_ADDED = 'Not added to the reply: it is sending\.';/);
 });
 

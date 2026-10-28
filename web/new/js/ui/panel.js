@@ -77,9 +77,10 @@ export function Panel({ state, pstate, panel, actions, mode, setPanel, reply, no
     const ed = reply.current;
     if (!ed) { actions.toast(NO_REPLY); return; }
     const out = placeLink(ed.text(), label, url, ed.caret());
-    ed.land(out.text, out.caret);
-    // Not while the reply is sending: the box is locked until the send ends, so it is said, and the drawer stays.
+    // Not while the reply is sending: the box is locked until the send ends, so it is said, the
+    // drawer stays, and the editor is told of no text to land. Taken, the caret goes after the link.
     if (actions.type(out.text) === false) { actions.toast(NOT_ADDED); return; }
+    ed.land(out.text, out.caret);
     if (overlay) close();
     actions.toast('Added to the reply');
   };

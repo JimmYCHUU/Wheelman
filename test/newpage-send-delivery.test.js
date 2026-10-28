@@ -9,7 +9,7 @@ import { sentSince } from '../web/new/js/channel.js';
 import { boxViewOf, sectionBox, deliveryFailed } from '../web/new/js/boxsections.js';
 import { sectionRowView } from '../web/new/js/sections.js';
 import { clock } from '../web/lib/format.js';
-import { draft, settle, paths } from './support/newpage-fakes.js';
+import { draft, settle, paths, setup } from './support/newpage-fakes.js';
 import { AT, DAY, FB, SENT, TYPING, OFFLINE, fb, sends, takes, failure, mainNow, sentWith } from './support/newpage-send-fakes.js';
 
 const BOX = fs.readFileSync(new URL('../web/new/js/ui/messagebox.js', import.meta.url), 'utf8');
@@ -26,7 +26,8 @@ test('a reply the engine took but could not deliver says so, never Sent, and Sen
   assert.equal(deliveryFailed(fine), false);
   // A reply failed: it did not reach the buyer, in red, with Send it again.
   assert.equal(deliveryFailed(UNDELIVERED), true);
-  assert.deepEqual(sectionBox({ item: UNDELIVERED, now: AT + 60e3 }), { kind: 'quiet', tone: 'bad', sentence: 'The reply sent at ' + clock(AT) + ' did not reach the buyer.', button: AGAIN, tell: true });
+  assert.deepEqual(sectionBox({ item: UNDELIVERED, now: AT + 60e3 }), { kind: 'quiet', tone: 'bad', sentence: 'The reply sent at ' + clock(AT) + ' did not reach the buyer.', button: AGAIN, tell: true,
+    suggestion: TEXT, suggestionLabel: 'The reply that did not reach the buyer', copy: true });
   assert.equal(sectionBox({ item: UNDELIVERED, now: AT + DAY }).sentence, 'The reply sent yesterday did not reach the buyer.');
   assert.equal(sectionBox({ item: UNDELIVERED, writing: true }).kind, 'writing');
   // A newer suggestion for the same message (Write a reply anyway) is the editor, as any suggestion is.
@@ -147,4 +148,46 @@ test('a failed send is Not sent on its row when refused, Not confirmed when its 
   const copied = sectionRowView(row, { now: AT, doneAnchor: s.done['mp:1'], sending: s.sending['mp:1'] }, 'marketplace');
   assert.deepEqual([copied.reason, copied.tone], ['Copied', '']);
   assert.match(boxViewOf(s, AT).sentence, /^Copied at /);
+});
+
+// ---- the final fix wave
+
+test('a reply that did not reach the buyer is shown with a quiet Copy, and once copied the box says Copied as its row does', async () => {
+  const view = sectionBox({ item: UNDELIVERED, now: AT + 60e3 });
+  assert.deepEqual([view.suggestion, view.suggestionLabel, view.copy], [TEXT, 'The reply that did not reach the buyer', true]);
+  // The message box shows it as a ghost line with that label, and Copy beside Send it again.
+  assert.match(BOX, /<span class="ghost-label">\$\{view\.suggestionLabel \|\| 'The suggestion that was here'\}<\/span>/);
+  assert.match(BOX, /view\.copy && !resending \? html`<button type="button" class="btn" onClick=\$\{\(\) => actions\.copy\(\{\}\)\}>Copy<\/button>`/);
+  // Copied: the text Send it again would send, with nothing of it told to the server.
+  const a = fb(UNDELIVERED);
+  await a.store.actions.open('mp:1');
+  await a.store.actions.copy({});
+  assert.deepEqual(a.written, [TEXT]);
+  assert.deepEqual(a.calls.find((c) => c.path === '/api/drafts/21/copied').body, { text: '' });
+  // The box follows the row: Copied, with Put back.
+  const row = { key: 'mp:1', anchor: 'fm:1', name: 'Liam Invented', unread: 0, state: 'awaiting', preview: { who: 'customer', text: 'Hi' } };
+  let s = a.store.get();
+  assert.equal(sectionRowView(row, { now: AT, doneAnchor: s.done['mp:1'], sending: s.sending['mp:1'], unconfirmed: s.unconfirmed['mp:1'] }, 'marketplace').reason, 'Copied');
+  assert.match(boxViewOf(s, AT).sentence, /^Copied at /);
+  // Put back: it did not reach the buyer, with Send it again, as before.
+  a.store.actions.putBack();
+  s = a.store.get();
+  assert.equal(boxViewOf(s, AT).button.label, 'Send it again');
+});
+
+test('a reply sent from here that the chat still does not show after ten minutes says Wheelman cannot see it yet', async () => {
+  const a = setup({}, { now: () => AT });
+  a.data.items['mp:1'] = { ...FB };
+  a.data.on = { '/api/items/mp:1/send': () => ({ ok: true, queued: false, item: null }) };
+  await a.store.actions.open('mp:1');
+  a.store.actions.type(TEXT);
+  a.data.fail.add('/api/items?'); // the refresh after it fails too, so the suggestion keeps the store's mark
+  assert.equal(await a.store.actions.send(), 'sent');
+  const s = a.store.get();
+  assert.equal(s.item.draft.sentHereAt, AT, "the store's clock");
+  const said = (now) => { const v = boxViewOf(s, now); return [v.tone, v.sentence]; };
+  assert.deepEqual(said(AT + 9 * 60e3), ['good', 'Sent on Facebook at ' + clock(AT) + '.']);
+  assert.deepEqual(said(AT + 10 * 60e3), ['', 'Sent on Facebook at ' + clock(AT) + '. Wheelman cannot see this reply in the chat yet.']);
+  // Once the chat shows it, it is green, however long ago.
+  assert.equal(sectionBox({ item: SENT, now: AT + DAY }).tone, 'good');
 });

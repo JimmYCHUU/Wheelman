@@ -203,7 +203,8 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
   async function setSection(id, { chip, key, wide } = {}) {
     runner.end();
     if (key && key === state.key) flush(); else close();
-    set({ section: id, chip: validChip(id, chip), rows: [], total: 0, listState: 'loading', limit: 20 });
+    // Its chips start with no counts: the section before's are not this one's.
+    set({ section: id, chip: validChip(id, chip), rows: [], total: 0, counts: {}, listState: 'loading', limit: 20 });
     await refresh();
     if (state.section !== id || sectionOff(id, state.sections)) return; // another section was chosen meanwhile, or this one is off
     const to = key || (wide && visibleRows(state)[0] ? visibleRows(state)[0].key : null);
