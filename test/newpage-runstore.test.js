@@ -3,8 +3,9 @@
 // and endRun), and the address while it goes on (web/new/js/hashsync.js). Invented data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRun, nextKey, runSummary, oldestWaiting, skipLabel, runTakes, startAgain, RUN_SIZE, SETTLE_MS } from '../web/new/js/runstore.js';
-import { visibleRows } from '../web/new/js/store.js';
+import { createRun, nextKey, runSummary, oldestWaiting, skipLabel, boxIsNext, runTakes, startAgain, RUN_SIZE, SETTLE_MS } from '../web/new/js/runstore.js';
+import { visibleRows, waitingCount } from '../web/new/js/store.js';
+import { boxViewOf } from '../web/new/js/model.js';
 import { addressAfter, leavesRun, sheetFirst, withSheet } from '../web/new/js/hashsync.js';
 import { parseRoute } from '../web/new/js/route.js';
 import { setup, row, draft, paths } from './support/newpage-fakes.js';
@@ -71,6 +72,7 @@ test('more waiting at the end: the summary says how many, and Start again takes 
   // The ten copied are still the server's ten newest waiting until the replies show on the
   // dashboard: a run now would take nobody, so Start again is not offered yet.
   assert.equal(runTakes(a.store.get()), 0);
+  assert.equal(waitingCount(a.store.get()), 2, 'the list still says how many are waiting; only Start replying goes');
   assert.deepEqual(startAgain(a.store.get()), { offer: false, note: '' });
   a.data.rows = a.data.rows.slice(10);
   a.data.counts = { ...a.data.counts, waiting: 2 };
@@ -357,6 +359,37 @@ test('on a complete list, a run customer whose reply showed on the dashboard is 
   // Seven on the server: the five copied whose replies have not shown yet, and c:11 and c:12.
   assert.equal(a.store.get().runSummary, 'All answered: 10 copied. 2 more waiting.');
   assert.equal(a.store.get().runMore, 2);
+});
+
+test("kept text after another's answer in a run: the box's main button is Next, and the run bar has no Next of its own", async () => {
+  const answer = (a) => {
+    a.data.items['c:3'] = { ...a.data.items['c:3'], anchor: 'a-c:3-after', state: 'answered', answered: { how: 'phone', by: '', at: 900 }, draft: null };
+    a.data.rows = a.data.rows.filter((r) => r.key !== 'c:3');
+    a.data.counts = { ...a.data.counts, waiting: 2 };
+  };
+  const a = waiting();
+  await a.store.actions.refresh();
+  await a.store.actions.startRun();
+  a.store.actions.type('My own words');
+  answer(a);
+  await a.store.actions.refresh();
+  const view = boxViewOf(a.store.get(), 5000);
+  assert.equal(view.elsewhere, true);
+  assert.equal(boxIsNext(a.store.get(), view), true);
+  assert.equal(skipLabel(a.store.get(), view), null, 'one Next, the box\'s');
+  // Nothing typed: the box has no Next, so the run bar's Next stays.
+  const b = waiting();
+  await b.store.actions.refresh();
+  await b.store.actions.startRun();
+  answer(b);
+  await b.store.actions.refresh();
+  const quiet = boxViewOf(b.store.get(), 5000);
+  assert.equal(quiet.kind, 'quiet');
+  assert.equal(boxIsNext(b.store.get(), quiet), false);
+  assert.equal(skipLabel(b.store.get(), quiet), 'Next');
+  // Outside a run the box has no Next either.
+  a.store.actions.endRun();
+  assert.equal(boxIsNext(a.store.get(), view), false);
 });
 
 test('Start again after skipping says that it takes the skipped ones too', async () => {

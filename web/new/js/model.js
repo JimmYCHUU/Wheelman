@@ -276,6 +276,9 @@ export function boxView({ item, writing = false, done = false, doneAt = null, ty
   return { kind: 'editor', context: '' };
 }
 
+/** The box's view of the open conversation from the store's state: the message box's, and the run bar's. */
+export const boxViewOf = (s, now) => boxView({ item: s.item, writing: s.writing === s.key, done: !!s.item && s.done[s.key] === s.item.anchor, doneAt: s.doneAt[s.key], typed: s.typed !== null, now });
+
 /** "48 words", and "· about 2 texts" once the reply runs past one text message. */
 export function wordsLine(text) {
   const { words, texts } = wordCount(text);

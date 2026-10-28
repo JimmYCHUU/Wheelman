@@ -3,10 +3,11 @@
 // Clear and the one main button. Nothing is sent from here: a Dashboard reply is copied, then pasted
 // into the dashboard. When there is no suggestion to show, one sentence says why, with one button.
 import { html, useState, useEffect, useRef, useLayoutEffect } from './html.js';
-import { boxText, boxView, liveChecks, checkLines, mainAction, insteadOptions, trustLine, wordsLine, saveWords, segments, rememberOffer } from '../model.js';
+import { boxText, boxViewOf, liveChecks, checkLines, mainAction, insteadOptions, trustLine, wordsLine, saveWords, segments, rememberOffer } from '../model.js';
 import { Trust } from './trust.js';
 import { Editor, focusFirstBlank, focusText } from './editor.js';
 import { cutBlock, putBackText } from '../segments.js';
+import { boxIsNext } from '../runstore.js';
 
 /**
  * Ctrl+Enter (Cmd+Enter on a Mac) runs main.current, unless focus is in a field outside the editor.
@@ -139,7 +140,7 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
   };
   // Answered elsewhere, the text kept: no reply is needed, so no copy is the main button. In a reply
   // run Next is, and Ctrl+Enter with it: the run moves on and counts this one as answered elsewhere.
-  const next = view.elsewhere && state.run && state.run.key === state.key ? () => actions.skipRun() : null;
+  const next = boxIsNext(state, view) ? () => actions.skipRun() : null;
   main.current = view.elsewhere ? next : run;
   // Copy anyway: the person's own decision. Offered only while no blank is empty, so it copies.
   const copyAnyway = () => {
@@ -224,7 +225,7 @@ function Box({ state, actions, item, reply }) {
   const editor = useRef(null);
   const main = useRef(null);
   useCtrlEnter(main, editor);
-  const view = boxView({ item, writing: state.writing === state.key, done: state.done[state.key] === item.anchor, doneAt: state.doneAt[state.key], typed: state.typed !== null, now: Date.now() });
+  const view = boxViewOf(state, Date.now());
   if (view.kind !== 'editor') main.current = null;
   if (view.kind === 'writing') return html`<${Writing} state=${state} />`;
   if (view.kind === 'quiet') return html`<${Quiet} state=${state} actions=${actions} item=${item} view=${view} />`;

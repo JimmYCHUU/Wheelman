@@ -761,7 +761,8 @@ marks the customer done and opens the next one. **Skip** moves on without markin
 **Run finished: 4 copied, 2 skipped, 1 dismissed.** When more are waiting beyond the run it says
 how many and offers **Start again**, which takes the ten newest still waiting, skipped ones
 included, and says so after a run that skipped anyone. While the ten newest are all ones you
-copied, **Start replying** and **Start again** wait until those replies show on the dashboard.
+copied, the list still says how many are waiting, but **Start replying** and **Start again** wait
+until those replies show on the dashboard.
 Nothing is sent by the run.
 
 A customer who was answered somewhere else leaves **Needs reply** by itself and says who answered

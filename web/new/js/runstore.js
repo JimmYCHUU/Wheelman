@@ -19,7 +19,10 @@ const complete = (s) => s.rows.length >= (s.total || 0);
 
 /** The run's current customer was answered by someone else while open: the run bar's Skip is Next. */
 const answeredNow = (s) => !!s.run && s.key === s.run.key && !!s.item && s.item.state === 'answered' && !!s.item.answered;
-export const skipLabel = (s) => (answeredNow(s) ? 'Next' : 'Skip');
+/** In the run, kept text after another's answer: the message box's main button is Next (view: model.js boxViewOf). */
+export const boxIsNext = (s, view) => !!view.elsewhere && !!s.run && s.run.key === s.key;
+/** The run bar's Skip: Next once the customer was answered elsewhere, and none while the box has its own Next. */
+export const skipLabel = (s, view = {}) => (answeredNow(s) ? (boxIsNext(s, view) ? null : 'Next') : 'Skip');
 
 /** When the longest-waiting of these rows started waiting, or null for none. */
 export function oldestWaiting(rows) {

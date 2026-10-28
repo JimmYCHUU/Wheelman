@@ -48,20 +48,21 @@ function Row({ row, view, selected, tabbable, onOpen }) {
 }
 
 /**
- * Above Needs reply: how many are waiting, and Start replying (gone from the moment a run starts, and
- * while a run would take nobody: the ten newest are all copied, until the replies show on the
- * dashboard). How long the oldest has waited is said once every waiting row is loaded (the list
- * comes newest first, so until then it is not known).
+ * Above Needs reply: how many are waiting, and Start replying (the line goes from the moment a run
+ * starts). While a run would take nobody (the ten newest are all copied, until the replies show on
+ * the dashboard) the count stays and only Start replying goes. How long the oldest has waited is said
+ * once every waiting row is loaded (the list comes newest first, so until then it is not known).
  */
 function RunOffer({ state, now, onStart }) {
   const n = waitingCount(state);
   const rows = visibleRows(state);
-  if (state.chip !== 'waiting' || state.run || state.listState !== 'ready' || !n || !runTakes(state)) return null;
+  if (state.chip !== 'waiting' || state.run || state.listState !== 'ready' || !n) return null;
   const oldest = (state.total || 0) <= state.rows.length ? oldestWaiting(rows) : null;
+  const start = runTakes(state) > 0;
   return html`<p class="run-start">
     <span class="num">${n} waiting${oldest ? ', oldest ' + ago(oldest, now) : ''}</span>
-    <span class="sep" aria-hidden="true">·</span>
-    <button type="button" class="btn small" onClick=${onStart}>Start replying</button>
+    ${start ? html`<span class="sep" aria-hidden="true">·</span>
+    <button type="button" class="btn small" onClick=${onStart}>Start replying</button>` : null}
   </p>`;
 }
 
