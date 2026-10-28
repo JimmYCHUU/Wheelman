@@ -262,7 +262,7 @@ test('a thread is an item of its own kind: waiting when the customer wrote last,
   assert.equal(item.marketplace, null);
 });
 
-test('the section lists the threads, counts them, searches them, and is off with the intake', async () => {
+test('the section lists the threads, counts them, searches them, and lists no email with the intake off', async () => {
   const waiting = await get('/api/items?section=importquery&tab=waiting');
   assert.equal(waiting.section, 'importquery');
   assert.deepEqual(waiting.items.map((r) => r.key), ['em:3', 'em:2'], 'newest customer message first; the answered and the opt-out threads are not waiting');
@@ -279,9 +279,10 @@ test('the section lists the threads, counts them, searches them, and is off with
   assert.equal((await get('/api/items?tab=waiting')).sections.importquery, 2, 'the count is reported from the other sections too');
 
   config.mail.switchedOn = false;
-  const off = await get('/api/items?section=importquery&tab=waiting');
-  assert.equal(off.section, 'dashboard', 'the section is off with the intake');
-  assert.equal(off.sections.importquery, null);
+  const off = await get('/api/items?section=importquery&tab=all');
+  assert.equal(off.section, 'importquery', 'Imports stays on with the intake off');
+  assert.equal(typeof off.sections.importquery, 'number');
+  assert.ok(!off.items.some((r) => r.key.startsWith('em:')), 'with no email listed');
   assert.equal(items.itemFromKey('em:2'), null);
   config.mail.switchedOn = true;
 });

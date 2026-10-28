@@ -154,7 +154,7 @@ export const COPY = {
   'move.foot': 'It keeps its messages, and the reply still goes out the way it came in.',
   'move.info.title': 'Where it is listed',
   'move.info.moved': 'You moved this conversation to {section}. It came in as {home}, and the reply still goes out the way it came in.',
-  'move.info.imports': "Listed in Auction: it came from the dashboard's Imports list.",
+  'move.info.imports': "Listed in Import Query: it came from the dashboard's Imports list.",
   'move.info.order': 'Listed in Auction: this customer has an auction order under way, and the order stands for them in the list.',
   'toast.movedTo': 'Moved to {section}.',
   'toast.ruledGeneral': 'Treated as an ordinary enquiry.',

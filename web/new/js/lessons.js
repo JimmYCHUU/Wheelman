@@ -32,12 +32,14 @@ export const scopeWords = (scope) => (Object.hasOwn(WORDS, scope) ? WORDS[scope]
 
 /**
  * Remember is offered for a Dashboard reply that was written from an instruction and not yet remembered:
- * { scope, label } or null. Not for a follow-up or a conversation in Auction, which teach nothing.
+ * { scope, label } or null. Not for a follow-up, a conversation in Auction, or one the server says
+ * teaches nothing (teaches: false, as for the dashboard's Imports list).
  * The scope is the conversation's situationKey, or every reply when it has none the server knows.
  * remembered: the drafts remembered in this visit.
  */
 export function rememberOffer(item, draft, remembered = []) {
   if (!item || !draft || !draft.instruction) return null;
+  if (item.teaches === false) return null;
   if (!/^(c|l|em):/.test(String(item.key || ''))) return null;
   if (/^fu:/.test(String(item.anchor || '')) || item.section === 'auction') return null;
   if (remembered.includes(draft.id)) return null;

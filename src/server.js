@@ -218,6 +218,8 @@ function summary(item) {
     preview: { who: lastShown.who, text: lastShown.text || lastShown.event || (lastShown.media ? 'Photo' : ''), media: lastShown.media || null },
     flag: flagLevel(draft),
     car: item.mail ? (item.mail.car || item.mail.subject) : item.vehicles[0]?.title || item.marketplace?.listingTitle || (item.imports ? wantedFrom(item).car : ''),
+    // An import enquiry in Imports that is not an email: where it has got to, as its row in Auction said.
+    ...(item.section === 'importquery' && item.channel !== 'email' && item.imports ? { stage: enquiryStage(item).label } : {}),
   };
 }
 
@@ -342,12 +344,17 @@ function presentOrder(item) {
 /**
  * "Which message?" for a conversation that is not an auction order: the templates that fit it, and
  * the one in the box even when it no longer fits (picked before the customer wrote again, or the
- * car sold since), so the list always says what the box holds.
+ * car sold since), so the list always says what the box holds. In Imports, a conversation that is
+ * not an email has the enquiry messages it had in Auction first, the due one marked best, then the
+ * Imports templates; an email has only its own.
  */
 function offeredTemplates(item, shown) {
-  const list = item.section === 'auction' ? enquiryTemplates(item) : templatesFor(item);
+  const imports = item.section === 'importquery';
+  const list = item.section === 'auction' ? enquiryTemplates(item)
+    : imports ? [...enquiryTemplates(item).map((t) => ({ ...t, best: t.due })), ...templatesFor(item)]
+      : templatesFor(item);
   if (!shown || item.state === 'optout' || list.some((t) => t.id === shown)) return list;
-  const label = item.section === 'auction' ? MESSAGES[shown] : sectionTemplateLabel(item, shown);
+  const label = item.section === 'auction' ? MESSAGES[shown] : imports ? MESSAGES[shown] || sectionTemplateLabel(item, shown) : sectionTemplateLabel(item, shown);
   return label ? [...list, { id: shown, label, best: false }] : list;
 }
 
@@ -401,8 +408,11 @@ function present(item) {
     templates: offeredTemplates(item, item.templatePick ?? (draft?.template || '')),
     template: item.templatePick ?? (draft?.template || ''),
     // Why it is listed where it is, when it is not where it came in: 'moved' (the owner), 'imports'
-    // (the dashboard's Imports list), 'order' (an auction order under way), or ''.
-    listed: item.move ? 'moved' : item.section === 'auction' && item.home === 'auction' ? (onImportsList(item) ? 'imports' : 'order') : '',
+    // (in Imports from the dashboard's Imports list), 'order' (in Auction: an auction order under
+    // way), or ''.
+    listed: item.move ? 'moved'
+      : item.section === 'importquery' && item.home === 'importquery' && onImportsList(item) ? 'imports'
+        : item.section === 'auction' && item.home === 'auction' ? 'order' : '',
     vehicle: v ? { title: v.title, stockNo: v.stockNo, price: v.price, odometer: v.odometer, availability: shownAvailability(item, v), url: v.url, year: v.year, fuel: v.fuel, transmission: v.transmission, seats: v.seats, colour: v.color, included: v.outline || [] } : null,
     thread: threadOf(item, shown),
     earlier: item.timeline.length - shown.length,
@@ -435,9 +445,13 @@ const newest = (x, y) => (y.lastInboundAt || y.lastActivityAt) - (x.lastInboundA
 // The "All" list: by the newest message whichever side wrote it, as in any messaging app.
 const byLastMessage = (a, b) => (b.lastAt || 0) - (a.lastAt || 0);
 
+// A list kept for one state of the email intake: Imports lists emails only while it is on. The
+// intake is read from .env at start, so this matters only where it is switched while running.
+const listKey = (section, hours) => `${section}|${hours}|${section === 'importquery' && config.mail.switchedOn ? 'mail' : ''}`;
+
 /** The conversations older than a fortnight, kept until something that shows on their rows changes. */
 function olderRows(section, hours) {
-  const key = `${section}|${hours}`;
+  const key = listKey(section, hours);
   const stamp = oldRowsStamp();
   const hit = olderCache.get(key);
   if (hit && hit.stamp === stamp) return hit.value;
@@ -448,10 +462,11 @@ function olderRows(section, hours) {
 }
 
 /**
- * The import and auction enquiries listed in Auction that have no order yet, as rows like an
- * order's: To do while the customer waits on us, In progress once we have answered, Finished when
- * there is nothing more to do. Rebuilt only when something in the database changes, not with the
- * orders' minute.
+ * The conversations listed in Auction that are not orders, as rows like an order's: a conversation
+ * the owner moved there, or another conversation of a customer whose order is under way (the one
+ * the order reads is under the order). To do while the customer waits on us, In progress once we
+ * have answered, Finished when there is nothing more to do. Rebuilt only when something in the
+ * database changes, not with the orders' minute.
  */
 let enquiryCache = null;
 function enquiryRows() {
@@ -498,7 +513,7 @@ function followUpRows() {
 function sectionRows(section, hours = Infinity) {
   const minute = section === 'auction' ? `|${Math.floor(Date.now() / 60000)}` : '';
   const stamp = `${dataStamp()}${minute}`;
-  const key = `${section}|${hours}`;
+  const key = listKey(section, hours);
   const hit = listCache.get(key);
   if (hit && hit.stamp === stamp) return hit.value;
 
@@ -817,7 +832,7 @@ async function api(req, res, url) {
       if (!item.message) return send(res, 400, { error: 'Choose which message to write first.' });
       draft = await draftOrderMessage(item, { type: item.message, facts: instruction, fitWith: config.auction.fit ? draftFor : null });
     } else if (picked.message && enquiryTemplates(item).some((t) => t.id === picked.message)) {
-      // An enquiry in Auction: the same messages, written from what the enquiry says.
+      // An enquiry in Auction or Imports: the same messages, written from what the enquiry says.
       draft = await draftOrderMessage(item, { type: picked.message, facts: instruction, order: enquiryOrder(item), fitWith: config.auction.fit ? draftFor : null });
     } else if (picked.message && hasSectionTemplate(item, picked.message)) {
       // Any other section: the owner's template, fitted to this customer, changed as the Prompt says.

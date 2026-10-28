@@ -13,13 +13,14 @@ const SNIPPET = 140;
 const MESSAGE_LIMIT = 20;
 
 // Each message table: where the body is, how it maps to an item key, the name to show, and its
-// section (a table whose section is switched off is not searched). A text seen on the phone is
-// listed under the dashboard's conversation or lead once the thread is matched to one, as the list
-// does (rekeyPhoneThreads in src/db.js); only an unmatched thread is "ph:".
+// section (a table whose section is switched off is not searched, nor one whose own switch is off:
+// the phone add-on's, and the email intake's, as Imports lists emails only while it is on). A text
+// seen on the phone is listed under the dashboard's conversation or lead once the thread is matched
+// to one, as the list does (rekeyPhoneThreads in src/db.js); only an unmatched thread is "ph:".
 const SOURCES = [
   { table: 'messages', sql: `SELECT 'c:' || m.conversation_id AS key, COALESCE(NULLIF(c.customer_name, ''), c.phone, '') AS name, m.at AS at, m.direction AS dir, m.body AS text FROM messages m LEFT JOIN conversations c ON c.id = m.conversation_id WHERE m.body LIKE ? ESCAPE '!' ORDER BY m.at DESC LIMIT ?`, home: 'dashboard' },
   { table: 'mp_messages', sql: `SELECT 'mp:' || m.conversation_id AS key, COALESCE(c.buyer_name, '') AS name, m.at AS at, m.direction AS dir, m.text AS text FROM mp_messages m LEFT JOIN mp_conversations c ON c.id = m.conversation_id WHERE m.text LIKE ? ESCAPE '!' ORDER BY m.at DESC LIMIT ?`, home: 'marketplace' },
-  { table: 'mail_messages', sql: `SELECT 'em:' || m.thread_id AS key, COALESCE(NULLIF(t.customer_name, ''), t.customer_email, '') AS name, m.at AS at, m.direction AS dir, m.text AS text FROM mail_messages m LEFT JOIN mail_threads t ON t.id = m.thread_id WHERE m.text LIKE ? ESCAPE '!' ORDER BY m.at DESC LIMIT ?`, home: 'importquery' },
+  { table: 'mail_messages', sql: `SELECT 'em:' || m.thread_id AS key, COALESCE(NULLIF(t.customer_name, ''), t.customer_email, '') AS name, m.at AS at, m.direction AS dir, m.text AS text FROM mail_messages m LEFT JOIN mail_threads t ON t.id = m.thread_id WHERE m.text LIKE ? ESCAPE '!' ORDER BY m.at DESC LIMIT ?`, home: 'importquery', on: () => config.mail.switchedOn },
   { table: 'phone_messages', sql: `SELECT COALESCE('c:' || t.conversation_id, 'c:' || l.conversation_id, 'l:' || t.lead_id, 'ph:' || m.thread_id) AS key, COALESCE(NULLIF(c.customer_name, ''), t.name, '') AS name, m.at AS at, m.direction AS dir, m.text AS text, m.truncated AS truncated, m.precision AS precision FROM phone_messages m LEFT JOIN phone_threads t ON t.id = m.thread_id LEFT JOIN leads l ON l.id = t.lead_id LEFT JOIN conversations c ON c.id = COALESCE(t.conversation_id, l.conversation_id) WHERE m.text LIKE ? ESCAPE '!' ORDER BY m.at DESC LIMIT ?`, home: 'dashboard', on: () => config.phone.switchedOn },
 ];
 

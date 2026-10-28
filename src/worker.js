@@ -241,12 +241,14 @@ export async function draftWaiting({ max = 25 } = {}) {
       if (item && item.state === 'awaiting') { queue.push(item); ahead.add(key); }
     }
     queue.push(...listItems({ states: ['awaiting'] }).filter((i) => !ahead.has(i.itemKey)));
-    // Then Auction: the import and auction enquiries listed there, and the orders whose customer
-    // has texted since we last wrote. (A message pasted from WhatsApp is answered as it is pasted.)
+    // Then Auction: the conversations listed there that are not orders, and the orders whose
+    // customer has texted since we last wrote. (A message pasted from WhatsApp is answered as it is
+    // pasted.)
     queue.push(...listItems({ source: 'auction', states: ['awaiting'] }));
     for (const r of orderRows()) if (r.dueKind === 'reply') { const order = itemFromKey(r.key); if (order?.autoDraft) queue.push(order); }
-    // Email threads from Gmail come last; they are few, and each is researched on the website first.
-    if (config.mail.switchedOn) queue.push(...listItems({ source: 'importquery', states: ['awaiting'] }));
+    // Imports come last: the leads from the dashboard's Imports list, and the email threads from
+    // Gmail (listed only while the email intake is on; each is researched on the website first).
+    queue.push(...listItems({ source: 'importquery', states: ['awaiting'] }));
     for (const item of queue) {
       if (made >= max) break;
       if (item.channel === 'marketplace') continue; // a Facebook chat moved to another section is still written on open

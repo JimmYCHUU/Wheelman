@@ -8,13 +8,14 @@
 //
 // Where a conversation belongs when nobody has moved it:
 //   Marketplace   a Facebook chat
-//   Import Query  an email thread from Gmail
-//   Auction       an auction order; a lead on the dashboard's Imports list; a lead whose customer
-//                 has a live auction order (listed under that order, one row per customer)
+//   Auction       an auction order; a lead whose customer has a live auction order, on the
+//                 dashboard's Imports list or not (listed under that order, one row per customer)
+//   Imports       an email thread from Gmail; a lead on the dashboard's Imports list
+//                 (the section is 'importquery': it was called Import Query)
 //   Dashboard     everything else
-// The owner can move a conversation between Dashboard, Import Query and Auction, in every
-// direction (item_moves in src/db.js). A Facebook chat can leave Marketplace and come back, but
-// nothing else moves into it: it is Facebook's inbox. An order never moves.
+// The owner can move a conversation between Dashboard, Imports and Auction, in every direction
+// (item_moves in src/db.js). A Facebook chat can leave Marketplace and come back, but nothing else
+// moves into it: it is Facebook's inbox. An order never moves.
 
 import { config } from './config.js';
 
@@ -22,8 +23,11 @@ export const SECTIONS = ['dashboard', 'marketplace', 'auction', 'importquery'];
 /** The sections the owner can move a conversation into, in the order of the section tabs. */
 export const MOVABLE = ['dashboard', 'auction', 'importquery'];
 
-/** Whether a section is switched on: Marketplace and Import Query can be switched off. */
-export const sectionOn = (s) => (s === 'marketplace' ? config.marketplace.enabled : s === 'importquery' ? config.mail.switchedOn : SECTIONS.includes(s));
+/**
+ * Whether a section is switched on: only Marketplace can be switched off. Imports is always on: with
+ * the email intake off it still holds the dashboard's Imports list, and lists no email.
+ */
+export const sectionOn = (s) => (s === 'marketplace' ? config.marketplace.enabled : SECTIONS.includes(s));
 
 const prefixOf = (key) => String(key || '').split(':')[0];
 
@@ -35,14 +39,16 @@ export function onImportsList(item) {
 
 /**
  * Where a conversation belongs when nobody has moved it. `liveOrder`: the customer's auction order
- * that is still going (not finished), if any.
+ * that is still going (not finished), if any. A live order comes before the Imports list: the
+ * customer stays under their order in Auction.
  */
 export function naturalSection(item, { liveOrder = null } = {}) {
   const p = prefixOf(item.itemKey);
   if (p === 'ao') return 'auction';
   if (p === 'mp') return 'marketplace';
   if (p === 'em') return 'importquery';
-  if (onImportsList(item) || liveOrder) return 'auction';
+  if (liveOrder) return 'auction';
+  if (onImportsList(item)) return 'importquery';
   return 'dashboard';
 }
 

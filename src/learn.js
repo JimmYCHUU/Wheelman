@@ -19,6 +19,7 @@ import { blanksIn } from '../web/lib/blank.js';
 import { similarity, wordCount, squash } from './text.js';
 import { complete } from './llm.js';
 import { SITUATIONS } from './situations.js';
+import { onImportsList } from './placement.js';
 
 const BLANK = new RegExp(BLANK_PATTERN);
 
@@ -43,10 +44,12 @@ function sinceVoice(rows) {
 /** Only dashboard conversations and leads, and import emails, teach Wheelman. */
 export const canLearnFrom = (itemKey) => /^(?:[cl]|em):\d+$/.test(String(itemKey || ''));
 /**
- * Whether this conversation teaches where it is listed now: one that can teach at all, and is not
- * in the Auction section. Nothing is learned from Auction, whatever the conversation came from.
+ * Whether this conversation teaches where it is listed now: one that can teach at all, is not in
+ * the Auction section, and is not from the dashboard's Imports list. Nothing is learned from
+ * Auction, whatever the conversation came from, nor from a lead on the Imports list, which taught
+ * nothing when the list was in Auction either.
  */
-export const teachesHere = (item) => !!item && canLearnFrom(item.itemKey) && item.section !== 'auction' && !/^fu:/.test(String(item.anchorKey || ''));
+export const teachesHere = (item) => !!item && canLearnFrom(item.itemKey) && item.section !== 'auction' && !onImportsList(item) && !/^fu:/.test(String(item.anchorKey || ''));
 /** A follow-up's suggestion (src/followup.js): it answers no customer message and teaches nothing. */
 const isFollowUp = (draft) => /^fu:\d+$/.test(String(draft?.anchor_key || '')) || !!draft?.context?.followUp;
 const FOLLOW_UP = 'a follow-up';
@@ -362,6 +365,7 @@ const SCOPES = [...Object.keys(SITUATIONS), 'general', 'any'];
 export const REMEMBER_REFUSED = 'Marketplace chats, phone-only texts and auction orders do not teach Wheelman.';
 export const REMEMBER_FOLLOW_UP = 'Follow-ups do not teach Wheelman.';
 export const REMEMBER_AUCTION = 'Auction conversations do not teach Wheelman.';
+export const REMEMBER_IMPORTS_LIST = "Conversations from the dashboard's Imports list do not teach Wheelman.";
 export const NOTHING_TO_REMEMBER = 'There is no instruction to remember.';
 const NO_SCOPE = 'Say which kind of reply to remember it for.';
 
@@ -377,10 +381,11 @@ export function onRemember(item, draftId, scope) {
   const draft = getDraft(draftId);
   if (!draft) return { status: 404, error: 'Suggestion not found.' };
   // Marketplace, the phone-only list and auction orders (and their out: messages), then follow-ups,
-  // then anything in Auction: each refused in its own sentence.
+  // then anything in Auction, then the dashboard's Imports list: each refused in its own sentence.
   if (!canLearnFrom(draft.item_key) || /^out:/.test(String(draft.anchor_key || ''))) return { status: 400, error: REMEMBER_REFUSED };
   if (isFollowUp(draft)) return { status: 400, error: REMEMBER_FOLLOW_UP };
   if (writtenInAuction(draft) || item?.section === 'auction') return { status: 400, error: REMEMBER_AUCTION };
+  if (item && onImportsList(item)) return { status: 400, error: REMEMBER_IMPORTS_LIST };
   if (!item) return { status: 404, error: 'That conversation was not found.' };
   const instruction = squash(redact(String(draft.instruction || ''), item.lead)).slice(0, 600);
   if (!instruction) return { status: 400, error: NOTHING_TO_REMEMBER };

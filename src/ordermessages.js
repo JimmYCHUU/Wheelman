@@ -424,21 +424,24 @@ export async function composeMessage(o, type, { told = factsIn(''), now = Date.n
   return { text, facts, notes, review, part, values: v, tail };
 }
 
-// ---- enquiries in Auction ----------------------------------------------------------------------
+// ---- enquiries in Auction and Imports -----------------------------------------------------------
 
-/** The messages that fit an auction customer before there is an order: the "Which message?" list of an enquiry in Auction. */
+/** The messages that fit an auction customer before there is an order: the "Which message?" list of an enquiry in Auction or Imports. */
 export const ENQUIRY_MESSAGES = ['first_estimate', 'lot_offer', 'lot_short', 'lots_coming', 'search_update', 'deposit_reminder'];
 
 /**
- * The "Which message?" list of a conversation in Auction that has no order yet: an import enquiry
- * answered by text. [{ id, label, due }]: the one that suits where it has got to is marked due
- * (a car to offer once they said what they want; still searching once one was offered). Empty for
- * anything else: an order has its own list, and the other sections get theirs with their templates.
+ * The "Which message?" list of an import enquiry that has no order yet, in Auction or in Imports.
+ * [{ id, label, due }]: the one that suits where it has got to is marked due (a car to offer once
+ * they said what they want; still searching once one was offered). Empty for anything else: an
+ * order has its own list, an email in Imports its own three, and the other sections get theirs
+ * with their templates.
  */
 export function enquiryTemplates(item) {
-  // Any conversation listed in Auction with no order yet: a text, an email or a Facebook chat moved
-  // there. Nothing for a customer who asked not to be contacted.
-  if (item.order || item.section !== 'auction' || item.state === 'optout') return [];
+  // Any conversation listed in Auction with no order yet (a text, an email or a Facebook chat moved
+  // there), and any in Imports that is not an email. Nothing for a customer who asked not to be
+  // contacted.
+  const here = item.section === 'auction' || (item.section === 'importquery' && item.channel !== 'email');
+  if (item.order || !here || item.state === 'optout') return [];
   const due = { enquiry_ready: 'lot_offer', enquiry_offered: 'search_update' }[enquiryStage(item).code] || '';
   return ENQUIRY_MESSAGES.map((id) => ({ id, label: MESSAGES[id], due: id === due }));
 }
@@ -476,7 +479,7 @@ export const blanksIn = (text) => [...new Set(String(text || '').match(/\[[A-Z][
  * fitting is used again with no request. Without it, no AI request is made.
  */
 export async function draftOrderMessage(item, { type, facts = '', instruction = facts, now = Date.now(), save = true, fitWith = null, fitLater = false, order = null } = {}) {
-  // `order`: for an enquiry in Auction with no order yet, the stand-in built from what it says (enquiryOrder).
+  // `order`: for an enquiry in Auction or Imports with no order yet, the stand-in built from what it says (enquiryOrder).
   const o = order || item.order;
   // `fitLater`: written word for word only because the AI is paused just now; a later check fits it.
   const context = { message: type, stage: stageOf(o).code };

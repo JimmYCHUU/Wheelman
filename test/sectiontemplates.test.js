@@ -186,8 +186,11 @@ test('the list follows the section a conversation was moved to: a text in Import
   const iq = Object.keys(template('importquery-messages.md').sections);
   assert.equal((await post('/api/items/c:203/move', { section: 'importquery' })).status, 200);
   try {
+    // A text in Imports: the enquiry messages it would have had in Auction first, then Imports' own.
     const list = await offered('c:203');
-    assert.ok(list.length && list.every((t) => iq.includes(t.id)), list.map((t) => t.id).join(', '));
+    const { ENQUIRY_MESSAGES } = await import('../src/ordermessages.js');
+    assert.deepEqual(list.slice(0, 6).map((t) => t.id), ENQUIRY_MESSAGES);
+    assert.ok(list.length > 6 && list.slice(6).every((t) => iq.includes(t.id)), list.map((t) => t.id).join(', '));
   } finally { await post('/api/items/c:203/move', { section: 'dashboard' }); }
   assert.equal((await post(`/api/items/${mailKey}/move`, { section: 'auction' })).status, 200);
   try {

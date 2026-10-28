@@ -81,12 +81,14 @@ const pastedInDashboard = (row) => /^[cl]:/.test(String((row && row.key) || ''))
  * Facebook chat the auto-reply handed to a person, still unanswered, says "Needs you" in blue when
  * the row has nothing else to say. A row just copied waits to show on the dashboard only when it is
  * a Dashboard text; a Facebook chat, an email, an order and a text seen only on the phone (answered
- * from the phone) go elsewhere, and say "Copied". A Facebook reply that failed (opts.sending, the
- * store's send for this row) says so before anything else, while the chat is as it was when it
- * failed: "Not sent" in red when it was refused, "Not confirmed" in amber when Wheelman could not
- * tell whether it went. Then a reply sent from here that did not reach the buyer (opts.unconfirmed,
- * the store's note for this row) says "Not delivered" in red, while the chat still waits on the
- * message it answered and nothing was copied for it since.
+ * from the phone) go elsewhere, and say "Copied". A row that is not an order and has nothing else
+ * to say shows where its enquiry has got to (row.stage: an import text in Imports, a conversation
+ * in Auction that is not an order), in the list's own tone. A Facebook reply that failed
+ * (opts.sending, the store's send for this row) says so before anything else, while the chat is as
+ * it was when it failed: "Not sent" in red when it was refused, "Not confirmed" in amber when
+ * Wheelman could not tell whether it went. Then a reply sent from here that did not reach the buyer
+ * (opts.unconfirmed, the store's note for this row) says "Not delivered" in red, while the chat
+ * still waits on the message it answered and nothing was copied for it since.
  */
 export function sectionRowView(row, opts, section) {
   const view = rowView(row, opts);
@@ -102,7 +104,7 @@ export function sectionRowView(row, opts, section) {
   const order = isOrder(row) && !view.done;
   const needsYou = !order && !view.reason && !!row.needsPerson && !!row.unanswered;
   const said = view.done && !pastedInDashboard(row) ? 'Copied' : view.reason;
-  const reason = order ? (row.due ? String(row.due).replace(/^Send: /, 'Due: ') : row.stage || '') : needsYou ? 'Needs you' : said;
+  const reason = order ? (row.due ? String(row.due).replace(/^Send: /, 'Due: ') : row.stage || '') : needsYou ? 'Needs you' : said || row.stage || '';
   const tone = order && row.due ? (row.dueKind === 'reply' ? 'info' : 'warn') : needsYou ? 'info' : '';
   return { ...view, reason, channel: rowChannelWord(row, section), tone };
 }

@@ -879,28 +879,30 @@ export function listItems({ maxAgeHours = config.draftMaxAgeHours, olderThanHour
     return items.slice(0, limit);
   }
 
-  // Email threads sent from Gmail: their own section, never mixed with the dashboard's conversations.
-  if (source === 'importquery') {
-    if (!config.mail.switchedOn) return [];
-    for (const r of listMailThreads({ cutoff, before })) keep(buildMailItem(r.id));
-    keepMoved();
-    items.sort(newest);
-    return items.slice(0, limit);
-  }
+  const leadRef = (l) => (l.conversation_id ? { conversationId: l.conversation_id, leadId: l.id } : { leadId: l.id });
 
-  // Auction: the leads on the dashboard's Imports list, the customers whose auction order is under
-  // way, and what the owner moved here. A conversation its order reads is listed by that order
-  // instead (orderRows); whatever else such a customer sends is a row of its own.
-  if (source === 'auction') {
+  // Imports: the leads on the dashboard's Imports list and their texts, the email threads sent from
+  // Gmail (only while the email intake is on), and what the owner moved here. A customer from the
+  // list whose auction order is under way is listed in Auction instead (src/placement.js).
+  if (source === 'importquery') {
     const platform = String(config.dashboard.importsPlatform || '').toUpperCase();
-    const leadRef = (l) => (l.conversation_id ? { conversationId: l.conversation_id, leadId: l.id } : { leadId: l.id });
-    const inWindow = (from, to = from) => (from >= cutoff || to >= cutoff) && from < before && to < before;
     for (const l of db.prepare('SELECT id, conversation_id FROM leads WHERE upper(platform) = ? AND (lead_at >= ? OR updated_at >= ?) AND lead_at < ? AND updated_at < ? ORDER BY updated_at DESC').all(platform, cutoff, cutoff, before, before)) {
       keep(buildItem(leadRef(l)));
     }
     for (const c of db.prepare('SELECT id FROM conversations WHERE upper(lead_platform) = ? AND latest_at >= ? AND latest_at < ?').all(platform, cutoff, before)) {
       if (!kept.has(`c:${c.id}`)) keep(buildItem({ conversationId: c.id }));
     }
+    if (config.mail.switchedOn) for (const r of listMailThreads({ cutoff, before })) keep(buildMailItem(r.id));
+    keepMoved();
+    items.sort(newest);
+    return items.slice(0, limit);
+  }
+
+  // Auction: the customers whose auction order is under way, and what the owner moved here. A
+  // conversation its order reads is listed by that order instead (orderRows); whatever else such a
+  // customer sends is a row of its own.
+  if (source === 'auction') {
+    const inWindow = (from, to = from) => (from >= cutoff || to >= cutoff) && from < before && to < before;
     const ordered = liveOrderCustomers();
     for (const l of ordered.leads) if (inWindow(l.lead_at || 0, l.updated_at || 0) && !kept.has(l.conversation_id ? `c:${l.conversation_id}` : `l:${l.id}`)) keep(buildItem(leadRef(l)));
     for (const c of ordered.conversations) if (inWindow(c.latest_at || 0) && !kept.has(`c:${c.id}`)) keep(buildItem({ conversationId: c.id }));

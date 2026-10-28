@@ -327,10 +327,11 @@ export async function planImport(item, { instruction = '', now = Date.now() } = 
   const wantsSearch = /\b(find|search|look for|auction|another (car|one|option)|other options?)\b/i.test(instruction) || Object.values(toldBy(instruction)).some(Boolean);
   const newDetails = Object.values(specificsIn(item.pendingText)).some(Boolean);
   const pointed = staff.lotId || theirs.lotId || staff.bidYen || theirs.bidYen;
-  // Moved into Auction by the owner and not offered a car yet: the first reply since the move (or
-  // that same reply written again) searches with what they asked for, however far the conversation
-  // has gone. After that, as for any import enquiry, only something new sets off a search.
-  const unoffered = item.move?.section === 'auction' && !lastOfferedLot(item) && firstReplySince(item, item.move.at);
+  // Moved into Auction or Imports by the owner and not offered a car yet: the first reply since the
+  // move (or that same reply written again) searches with what they asked for, however far the
+  // conversation has gone. After that, as for any import enquiry, only something new sets off a
+  // search.
+  const unoffered = ['auction', 'importquery'].includes(item.move?.section) && !lastOfferedLot(item) && firstReplySince(item, item.move.at);
 
   if (!pointed) {
     // Nothing to go on yet: ask what they are looking for.
