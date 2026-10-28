@@ -62,10 +62,12 @@ export const moreLabel = (section) => ({ auction: 'Load more orders', importquer
 const CHANNEL = [['mp:', 'Facebook'], ['em:', 'Email'], ['ao:', 'WhatsApp']];
 const OWN = { dashboard: 'Text', marketplace: 'Facebook', importquery: 'Email', auction: 'WhatsApp' };
 
+/** The channel a row is on, in a word, by its key: 'Facebook', 'Email', 'WhatsApp' or 'Text'. */
+const channelWord = (row) => { const key = String((row && row.key) || ''); return (CHANNEL.find(([p]) => key.startsWith(p)) || [null, 'Text'])[1]; };
+
 /** The row's channel in a word, or '' when it is the section's own. */
 export function rowChannelWord(row, section) {
-  const key = String((row && row.key) || '');
-  const word = (CHANNEL.find(([p]) => key.startsWith(p)) || [null, 'Text'])[1];
+  const word = channelWord(row);
   return word === OWN[section] ? '' : word;
 }
 
@@ -76,13 +78,15 @@ const isOrder = (row) => String((row && row.key) || '').startsWith('ao:');
  * ('' for the list's own). An order row not just copied says what is due ("Due: …"), else where
  * the order has got to: blue for a message of theirs to answer, amber for one of ours to send. A
  * Facebook chat the auto-reply handed to a person, still unanswered, says "Needs you" in blue when
- * the row has nothing else to say.
+ * the row has nothing else to say. A row just copied waits to show on the dashboard only when it is
+ * a Dashboard text; a Facebook chat, an email or an order goes elsewhere, and says "Copied".
  */
 export function sectionRowView(row, opts, section) {
   const view = rowView(row, opts);
   const order = isOrder(row) && !view.done;
   const needsYou = !order && !view.reason && !!row.needsPerson && !!row.unanswered;
-  const reason = order ? (row.due ? String(row.due).replace(/^Send: /, 'Due: ') : row.stage || '') : needsYou ? 'Needs you' : view.reason;
+  const said = view.done && channelWord(row) !== 'Text' ? 'Copied' : view.reason;
+  const reason = order ? (row.due ? String(row.due).replace(/^Send: /, 'Due: ') : row.stage || '') : needsYou ? 'Needs you' : said;
   const tone = order && row.due ? (row.dueKind === 'reply' ? 'info' : 'warn') : needsYou ? 'info' : '';
   return { ...view, reason, channel: rowChannelWord(row, section), tone };
 }

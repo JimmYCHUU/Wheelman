@@ -6,7 +6,7 @@
 import { html, useState, useEffect, useRef, useLayoutEffect } from './html.js';
 import { boxText, liveChecks, checkLines, insteadOptions, trustLine, wordsLine, saveWords, segments, rememberOffer } from '../model.js';
 import { boxViewOf } from '../boxsections.js';
-import { replyChannel, mainFor, sendFor, sendFailedWords } from '../channel.js';
+import { replyChannel, mainFor, sendFor, sendingNow, sendFailedWords } from '../channel.js';
 import { Trust } from './trust.js';
 import { Editor, focusFirstBlank, focusText } from './editor.js';
 import { cutBlock, putBackText } from '../segments.js';
@@ -34,9 +34,10 @@ function useCtrlEnter(main, editor) {
 
 /**
  * "Tell Wheelman what to say…": Enter sends it and empties the line, Escape empties it. While it
- * has text, Wheelman holds back from writing this conversation by itself.
+ * has text, Wheelman holds back from writing this conversation by itself. disabled: while the
+ * reply is sending, nothing can be asked for.
  */
-function Tell({ onSend, holdTell, button }) {
+function Tell({ onSend, holdTell, button, disabled = false }) {
   const [value, setValue] = useState('');
   useEffect(() => () => { holdTell(false); }, []);
   const send = () => {
@@ -51,10 +52,10 @@ function Tell({ onSend, holdTell, button }) {
     else if (e.key === 'Escape' && value) { e.preventDefault(); e.stopPropagation(); setValue(''); holdTell(false); }
   };
   return html`<div class="tell">
-    <input type="text" maxlength="600" enterkeyhint="send" autocomplete="off" value=${value}
+    <input type="text" maxlength="600" enterkeyhint="send" autocomplete="off" value=${value} disabled=${disabled}
       placeholder="Tell Wheelman what to say…" aria-label="Tell Wheelman what to say, then press Enter"
       onInput=${(e) => { const v = e.currentTarget.value; setValue(v); holdTell(!!v.trim()); }} onKeyDown=${keys} />
-    ${value.trim() ? html`<button type="button" class="btn small quiet" onClick=${send}>${button}</button>` : null}
+    ${value.trim() && !disabled ? html`<button type="button" class="btn small quiet" onClick=${send}>${button}</button>` : null}
   </div>`;
 }
 
@@ -136,6 +137,9 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
   // A send of this chat's reply on its way, or one that did not go (kept by conversation, so it
   // outlives closing the chat).
   const sending = sendFor(item, state.sending[state.key]);
+  // While it is on its way the box is read-only, as on the old page: what goes is the text as Send
+  // was pressed. It is Jim's again if the send fails, and cleared once it is sent.
+  const locked = sendingNow(item, state.sending[state.key]);
   const action = empty ? null : mainFor({ item, text, checks: live, overridden: state.overridden, sending });
   const options = insteadOptions(item);
 
@@ -206,7 +210,7 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
         ${note ? html`<span class=${'save-note' + (state.save.state === 'failed' ? ' bad' : '')}>${note}</span>` : null}
         <span class="count num">${wordsLine(text)}</span>
       </div>
-      <${Editor} text=${text} parts=${d ? d.parts : null} onChange=${actions.type} onRemove=${remove}
+      <${Editor} text=${text} parts=${d ? d.parts : null} onChange=${actions.type} onRemove=${remove} readOnly=${locked}
         bad=${lines.fails.length > 0 && !state.overridden} root=${editor} handle=${reply} />
     </div>
     <div class="box-foot">
@@ -217,14 +221,14 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
         ${[...lines.warns, ...lines.inputs].map((m, i) => html`<p class="check warn" key=${'w' + i}>${m}</p>`)}
       </div>`}
       ${options.length ? html`<div class="instead"><span>Instead:</span>
-        ${options.map((o) => html`<button type="button" class="opt" key=${o.id} onClick=${() => actions.instead(o.id)}>${o.label}</button>`)}
+        ${options.map((o) => html`<button type="button" class="opt" disabled=${locked} key=${o.id} onClick=${() => actions.instead(o.id)}>${o.label}</button>`)}
       </div>` : null}
       <div class="foot">
-        <${Tell} onSend=${(v) => actions.tell(v)} holdTell=${actions.holdTell} button="Rewrite" />
+        <${Tell} disabled=${locked} onSend=${(v) => actions.tell(v)} holdTell=${actions.holdTell} button="Rewrite" />
         <div class="right">
           ${empty
             ? (d && d.reply ? html`<button type="button" class="btn" onClick=${bringBack}>Bring back the suggestion</button>` : null)
-            : html`<button type="button" class="btn quiet" onClick=${clear}>Clear</button>`}
+            : locked ? null : html`<button type="button" class="btn quiet" onClick=${clear}>Clear</button>`}
           ${action && action.secondary ? html`<button type="button" class="btn quiet" onClick=${() => actions.copy({ withBlanks: true })}>${action.secondary}</button>` : null}
           ${action ? html`<button type="button" class=${view.elsewhere ? 'btn' : 'btn main'} disabled=${action.kind === 'blocked' || action.kind === 'sending'}
             title=${view.elsewhere || !action.byKey || action.kind === 'blocked' ? null : action.label + ' (Ctrl+Enter)'} onClick=${run}>${action.label}</button>` : null}

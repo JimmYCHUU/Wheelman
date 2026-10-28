@@ -71,8 +71,8 @@ function insertPlain(el, t, { last, ends }, onText) {
   if (!ends && atEnd && t.endsWith('\n') && pill) pill.focus();
 }
 
-/** last: the editor's last piece; ends: the last piece of the editor or of a block (see above). */
-function TextPiece({ text, only, last, ends, onText }) {
+/** last: the editor's last piece; ends: the last piece of the editor or of a block (see above). readOnly: shown, not changed. */
+function TextPiece({ text, only, last, ends, onText, readOnly }) {
   const ref = useRef(null);
   // Written once, when the piece is made: after that the browser owns what is in it.
   useLayoutEffect(() => { ref.current.textContent = ends && text.endsWith('\n') ? text + '\n' : text; }, []);
@@ -92,16 +92,16 @@ function TextPiece({ text, only, last, ends, onText }) {
     e.preventDefault();
     insertPlain(e.currentTarget, '\n', { last, ends }, onText);
   };
-  return html`<span class="seg" ref=${ref} contenteditable=${PLAIN ? 'plaintext-only' : 'true'} role="textbox" aria-multiline="true"
-    aria-label="Reply text, you can change it" spellcheck="true" data-placeholder=${only ? 'Type your reply' : null}
+  return html`<span class="seg" ref=${ref} contenteditable=${readOnly ? 'false' : PLAIN ? 'plaintext-only' : 'true'} aria-readonly=${readOnly ? 'true' : null} role="textbox" aria-multiline="true"
+    aria-label=${readOnly ? 'Reply text, sending' : 'Reply text, you can change it'} spellcheck="true" data-placeholder=${only ? 'Type your reply' : null}
     onInput=${(e) => onText(readText(e.currentTarget, ends), e.isComposing)} onKeyDown=${keys} onbeforeinput=${beforeInput} onPaste=${paste} onDrop=${(e) => e.preventDefault()}></span>`;
 }
 
-function Pill({ piece, onValue, onKey }) {
+function Pill({ piece, onValue, onKey, readOnly }) {
   const words = blankWords(piece.label);
   const v = piece.value;
   return html`<input type="text" class=${'blank-pill' + (v.trim() ? ' filled' : '')} size=${Math.max(words.length, v.length) + 1}
-    value=${v} placeholder=${words} aria-label=${'Fill in: ' + words} autocomplete="off" spellcheck="false"
+    value=${v} placeholder=${words} aria-label=${'Fill in: ' + words} autocomplete="off" spellcheck="false" readOnly=${readOnly}
     onInput=${(e) => onValue(e.currentTarget.value)} onKeyDown=${onKey} />`;
 }
 
@@ -186,7 +186,7 @@ function Block({ id, block, onRemove, children }) {
     <div class="block-head">
       <span class="block-label" id=${id} title=${block.why || null}>${block.label} · added by Wheelman's rules</span>
       ${block.why ? html`<span class="sr" id=${id + '-why'}>${block.why}</span>` : null}
-      <button type="button" class="btn small quiet" aria-label=${'Remove ' + block.label} onClick=${onRemove}>Remove</button>
+      ${onRemove ? html`<button type="button" class="btn small quiet" aria-label=${'Remove ' + block.label} onClick=${onRemove}>Remove</button>` : null}
     </div>
     <div class="block-body">${children}</div>
   </div>`;
@@ -204,8 +204,9 @@ let editors = 0;
  * handle (a ref) is how Add to reply reaches the editor: text() is the text on screen, caret() the
  * last caret position as an offset into it (null when the editor has not had focus since its text
  * arrived), and land(text, at) says where the caret goes once that text arrives from outside.
+ * readOnly: the text is shown and cannot be changed (its reply is sending), and no block has Remove.
  */
-export function Editor({ text, parts, onChange, onRemove, bad, root, handle }) {
+export function Editor({ text, parts, onChange, onRemove, bad, root, handle, readOnly = false }) {
   const own = useRef({ text: null, pieces: [], blocks: [], parts: null, partsKey: '', rev: 0, caret: null, land: null, uid: 0 });
   const [, redraw] = useState(0);
   const s = own.current;
@@ -309,8 +310,8 @@ export function Editor({ text, parts, onChange, onRemove, bad, root, handle }) {
   const list = s.pieces;
   const only = list.length === 1;
   const draw = (p, i) => (p.kind === 'blank'
-    ? html`<${Pill} key=${s.rev + '-' + i} piece=${p} onValue=${(value) => set(i, { value })} onKey=${tab} />`
-    : html`<${TextPiece} key=${s.rev + '-' + i} text=${p.text} only=${only} last=${i === list.length - 1} ends=${endsAt(list, i)} onText=${(t, composing) => set(i, { text: t }, composing)} />`);
+    ? html`<${Pill} key=${s.rev + '-' + i} piece=${p} onValue=${(value) => set(i, { value })} onKey=${tab} readOnly=${readOnly} />`
+    : html`<${TextPiece} key=${s.rev + '-' + i} text=${p.text} only=${only} last=${i === list.length - 1} ends=${endsAt(list, i)} onText=${(t, composing) => set(i, { text: t }, composing)} readOnly=${readOnly} />`);
   const drawn = [];
   for (let i = 0; i < list.length;) {
     const b = list[i].block;
@@ -318,7 +319,7 @@ export function Editor({ text, parts, onChange, onRemove, bad, root, handle }) {
     const inner = [];
     for (; i < list.length && list[i].block === b; i++) inner.push(draw(list[i], i));
     const id = 'block-' + s.uid + '-' + s.rev + '-' + b;
-    drawn.push(html`<${Block} key=${s.rev + '-b' + b} id=${id} block=${s.blocks[b]} onRemove=${() => remove(b)}>${inner}<//>`);
+    drawn.push(html`<${Block} key=${s.rev + '-b' + b} id=${id} block=${s.blocks[b]} onRemove=${readOnly ? null : () => remove(b)}>${inner}<//>`);
   }
   return html`<div class=${'editor' + (bad ? ' bad' : '')} ref=${root} role="group" aria-label="Suggested reply, not sent" onfocusout=${settle} onfocusin=${mark} onInput=${mark} onMouseDown=${edge}>
     <div class="para">${drawn}</div>

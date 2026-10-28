@@ -4,7 +4,7 @@
 // and one that did not go keeps its text and says why. No DOM: the store passes in what it holds.
 import { blanksIn } from '../../lib/blank.js';
 import { liveChecks } from './model.js';
-import { replyChannel } from './channel.js';
+import { replyChannel, sendFailedAwayWords } from './channel.js';
 
 const SENT = 'Sent. It is on its way to the buyer.';
 const QUEUED = 'Queued. The Marketplace system sends it as soon as its phone is back online.';
@@ -34,7 +34,9 @@ export function createSender({ api, get, set, toast, text, refresh }) {
       out = await api('/api/items/' + key + '/send', { text: value, draftId: item.draft ? item.draft.id : null });
     } catch (e) {
       // The text stays where it is; the box says why, for the chat as it was when Send was pressed.
+      // With another chat open by now, a toast says whose reply did not go, so it is not missed.
       set({ sending: { ...get().sending, [key]: { state: 'failed', error: e.message, anchor } } });
+      if (key !== get().key) toast(sendFailedAwayWords(item.name, e.message));
       return 'failed';
     }
     // The reply is on its way and the text went with it, so a later message from the buyer never

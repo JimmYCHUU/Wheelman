@@ -33,6 +33,9 @@ export function sendFor(item, sending) {
   return sending;
 }
 
+/** Whether the chat's reply is on its way now: its box cannot be edited until the send ends. */
+export const sendingNow = (item, sending) => { const s = sendFor(item, sending); return !!s && s.state === 'sending'; };
+
 /**
  * The message box's one main button: { kind, label, secondary, byKey }. kind is 'copy', 'fill' (to
  * the first blank), 'blocked', 'send' or 'sending'; secondary is the quiet Copy beside it, or null;
@@ -74,3 +77,6 @@ const sentence = (words) => { const s = String(words || '').trim(); return !s ||
 
 /** The line in the box after a send that did not go: why, in the server's words, and that the text stays. */
 export const sendFailedWords = (error) => ['Not sent.', sentence(error), 'Your text is still in the box.'].filter(Boolean).join(' ');
+
+/** The toast for a send that did not go once another chat was open: whose, and why. */
+export const sendFailedAwayWords = (name, error) => ['Not sent to ' + (String(name || '').trim() || 'the buyer') + '.', sentence(error)].filter(Boolean).join(' ');

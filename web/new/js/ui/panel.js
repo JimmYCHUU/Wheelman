@@ -78,8 +78,8 @@ export function Panel({ state, pstate, panel, actions, mode, setPanel, reply, no
     const out = placeLink(ed.text(), label, url, ed.caret());
     ed.land(out.text, out.caret);
     if (overlay) close();
-    actions.type(out.text);
-    actions.toast('Added to the reply');
+    // Not while the reply is sending: the box is locked until the send ends.
+    if (actions.type(out.text) !== false) actions.toast('Added to the reply');
   };
 
   const item = state.key ? state.item : null;

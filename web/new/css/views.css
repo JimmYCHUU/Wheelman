@@ -105,6 +105,7 @@
   .instead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); padding: 0 var(--s-1); font-size: var(--fs-13); color: var(--ink-2); }
   .instead .opt { padding: var(--s-hair) var(--s-3); border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface); color: var(--ink-2); font-size: var(--fs-13); font-weight: var(--fw-semi); transition: border-color var(--t-press) var(--ease), color var(--t-press) var(--ease); }
   .instead .opt:hover { border-color: var(--accent); color: var(--accent); }
+  .instead .opt:disabled, .instead .opt:disabled:hover { opacity: 0.55; cursor: not-allowed; border-color: var(--line); color: var(--ink-2); }
   .box .foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
   .tell { flex: 1 1 var(--tell-w); min-width: 0; display: flex; align-items: center; gap: var(--s-1); min-height: var(--control); padding: 0 var(--s-1) 0 var(--s-4); border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface-quiet); }
   .tell input { flex: 1; min-width: 0; min-height: var(--control); padding: 0; border: 0; background: transparent; }

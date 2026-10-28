@@ -190,9 +190,25 @@ test("a row shows its channel only when it differs from its section's own, and a
   assert.deepEqual([reply.reason, reply.tone], ['Reply to their message', 'info']);
   const going = sectionRowView(row('ao:6', { due: '', dueKind: '', stage: 'Searching the auctions' }), { now }, 'auction');
   assert.deepEqual([going.reason, going.tone], ['Searching the auctions', '']);
-  // Copied: the copied words stay, and the list's own tone (green) says it.
+  // Copied: the copied words stay, and the list's own tone (green) says it. An order is not copied into the dashboard.
   const done = sectionRowView(row('ao:5', { due: 'Send: deposit request', dueKind: 'send' }), { now, doneAnchor: 'a-ao:5' }, 'auction');
-  assert.deepEqual([done.reason, done.tone, done.done], ['Copied, waiting for it to show on the dashboard', '', true]);
+  assert.deepEqual([done.reason, done.tone, done.done], ['Copied', '', true]);
+});
+
+test('a copied row says where it will show only for a Dashboard text', () => {
+  const now = Date.UTC(2026, 9, 28, 1, 0);
+  const copied = (key, section) => sectionRowView(row(key), { now, doneAnchor: 'a-' + key }, section);
+  // A text is pasted into the dashboard, wherever it is listed (an enquiry in Auction too).
+  assert.equal(copied('c:1', 'dashboard').reason, 'Copied, waiting for it to show on the dashboard');
+  assert.equal(copied('l:1', 'auction').reason, 'Copied, waiting for it to show on the dashboard');
+  assert.equal(copied('ph:1', 'dashboard').reason, 'Copied, waiting for it to show on the dashboard');
+  // A Facebook chat, an email and an order go elsewhere, and their row says only that it was copied.
+  for (const [key, section] of [['mp:1', 'marketplace'], ['mp:1', 'dashboard'], ['em:1', 'importquery'], ['ao:1', 'auction']]) {
+    const v = copied(key, section);
+    assert.deepEqual([v.reason, v.tone, v.done, v.unread], ['Copied', '', true, 0], key + ' in ' + section);
+  }
+  // Not copied: each row as before.
+  assert.equal(sectionRowView(row('mp:1'), { now }, 'marketplace').reason, '');
 });
 
 test('the head names the account, the subject or the order', () => {

@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import { applyTestEnv } from './support/env.js';
 import { startStandins, aiBehaviour } from './support/standins.js';
 import { marketplace } from './support/fixtures.js';
-import { replyChannel, mainFor, copiedWords, sendFailedWords } from '../web/new/js/channel.js';
+import { replyChannel, mainFor, copiedWords, sendFailedWords, sendFailedAwayWords, sendFor, sendingNow } from '../web/new/js/channel.js';
 import { boxViewOf, sectionBox } from '../web/new/js/boxsections.js';
 import { createStore } from '../web/new/js/store.js';
 import { createApi } from '../web/new/js/api.js';
@@ -207,6 +207,74 @@ test('a second press while sending sends nothing', async () => {
   assert.equal(await b.store.actions.send(), 'failed');
   assert.deepEqual(b.store.get().sending, { 'mp:1': { state: 'failed', error: 'This reply is already on its way.', anchor: 'fm:1' } });
   assert.equal(sendFailedWords(b.store.get().sending['mp:1'].error), 'Not sent. This reply is already on its way. Your text is still in the box.');
+  assert.equal(b.store.get().toast, null, 'the chat is open: the box says it');
+});
+
+test('a send that fails after another chat is opened says so, and the chat keeps Try again', async () => {
+  const a = fb();
+  let refuse = null;
+  a.data.on = { '/api/items/mp:1/send': () => new Promise((_, no) => { refuse = () => no(new Error('The Marketplace system did not accept the reply: the phone is offline')); }) };
+  await a.store.actions.open('mp:1');
+  a.store.actions.type('The price is $28,900. Would you like to see it?');
+  const going = a.store.actions.send();
+  // Jim moves on to the next customer while the reply is on its way, and it is refused.
+  await a.store.actions.open('c:1');
+  refuse();
+  assert.equal(await going, 'failed');
+  let s = a.store.get();
+  assert.equal(s.key, 'c:1', 'the chat open now stays open');
+  assert.equal(s.toast.message, 'Not sent to Liam Invented. The Marketplace system did not accept the reply: the phone is offline.');
+  assert.equal(sendFailedAwayWords('', 'Not found'), 'Not sent to the buyer. Not found.');
+  // Back in the chat: why, the text, and Try again.
+  await a.store.actions.open('mp:1');
+  s = a.store.get();
+  assert.equal(boxText(s.item.draft), 'The price is $28,900. Would you like to see it?', 'the text was saved as Jim left the chat');
+  assert.deepEqual(mainNow(s), { kind: 'send', label: 'Try again', secondary: 'Copy', byKey: false });
+  assert.equal(sendFor(s.item, s.sending[s.key]).error, 'The Marketplace system did not accept the reply: the phone is offline');
+  takes(a);
+  assert.equal(await a.store.actions.send(), 'sent');
+  assert.equal(sends(a).length, 2);
+});
+
+test('the box cannot be edited while its reply is sending', async () => {
+  const a = fb();
+  let answer = null;
+  a.data.on = { '/api/items/mp:1/send': () => new Promise((yes, no) => { answer = { yes, no }; }) };
+  await a.store.actions.open('mp:1');
+  a.store.actions.type('Yes, it is still here.');
+  assert.equal(sendingNow(a.store.get().item, a.store.get().sending['mp:1']), false);
+  const going = a.store.actions.send();
+  let s = a.store.get();
+  assert.equal(sendingNow(s.item, s.sending[s.key]), true);
+  // Typing, Clear, Bring back and Add to reply all go through type(): none takes while it is sending.
+  assert.equal(a.store.actions.type('Something else'), false);
+  a.store.actions.clear();
+  a.store.actions.bringBack();
+  assert.equal(a.store.get().typed, 'Yes, it is still here.');
+  // Another chat is not held up by it.
+  assert.equal(sendingNow({ ...FB, key: 'mp:2' }, undefined), false);
+  // Not sent: the box is Jim's again.
+  answer.no(new Error('The phone is offline.'));
+  assert.equal(await going, 'failed');
+  s = a.store.get();
+  assert.equal(sendingNow(s.item, s.sending[s.key]), false);
+  assert.equal(a.store.actions.type('Yes, it is still here today.'), true);
+  assert.equal(a.store.get().typed, 'Yes, it is still here today.');
+  // Sent: the text goes with the reply, as before.
+  a.data.on = { '/api/items/mp:1/send': () => new Promise((yes) => { answer = { yes }; }) };
+  const again = a.store.actions.send();
+  a.data.items['mp:1'] = SENT;
+  answer.yes({ ok: true, queued: false, item: SENT });
+  assert.equal(await again, 'sent');
+  assert.equal(a.store.get().typed, null);
+  // The message box locks its editor, Clear, the block Remove, Tell Wheelman and Instead while it is sending.
+  assert.match(BOX, /const locked = sendingNow\(item, state\.sending\[state\.key\]\);/);
+  assert.match(BOX, /<\$\{Editor\} [^>]*readOnly=\$\{locked\}/);
+  assert.match(BOX, /<\$\{Tell\} [^>]*disabled=\$\{locked\}/);
+  assert.match(BOX, /class="opt" [^>]*disabled=\$\{locked\}/);
+  const editor = fs.readFileSync(new URL('../web/new/js/ui/editor.js', import.meta.url), 'utf8');
+  assert.match(editor, /contenteditable=\$\{readOnly \? 'false' :/);
+  assert.match(editor, /readOnly=\$\{readOnly\}/);
 });
 
 test('send with a blank posts nothing and moves to the blank', async () => {

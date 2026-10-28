@@ -8,6 +8,7 @@ import { createRunner } from './runstore.js';
 import { createFinish, readDone } from './finish.js';
 import { createHold } from './hold.js';
 import { createSender } from './sender.js';
+import { sendingNow } from './channel.js';
 import { validChip, sectionOff, listFor } from './sections.js';
 import { writesOnOpen } from '../../lib/onopen.js';
 
@@ -62,12 +63,16 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
   const autosave = createAutosave({ api, now, timers, keepalive, get: () => state, set });
   const flush = () => autosave.flush();
 
+  /** The text in the box changed (typing, Clear, Bring back, Add to reply); false when it was not taken. */
   function type(value) {
+    // While its reply is sending the box is locked: what goes is the text as Send was pressed.
+    if (sendingNow(state.item, state.sending[state.key])) return false;
     const typed = String(value ?? '');
     const id = draftId(state.item);
     // "Saving…" from the first key: the save itself waits for a pause in the typing.
     set(id ? { typed, save: { state: 'saving', at: state.save.at } } : { typed });
     autosave.queue(id, typed);
+    return true;
   }
 
   // ---- the list and the open conversation
