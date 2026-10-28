@@ -3,10 +3,12 @@
 // (web/lib/onopen.js) once. Against a stand-in content engine; all data is invented.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { applyTestEnv } from './support/env.js';
 import { startStandins, aiBehaviour } from './support/standins.js';
 import { chatRow, chatMessage } from './support/fixtures.js';
-import { writesOnOpen } from '../web/lib/onopen.js';
+import { writesOnOpen, noSuggestionKey } from '../web/lib/onopen.js';
+import { t } from '../web/lib/copy.js';
 
 applyTestEnv({ MARKETPLACE_ENABLED: '1', DASHBOARD_USERNAME: '', DASHBOARD_PASSWORD: '' });
 
@@ -25,10 +27,11 @@ const chats = new Map([
   [605, { row: chatRow(605, 'Oz Invented', 40, now, { last_direction: 'out' }), messages: [chatMessage(65, 'in', 'phone', 'Is it automatic?', 40, now), chatMessage(66, 'out', 'agent', 'Yes, it is automatic.', 39, now)] }],
 ]);
 
+const ai = aiBehaviour();
 let standins, app, base;
 
 before(async () => {
-  standins = await startStandins({ world: { now, chats }, ai: aiBehaviour() });
+  standins = await startStandins({ world: { now, chats }, ai });
   const { config } = await import('../src/config.js');
   config.marketplace.url = `${standins.engineBase}/inbox`;
   config.llm.gemini.url = `${standins.base}/chat`;
@@ -90,4 +93,65 @@ test('writesOnOpen asks once: never over a draft, a write on its way, a dismisse
   assert.equal(writesOnOpen(unsaid), false, 'a conversation the server says nothing about');
   assert.equal(writesOnOpen(null), false);
   assert.equal(writesOnOpen(undefined), false);
+});
+
+test('the old page says No suggestion yet for a waiting Facebook chat, never that one will be written', () => {
+  // A buyer who wrote again while the chat was open, or a chat opened without writing (the next row
+  // after a Dismiss): nothing writes it in the background, so the box says so, beside Write it now.
+  assert.equal(t(noSuggestionKey({ channel: 'marketplace', state: 'awaiting', writeOnOpen: true, draft: null })), 'No suggestion yet.');
+  // A Dashboard text keeps its words: it is written ahead in the background.
+  assert.equal(t(noSuggestionKey({ channel: 'sms', state: 'awaiting', draft: null })), 'A suggestion will be written within a few minutes.');
+  assert.equal(t(noSuggestionKey({ channel: 'email', state: 'awaiting', draft: null })), 'A suggestion will be written within a few minutes.');
+  // The old page takes its words from this rule (web/app.js renderComposer), and from nowhere else.
+  const page = fs.readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
+  assert.match(page, /import \{ writesOnOpen, noSuggestionKey \} from '\.\/lib\/onopen\.js'/);
+  assert.match(page, /: t\(noSuggestionKey\(item\)\)\);/);
+  assert.doesNotMatch(page, /t\('composer\.waiting'\)/);
+});
+
+test('a refused Facebook write never says Wheelman will try again by itself', async () => {
+  const llm = await import('../src/llm.js');
+  const { config } = await import('../src/config.js');
+  const words = async (role) => { try { await llm.complete('system', 'user', { role }); return ''; } catch (e) { return e.message; } };
+  const busy = async (role) => { llm.resetModelState(); ai.down = true; try { return await words(role); } finally { ai.down = false; } };
+  const usedUp = async (role) => {
+    llm.resetModelState();
+    for (const m of config.llm.gemini.models) ai.usedUp.add(m);
+    try { return await words(role); } finally { ai.usedUp.clear(); }
+  };
+  const models = config.llm.gemini.models;
+  const small = config.llm.marketplaceModel;
+  const real = globalThis.setTimeout;
+  globalThis.setTimeout = (f, ms, ...a) => real(f, Math.min(ms, 5), ...a); // no real waiting between tries
+  try {
+    // Marketplace sharing the dashboard's model, then with a small model of its own.
+    for (const split of [false, true]) {
+      if (split) { config.llm.gemini.models = ['model-a', 'model-b']; config.llm.marketplaceModel = 'model-b'; }
+      for (const said of [await busy('marketplace'), await usedUp('marketplace')]) {
+        assert.ok(said, 'the write was refused');
+        assert.doesNotMatch(said, /by itself|by themselves|tries again|start again/i, said);
+        assert.match(said, /Try again (in a few minutes|after \S.*)\.$/, said);
+      }
+    }
+    // The Dashboard's words stay exactly as they are: its customers are written ahead in the background.
+    assert.equal(await busy('write'), 'No AI model could answer just now. The free models are busy or have used up their allowance for today. Wheelman tries again by itself in a few minutes.');
+    assert.match(await usedUp('write'), /^Every free AI model has used up its allowance for today\. Suggestions start again by themselves around \S/);
+    config.llm.gemini.models = models;
+    config.llm.marketplaceModel = small;
+
+    // A Facebook chat written from the page carries the words to its box.
+    llm.resetModelState();
+    ai.down = true;
+    const out = await (await fetch(`${base}/api/items/mp:601/draft`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).json();
+    ai.down = false;
+    assert.equal(out.item.draft.status, 'failed');
+    assert.equal(out.item.draft.error, 'No AI model could answer just now. The free models are busy or have used up their allowance for today. Try again in a few minutes.');
+  } finally {
+    globalThis.setTimeout = real;
+    ai.down = false;
+    ai.usedUp.clear();
+    config.llm.gemini.models = models;
+    config.llm.marketplaceModel = small;
+    llm.resetModelState();
+  }
 });

@@ -272,6 +272,8 @@ export const COPY = {
   'composer.sending': 'Your reply is on its way. The Marketplace system is typing it into the chat from the phone.',
   'composer.replied': 'We have replied. Nothing is waiting here.',
   'composer.waiting': 'A suggestion will be written within a few minutes.',
+  // A Facebook chat is written when it is opened, never in the background.
+  'composer.none': 'No suggestion yet.',
   'composer.retry.busy': 'The free AI models are busy. Wheelman tries again at {time}, or you can write it now.',
   'composer.retry.daily': "The free AI models have used up today's allowance. Wheelman tries again at {time}.",
   'composer.retry.marketplace': 'The AI model for Marketplace is busy. Wheelman tries again at {time}, or you can write it now.',

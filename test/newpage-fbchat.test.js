@@ -74,6 +74,49 @@ test('opening a waiting chat writes it once, and opening it again while it is wr
   await opening;
 });
 
+test('a write on open never holds up opening: boot resolves before the write\'s answer arrives, and the box reads Writing… meanwhile', async () => {
+  const listed = { sections: { marketplace: { rows: [row('mp:501', { section: 'marketplace', state: 'awaiting' })], counts: { waiting: 1, all: 1 } } } };
+  const slowWrite = (a) => {
+    const answers = [];
+    a.data.items['mp:501'] = { ...BUYER };
+    a.data.draftReply = () => new Promise((resolve) => answers.push(() => resolve({ ok: true, item: { ...BUYER, draft: draft(96, { reply: 'Yes, it is still here.' }) }, error: '' })));
+    return answers;
+  };
+
+  // A reload on the chat's address: boot is done once the conversation is in, not once it is written.
+  const a = setup(listed);
+  const answers = slowWrite(a);
+  let booted = false;
+  const boot = a.store.actions.boot({ section: 'marketplace', chip: 'waiting', key: 'mp:501' }, { wide: true }).then(() => { booted = true; });
+  await settle();
+  assert.equal(answers.length, 1, 'the write was asked for');
+  assert.equal(booted, true, 'boot resolved while the write is on its way');
+  const s = a.store.get();
+  assert.deepEqual([s.section, s.key, s.itemState], ['marketplace', 'mp:501', 'ready']);
+  assert.equal(boxViewOf(s, 5000).kind, 'writing');
+  answers[0]();
+  await boot;
+  await settle();
+  assert.equal(a.store.get().item.draft.reply, 'Yes, it is still here.');
+  assert.equal(writesOf(a).length, 1);
+
+  // Switching to Marketplace on a wide window: its first chat opens, and setSection is done as it is in.
+  const b = setup(listed);
+  const later = slowWrite(b);
+  await b.store.actions.boot({ section: 'dashboard', chip: 'waiting', key: 'c:1' }, { wide: true });
+  let switched = false;
+  const going = b.store.actions.setSection('marketplace', { chip: 'waiting', wide: true }).then(() => { switched = true; });
+  await settle();
+  assert.equal(switched, true, 'setSection resolved while the write is on its way');
+  assert.equal(b.store.get().key, 'mp:501');
+  assert.equal(boxViewOf(b.store.get(), 5000).kind, 'writing');
+  assert.equal(writesOf(b).length, 1);
+  later[0]();
+  await going;
+  await settle();
+  assert.equal(boxViewOf(b.store.get(), 5000).kind, 'editor');
+});
+
 test('a chat written on open that the AI refuses says why and offers Try again', async () => {
   const ALLOWANCE = 'The AI models used for Marketplace have used up their allowance for today. Try again after Thu 29 Oct, 4:05 pm.';
   const BUDGET = "This month's AI budget of A$50 is used, and no free model is set up for marketplace chats. Dashboard suggestions continue; this starts again on 1 November.";
@@ -83,6 +126,7 @@ test('a chat written on open that the AI refuses says why and offers Try again',
   a.data.items['mp:501'] = { ...BUYER };
   a.data.draftReply = () => ({ ok: false, error: ALLOWANCE, item: { ...BUYER, draft: draft(97, { status: 'failed', reply: '', error: ALLOWANCE }) } });
   await a.store.actions.open('mp:501');
+  await settle(); // the write on open goes on after the open has resolved
   let view = boxViewOf(a.store.get(), 5000);
   assert.equal(view.kind, 'quiet');
   assert.equal(view.tone, 'bad');
@@ -95,6 +139,7 @@ test('a chat written on open that the AI refuses says why and offers Try again',
   a.data.items['mp:501'] = { ...BUYER };
   a.data.draftReply = () => ({ ok: false, error: BUDGET, item: { ...BUYER } });
   await a.store.actions.open('mp:501');
+  await settle();
   assert.deepEqual(a.store.get().writeFailed, { key: 'mp:501', message: BUDGET });
   assert.deepEqual(boxViewOf(a.store.get(), 5000), { kind: 'quiet', tone: 'bad', sentence: BUDGET, button: TRY_AGAIN, tell: true });
 
@@ -103,6 +148,7 @@ test('a chat written on open that the AI refuses says why and offers Try again',
   a.data.items['mp:501'] = { ...BUYER };
   a.data.fail.add('/draft');
   await a.store.actions.open('mp:501');
+  await settle();
   assert.deepEqual(a.store.get().writeFailed, { key: 'mp:501', message: 'Network down' });
   assert.deepEqual(boxViewOf(a.store.get(), 5000), { kind: 'quiet', tone: 'bad', sentence: 'Network down', button: TRY_AGAIN, tell: true });
   // Typed meanwhile: the text stays in the editor, and the reason is above it.
@@ -121,6 +167,7 @@ test('a chat written on open that the AI refuses says why and offers Try again',
   a.data.fail.add('/draft');
   a.data.items['mp:501'] = { ...BUYER };
   await a.store.actions.open('mp:501');
+  await settle();
   assert.equal(a.store.get().writeFailed.key, 'mp:501');
   await a.store.actions.open('c:1');
   assert.equal(a.store.get().writeFailed, null);

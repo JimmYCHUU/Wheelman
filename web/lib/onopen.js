@@ -9,3 +9,10 @@
  * chat is open is not written by itself: only opening asks.
  */
 export const writesOnOpen = (item) => !!item && item.writeOnOpen === true && item.state === 'awaiting' && !item.dismissed && !item.draft && !item.writing;
+
+/**
+ * The old page's words (a key in web/lib/copy.js) for a waiting conversation with no suggestion and
+ * nothing to say why: a Facebook chat has no suggestion yet, beside Write it now (nothing writes it
+ * in the background); anything else is written within a few minutes.
+ */
+export const noSuggestionKey = (item) => (item && item.channel === 'marketplace' ? 'composer.none' : 'composer.waiting');

@@ -293,11 +293,14 @@ export async function complete(system, user, { role = 'write', marketplace = fal
   }
   const now = Date.now();
   const split = role !== 'write' && list.length < providers().length;
+  // What happens next. A Facebook chat (the Marketplace job) is never written in the background
+  // (src/worker.js), so its words say when to try again; everything else is written again by itself.
+  const chat = role === 'marketplace';
   if (usable.every((p) => (exhausted.get(keyOf(p)) || 0) > now)) {
-    const back = Math.min(...usable.map((p) => exhausted.get(keyOf(p))));
-    if (split) throw new LlmError(`The AI models used for Marketplace have used up their allowance for today. Try again after ${formatSydney(back)}.`, { daily: true, detail });
-    throw new LlmError(`Every free AI model has used up its allowance for today. Suggestions start again by themselves around ${formatSydney(back)}.`, { daily: true, detail });
+    const back = formatSydney(Math.min(...usable.map((p) => exhausted.get(keyOf(p)))));
+    const then = chat ? `Try again after ${back}.` : `${split ? 'Marketplace suggestions' : 'Suggestions'} start again by themselves around ${back}.`;
+    throw new LlmError(`${split ? 'The AI models used for Marketplace have used up their' : 'Every free AI model has used up its'} allowance for today. ${then}`, { daily: true, detail });
   }
-  if (split) throw new LlmError('The AI models used for Marketplace could not answer just now. Wheelman tries again by itself in a few minutes.', { detail });
-  throw new LlmError('No AI model could answer just now. The free models are busy or have used up their allowance for today. Wheelman tries again by itself in a few minutes.', { detail });
+  const then = chat ? 'Try again in a few minutes.' : 'Wheelman tries again by itself in a few minutes.';
+  throw new LlmError(`${split ? 'The AI models used for Marketplace could not answer just now.' : 'No AI model could answer just now. The free models are busy or have used up their allowance for today.'} ${then}`, { detail });
 }

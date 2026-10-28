@@ -154,8 +154,10 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
       return;
     }
     // A waiting Facebook buyer is written as the chat opens, once: not while this page's own write
-    // for it is on its way (the server may not say so yet).
-    if (writesOnOpen(item) && state.typed === null && state.writing !== key) await write({});
+    // for it is on its way (the server may not say so yet). The write is started, not waited for:
+    // the open (and a boot, a section switch, the address) is done once the conversation is in, and
+    // the box reads Writing… from here, as write() says so before it asks.
+    if (writesOnOpen(item) && state.typed === null && state.writing !== key) write({});
   }
 
   // Another list. Chosen, Follow-ups opens the first one and writes it if nothing is written or being
