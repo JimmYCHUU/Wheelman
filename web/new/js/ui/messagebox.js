@@ -2,13 +2,14 @@
 // its editor, what the checks say about it, other answers ("Instead:"), then the Tell Wheelman line,
 // Clear and the one main button, its channel's (web/new/js/channel.js). Only a Facebook chat sends
 // from here, and only when Send on Facebook is pressed; every other reply is copied, then pasted
-// where it goes. When there is no suggestion to show, one sentence says why, with one button.
+// where it goes. When there is no suggestion to show, one sentence says why, with one button. An
+// auction order has its messages on the Instead line, with Paste what they wrote at its end, in
+// every view but Writing; the paste box, once opened, takes the box's place until it is used.
 import { html, useState, useEffect, useRef, useLayoutEffect } from './html.js';
 import { boxText, liveChecks, checkLines, trustLine, wordsLine, saveWords, segments, rememberOffer } from '../model.js';
 import { boxViewOf } from '../boxsections.js';
-import { messageOptions } from '../messages.js';
 import { typeView } from '../enquiry.js';
-import { MenuButton } from './menu.js';
+import { Picker, PasteButton, PasteBox, usePaste } from './orderbox.js';
 import { Research } from './research.js';
 import { replyChannel, mainFor, sendFor, sendingNow, sendFailedWords } from '../channel.js';
 import { Trust } from './trust.js';
@@ -100,8 +101,11 @@ function Writing({ state }) {
   </div>`;
 }
 
-/** One sentence, with at most one button and, where a reply can be written, the Tell Wheelman line. */
-function Quiet({ state, actions, item, view }) {
+/**
+ * One sentence, with at most one button and, where a reply can be written, the Tell Wheelman line.
+ * An auction order's messages go with it, and Paste what they wrote.
+ */
+function Quiet({ state, actions, item, view, paste }) {
   const d = item.draft || {};
   const fu = item.followUp;
   const run = {
@@ -127,6 +131,7 @@ function Quiet({ state, actions, item, view }) {
     ${resendFailed ? html`<div class="context bad" role="alert"><span>${sendFailedWords(resendFailed.error, resendFailed.outcome, { kept: false })}</span></div>` : null}
     <p class=${'box-note ' + view.tone} role="status">${view.sentence}</p>
     ${view.suggestion ? html`<div class="ghost"><span class="ghost-label">${view.suggestionLabel || 'The suggestion that was here'}</span><p>${view.suggestion}</p></div>` : null}
+    ${item.order ? html`<${Picker} item=${item} actions=${actions} extra=${html`<${PasteButton} paste=${paste} />`} />` : null}
     ${view.tell || b ? html`<div class="foot">
       ${view.tell ? html`<${Tell} onSend=${tell} holdTell=${actions.holdTell} button="Write from this" disabled=${resending} />` : null}
       <div class="right">${view.copy && !resending ? html`<button type="button" class="btn quiet" onClick=${() => actions.copy({})}>Copy</button>` : null}
@@ -141,8 +146,9 @@ function Quiet({ state, actions, item, view }) {
  * Typed text stays here even when the conversation has no ready suggestion (a new message has
  * arrived, or the suggestion could not be written): then nothing is checked and there is nothing
  * to bring back. A suggestion that could not be written is told above the text, with Try again.
+ * An auction order's message is named above it (view.label), and Paste what they wrote ends the Instead line.
  */
-function Draft({ state, actions, item, view, editor, main, reply }) {
+function Draft({ state, actions, item, view, editor, main, reply, paste }) {
   const d = item.draft && item.draft.status === 'ready' ? item.draft : null;
   const text = state.typed !== null ? state.typed : boxText(item.draft);
   const empty = !text.trim();
@@ -158,7 +164,6 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
   const locked = sendingNow(item, state.sending[state.key]);
   const failedSend = sending && sending.state === 'failed' ? sending : null;
   const action = empty ? null : mainFor({ item, text, checks: live, overridden: state.overridden, sending });
-  const { shown: options, more } = messageOptions(item);
 
   const fill = () => focusFirstBlank(editor.current);
   // Send on Facebook: a blank still in the text sends nothing, and the caret goes to it.
@@ -223,7 +228,7 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
       </div>` : null}
       ${failedSend ? html`<div class="context bad" role="alert"><span>${sendFailedWords(failedSend.error, failedSend.outcome)}</span></div>` : null}
       <div class="box-head">
-        <span class="box-label"><b>Suggested reply</b> · not sent</span>
+        <span class="box-label"><b>${view.label || 'Suggested reply'}</b> · not sent</span>
         ${note ? html`<span class=${'save-note' + (state.save.state === 'failed' ? ' bad' : '')}>${note}</span>` : null}
         <span class="count num">${wordsLine(text)}</span>
       </div>
@@ -237,10 +242,7 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
           ${state.overridden || blanks ? null : html`<button type="button" class="btn small" onClick=${anyway}>${facebook ? 'Send anyway' : 'Copy anyway'}</button>`}</p>`)}
         ${[...lines.warns, ...lines.inputs].map((m, i) => html`<p class="check warn" key=${'w' + i}>${m}</p>`)}
       </div>`}
-      ${options.length || more.length ? html`<div class="instead"><span>Instead:</span>
-        ${options.map((o) => html`<button type="button" class="opt" disabled=${locked} key=${o.id} onClick=${() => actions.instead(o.id)}>${o.label}</button>`)}
-        ${more.length && !locked ? html`<${MenuButton} label="More messages" items=${more.map((o) => ({ label: o.label, run: () => actions.instead(o.id) }))} />` : null}
-      </div>` : null}
+      <${Picker} item=${item} actions=${actions} locked=${locked} extra=${item.order ? html`<${PasteButton} paste=${paste} />` : null} />
       <div class="foot">
         <${Tell} disabled=${locked} onSend=${(v) => actions.tell(v)} holdTell=${actions.holdTell} button="Rewrite" />
         <div class="right">
@@ -263,12 +265,18 @@ function Box({ state, actions, item, reply }) {
   const editor = useRef(null);
   const main = useRef(null);
   useCtrlEnter(main, editor);
+  // An order's paste box: kept here, so its text outlives the Writing… a paste starts.
+  const paste = usePaste(actions.paste);
   // sectionBox's view (boxsections.js): the same one the run bar reads.
   const view = boxViewOf(state, Date.now());
-  if (view.kind !== 'editor') main.current = null;
+  // Opened, the paste box is the whole box until it is used or cancelled (as on the old page), so it
+  // and its buttons fit on a phone; the reply and what was typed for it wait in the store.
+  const pasting = !!item.order && paste.open && view.kind !== 'writing';
+  if (view.kind !== 'editor' || pasting) main.current = null;
   if (view.kind === 'writing') return html`<${Writing} state=${state} />`;
-  if (view.kind === 'quiet') return html`<${Quiet} state=${state} actions=${actions} item=${item} view=${view} />`;
-  return html`<${Draft} state=${state} actions=${actions} item=${item} view=${view} editor=${editor} main=${main} reply=${reply} />`;
+  if (pasting) return html`<div class="box" role="group" aria-label="Message box"><${PasteBox} paste=${paste} /></div>`;
+  if (view.kind === 'quiet') return html`<${Quiet} state=${state} actions=${actions} item=${item} view=${view} paste=${paste} />`;
+  return html`<${Draft} state=${state} actions=${actions} item=${item} view=${view} editor=${editor} main=${main} reply=${reply} paste=${paste} />`;
 }
 
 /** reply: a ref the editor fills while it is on screen, for Add to reply (see Editor's handle). */

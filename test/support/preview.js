@@ -99,6 +99,16 @@ const pell = ['Pell', 'Invented', '0491 570 191'];
   const imani = ['Imani', 'Invented', '0491 570 194'];
   invented.leads.IMPORTS.push(rawLead(794, null, imani, now, { platform: 'IMPORTS', source: 'Import', agoMs: 35 * MIN,
     inquiries: [{ type: 'Import', subject: 'Import enquiry', text: 'Could you find me a Daihatsu Copen? 2016 or newer, under 60,000 km.', agoMs: 35 * MIN }] }));
+  // Omar (order 503, his bid placed) texted the dashboard about his deposit three days ago and was
+  // answered. The first sync matches the conversation to his order by its number, so his texts are
+  // answered on the order (Their texts in the Order tab); it is not listed in Dashboard.
+  const omar = ['Omar', 'Haddad', '0491 570 113'];
+  const omarLead = rawLead(796, 796, omar, now, { agoMs: 4 * 24 * 3600e3 });
+  invented.leads.carbarnau.push(omarLead);
+  invented.conversations.push({ row: rawConversation(796, omarLead, omar, { direction: 'OUT', at: now - 3 * 24 * 3600e3, body: 'Yes Omar, your deposit is in.' }), messages: [
+    rawMessage(7960, 796, 'IN', 'Hi, did my deposit for the XV come through?', 3 * 24 * 3600e3 + 10 * MIN, now),
+    rawMessage(7961, 796, 'OUT', 'Yes Omar, your deposit is in. We bid for you on the day.', 3 * 24 * 3600e3, now, STAFF.alex),
+  ] });
   // The first Send to Liam (chat 501) is refused, as if the engine's phone were offline, so the
   // refusal and Try again can be seen. The stand-in engine takes the reply after that.
   invented.refuseSendOnce = new Set([501]);
@@ -173,6 +183,17 @@ const { parseDashboardTime, sydneyDay } = await import('../../src/time.js');
   invented.leads.carbarnau.push(lead);
   invented.conversations.push({ row: rawConversation(795, lead, jory, { direction: 'IN', at: now - 4 * MIN, body: ask }), messages: [rawMessage(7950, 795, 'IN', ask, 4 * MIN, now)] });
   await worker.runSync();
+}
+// Omar wrote on WhatsApp, pasted into his order as the paste box does: we had said we would let him
+// know after the auction (pasted as sent by us), then he asked for news. His reply is written then.
+{
+  const HOUR = 3600e3;
+  db.addOrderMessage(503, 'out', 'We will let you know after the auction.', Date.now() - 2 * HOUR);
+  try {
+    const res = await fetch(`http://127.0.0.1:${PORT}/api/items/ao:503/paste`, { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ direction: 'in', text: 'Any news on the XV? I can go a bit higher if needed.' }) });
+    if (!res.ok) console.log('Preview: the paste into order 503 was refused: ' + res.status);
+  } catch (e) { console.log('Preview: the paste into order 503 was not taken: ' + e.message); }
 }
 // The people just added are waiting too: the ten newest get their suggestions written ahead, as in daily use.
 await worker.draftWaiting();

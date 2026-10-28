@@ -3,6 +3,7 @@
 // Pure functions (no DOM, no globals) beside model.js, which the tests import in Node. PR 5b adds
 // its sections' states here.
 import { boxView, boxText } from './boxview.js';
+import { orderBox } from './orderview.js';
 import { sentence } from './words.js';
 import { sameText } from './channel.js';
 import { clock, listTime, daysAgo } from '../../lib/format.js';
@@ -79,10 +80,11 @@ function sentWhen(at, now) {
  * sent reply cannot be taken back, so there is no Put back). Still not in the chat ten minutes after
  * it was sent, it says Wheelman cannot see it there yet, in no colour. A reply sent from here that
  * did not reach the buyer (deliveryFailed) says so in red instead, with that reply to see, a quiet
- * Copy and Send it again; once it was copied, the box says Copied, as its row does.
+ * Copy and Send it again; once it was copied, the box says Copied, as its row does. An auction
+ * order's box is orderBox's (orderview.js), told a refused write as any other.
  */
 export function sectionBox(args = {}) {
-  const view = boxView(args);
+  const view = args.item && args.item.order ? orderBox(args) : boxView(args);
   const { item, writeFailed, now } = args;
   if (view.kind !== 'writing' && !args.done && deliveryFailed(item)) {
     return {
@@ -117,5 +119,5 @@ export function sectionBox(args = {}) {
 /** The box's view of the open conversation from the store's state: the message box's, and the run bar's. */
 export const boxViewOf = (s, now) => sectionBox({
   item: s.item, writing: s.writing === s.key, done: !!s.item && s.done[s.key] === s.item.anchor, doneAt: s.doneAt[s.key],
-  typed: s.typed !== null, typedText: s.typed, writeFailed: s.writeFailed || null, now,
+  typed: s.typed !== null, typedText: s.typed, writeFailed: s.writeFailed || null, picked: s.picked, now,
 });

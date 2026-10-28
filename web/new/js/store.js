@@ -9,6 +9,7 @@ import { createFinish, readDone } from './finish.js';
 import { createHold } from './hold.js';
 import { createSender } from './sender.js';
 import { createTypeChanger } from './typestore.js';
+import { createOrderActions } from './orderstore.js';
 import { sendingNow } from './channel.js';
 import { validChip, sectionOff, listFor } from './sections.js';
 import { writesOnOpen } from '../../lib/onopen.js';
@@ -26,6 +27,8 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
     writing: null, writeFailed: null, sending: {}, unconfirmed: {}, remembered: [], closedNotes: [], run: null, runSummary: null, runMore: 0, runSkipped: 0,
     // A move the page is asked to follow (typestore.js): { section, chip, key, n }, n counting up.
     goTo: null,
+    // The message picked from "Instead:" ('' a reply to what they wrote), null for none; an order's box reads it.
+    picked: null,
   };
   const listeners = new Set();
   const draftId = (item) => (item && item.draft ? item.draft.id : null);
@@ -38,7 +41,6 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
 
   // Things the UI has no need to see.
   let followupId = null;          // the follow-up the open conversation was opened from
-  let picked = null;              // the answer picked from "Instead:" ('' a reply to what they wrote), null for none
   let toastTimer = null;
   let toastSeq = 0;
   let openSeq = 0;
@@ -50,6 +52,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
 
   /** How the open conversation is asked for: with the answer picked and the follow-up in hand. */
   const itemPath = (key) => {
+    const { picked } = state;
     const q = [picked !== null ? 'message=' + encodeURIComponent(picked) : '', followupId ? 'followup=' + followupId : ''].filter(Boolean).join('&');
     return '/api/items/' + key + (q ? '?' + q : '');
   };
@@ -152,6 +155,8 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
   const { send } = sender;
   // The enquiry type, from the conversation's More menu (web/new/js/typestore.js).
   const { setType } = createTypeChanger({ api, get: () => state, set, toast, flush, refresh, dismiss, timers });
+  // An auction order's paste box, Remove on a pasted message, and Their texts (web/new/js/orderstore.js).
+  const { paste, removePaste, moveTexts } = createOrderActions({ api, get: () => state, set, toast, refresh, take: takeItem });
   const open = (key, o) => { runner.end(); return show(key, o); };
 
   async function show(key, { followup } = {}) {
@@ -159,9 +164,8 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
     await hold.releaseFor(key);
     const seq = ++openSeq;
     followupId = followup || null;
-    picked = null;
     olderLoaded = 0;
-    set({ key, item: null, itemState: 'loading', typed: null, overridden: false, context: null, writeFailed: null, save: { state: 'idle', at: null } });
+    set({ key, item: null, itemState: 'loading', typed: null, overridden: false, context: null, writeFailed: null, picked: null, save: { state: 'idle', at: null } });
     let item;
     try {
       ({ item } = await api('/api/items/' + key + (followup ? '?followup=' + followup : '')));
@@ -229,8 +233,12 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
 
   // ---- writing
 
-  /** The template in the box, which a write keeps unless told otherwise (none: a reply to what they wrote). */
-  const templateInHand = (item) => (item && item.templates && item.templates.length && item.template) || undefined;
+  /**
+   * The template in the box, which a write keeps unless told otherwise (none: a reply to what they
+   * wrote). An order's is its message in the box, the one picked or the one due.
+   */
+  const templateInHand = (item) => (item && item.order ? (item.order.replying ? undefined : item.order.message || undefined)
+    : (item && item.templates && item.templates.length && item.template) || undefined);
 
   async function write({ instruction, message, followup } = {}) {
     const key = state.key;
@@ -275,7 +283,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
     const key = state.key;
     if (!key) return;
     // The pick is asked for by name, '' too: without it the server shows the newest suggestion.
-    picked = id || '';
+    set({ picked: id || '' });
     try {
       const { item } = await api(itemPath(key));
       if (key !== state.key) return;
@@ -304,7 +312,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     actions: {
       boot, refresh, setSection, setChip, more, open, type, flush, write, tell, holdTell: hold.holdTell, instead, copy, send, copyNumber, copyEmail, older, dismiss, dismissFollowUp,
-      putBack, restore, restoreFollowUp, copyLink, toast, remember, justOnce, switchLesson, setType,
+      putBack, restore, restoreFollowUp, copyLink, toast, remember, justOnce, switchLesson, setType, paste, removePaste, moveTexts,
       startRun: runner.start, skipRun: runner.skip, endRun: runner.end,
       clear: () => type(''),
       bringBack: () => type((state.item && state.item.draft && state.item.draft.reply) || ''),

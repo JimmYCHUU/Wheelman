@@ -5,6 +5,7 @@
 import { html, useState, useEffect, useRef } from './html.js';
 import { placeLink } from '../insertlink.js';
 import { CarTab } from './cartab.js';
+import { OrderTab } from './ordertab.js';
 import { CustomerTab } from './customertab.js';
 import { UsedTab } from './usedtab.js';
 import { OPEN_FAILED } from './conversation.js';
@@ -15,6 +16,8 @@ const NO_REPLY = 'Open a conversation with a suggestion first, then Add to reply
 const NOT_ADDED = 'Not added to the reply: it is sending.';
 const TABS = [{ id: 'car', label: 'Car' }, { id: 'customer', label: 'Customer' }, { id: 'used', label: 'What Wheelman used' }];
 const NONE = { car: 'its car', customer: 'its customer', used: 'what Wheelman used' };
+/** An auction order's first tab is its Order tab, in the Car tab's place (its id stays, so the tab chosen is kept). */
+const tabsFor = (item) => (item && item.order ? TABS.map((t) => (t.id === 'car' ? { ...t, label: 'Order' } : t)) : TABS);
 
 /** 'column', 'drawer' or 'sheet': what the panel is at the window's width, kept up to date. */
 export function useMode() {
@@ -30,19 +33,19 @@ export function useMode() {
 }
 
 /** The tabs: the arrow keys, Home and End move between them, as in any tab list. */
-function Tabs({ tab, onTab }) {
+function Tabs({ tabs, tab, onTab }) {
   const keys = (e) => {
-    const at = TABS.findIndex((t) => t.id === tab);
-    const to = { ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: TABS.length - 1 }[e.key];
+    const at = tabs.findIndex((t) => t.id === tab);
+    const to = { ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: tabs.length - 1 }[e.key];
     if (to === undefined) return;
     e.preventDefault();
-    const next = TABS[(to + TABS.length) % TABS.length];
+    const next = tabs[(to + tabs.length) % tabs.length];
     onTab(next.id);
     const el = document.getElementById('tab-' + next.id);
     if (el) el.focus();
   };
   return html`<div class="panel-tabs" role="tablist" aria-label="What the panel shows" onKeyDown=${keys}>
-    ${TABS.map((t) => html`<button type="button" role="tab" id=${'tab-' + t.id} key=${t.id} aria-selected=${tab === t.id}
+    ${tabs.map((t) => html`<button type="button" role="tab" id=${'tab-' + t.id} key=${t.id} aria-selected=${tab === t.id}
       aria-controls="panel-body" tabindex=${tab === t.id ? 0 : -1} onClick=${() => onTab(t.id)}>${t.label}</button>`)}
   </div>`;
 }
@@ -104,6 +107,7 @@ export function Panel({ state, pstate, panel, actions, mode, setPanel, reply, no
   else if (state.key && !item && !here) body = html`<p class="empty" role="status">${state.itemState === 'error' ? OPEN_FAILED : 'Opening…'}</p>`;
   else if (tab === 'customer') body = html`<${CustomerTab} item=${item} act=${{ copyNumber: actions.copyNumber, copyEmail: actions.copyEmail }} />`;
   else if (tab === 'used') body = html`<${UsedTab} item=${item} />`;
+  else if (item && item.order && !here) body = html`<${OrderTab} order=${item.order} now=${now} act=${{ moveTexts: actions.moveTexts }} />`;
   else {
     body = html`<${CarTab} car=${car} media=${stock ? pstate.media[String(stock)] : null} other=${other} now=${now}
       backTo=${item ? item.name || item.phone || item.email || '' : ''} looking=${item && item.looking} act=${act} />`;
@@ -114,7 +118,7 @@ export function Panel({ state, pstate, panel, actions, mode, setPanel, reply, no
       role=${overlay ? 'dialog' : null} aria-modal=${overlay ? 'true' : null}>
       <div class="panel-head">
         <div class="panel-title"><h2>Details</h2><button type="button" class="btn quiet small" onClick=${close}>Close</button></div>
-        <${Tabs} tab=${tab} onTab=${panel.actions.setTab} />
+        <${Tabs} tabs=${tabsFor(item)} tab=${tab} onTab=${panel.actions.setTab} />
       </div>
       <div class="panel-body" id="panel-body" role="tabpanel" aria-labelledby=${'tab-' + tab} key=${tab + '|' + (stock || '')}>${body}</div>
     </aside>`;

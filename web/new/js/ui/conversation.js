@@ -6,6 +6,7 @@ import { boxViewOf } from '../boxsections.js';
 import { headLine } from '../sections.js';
 import { typeView, typeLine } from '../enquiry.js';
 import { marketplacePills, listingStrip } from '../fbchat.js';
+import { orderStrip, pastedId } from '../orderview.js';
 import { hashFor } from '../route.js';
 import { skipLabel, startAgain } from '../runstore.js';
 import { MenuButton } from './menu.js';
@@ -38,7 +39,7 @@ const safeUrl = (u) => (/^https?:\/\//i.test(String(u || '')) ? u : '');
 /**
  * The head: ‹ List, the name, the line under it (the enquiry type first when it is not the
  * section's own), More and Details. More starts with the enquiry type's three choices, under their
- * heading (none for an auction order).
+ * heading (none for an auction order, whose Dismiss is for the message that is due).
  */
 function Head({ state, actions, details }) {
   const item = state.item;
@@ -56,7 +57,7 @@ function Head({ state, actions, details }) {
       types.length && { heading: 'Enquiry type' },
       ...types,
       types.length && { separator: true },
-      { label: 'Dismiss', hint: 'No reply needed. You can undo it.', run: actions.dismiss },
+      { label: item.order ? 'Dismiss this message' : 'Dismiss', hint: 'No reply needed. You can undo it.', run: actions.dismiss },
       item.followUp && { label: 'Dismiss this follow-up', run: actions.dismissFollowUp },
       item.phone ? { label: 'Copy number', hint: item.phone, run: actions.copyNumber }
         : item.email && { label: 'Copy email', hint: item.email, run: actions.copyEmail },
@@ -93,6 +94,18 @@ function ListingStrip({ strip }) {
   </div>`;
 }
 
+/** An auction order: the car it is about, where the order has got to, the deposit, and the auction car's page. */
+function OrderStrip({ strip }) {
+  const facts = [strip.stage, strip.deposit].filter(Boolean).join(' · ');
+  return html`<div class="carstrip">
+    <div class="info">
+      <div class="car-title"><b>${strip.title}</b></div>
+      ${facts ? html`<div class=${'facts' + (strip.finished ? ' finished' : '')}>${facts}</div>` : null}
+    </div>
+    ${strip.url ? html`<a class="btn small listing" href=${strip.url} target="_blank" rel="noopener noreferrer">Open the auction car</a>` : null}
+  </div>`;
+}
+
 function Photos({ message, side }) {
   if (!message.photos || !/^m:\d+$/.test(message.key)) return null;
   const id = message.key.slice(2);
@@ -104,7 +117,8 @@ function Photos({ message, side }) {
   });
 }
 
-function Message({ m, name }) {
+/** One message. onRemove: a message pasted into an auction order, which Remove takes out (no Undo, as on the old page). */
+function Message({ m, name, onRemove }) {
   if (m.internal && m.text) {
     return html`<div class="pill note">Staff note${m.by ? ' by ' + m.by : ''}: ${m.text}<span class="when">${clock(m.at)}</span></div>`;
   }
@@ -121,11 +135,13 @@ function Message({ m, name }) {
     ${m.sending
       ? html`<span class="by sending" title="The Marketplace system is sending this into the chat from the phone.">Sending</span>`
       : html`<span class="by">${clock(m.at)}</span>`}
+    ${onRemove ? html`<button type="button" class="btn small quiet unpaste" title="Take this pasted message out of the order"
+      aria-label="Remove this pasted message from the order" onClick=${onRemove}>Remove</button>` : null}
   </div>`);
   return parts;
 }
 
-function Thread({ item, name, now, older }) {
+function Thread({ item, name, now, older, removePaste }) {
   const box = useRef(null);
   const keep = useRef({ key: null, first: null, fromBottom: 0, stuck: true });
   const [busy, setBusy] = useState(false);
@@ -162,7 +178,8 @@ function Thread({ item, name, now, older }) {
   for (const m of thread) {
     const d = m.at ? dayKey(m.at) : '';
     if (d !== day) { day = d; if (m.at) out.push(html`<div class="day" key=${'d' + m.key}>${dayLabel(m.at, now)}</div>`); }
-    out.push(html`<${Message} key=${m.key} m=${m} name=${name} />`);
+    const pasted = pastedId(item, m);
+    out.push(html`<${Message} key=${m.key} m=${m} name=${name} onRemove=${pasted ? () => removePaste(pasted) : null} />`);
   }
   // Marketplace: what the engine's own auto-reply is doing with this chat, after the messages.
   const pills = marketplacePills(item, now).map((p, i) => html`<div class=${'pill engine ' + p.tone} key=${'engine' + i}>${p.text}</div>`);
@@ -217,6 +234,7 @@ export function Conversation({ state, actions, now, details }) {
   const name = item.name || item.phone || item.email || 'Customer';
   const strip = listingStrip(item);
   return html`${bar}<${Head} state=${state} actions=${actions} details=${details} />
-    ${item.vehicle ? html`<${CarStrip} vehicle=${item.vehicle} details=${details} />` : strip ? html`<${ListingStrip} strip=${strip} />` : null}
-    <${Thread} item=${item} name=${name} now=${now} older=${actions.older} key=${state.key} />`;
+    ${item.order ? html`<${OrderStrip} strip=${orderStrip(item)} />`
+      : item.vehicle ? html`<${CarStrip} vehicle=${item.vehicle} details=${details} />` : strip ? html`<${ListingStrip} strip=${strip} />` : null}
+    <${Thread} item=${item} name=${name} now=${now} older=${actions.older} removePaste=${actions.removePaste} key=${state.key} />`;
 }

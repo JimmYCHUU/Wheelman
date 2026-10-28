@@ -202,7 +202,9 @@ test('the box cannot be edited while its reply is sending', async () => {
   assert.match(BOX, /const locked = sendingNow\(item, state\.sending\[state\.key\]\);/);
   assert.match(BOX, /<\$\{Editor\} [^>]*readOnly=\$\{locked\}/);
   assert.match(BOX, /<\$\{Tell\} [^>]*disabled=\$\{locked\}/);
-  assert.match(BOX, /class="opt" [^>]*disabled=\$\{locked\}/);
+  // The Instead line is the picker the order box shares (ui/orderbox.js): the box passes it the lock.
+  assert.match(BOX, /<\$\{Picker\} [^>]*locked=\$\{locked\}/);
+  assert.match(source('../web/new/js/ui/orderbox.js'), /class="opt" [^>]*disabled=\$\{locked\}/);
   const editor = source('../web/new/js/ui/editor.js');
   assert.match(editor, /contenteditable=\$\{readOnly \? 'false' :/);
   assert.match(editor, /readOnly=\$\{readOnly\}/);

@@ -46,14 +46,20 @@ export function createFinish({ api, clipboard, storage, now, get, set, toast, te
       const kept = replyChannel(item) === 'facebook' ? '' : value;
       if (item.draft && value.trim()) api('/api/drafts/' + item.draft.id + '/copied', { text: kept }).catch(() => { /* the copy itself worked */ });
       saveDone({ ...get().done, [key]: item.anchor }, { ...get().doneAt, [key]: now() });
+      // An order's message is handed over once copied: the order moves on on the server, with the
+      // copy in its thread, so the text leaves the box (it is saved with its suggestion, which Put
+      // back in To do brings back), and the box says Copied, not a new message beside old words.
+      if (item.order && key === get().key) set({ typed: null, context: null });
       // Copied after its send failed, the reply is going by hand: the failure is over (its row says
       // Copied). The chat's next Send still reads Marketplace first (state.unconfirmed, sender.js).
       const was = get().sending && get().sending[key];
       if (was && was.state === 'failed') { const sending = { ...get().sending }; delete sending[key]; set({ sending }); }
-      // A follow-up leaves Follow-ups on the server once it is copied, so it is put back there.
+      // A follow-up leaves Follow-ups on the server once it is copied, so it is put back there. An
+      // order's message is handled on the server once copied, so it is put back in To do there.
       toast(copiedWords(item, blanksIn(value).length), fu
         ? { label: 'Put back in Follow-ups', run: () => restoreFollowUp(Number(fu[1]), key) }
-        : { label: 'Put back in Needs reply', run: () => putBack(key) });
+        : item.order ? { label: 'Put back in To do', run: () => restore(key) }
+          : { label: 'Put back in Needs reply', run: () => putBack(key) });
     });
   }
 
@@ -66,12 +72,17 @@ export function createFinish({ api, clipboard, storage, now, get, set, toast, te
     saveDone(done, doneAt);
   }
 
-  /** Undo for Dismiss: the conversation is waiting again. */
+  /**
+   * Undo for Dismiss: the conversation is waiting again. For an auction order it is Put back in To
+   * do, after a Dismiss or a Copy: the message is due again, and the row copied from it is no longer
+   * done. With a message picked the server's answer is not the one on screen: the refresh reads it.
+   */
   async function restore(key = get().key) {
     if (!key) return;
     try {
       const back = await api('/api/items/' + key + '/restore', {});
-      if (back.item && key === get().key) set({ item: back.item });
+      if (back.item && key === get().key && get().picked === null) set({ item: back.item });
+      if (get().done[key] !== undefined) putBack(key);
       await refresh();
     } catch (e) { toast(e.message); }
   }
@@ -97,11 +108,13 @@ export function createFinish({ api, clipboard, storage, now, get, set, toast, te
    * none, as its menu runs a choice with no arguments.
    */
   async function dismiss(words = 'Dismissed') {
-    const key = get().key;
+    const { key, item } = get();
     if (!key) return;
     try {
       const out = await api('/api/items/' + key + '/dismiss', {});
       if (out.item && key === get().key) set({ item: out.item });
+      // An order's message is set aside on the server, as after a copy: its text leaves the box.
+      if (item && item.order && key === get().key) set({ typed: null, context: null });
       toast(words, { label: 'Undo', run: () => restore(key) });
       await runner.dismissed(key); // in a reply run, the next customer
       await refresh();
