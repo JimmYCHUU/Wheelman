@@ -162,7 +162,10 @@ customer's last message, so the ones the reply run opens first are ready. Every 
 applies (no customer record, a photo with no words, a held Prompt, a recent failure, the daily
 and busy limits). A draft that fails is tried again, at most three times an hour; once the
 customer's message is more than a day old, three failures in all end the tries (asking for it on
-the page still works). Marketplace chats are written as before.
+the page still works). Facebook Marketplace chats are not written in the background: each is
+written when it is opened, on both pages, however old the buyer's message. A photo with no words, a chat not marked as a
+buyer and an archived chat are not written on open. If the writing is refused, the box says why
+and offers Try again. Imports and Auction are written as before.
 
 Every suggestion is stored in SQLite with the checks it passed or failed and the model that
 wrote it. When the reply later appears in the dashboard conversation, Wheelman compares what
@@ -711,13 +714,23 @@ What to know:
 ### The new page
 
 A new page is being built beside this one, at http://127.0.0.1:3210/new/. The old page has a
-quiet link, **Try the new page**, next to the cog. For now the new page covers the Dashboard
-texts: the list (Needs reply, Follow-ups and All), the open conversation, and the message box
-with its fill-in blanks, **Instead**, the "Tell Wheelman what to say…" line, and **Copy**, with
-**Put back in Needs reply**. Marketplace, Imports and Auction are tabs on the new page too, but
-each shows a line and a link to that section on the old page. The old page stays at the normal
-address until the switch-over, and nothing else about it has changed. The new page is built from
-`prototype/`.
+quiet link, **Try the new page**, next to the cog. All four sections open on the new page, each
+with its own lists: Dashboard has Needs reply, Follow-ups and All, and Auction has To do, In
+progress and Finished. A section that is switched off has no tab. In each, the open conversation
+has the message box with its fill-in blanks, **Instead**, the "Tell Wheelman what to say…" line,
+and one main button for the channel: **Copy reply** for a text, **Copy for Gmail** for an email,
+**Copy for WhatsApp** for an auction order, and **Send on Facebook** for a Marketplace buyer.
+**Put back in Needs reply** is on Dashboard. Imports and Auction have their full tools on the old
+page until the next update. The old page stays at the normal address until the switch-over. The
+new page is built from `prototype/`.
+
+**Send on Facebook** is the only send on the new page, and it goes only when you press it. It
+reads **Sending…**, then **Sent** with the time. If it fails, the box says why and offers **Try
+again**. A send that may have gone is never sent twice: Wheelman reads Marketplace and the chat
+first. If the engine took the reply but did not deliver it, the box says it did not reach the
+buyer and offers **Send it again**, and the row reads **Not delivered**. When the chat is off
+screen, a failure appears as a message with **Open**, and the row reads **Not sent** or **Not
+confirmed**. A sent reply cannot be taken back. Ctrl+Enter copies and never sends.
 
 Beside the open conversation is the **deal panel** (a column on a wide screen, a drawer on a
 medium one, a sheet from the bottom on a phone; it remembers whether you left it open). Its
@@ -1128,7 +1141,7 @@ up the day's free AI requests.
 |---|---|---|
 | `MARKETPLACE_URL` | Where the inbox is read from | Empty: the section stays off |
 | `MARKETPLACE_ENABLED` | Set to `0` to switch the section off | `1` |
-| `MARKETPLACE_DAILY_DRAFTS` | Most Marketplace suggestions in any 24 hours | `60` |
+| `MARKETPLACE_DAILY_DRAFTS` | Kept for now; it no longer limits anything, because Marketplace chats are written when opened | `60` |
 | `MARKETPLACE_MODEL` | Marketplace chats use this model and the ones after it in the list. Leave empty to let Marketplace use every model | `gemini-3.5-flash-lite` |
 
 If the content engine cannot be reached, the Dashboard section keeps working and the
@@ -2177,6 +2190,13 @@ suggestions written ahead for the ten newest waiting Dashboard customers whateve
 message. The server gained an `answered` field on rows and conversations; nothing else about it
 changed, and Marketplace drafting is as before. Checked on the automated tests and in a browser on
 invented data. Not yet used over a working day.
+
+28 October 2026: every section opens on the new page, each with its own lists, and Facebook buyers
+are answered with Send on Facebook, which never sends twice and says plainly when a reply did not
+reach the buyer. Facebook chats are now written when they are opened, on both pages, and not in
+the background. The server answers success once the engine has the reply, treats an engine timeout
+as a send that may have gone, and lets a check cover Marketplace alone. Checked on the automated
+tests and in a browser on invented data. Not yet used over a working day.
 
 ### Open questions for Carbarn
 
