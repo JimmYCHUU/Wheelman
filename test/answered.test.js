@@ -111,7 +111,21 @@ test('a staff note is not an answer, and a real reply before it still is', () =>
 
 test('a Marketplace reply typed by a person names nobody', () => {
   const t = [{ who: 'customer', key: 'a', at: 1, text: 'Hi' }, { who: 'us', via: 'Marketplace', key: 'b', at: 2, text: 'Hello', by: 'Typed by a person' }];
-  assert.deepEqual(answeredBy(t, null), { how: 'dashboard', by: '', at: 2 });
+  assert.deepEqual(answeredBy(t, null), { how: 'facebook', by: '', at: 2 });
+});
+
+test('a Facebook chat a person answered on Facebook says so, not the dashboard', async () => {
+  db.upsertMpConversation({ id: 4102, account: 'Carbarn', buyerName: 'Dot Market', stockId: '', lastDirection: 'out', lastMessageAt: now - 15 * MIN, archived: false });
+  db.replaceMpMessages(4102, [
+    { id: 410201, seq: 0, direction: 'in', source: 'buyer', text: 'Is it still available?', status: '', hasMedia: false, at: now - 30 * MIN },
+    { id: 410202, seq: 1, direction: 'out', source: 'dashboard', text: 'Yes, it is. Come and see it.', status: 'sent', hasMedia: false, at: now - 15 * MIN },
+  ], 'sig-answered-fb');
+  const item = await itemOf('mp:4102');
+  assert.equal(item.state, 'answered');
+  assert.deepEqual([item.answered.how, item.answered.by], ['facebook', '']);
+  const { rowView } = await import('../web/new/js/model.js');
+  const row = { key: item.key, name: 'Dot Market', phone: '', email: '', anchor: item.anchor, phoneOnly: false, lastAt: now - 3 * HOUR, unread: 0, preview: { who: 'us', text: 'Yes', media: 0 }, flag: 'none', car: '', state: item.state, answered: item.answered };
+  assert.match(rowView(row, { now }).reason, /^Answered on Facebook /);
 });
 
 test('a copied suggestion sent with one word changed is still Wheelman\'s, and a recorded outcome counts', async () => {

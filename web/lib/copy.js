@@ -276,7 +276,6 @@ export const COPY = {
   'composer.none': 'No suggestion yet.',
   'composer.retry.busy': 'The free AI models are busy. Wheelman tries again at {time}, or you can write it now.',
   'composer.retry.daily': "The free AI models have used up today's allowance. Wheelman tries again at {time}.",
-  'composer.retry.marketplace': 'The AI model for Marketplace is busy. Wheelman tries again at {time}, or you can write it now.',
   'composer.prompt': 'Prompt',
   'composer.prompt.title': 'Say what this reply should say before Wheelman writes it. Use it when you want something particular said; otherwise Wheelman writes by itself.',
   'composer.prompt.placeholder': 'What should the reply say? For example: we have none of that model, we can source one',

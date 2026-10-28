@@ -340,6 +340,7 @@ test('answeredWords says how, by whom and when', () => {
   assert.equal(answeredWords({ how: 'dashboard', by: 'Alex', at }, now), 'Answered by Alex on the dashboard ' + clock(at));
   assert.equal(answeredWords({ how: 'dashboard', by: '', at }, now), 'Answered on the dashboard ' + clock(at));
   assert.equal(answeredWords({ how: 'auto', by: '', at }, now), 'Answered by an auto-reply ' + clock(at));
+  assert.equal(answeredWords({ how: 'facebook', by: '', at }, now), 'Answered on Facebook ' + clock(at));
   assert.equal(answeredWords({ how: 'wheelman', by: 'Alex', at }, now), "Answered with Wheelman's suggestion " + clock(at));
   assert.match(answeredWords({ how: 'phone', by: '', at }, at + 3 * 86400000), /^Answered on the phone \w+$/, 'an earlier day reads as the list time does');
   // Mid-sentence, a day word is lower case; a weekday is a name and keeps its capital.

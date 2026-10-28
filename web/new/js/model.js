@@ -3,6 +3,7 @@
 import { blanksIn } from '../../lib/blank.js';
 import { listTime, ago, clock, plural } from '../../lib/format.js';
 import { listOf } from '../../lib/copy.js';
+import { answeredWords } from './boxview.js';
 
 export const SECTIONS = [
   { id: 'dashboard', label: 'Dashboard', ready: true },
@@ -17,20 +18,6 @@ export const CHIPS = [
   { id: 'followups', label: 'Follow-ups' },
   { id: 'all', label: 'All' },
 ];
-
-/**
- * Who answered a customer instead of us, in words: "Answered on the phone 10:42". The time is the clock
- * today and the list's own time on an earlier day (listTime), a day word in lower case mid-sentence;
- * left out when it is shownAt, the time already shown beside the words. '' for nobody, or a way not known.
- */
-export function answeredWords(answered, now, shownAt = '') {
-  if (!answered) return '';
-  const day = listTime(answered.at, now);
-  const when = day === shownAt ? '' : day === 'Yesterday' ? 'yesterday' : day;
-  const by = answered.by ? ' by ' + answered.by : '';
-  const text = { phone: 'Answered on the phone', dashboard: 'Answered' + by + ' on the dashboard', auto: 'Answered by an auto-reply', wheelman: "Answered with Wheelman's suggestion" }[answered.how];
-  return text ? (text + ' ' + when).trim() : '';
-}
 
 /** What one list row shows. doneAnchor is the anchor of the row just copied, waiting to show on the dashboard. */
 export function rowView(row, { now, doneAnchor } = {}) {
@@ -93,28 +80,12 @@ export function fillBlank(segs, i, value) {
   return segs.map((x, n) => (n === i ? { kind: 'text', text: v } : x));
 }
 
-/** What the suggestion box holds: the person's edit (a cleared box is ''), else what Wheelman wrote. */
-export function boxText(draft) {
-  if (!draft) return '';
-  if (draft.edited !== null && draft.edited !== undefined) return draft.edited;
-  return draft.reply || '';
-}
 
 export function checkLines(checks) {
   const at = (level) => (checks || []).filter((c) => c.level === level).map((c) => c.message);
   return { fails: at('fail'), warns: at('warn'), inputs: at('input') };
 }
 
-/** The one main button. */
-export function mainAction({ text, checks, overridden }) {
-  const blocked = !overridden && (checks || []).some((c) => c.level === 'fail');
-  const n = blanksIn(text).length;
-  const fill = n === 1 ? 'Fill 1 blank' : 'Fill ' + n + ' blanks';
-  // A blank comes first even past a failed check, but nothing is copied until the check is dealt with.
-  if (blocked) return n ? { kind: 'fill', label: fill, secondary: null } : { kind: 'blocked', label: 'Fix the check first', secondary: null };
-  if (n) return { kind: 'fill', label: fill, secondary: n === 1 ? 'Copy with the blank' : 'Copy with the blanks' };
-  return { kind: 'copy', label: 'Copy reply', secondary: null };
-}
 
 export function statusWords(status, now) {
   const { missing = [], syncing, drafting, lastSync } = status || {};
@@ -215,69 +186,8 @@ export function liveChecks(draft, text) {
   });
 }
 
-const PUT_BACK = { label: 'Put back in Needs reply', act: 'put-back', main: false };
-const PUT_BACK_FOLLOW_UP = { label: 'Put back in Follow-ups', act: 'restore-followup', main: false };
-
-/**
- * What the message box shows for the open conversation: the editor, or one sentence with at most
- * one button (act names what it does), and whether the Tell Wheelman line goes with it.
- * writing: a write this page started. typed: the person has typed text, which stays in the editor
- * whatever arrives (a new message with no suggestion yet, Wheelman writing in the background, or a
- * failure); only a write from here, done, opted out and dismissed take the box over. A suggestion
- * that could not be written beside text the person typed (now, or saved before a reload) is told in
- * the editor view's failure line, and the text stays. elsewhere: true on the editor view when the
- * customer was answered somewhere else and the text kept is no reply anyone needs.
- */
-export function boxView({ item, writing = false, done = false, doneAt = null, typed = false, now } = {}) {
-  if (!item) return { kind: 'none' };
-  const d = item.draft || null;
-  const ready = !!d && d.status === 'ready';
-  const fu = item.followUp || null;
-  const mine = !!fu && item.anchor === 'fu:' + fu.id;
-  const say = (sentence, button = null, o = {}) => ({ kind: 'quiet', tone: '', sentence, button, tell: false, ...o });
-  const failed = (first) => say((first + ' ' + (d.error || '')).trim(), { label: 'Try again', act: 'retry', main: true }, { tone: 'bad', tell: true });
-  const isFailed = !!d && d.status === 'failed';
-  const kept = typed || (isFailed && typeof d.edited === 'string' && d.edited.trim() !== '');
-  const failure = isFailed ? ((mine ? 'The follow-up could not be written. ' : 'A suggestion could not be written. ') + (d.error ? d.error + ' ' : '') + 'Your text is kept.') : '';
-
-  if (writing) return { kind: 'writing' };
-  if (done) return say(doneAt ? 'Copied at ' + clock(doneAt) + '.' : 'Copied.', mine ? PUT_BACK_FOLLOW_UP : PUT_BACK, { tone: 'good' });
-  if (fu && fu.done === 'copied') return say('You copied this follow-up. It has left Follow-ups.', PUT_BACK_FOLLOW_UP);
-  if (fu && fu.done) return say('You dismissed this follow-up.', PUT_BACK_FOLLOW_UP);
-  if (item.state === 'optout') return say('This customer asked not to be contacted. Do not reply.', null, { tone: 'bad' });
-  if (item.dismissed && item.state === 'awaiting') {
-    return say('You dismissed this conversation. It comes back by itself if the customer writes again.', { label: 'Put back in Needs reply', act: 'restore', main: false });
-  }
-  // Answered (a follow-up in hand is told as itself). A suggestion written after the answer was asked
-  // for by the person, so it is theirs to use. Answered with Wheelman's own suggestion, copied then
-  // sent, nothing is waiting and nothing is shown again, whatever is typed (it stays in the store).
-  // Answered by someone else, what the person typed stays; else nothing is waiting.
-  const words = item.state === 'answered' && !fu ? answeredWords(item.answered, now) : '';
-  const asked = !!words && !!d && d.createdAt > item.answered.at;
-  const anyway = { label: 'Write a reply anyway', act: 'write', main: false };
-  if (words && !asked && item.answered.how === 'wheelman') return say(words + '. No reply needed.', anyway, { tell: true });
-  const elsewhere = !!words && !asked;
-  const own = typed || (typeof d?.edited === 'string' && d.edited.trim() !== '');
-  const context = mine ? 'Follow-up: ' + fu.reason : elsewhere && own ? 'The customer was answered elsewhere. Your text is kept.' : '';
-  if (kept || (elsewhere && own)) return { kind: 'editor', context, ...(elsewhere && own ? { elsewhere: true } : {}), ...(failure ? { failure } : {}) };
-  if (item.writing) return { kind: 'writing' };
-  if (fu) {
-    if (mine && ready) return { kind: 'editor', context: 'Follow-up: ' + fu.reason };
-    if (mine && d && d.status === 'failed') return failed('The follow-up could not be written.');
-    return say(fu.reason + '. A follow-up is due. Nothing is sent by itself: write it, check it, then copy it.',
-      { label: 'Write the follow-up', act: 'write-followup', main: true }, { tell: true });
-  }
-  if (elsewhere) return say(words + '. No reply needed.', anyway, { tell: true, suggestion: ready ? boxText(d) : item.lastSuggestion || '' });
-  if (item.state !== 'awaiting' && !ready) {
-    return say(item.state === 'answered' ? 'We have replied. Nothing is waiting here.' : item.note || 'No reply needed.', anyway, { tell: true });
-  }
-  if (d && d.status === 'failed') return failed('A suggestion could not be written.');
-  if (!ready) return say('No suggestion yet.', { label: 'Write it now', act: 'write', main: true }, { tell: true });
-  return { kind: 'editor', context: '' };
-}
-
-// The box's view from the store's state, the message box's and the run bar's: boxView with each section's own states (boxsections.js).
-export { boxViewOf } from './boxsections.js';
+// The message box's rules (boxview.js), kept importable from here.
+export { answeredWords, boxText, mainAction, boxView } from './boxview.js';
 
 /** "48 words", and "· about 2 texts" once the reply runs past one text message. */
 export function wordsLine(text) {

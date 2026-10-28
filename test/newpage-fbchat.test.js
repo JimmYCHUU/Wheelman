@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { boxViewOf, sectionBox } from '../web/new/js/boxsections.js';
-import { boxViewOf as fromModel } from '../web/new/js/model.js';
+import fs from 'node:fs';
 import { marketplacePills, listingStrip, marketplaceRows, marketplaceDown } from '../web/new/js/fbchat.js';
 import { sectionRowView } from '../web/new/js/sections.js';
 import { clock } from '../web/lib/format.js';
@@ -172,8 +172,12 @@ test('a chat written on open that the AI refuses says why and offers Try again',
   await a.store.actions.open('c:1');
   assert.equal(a.store.get().writeFailed, null);
 
-  // The run bar and the message box read one view, whichever module they import it from.
-  assert.equal(fromModel, boxViewOf);
+  // The run bar and the message box read one view, from boxsections.js; model.js does not export it.
+  const src = (f) => fs.readFileSync(new URL('../web/new/js/' + f, import.meta.url), 'utf8');
+  for (const f of ['ui/messagebox.js', 'ui/conversation.js']) {
+    assert.match(src(f), /import \{[^}]*\bboxViewOf\b[^}]*\} from '\.\.\/boxsections\.js'/, f);
+  }
+  assert.doesNotMatch(src('model.js'), /boxViewOf/);
 });
 
 test('a refused write is told only while the chat is as it was: a new buyer message or an answer takes the words away', async () => {

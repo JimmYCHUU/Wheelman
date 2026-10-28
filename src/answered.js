@@ -31,7 +31,8 @@ function sentFromWheelman(draft, sentText) {
 
 /**
  * How a conversation was answered, or null while it is not: { how, by, at }.
- * how: 'wheelman' | 'auto' | 'phone' | 'dashboard'. by names the person only for 'dashboard'.
+ * how: 'wheelman' | 'auto' | 'phone' | 'facebook' | 'dashboard'. by names the person only for 'dashboard'. 'facebook' is a person's
+ * reply on a Marketplace chat that is not the auto-reply's (Jim's own after a send that timed out, a colleague's, or one typed on the engine's page).
  * latestDraft is the newest suggestion for the customer message that was answered, or null.
  * nameOf turns a sender's login into the name the thread shows.
  */
@@ -45,7 +46,8 @@ export function answeredBy(timeline, latestDraft, nameOf = (x) => x) {
   if (sentFromWheelman(latestDraft, sentTextAfter(timeline, customer))) return { how: 'wheelman', by: '', at };
   if (reply.auto) return { how: 'auto', by: '', at };
   if (reply.phone || reply.phoneOnly) return { how: 'phone', by: '', at };
-  const by = reply.via === 'Marketplace' && reply.by === 'Typed by a person' ? '' : nameOf(reply.by) || '';
+  if (reply.via === 'Marketplace') return { how: 'facebook', by: '', at };
+  const by = nameOf(reply.by) || '';
   return { how: 'dashboard', by, at };
 }
 

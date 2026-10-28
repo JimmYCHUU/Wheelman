@@ -1,8 +1,8 @@
-// What the message box shows where a section differs from the Dashboard: model.js boxView, plus
+// What the message box shows where a section differs from the Dashboard: boxview.js boxView, plus
 // a write from this page that the AI refused with nothing to show for it, and a Facebook reply sent.
 // Pure functions (no DOM, no globals) beside model.js, which the tests import in Node. PR 5b adds
 // its sections' states here.
-import { boxView, boxText } from './model.js';
+import { boxView, boxText } from './boxview.js';
 import { sentence } from './words.js';
 import { sameText } from './channel.js';
 import { clock, listTime, daysAgo } from '../../lib/format.js';

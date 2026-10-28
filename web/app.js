@@ -543,8 +543,8 @@ function blanksIn(text) {
   return found;
 }
 
-/** When the automatic writing starts again, if it is stopped for this section: busy or used-up models. */
-const retryFor = (item) => (item.channel === 'marketplace' ? state.status?.marketplace?.retryAt : state.status?.retryAt) || 0;
+/** When the automatic writing starts again, if it is stopped: busy or used-up models. Nothing retries a Facebook chat, so 0. */
+const retryFor = (item) => (item.channel === 'marketplace' ? 0 : state.status?.retryAt) || 0;
 
 function composerSignature(item) {
   const d = item.draft;
@@ -779,7 +779,7 @@ function renderComposer(item, els, { arriving = false } = {}) {
     const retry = retryFor(item);
     const line = failed ? `A suggestion could not be written. ${d.error}`
       : item.autoReason || (item.autoDraft && retry > Date.now()
-        ? t(item.channel === 'marketplace' ? 'composer.retry.marketplace' : state.status?.retryWhy === 'daily' ? 'composer.retry.daily' : 'composer.retry.busy', { time: clock(retry) })
+        ? t(state.status?.retryWhy === 'daily' ? 'composer.retry.daily' : 'composer.retry.busy', { time: clock(retry) })
         : t(noSuggestionKey(item)));
     const prompt = promptControls(item, { instruction: failed ? d.instruction || '' : '' });
     box.append(h('div', { class: `quiet ${failed ? 'bad' : ''}`.trim() },

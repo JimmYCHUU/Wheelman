@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRun, nextKey, runSummary, oldestWaiting, skipLabel, boxIsNext, runTakes, startAgain, RUN_SIZE, SETTLE_MS } from '../web/new/js/runstore.js';
 import { visibleRows, waitingCount } from '../web/new/js/store.js';
-import { boxViewOf } from '../web/new/js/model.js';
+import { boxViewOf } from '../web/new/js/boxsections.js';
 import { addressAfter, leavesRun, sheetFirst, withSheet } from '../web/new/js/hashsync.js';
 import { parseRoute } from '../web/new/js/route.js';
 import { setup, row, draft, paths } from './support/newpage-fakes.js';

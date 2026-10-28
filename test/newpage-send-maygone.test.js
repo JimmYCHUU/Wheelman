@@ -9,7 +9,7 @@ import http from 'node:http';
 import { applyTestEnv } from './support/env.js';
 import { startStandins, aiBehaviour } from './support/standins.js';
 import { chatRow, chatMessage } from './support/fixtures.js';
-import { boxViewOf } from '../web/new/js/boxsections.js';
+import { boxViewOf, sectionBox } from '../web/new/js/boxsections.js';
 import { createStore } from '../web/new/js/store.js';
 import { createApi } from '../web/new/js/api.js';
 import { boxText } from '../web/new/js/model.js';
@@ -149,6 +149,15 @@ test('the 504 starts a Marketplace read of its own, and a reply that did not go 
   assert.equal((await post('/api/items/mp:516/send', { text: 'And one more thing.', draftId: null })).status, 200);
   assert.equal(lists(), read);
   assert.equal(replies(516).length, 3);
+});
+
+test('a reply that timed out and went reads Answered on Facebook, not on the dashboard', async () => {
+  await buyer(590, 'Mia Invented');
+  assert.equal((await timesOut(() => post('/api/items/mp:590/send', { text: 'Yes, it is still here.', draftId: null }))).status, 504);
+  await until(async () => (await chat('mp:590')).state === 'answered', 'the read the 504 starts brings the reply in');
+  const item = await chat('mp:590');
+  assert.equal(item.answered.how, 'facebook');
+  assert.match(sectionBox({ item, now: Date.now() }).sentence, /^Answered on Facebook .*No reply needed\.$/);
 });
 
 // ---- PR 5b, Task 0a: the same words are never sent to a buyer twice

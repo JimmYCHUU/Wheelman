@@ -17,6 +17,27 @@ test('no new page file is over 400 lines', () => {
   }
 });
 
+test("the new page's modules import one another without a cycle", () => {
+  const files = filesUnder(path.join(root, 'js')).filter((f) => f.endsWith('.js'));
+  const edges = new Map(files.map((f) => {
+    const text = fs.readFileSync(f, 'utf8');
+    const to = [...text.matchAll(/^(?:import|export)\s[^;]*?\sfrom\s+'(\.[^']+)'/gms)].map((m) => path.resolve(path.dirname(f), m[1])).filter((p) => files.includes(p));
+    return [f, to];
+  }));
+  const rel = (f) => path.relative(root, f);
+  const seen = new Set();
+  const walk = (f, trail) => {
+    if (trail.includes(f)) assert.fail('import cycle: ' + [...trail.slice(trail.indexOf(f)), f].map(rel).join(' -> '));
+    if (seen.has(f)) return;
+    for (const g of edges.get(f)) walk(g, [...trail, f]);
+    seen.add(f);
+  };
+  for (const f of files) walk(f, []);
+  for (const n of ['boxsections.js', 'channel.js']) {
+    assert.ok(!edges.get(path.join(root, 'js', n)).includes(path.join(root, 'js', 'model.js')), n + ' imports nothing from model.js');
+  }
+});
+
 test("the store's actions are the same after the split", () => {
   const { store } = setup();
   assert.deepEqual(Object.keys(store.actions).sort(), [

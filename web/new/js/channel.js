@@ -2,7 +2,7 @@
 // on Facebook for a Marketplace chat, Copy for Gmail for an email, Copy for WhatsApp for an auction
 // order. Then what a send's failure means, and the words after a copy, a send, and a send that did
 // not go. Pure functions (no DOM, no globals) beside model.js, which the tests import in Node.
-import { mainAction } from './model.js';
+import { mainAction } from './boxview.js';
 import { sentence } from './words.js';
 import { blanksIn } from '../../lib/blank.js';
 import { plural } from '../../lib/format.js';

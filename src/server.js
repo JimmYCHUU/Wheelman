@@ -201,7 +201,7 @@ function summary(item) {
     replyComing: !!item.marketplace?.replyComing,
     anchor: item.anchorKey,
     state: item.state,
-    // Who answered it, when it is answered: 'wheelman', 'auto', 'phone' or 'dashboard'.
+    // Who answered it, when it is answered: 'wheelman', 'auto', 'phone', 'facebook' or 'dashboard'.
     answered: answeredOf(item),
     // Seen only on the phone: the dashboard has no conversation for this number.
     phoneOnly: !!item.phoneOnly,

@@ -8,7 +8,7 @@ import { applyTestEnv } from './support/env.js';
 import { startStandins, aiBehaviour } from './support/standins.js';
 import { chatRow, chatMessage } from './support/fixtures.js';
 import { writesOnOpen, noSuggestionKey } from '../web/lib/onopen.js';
-import { t } from '../web/lib/copy.js';
+import { t, COPY } from '../web/lib/copy.js';
 
 applyTestEnv({ MARKETPLACE_ENABLED: '1', DASHBOARD_USERNAME: '', DASHBOARD_PASSWORD: '' });
 
@@ -160,4 +160,9 @@ test('a refused Facebook write never says Wheelman will try again by itself', as
     config.llm.marketplaceModel = small;
     llm.resetModelState();
   }
+});
+
+test('the old page has no retry words for a Facebook chat, since nothing retries one', () => {
+  assert.equal(Object.hasOwn(COPY, 'composer.retry.marketplace'), false);
+  assert.ok(!fs.readFileSync(new URL('../web/app.js', import.meta.url), 'utf8').includes('composer.retry.marketplace'));
 });
