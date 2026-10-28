@@ -22,12 +22,15 @@ one stays at `/`.
 | 2 | **Deal panel and one search.** The Car tab (photos, videos, documents, Copy link, Add to reply, the viewer), the Customer tab (stage line, insider facts), and What Wheelman used. One search over customers, cars and messages | M5, M10 |
 | 3 | **The rest of the message box.** Removable code blocks; the trust line with each fact's source; "Remember" with lessons that have a scope and an off switch; Good reply retired (Copy as written counts as approval); lessons proposed from repeated edits | R3.4, R3.6, R3.7, R9.2–R9.4 |
 | 4 | **Reply run, answered elsewhere, write ahead for the top 10.** Start replying with Skip and a summary; rows clear when the phone, the dashboard or a colleague answered; drafts ready for the 10 newest waiting Dashboard conversations | R1.5, R4.6, journey 2 |
-| 5 | **Marketplace, Imports and Auction on the new page.** Send on Facebook (Sending, Sent, Try again); Imports replaces Import Query and takes the Imports AU leads out of Auction; the enquiry type menu replaces Move and the import ruling buttons; Auction orders with the paste box and Copy for WhatsApp; Copy for Gmail | R2.4, R3.8, M6, M7 |
+| 5 | **Marketplace on the new page.** Every section opens on the new page; Facebook chats are written when opened, not in the background; Send on Facebook (Sending, Sent, Try again); one main button per channel. The new page's store is split first | R3.8, R4.6, story 11 |
+| 5b | **Imports and Auction on the new page.** Imports replaces Import Query and takes the Imports AU leads out of Auction; the enquiry type menu replaces Move and the import ruling buttons; Copy for Gmail with the research notes; Auction orders with the paste box and Copy for WhatsApp | R2.4, M6, M7 |
 | 6 | **Playbook.** Lessons, business facts (Confirmed, Working, Needs answer), templates with a preview on 3 real conversations and every version kept, and voice rules | M9 |
 | 7 | **Sales board, This week, Settings and status.** AI per job, keys, budget and usage; sources with their last good read; theme and business identity | M11–M13 |
 | 8 | **Switch-over.** The new page opens at `/`, the old page moves to `/old/`, and sign-in lands on the new page. Every item on the feature checklist below is ticked on the preview and on Jim's own use | gate 4 |
 | 9 | **Stable IDs, the stored inbox and pushed updates** (server-sent events) under the new page. A one-time move of today's data, after a backup, rehearsed on a copy first | section 11, R4.5 |
 | 10 | **After about two weeks and Jim's yes:** the old page is removed; release 1.0 | gate 5 |
+
+PR 5 was split in two on 28 October 2026 (my call): one PR of nine tasks was too much for one final review.
 
 Each PR has its own plan in this folder, written when the one before it is merged, so it starts
 from the code as it then is.
