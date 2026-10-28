@@ -184,12 +184,12 @@ test('the page follows the conversation to its new section', async () => {
   await b.store.actions.setType('stock');
   assert.deepEqual(b.store.get().goTo, { section: 'marketplace', chip: 'waiting', key: 'mp:5', n: 1 });
   assert.equal(b.store.get().toast.message, 'Moved to Marketplace.');
-  // Ruled with no move: it stays, and the toast says how it is answered now.
+  // Ruled with no move: it stays where it is, the page too, and the toast says how it is answered now.
   const c = await opened([text({ isImport: true, judged: CODE })]);
   serves(c, 'c:1');
   await c.store.actions.setType('stock');
   assert.deepEqual(changes(c), [{ path: '/api/items/c:1/ruling', body: { kind: 'general', section: 'dashboard' } }]);
-  assert.deepEqual(c.store.get().goTo, { section: 'dashboard', chip: 'waiting', key: 'c:1', n: 1 });
+  assert.equal(c.store.get().goTo, null);
   assert.equal(c.store.get().toast.message, 'Now answered as a stock enquiry.');
   const d = await opened([text({ section: 'importquery', home: 'importquery', listed: 'imports', ruling: { kind: 'general' } })]);
   serves(d, 'c:1');
@@ -200,6 +200,31 @@ test('the page follows the conversation to its new section', async () => {
   e.data.on = { '/api/items/c:1/ruling': () => { throw new Error('That section is switched off.'); } };
   await e.store.actions.setType('import');
   assert.deepEqual([e.store.get().toast.message, e.store.get().goTo, e.store.get().item.section], ['That section is switched off.', null, 'dashboard']);
+});
+
+test('a type change that keeps the section keeps the chip and the open follow-up', async () => {
+  // Opened from Follow-ups, with its follow-up in hand.
+  const a = setup();
+  a.data.rows = [row('c:1', { followUp: { id: 5, reason: 'Their inspection was yesterday' } })];
+  a.data.items['c:1'] = text({ isImport: true, judged: CODE, anchor: 'fu:5', followUp: { id: 5, reason: 'Their inspection was yesterday' } });
+  await a.store.actions.setChip('followups');
+  const opens = () => paths(a.calls).filter((p) => p === 'POST /api/items/c:1/seen').length;
+  assert.deepEqual([a.store.get().chip, a.store.get().key, opens()], ['followups', 'c:1', 1]);
+  // Ruled not an import enquiry: it stays in Dashboard, so the page stays on Follow-ups with it open.
+  serves(a, 'c:1');
+  await a.store.actions.setType('stock');
+  assert.deepEqual(changes(a), [{ path: '/api/items/c:1/ruling', body: { kind: 'general', section: 'dashboard' } }]);
+  let s = a.store.get();
+  assert.deepEqual([s.goTo, s.chip, s.key, s.item.ruling, opens()], [null, 'followups', 'c:1', { kind: 'general' }, 1]);
+  assert.equal(s.toast.message, 'Now answered as a stock enquiry.');
+  // Still asked for with its follow-up: nothing reopened it without.
+  assert.equal(paths(a.calls).filter((p) => p.startsWith('GET /api/items/c:1')).at(-1), 'GET /api/items/c:1?followup=5');
+  // Undo keeps them too.
+  s.toast.action.run();
+  await settle();
+  s = a.store.get();
+  assert.deepEqual([s.goTo, s.chip, s.key, s.item.ruling, opens()], [null, 'followups', 'c:1', null, 1]);
+  assert.equal(paths(a.calls).filter((p) => p.startsWith('GET /api/items/c:1')).at(-1), 'GET /api/items/c:1?followup=5');
 });
 
 test('Undo puts the enquiry type and the section back as they were', async () => {

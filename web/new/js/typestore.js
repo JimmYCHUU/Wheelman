@@ -47,11 +47,16 @@ export function createTypeChanger({ api, get, set, toast, flush, refresh, dismis
     return api(req.path, keep ? { ...req.body, keep: true } : req.body);
   }
 
-  /** The conversation as the server answered it, taken while it is still the one open. */
+  /**
+   * The conversation as the server answered it, taken while it is still the one open. The page
+   * follows it only when it is listed in another section now: in the same one, the chip and the
+   * open conversation stay as they are (a follow-up opened from Follow-ups stays in hand).
+   */
   function take(out, key) {
+    const was = get().item;
     if (!out.item || get().key !== key) return false;
     set({ item: out.item, itemState: 'ready' });
-    follow(out.item);
+    if (!was || out.item.section !== was.section) follow(out.item);
     if (out.item.writing) watch(key);
     return true;
   }
