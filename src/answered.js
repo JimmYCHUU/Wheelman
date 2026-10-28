@@ -48,3 +48,22 @@ export function answeredBy(timeline, latestDraft, nameOf = (x) => x) {
   const by = reply.via === 'Marketplace' && reply.by === 'Typed by a person' ? '' : nameOf(reply.by) || '';
   return { how: 'dashboard', by, at };
 }
+
+/** A reply's words as a chat keeps them: the link tag on our links and runs of space set aside. */
+const plainReply = (s, tag) => String(s ?? '').replace(/\r/g, '').split(`?utm_source=${tag}`).join('').split(`&utm_source=${tag}`).join('').replace(/\s+/g, ' ').trim();
+
+/**
+ * Whether the timeline shows a reply of ours with this text after the message `anchor` (the one a
+ * send answered), with nothing from the customer since: that reply went, and the chat is answered by
+ * it. Compared as the new page compares them (web/new/js/channel.js sentSince): the link tag
+ * (utm_source=<tag>) and runs of space set aside. With that message not in the timeline, false.
+ */
+export function replyShown(timeline, anchor, text, tag = 'marketplace') {
+  const at = timeline.findIndex((e) => e.key === anchor);
+  if (at === -1) return false;
+  const want = plainReply(text, tag);
+  if (!want) return false;
+  const after = timeline.slice(at + 1);
+  const ours = after.findIndex((e) => e.who === 'us' && !e.internal && plainReply(e.text, tag) === want);
+  return ours !== -1 && !after.slice(ours + 1).some((e) => e.who === 'customer' && !e.internal);
+}

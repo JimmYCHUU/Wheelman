@@ -12,7 +12,7 @@ import { liveChecks, boxText } from './model.js';
 import { hashFor } from './route.js';
 import { sentence } from './words.js';
 import { deliveryFailed } from './boxsections.js';
-import { replyChannel, sendFor, sendOutcome, repliedSince, sentSince, sameText, sentWords, sendFailedAwayWords } from './channel.js';
+import { replyChannel, sendFor, sendOutcome, repliedSince, sentSince, sameText, sentWords, goneWords, sendFailedAwayWords } from './channel.js';
 
 const IDLE = { state: 'idle', at: null };
 const NOT_READ = 'The Marketplace chat could not be read first.';
@@ -76,11 +76,12 @@ export function createSender({ api, get, set, toast, text, refresh, take, now, s
    * Sends the open Facebook chat's text, with the suggestion it came from, and says what happened:
    * 'sent'; 'failed'; 'replied' or 'moved' (Marketplace and the chat read first had the text
    * already, a reply since, or a new message from the buyer: nothing is posted, and the chat as it
-   * is now is on screen); 'fill' (a blank is still in the text: nothing is posted, and the box goes
-   * to the blank); 'blocked' (a failed check not passed with Send anyway: nothing is posted); or
-   * null when there is nothing to send here (not a Facebook chat, no text, its reply already on its
-   * way, or a suggestion the server notes as sent from here). again: Send it again, for a reply sent
-   * from here that did not reach the buyer (deliveryFailed): that suggestion's text.
+   * is now is on screen; 'replied' too when the server answers that the reply had gone); 'fill' (a
+   * blank is still in the text: nothing is posted, and the box goes to the blank); 'blocked' (a
+   * failed check not passed with Send anyway: nothing is posted); or null when there is nothing to
+   * send here (not a Facebook chat, no text, its reply already on its way, or a suggestion the
+   * server notes as sent from here). again: Send it again, for a reply sent from here that did not
+   * reach the buyer (deliveryFailed): that suggestion's text.
    */
   async function send({ again = false } = {}) {
     const { key, item, sending, overridden } = get();
@@ -159,6 +160,14 @@ export function createSender({ api, get, set, toast, text, refresh, take, now, s
     const outcome = sendOutcome(e);
     const read = await reread(key);
     const away = !onScreen(key);
+    // The server found the reply of a send that timed out (this page's, or another's, before a
+    // reload): nothing more was sent. The chat shows it sent, and the text leaves the box.
+    if (outcome === 'gone') {
+      went(key, read.item);
+      toast(goneWords(away ? item.name : ''));
+      await refresh();
+      return 'replied';
+    }
     if (read.item && sentSince(read.item, anchor, value)) {
       went(key, read.item);
       toast(sentWords(false, away ? item.name : ''));

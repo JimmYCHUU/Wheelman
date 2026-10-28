@@ -74,14 +74,16 @@ export function copiedWords(item, left = 0) {
 }
 
 /**
- * What a send that threw means, from the page's api error (web/new/js/api.js): 'elsewhere' (409:
- * another page is sending a reply to this chat), 'refused' (the server said it was not sent: a 4xx,
- * or its own 502 when the engine said no or was not reached), or 'unknown' (no answer at all, or a
- * failure not in the server's words, after which the reply may have gone).
+ * What a send that threw means, from the page's api error (web/new/js/api.js): 'gone' (409: the
+ * server read Marketplace and found the reply of a send that timed out, from here or another page,
+ * so nothing more was sent), 'elsewhere' (409: another page is sending a reply to this chat),
+ * 'refused' (the server said it was not sent: a 4xx, or its own 502 when the engine said no or was
+ * not reached), or 'unknown' (no answer at all, or a failure not in the server's words, after which
+ * the reply may have gone).
  */
 export function sendOutcome(e) {
   const status = e && e.status;
-  if (status === 409) return 'elsewhere';
+  if (status === 409) return e.gone ? 'gone' : 'elsewhere';
   if (status >= 400 && status < 500) return 'refused';
   if (status === 502 && e.said) return 'refused';
   return 'unknown';
@@ -118,6 +120,12 @@ export function sentSince(item, anchor, text) {
   const at = thread.findIndex((m) => m.key === anchor);
   if (at === -1) return false;
   return thread.slice(at + 1).some((m) => m.who === 'us' && !m.internal && sameText(m.text, text));
+}
+
+/** The toast when the reply had gone already (the server's 409): the chat still open says it plainly; another chat open by now names the buyer. */
+export function goneWords(name) {
+  const who = String(name || '').trim();
+  return who ? 'The reply to ' + who + ' has gone already.' : 'This reply has gone already.';
 }
 
 /** The toast after a send: the chat still open says it plainly; another chat open by now names the buyer. */

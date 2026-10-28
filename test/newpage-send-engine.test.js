@@ -175,19 +175,25 @@ test('an engine that does not answer in time may have taken the reply: Try again
   const marketplaceSrc = fs.readFileSync(new URL('../src/marketplace.js', import.meta.url), 'utf8');
   assert.match(marketplaceSrc, /AbortSignal\.timeout\(config\.marketplace\.sendTimeoutMs \|\| 20000\)/);
   const server = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
-  assert.match(server, /return send\(res, e\.mayHaveGone \? 504 : 502, \{ error: e\.message \}\);/);
+  assert.match(server, /if \(!e\.mayHaveGone\) return send\(res, 502, \{ error: e\.message \}\);/);
+  assert.match(server, /send\(res, 504, \{ error: e\.message \}\);/);
 });
 
-test('POST /api/sync with marketplace reads Marketplace only, and waits for a read already under way', async () => {
+test('POST /api/sync with marketplace reads Marketplace only: after a read already under way, a fresh one', async () => {
   const worker = await import('../src/worker.js');
   const post = (body) => fetch(base + '/api/sync', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const lists = () => standins.engineSeen.filter((r) => r.method === 'GET' && r.path === '/inbox/conversations').length;
   const dashboard = worker.state.lastSync;
-  // A Marketplace read under way (the background's), held at the engine's chat list.
+  // A Marketplace read under way (the background's), held at the engine's chat list as it stood when asked.
   let release;
   standins.world.listWait = new Promise((r) => { release = r; });
+  const listed = lists();
   const running = worker.runMarketplaceSync();
+  await until(() => lists() > listed);
   const earlier = worker.state.mpSync;
   assert.equal(await worker.runMarketplaceSync(), earlier, 'any other caller still takes the earlier result at once');
+  // Meanwhile the engine records a chat the read under way cannot see.
+  standins.world.chats.set(512, { row: chatRow(512, 'Sol Invented', 1, Date.now()), messages: [chatMessage(5120, 'in', 'phone', 'Is it still for sale?', 1, Date.now())] });
   // A pass of writing under way: draftWaiting, if it were started, would ask for one more.
   worker.state.drafting = true;
   worker.state.draftAgain = false;
@@ -202,7 +208,13 @@ test('POST /api/sync with marketplace reads Marketplace only, and waits for a re
     const done = await running;
     assert.notEqual(done, earlier);
     assert.ok(done.ok);
-    assert.equal(worker.state.mpSync, done, 'the read it waited for');
+    // It waited for that read, then had a fresh one, begun after the request: the chat the engine
+    // recorded meanwhile is in Wheelman.
+    assert.notEqual(worker.state.mpSync, done, 'a fresh read after the one under way');
+    assert.ok(worker.state.mpSync.ok);
+    assert.equal(lists(), listed + 2);
+    const fresh = await (await fetch(base + '/api/items/mp:512')).json();
+    assert.equal(fresh.item && fresh.item.name, 'Sol Invented');
     assert.equal(worker.state.lastSync, dashboard, 'no dashboard check');
     assert.equal(worker.state.draftAgain, false, 'nothing written');
     // With no read under way, Marketplace is read now.

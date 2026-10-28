@@ -195,14 +195,16 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
     if (req.method !== 'GET') return json(res, 405, { error: 'no' });
     if (url.pathname === '/inbox/devices') { res.writeHead(302, { location: '/inbox/conversations' }); return res.end(); }
     if (url.pathname === '/inbox/conversations') {
-      // world.listWait (a promise) holds the chat list until it settles, so a read stays under way;
-      // world.listDown makes the list answer 503.
-      if (world.listWait) await world.listWait;
+      // world.listDown makes the list answer 503. world.listWait (a promise) holds the answer until it
+      // settles, as the list stood when it was asked: a read stays under way, and misses what the
+      // engine records meanwhile.
       if (world.listDown) return json(res, 503, { error: 'Service Unavailable' });
       const all = [...chats.values()].map((c) => c.row).sort((a, b) => Date.parse(b.last_message_at) - Date.parse(a.last_message_at));
       const offset = Number(url.searchParams.get('offset')) || 0;
       const limit = Number(url.searchParams.get('limit')) || 50;
-      return json(res, 200, { conversations: all.slice(offset, offset + limit), total: all.length, limit, offset });
+      const page = JSON.parse(JSON.stringify({ conversations: all.slice(offset, offset + limit), total: all.length, limit, offset }));
+      if (world.listWait) await world.listWait;
+      return json(res, 200, page);
     }
     const m = url.pathname.match(/^\/inbox\/conversations\/(\d+)$/);
     if (m && chats.has(Number(m[1]))) {

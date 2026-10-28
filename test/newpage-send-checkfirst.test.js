@@ -6,11 +6,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { sendFailedWords, sendFor } from '../web/new/js/channel.js';
+import { sendFailedWords, sendFor, sendOutcome } from '../web/new/js/channel.js';
 import { sectionRowView } from '../web/new/js/sections.js';
-import { NOT_RESPONDING } from '../web/new/js/api.js';
+import { boxViewOf } from '../web/new/js/boxsections.js';
+import { NOT_RESPONDING, createApi } from '../web/new/js/api.js';
 import { draft, paths } from './support/newpage-fakes.js';
-import { AT, FB, OFFLINE, fb, sends, takes, failure, mainNow, sentWith } from './support/newpage-send-fakes.js';
+import { AT, FB, SENT, ASKED, TYPING, OFFLINE, fb, sends, takes, failure, mainNow, sentWith } from './support/newpage-send-fakes.js';
 
 const source = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8');
 const TEXT = 'The price is $28,900. Would you like to see it?';
@@ -199,4 +200,39 @@ test('a reply that did not reach the buyer says Not delivered on its row', async
   await b.store.actions.open('mp:1');
   assert.deepEqual(b.store.get().unconfirmed['mp:1'], undelivered);
   assert.match(source('../web/new/js/ui/list.js'), /sectionRowView\(r, \{ now, doneAnchor: state\.done\[r\.key\], sending: state\.sending\[r\.key\], unconfirmed: state\.unconfirmed\[r\.key\] \}, section\)/);
+});
+
+// ---- the final fix wave
+
+const GONE = 'This reply has gone already.';
+const gone = () => Object.assign(failure(GONE, 409), { gone: true });
+
+test('a 409 that says the reply has gone already shows it sent, and nothing more is posted', async () => {
+  // The page's api carries the server's word, and a send reads it as its own outcome.
+  const api = createApi({ fetch: async () => ({ status: 409, ok: false, json: async () => ({ error: GONE, gone: true }) }), go: () => {} });
+  await assert.rejects(api('/api/items/mp:1/send', {}), (e) => e.status === 409 && e.gone === true && e.message === GONE);
+  assert.equal(sendOutcome(gone()), 'gone');
+  assert.equal(sendOutcome(failure('This reply is already on its way.', 409)), 'elsewhere');
+  // A fresh page (nothing in memory) presses Send on a chat whose earlier reply timed out: the
+  // server read Marketplace, found that reply, and answered 409.
+  const typed = 'Yes, it is still here.';
+  const a = fb();
+  a.data.on = { '/api/items/mp:1/send': () => { a.data.items['mp:1'] = { ...SENT, thread: [ASKED, { key: 'fm:2', who: 'us', text: typed, sending: true }] }; throw gone(); } };
+  await a.store.actions.open('mp:1');
+  a.store.actions.type(typed);
+  assert.equal(await a.store.actions.send(), 'replied');
+  const s = a.store.get();
+  assert.equal(sends(a).length, 1, 'the one press, answered 409');
+  assert.deepEqual([s.sending, s.unconfirmed, s.typed], [{}, {}, null]);
+  assert.equal(s.item.state, 'answered', 'the chat as it is now');
+  assert.equal(s.toast.message, GONE);
+  assert.equal(boxViewOf(s, AT).sentence, TYPING);
+  // Out of sight, the toast names the buyer.
+  let onScreen = true;
+  const b = fb({}, () => onScreen);
+  b.data.on = { '/api/items/mp:1/send': () => { onScreen = false; b.data.items['mp:1'] = SENT; throw gone(); } };
+  await b.store.actions.open('mp:1');
+  b.store.actions.type(typed);
+  assert.equal(await b.store.actions.send(), 'replied');
+  assert.equal(b.store.get().toast.message, 'The reply to Liam Invented has gone already.');
 });

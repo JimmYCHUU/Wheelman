@@ -129,13 +129,19 @@ let marketplaceRead = null; // the Marketplace read that is under way, if any
 /**
  * Reads the Marketplace inbox from the content engine. It has its own state and its own errors,
  * so a problem here never stops the dashboard side, and it does not need the dashboard login.
- * While a read is under way a caller is given the last result at once; with wait (the new page,
- * before a Facebook send that follows one that failed or could not be told) it waits for that
- * read to finish and is given its result instead.
+ * While a read is under way a caller is given the last result at once. With wait (before a
+ * Facebook send that follows one that failed or could not be told) the caller is given a read that
+ * began after it asked: it waits for the one under way, which may have begun before the engine
+ * recorded the reply, and then has a fresh one (or joins one another caller started after that).
  */
 export async function runMarketplaceSync({ wait = false } = {}) {
   if (!config.marketplace.enabled) return null;
-  if (state.mpSyncing) return wait && marketplaceRead ? marketplaceRead : state.mpSync;
+  if (state.mpSyncing) {
+    if (!wait || !marketplaceRead) return state.mpSync;
+    await marketplaceRead;
+    // A read under way now began after the one this caller waited for, so after it asked.
+    if (state.mpSyncing && marketplaceRead) return marketplaceRead;
+  }
   state.mpSyncing = true;
   marketplaceRead = readMarketplace();
   return marketplaceRead;

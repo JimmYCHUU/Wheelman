@@ -6,7 +6,8 @@ export const NOT_RESPONDING = 'Wheelman is not responding. Check that it is runn
  * api(path) is a GET; api(path, body) is a POST of JSON. A 401 goes to the sign-in page and throws; a
  * fetch that fails (the server is off) says so in plain words, with no status. Any other failure
  * throws the server's words with the status, and said: whether they are the server's own (a gateway
- * in between answers in none), so a send can tell a refusal from an outcome it does not know.
+ * in between answers in none), so a send can tell a refusal from an outcome it does not know; and
+ * gone, when the server says a reply that may have gone has (a send it answered 409).
  */
 export function createApi({ fetch, go }) {
   return async function api(path, body) {
@@ -19,7 +20,7 @@ export function createApi({ fetch, go }) {
       go('/signin');
       throw Object.assign(new Error('Signed out'), { status: 401, said: false });
     }
-    if (!res.ok) throw Object.assign(new Error((data && data.error) || 'HTTP ' + res.status), { status: res.status, said: !!(data && data.error) });
+    if (!res.ok) throw Object.assign(new Error((data && data.error) || 'HTTP ' + res.status), { status: res.status, said: !!(data && data.error), ...(data && data.gone === true ? { gone: true } : {}) });
     return data;
   };
 }
