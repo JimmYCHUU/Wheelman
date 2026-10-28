@@ -542,6 +542,23 @@ test('Put back in To do after copying a picked message puts that message back', 
   assert.equal((await get('/api/items/ao:504')).item.order.due, 'Send: car secured');
 });
 
+test('Put back in To do after copying a reply puts that reply back', async () => {
+  model.script = [{ reply: 'Hi {{NAME}},\nNothing yet. We keep looking and will tell you as soon as one comes up.', needs_human: [], facts_used: [], hold: false }];
+  const asked = await post('/api/items/ao:502/paste', { text: 'Anything this week?' });
+  assert.equal(asked.item.order.replying, true);
+  const reply = asked.item.draft;
+  await post(`/api/drafts/${reply.id}/copied`, { text: reply.reply });
+  const copied = (await get('/api/items/ao:502')).item;
+  assert.deepEqual([copied.order.replying, copied.unanswered], [false, 0]);
+  assert.ok(copied.thread.some((e) => e.by === 'Copied from Wheelman' && e.text === reply.reply));
+  // As before, with no suggestion named, the message at the order's anchor now is put back: the reply stays copied.
+  assert.equal((await post('/api/items/ao:502/restore')).item.order.replying, false);
+  // Named, the reply is put back: they are waiting on us again, and the copy leaves the conversation.
+  const back = (await post('/api/items/ao:502/restore', { draftId: reply.id })).item;
+  assert.deepEqual([back.order.replying, back.anchor, back.unanswered, back.draft.id], [true, asked.item.anchor, 1, reply.id]);
+  assert.ok(!back.thread.some((e) => e.by === 'Copied from Wheelman' && e.text === reply.reply));
+});
+
 test('nothing is learned from the Auction section', async () => {
   const before = [db.countRows('learned'), db.countRows('advice')];
   const it = (await get('/api/items/ao:503')).item;

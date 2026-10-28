@@ -85,7 +85,8 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
 
   // ---- the list and the open conversation
 
-  function takeItem(taken) {
+  /** notice: the words over typed text when the message under it changed (an order's own say what changed). */
+  function takeItem(taken, { notice = NEW_MESSAGE } = {}) {
     // A reply from here that did not reach the buyer is noted; one whose send could not be told,
     // now in the chat, is taken with its text gone (sender.js).
     sender.seen(taken);
@@ -99,7 +100,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
     if (changed && state.typed !== null && !elsewhere) {
       // The typed text stays. Its replacement is offered only once there is a suggestion to use.
       const ready = !!(fresh.draft && fresh.draft.status === 'ready');
-      set({ item: fresh, context: { message: NEW_MESSAGE, action: ready ? { label: 'Use the new suggestion', run: useSuggestion } : null } });
+      set({ item: fresh, context: { message: notice, action: ready ? { label: 'Use the new suggestion', run: useSuggestion } : null } });
     } else {
       set({ item: fresh, itemState: 'ready' });
     }

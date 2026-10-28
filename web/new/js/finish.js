@@ -19,15 +19,32 @@ export function readDone(storage) {
 export function createFinish({ api, clipboard, storage, now, get, set, toast, text, refresh, runner, type }) {
   // An auction order's message handed over here, by conversation, until it is put back: the
   // suggestion copied ({ anchor, draftId, sent: its /copied request }), and the words typed for the
-  // message copied or dismissed, which come back with it.
+  // message copied or dismissed ({ words, anchor, draftId }), which come back with that message only.
   const copiedHere = new Map();
   const handed = new Map();
 
-  /** An order's message copied or dismissed: the text typed for it leaves the box, kept to come back with it. */
-  function handOver(key) {
+  /**
+   * An order's message copied or dismissed: the text typed for it leaves the box, kept with the
+   * message it was for. Words for a later message replace it; nothing typed leaves it as it was.
+   */
+  function handOver(key, item) {
     const typed = get().typed;
-    if (typed !== null) handed.set(key, typed); else handed.delete(key);
+    if (typed !== null) handed.set(key, { words: typed, anchor: item.anchor, draftId: item.draft ? item.draft.id : null });
     set({ typed: null, context: null });
+  }
+
+  /**
+   * After a Put back, the words handed over come back only into the message they were typed for:
+   * the box holds its anchor, and its suggestion when there is one. Otherwise that message's own
+   * saved edit shows, and the words wait for their message. Used, they are forgotten.
+   */
+  function giveBack(key) {
+    const h = handed.get(key);
+    const s = get();
+    if (!h || key !== s.key || s.typed !== null || !s.item || s.item.anchor !== h.anchor) return;
+    if (h.draftId !== null && !(s.item.draft && s.item.draft.id === h.draftId)) return;
+    handed.delete(key);
+    type(h.words);
   }
 
   function saveDone(done, doneAt) {
@@ -65,7 +82,7 @@ export function createFinish({ api, clipboard, storage, now, get, set, toast, te
       // box says Copied, not a new message beside old words. Put back names the suggestion copied.
       const copiedId = item.order && item.draft ? item.draft.id : undefined;
       if (copiedId) copiedHere.set(key, { anchor: item.anchor, draftId: copiedId, sent });
-      if (item.order && key === get().key) handOver(key);
+      if (item.order && key === get().key) handOver(key, item);
       // Copied after its send failed, the reply is going by hand: the failure is over (its row says
       // Copied). The chat's next Send still reads Marketplace first (state.unconfirmed, sender.js).
       const was = get().sending && get().sending[key];
@@ -92,7 +109,7 @@ export function createFinish({ api, clipboard, storage, now, get, set, toast, te
   /**
    * Undo for Dismiss: the conversation is waiting again. For an auction order it is Put back in To
    * do, after a Dismiss or a Copy: the message is due again, the row copied from it is no longer
-   * done, and the words typed for it come back while it is open and nothing else is typed.
+   * done, and the words typed for that message come back into it (giveBack) while it is open.
    * draftId: the suggestion copied, which the server puts back (the copy's toast names it, and the
    * box's own Put back while it says Copied); none, the message at the order's anchor now. With a
    * message picked the server's answer is not the one on screen: the refresh reads it.
@@ -109,9 +126,7 @@ export function createFinish({ api, clipboard, storage, now, get, set, toast, te
       const back = await api('/api/items/' + key + '/restore', copied ? { draftId: copied } : {});
       if (back.item && key === get().key && get().picked === null) set({ item: back.item });
       if (get().done[key] !== undefined) putBack(key);
-      const words = handed.get(key);
-      handed.delete(key);
-      if (words !== undefined && key === get().key && get().typed === null) type(words);
+      giveBack(key);
       await refresh();
     } catch (e) { toast(e.message); }
   }
@@ -143,7 +158,7 @@ export function createFinish({ api, clipboard, storage, now, get, set, toast, te
       const out = await api('/api/items/' + key + '/dismiss', {});
       if (out.item && key === get().key) set({ item: out.item });
       // An order's message is set aside on the server, as after a copy: its text leaves the box, and Undo brings it back.
-      if (item && item.order && key === get().key) handOver(key);
+      if (item && item.order && key === get().key) handOver(key, item);
       toast(words, { label: 'Undo', run: () => restore(key) });
       await runner.dismissed(key); // in a reply run, the next customer
       await refresh();

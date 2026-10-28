@@ -117,6 +117,14 @@ function Photos({ message, side }) {
   });
 }
 
+/** Remove on a pasted message: pressed, it waits for its request (the store sends one only). */
+function RemoveButton({ onRemove }) {
+  const [busy, setBusy] = useState(false);
+  const run = async () => { setBusy(true); try { await onRemove(); } finally { setBusy(false); } };
+  return html`<button type="button" class="btn small quiet unpaste" title="Take this pasted message out of the order"
+    aria-label="Remove this pasted message from the order" disabled=${busy} onClick=${run}>Remove</button>`;
+}
+
 /** One message. onRemove: a message pasted into an auction order, which Remove takes out (no Undo, as on the old page). */
 function Message({ m, name, onRemove }) {
   if (m.internal && m.text) {
@@ -135,8 +143,7 @@ function Message({ m, name, onRemove }) {
     ${m.sending
       ? html`<span class="by sending" title="The Marketplace system is sending this into the chat from the phone.">Sending</span>`
       : html`<span class="by">${clock(m.at)}</span>`}
-    ${onRemove ? html`<button type="button" class="btn small quiet unpaste" title="Take this pasted message out of the order"
-      aria-label="Remove this pasted message from the order" onClick=${onRemove}>Remove</button>` : null}
+    ${onRemove ? html`<${RemoveButton} onRemove=${onRemove} />` : null}
   </div>`);
   return parts;
 }

@@ -21,6 +21,7 @@ const inBox = (o) => (o.replying ? '' : ((o.messages || []).find((m) => m.type =
  * with it. picked: the message picked from the picker (state.picked), null for none. done: copied
  * from this page (the local mark), at doneAt. The editor view's label is the message's name.
  * Writing first, then typed text (never hidden: a failure is told beside it), then copied here,
+ * then words saved beside a suggestion that could not be written (in the editor, as typed text),
  * then the message that was due copied or dismissed (or none due) unless one was picked or they
  * wrote to us, then the suggestion, a failure with Try again, or Write it now.
  */
@@ -31,11 +32,12 @@ export function orderBox({ item, picked = null, done = false, doneAt = null, wri
   const say = (sentence, button = null, more = {}) => ({ kind: 'quiet', tone: '', sentence, button, tell: false, ...more });
   const failed = !!d && d.status === 'failed';
   const failure = failed ? d.error || 'This message could not be written.' : '';
-  const kept = typed || (failed && typeof d.edited === 'string' && d.edited.trim() !== '');
+  const editor = () => ({ kind: 'editor', context: '', label: inBox(o), ...(failure ? { failure: failure + ' Your text is kept.' } : {}) });
 
   if (writing) return { kind: 'writing' };
-  if (kept) return { kind: 'editor', context: '', label: inBox(o), ...(failure ? { failure: failure + ' Your text is kept.' } : {}) };
+  if (typed) return editor();
   if (done) return say(doneAt ? 'Copied at ' + clock(doneAt) + '.' : 'Copied.', PUT_BACK, { tone: 'good' });
+  if (failed && typeof d.edited === 'string' && d.edited.trim() !== '') return editor();
   if (item.writing) return { kind: 'writing' };
   if (!o.replying && !picked && (o.handled || item.state !== 'awaiting')) {
     if (o.handled === 'copied') return say('You copied the message that was due. It is shown in the conversation above.', PUT_BACK);

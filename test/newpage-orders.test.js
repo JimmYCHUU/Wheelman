@@ -398,6 +398,114 @@ test('Undo after Dismiss and Put back after Copy bring back what was typed, and 
   assert.deepEqual(b.calls.filter((c) => c.path.endsWith('/restore')).map((c) => c.body), [{ draftId: 41 }]);
 });
 
+test('Put back of the first of two messages copied on one order never brings back the words of the other', async () => {
+  const a = await opened(orderItem({ draft: ready(41, 'Due message') }));
+  const restores = [];
+  // 1. Jim's words for the due message, copied; they are saved with its suggestion.
+  a.store.actions.type('Due message, we bid $12,000');
+  await a.store.actions.copy();
+  await a.timers.advance(1000);
+  const savedDue = a.data.items[KEY].draft;
+  assert.equal(savedDue.edited, 'Due message, we bid $12,000');
+  // 2. Deposit reminder picked, words of its own, copied.
+  a.data.items[KEY] = orderItem({ anchor: 'out:own-deposit_reminder', state: 'answered', draft: ready(50, 'Deposit reminder text') }, { handled: 'copied', message: 'deposit_reminder' });
+  await a.store.actions.instead('deposit_reminder');
+  a.store.actions.type('Deposit reminder text, thanks Omar');
+  await a.store.actions.copy();
+  await a.timers.advance(1000);
+  // 3. Another conversation, then the order again: the due message says it was copied.
+  a.data.items[KEY] = orderItem({ state: 'answered', draft: savedDue }, { handled: 'copied', message: '' });
+  await a.store.actions.open('c:1');
+  await a.store.actions.open(KEY);
+  assert.equal(boxViewOf(a.store.get(), NOW).button.label, 'Put back in To do');
+  // 4. Put back in To do: the due message comes back with its own saved words, not the reminder's.
+  a.data.on = { ['/api/items/' + KEY + '/restore']: (body) => { restores.push(body); a.data.items[KEY] = orderItem({ draft: savedDue }); return { ok: true, item: a.data.items[KEY] }; } };
+  await a.store.actions.restore();
+  await settle();
+  let s = a.store.get();
+  assert.deepEqual([s.item.draft.id, s.typed, boxViewOf(s, NOW).kind], [41, null, 'editor']);
+  await a.timers.advance(1000);
+  assert.equal(a.data.items[KEY].draft.edited, 'Due message, we bid $12,000', 'its saved edit is not written over');
+  assert.ok(!a.calls.some((c) => c.path === '/api/drafts/41/edit' && c.body.text === 'Deposit reminder text, thanks Omar'));
+  // The reminder's words still come back with the reminder, from its own toast.
+  a.data.items[KEY] = orderItem({ anchor: 'out:own-deposit_reminder', draft: ready(50, 'Deposit reminder text') }, { message: 'deposit_reminder' });
+  await a.store.actions.instead('deposit_reminder');
+  a.store.actions.type('Deposit reminder text, thanks Omar');
+  await a.store.actions.copy();
+  await settle();
+  a.data.on['/api/items/' + KEY + '/restore'] = (body) => { restores.push(body); return { ok: true, item: a.data.items[KEY] }; };
+  await a.store.get().toast.action.run();
+  await settle();
+  s = a.store.get();
+  assert.deepEqual([restores.at(-1), s.typed], [{ draftId: 50 }, 'Deposit reminder text, thanks Omar']);
+});
+
+test('We sent this or Remove under typed text says what is due has changed, and offers the new suggestion', async () => {
+  const a = await opened(orderItem({ draft: ready(41) }));
+  a.data.on = {
+    ['/api/items/' + KEY + '/paste']: () => {
+      a.data.items[KEY] = orderItem({ anchor: 'out:offer-2006629', draft: ready(60, 'Car found') }, { message: 'lot_offer' });
+      return { item: a.data.items[KEY], pasteId: 8, ok: true, error: '' };
+    },
+    ['/api/items/' + KEY + '/paste/8/remove']: () => {
+      a.data.items[KEY] = orderItem({ anchor: DUE, draft: null });
+      return { ok: true, item: a.data.items[KEY] };
+    },
+  };
+  a.store.actions.type('My own words');
+  assert.equal(await a.store.actions.paste('out', 'We will let you know.'), true);
+  let s = a.store.get();
+  assert.deepEqual([s.typed, s.context.message, s.context.action.label], ['My own words', 'What is due on this order has changed. Your text is kept.', 'Use the new suggestion']);
+  await a.store.actions.removePaste('8');
+  s = a.store.get();
+  assert.deepEqual([s.typed, s.context.message, s.context.action], ['My own words', 'What is due on this order has changed. Your text is kept.', null]);
+  // With nothing typed, the box simply shows what is due now.
+  const b = await opened(orderItem({ draft: ready(41) }));
+  b.data.on = { ['/api/items/' + KEY + '/paste']: () => ({ item: orderItem({ anchor: 'out:offer-2006629', draft: ready(60, 'Car found') }, { message: 'lot_offer' }), pasteId: 8, ok: true, error: '' }) };
+  await b.store.actions.paste('out', 'We will let you know.');
+  assert.deepEqual([b.store.get().context, b.store.get().item.draft.id], [null, 60]);
+});
+
+test('a suggestion that could not be written, with words saved beside it, says Copied once it is copied', async () => {
+  const failed = { id: 43, status: 'failed', error: 'The model is overloaded.', reply: '', edited: 'My own words for Omar', checks: [] };
+  // Before the copy its saved words are in the editor; copied, the box says so.
+  assert.equal(orderBox({ item: orderItem({ draft: failed }) }).kind, 'editor');
+  assert.equal(orderBox({ item: orderItem({ draft: failed }), done: true, doneAt: NOW }).sentence, 'Copied at ' + clock(NOW) + '.');
+  const a = await opened(orderItem({ draft: failed }));
+  assert.equal(boxViewOf(a.store.get(), NOW).kind, 'editor');
+  await a.store.actions.copy();
+  await settle();
+  assert.deepEqual(a.written, ['My own words for Omar']);
+  assert.equal(boxViewOf(a.store.get(), NOW).sentence, 'Copied at ' + clock(1000) + '.');
+});
+
+test('Remove and Their texts send one request at a time, however often they are pressed', async () => {
+  const a = await opened(orderItem({ thread: [{ key: 'in:7', who: 'customer', text: 'Hi', at: NOW }] }));
+  let release = null;
+  const hold = (answer) => () => new Promise((resolve) => { release = () => resolve(answer()); });
+  a.data.on = {
+    ['/api/items/' + KEY + '/paste/7/remove']: hold(() => ({ ok: true, item: a.data.items[KEY] })),
+    '/api/items/c:113/move': hold(() => ({ ok: true, from: 'auction', item: { key: 'c:113' } })),
+  };
+  const count = (end) => a.calls.filter((c) => c.path.endsWith(end)).length;
+  const first = a.store.actions.removePaste('7');
+  await a.store.actions.removePaste('7');
+  release();
+  await first;
+  assert.equal(count('/paste/7/remove'), 1);
+  // Once it is done, it can be pressed again.
+  const again = a.store.actions.removePaste('7');
+  release();
+  await again;
+  assert.equal(count('/paste/7/remove'), 2);
+  const move = a.store.actions.moveTexts('dashboard');
+  await a.store.actions.moveTexts('dashboard');
+  await a.store.actions.moveTexts('auction');
+  release();
+  await move;
+  assert.equal(count('/move'), 1);
+});
+
 test('Their texts go to Dashboard and back, with Undo', async () => {
   const a = await opened();
   const moves = [];
