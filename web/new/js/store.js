@@ -8,6 +8,7 @@ import { createRunner } from './runstore.js';
 import { createFinish, readDone } from './finish.js';
 import { createHold } from './hold.js';
 import { validChip, sectionOff, listFor } from './sections.js';
+import { writesOnOpen } from '../../lib/onopen.js';
 
 export { visibleRows, followUpOf, waitingCount };
 
@@ -18,7 +19,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     section: 'dashboard', chip: 'waiting', rows: [], total: 0, counts: {}, sections: {}, unread: {}, listState: 'loading', listError: '',
     limit: 20, key: null, item: null, itemState: 'idle', typed: null, save: { state: 'idle', at: null },
     overridden: false, ...readDone(storage), status: null, toast: null, context: null,
-    writing: null, remembered: [], closedNotes: [], run: null, runSummary: null, runMore: 0, runSkipped: 0,
+    writing: null, writeFailed: null, remembered: [], closedNotes: [], run: null, runSummary: null, runMore: 0, runSkipped: 0,
   };
   const listeners = new Set();
   const draftId = (item) => (item && item.draft ? item.draft.id : null);
@@ -140,16 +141,21 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     followupId = followup || null;
     picked = null;
     olderLoaded = 0;
-    set({ key, item: null, itemState: 'loading', typed: null, overridden: false, context: null, save: { state: 'idle', at: null } });
+    set({ key, item: null, itemState: 'loading', typed: null, overridden: false, context: null, writeFailed: null, save: { state: 'idle', at: null } });
+    let item;
     try {
-      const { item } = await api('/api/items/' + key + (followup ? '?followup=' + followup : ''));
+      ({ item } = await api('/api/items/' + key + (followup ? '?followup=' + followup : '')));
       if (seq !== openSeq) return;
       set({ item, itemState: 'ready', rows: state.rows.map((r) => (r.key === key ? { ...r, unread: 0 } : r)) });
       api('/api/items/' + key + '/seen', {}).catch(() => {});
     } catch (e) {
       if (seq === openSeq) set({ itemState: 'error' });
       toast(e.message);
+      return;
     }
+    // A waiting Facebook buyer is written as the chat opens, once: not while this page's own write
+    // for it is on its way (the server may not say so yet).
+    if (writesOnOpen(item) && state.typed === null && state.writing !== key) await write({});
   }
 
   // Another list. Chosen, Follow-ups opens the first one and writes it if nothing is written or being
@@ -210,7 +216,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     const fu = followup !== undefined ? followup : followupId || undefined;
     const msg = message !== undefined ? message : templateInHand(state.item);
     const seq = ++writeSeq;
-    set({ writing: key });
+    set({ writing: key, writeFailed: null });
     try {
       const out = await api('/api/items/' + key + '/draft', { instruction, message: msg, followup: fu });
       if (key !== state.key) return;
@@ -225,10 +231,12 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
         set({ item: out.item, itemState: 'ready' });
         autosave.move(draftId(out.item), state.typed);
       }
+      // A failed suggestion says why in the box. With none to say it (the budget used, say), the
+      // box says the server's words with Try again (boxsections.js), never only a toast that goes.
       const shown = !!(out.item && out.item.draft && out.item.draft.status === 'failed');
-      if (out.error && !shown) toast(out.error);
+      if (out.error && !shown) { set({ writeFailed: { key, message: out.error } }); toast(out.error); }
     } catch (e) {
-      if (key === state.key) toast(e.message);
+      if (key === state.key) { set({ writeFailed: { key, message: e.message } }); toast(e.message); }
     } finally {
       if (seq === writeSeq) set({ writing: null });
     }

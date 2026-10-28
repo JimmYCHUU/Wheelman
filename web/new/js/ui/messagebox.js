@@ -3,7 +3,8 @@
 // Clear and the one main button. Nothing is sent from here: a Dashboard reply is copied, then pasted
 // into the dashboard. When there is no suggestion to show, one sentence says why, with one button.
 import { html, useState, useEffect, useRef, useLayoutEffect } from './html.js';
-import { boxText, boxViewOf, liveChecks, checkLines, mainAction, insteadOptions, trustLine, wordsLine, saveWords, segments, rememberOffer } from '../model.js';
+import { boxText, liveChecks, checkLines, mainAction, insteadOptions, trustLine, wordsLine, saveWords, segments, rememberOffer } from '../model.js';
+import { boxViewOf } from '../boxsections.js';
 import { Trust } from './trust.js';
 import { Editor, focusFirstBlank, focusText } from './editor.js';
 import { cutBlock, putBackText } from '../segments.js';
@@ -185,7 +186,7 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
     <div class="box-scroll">
       <${Context} context=${state.context} words=${view.context} />
       ${view.failure ? html`<div class="context bad" role="status"><span>${view.failure}</span>
-        <button type="button" class="btn small" onClick=${() => actions.write({ instruction: item.draft.instruction || undefined })}>Try again</button>
+        <button type="button" class="btn small" onClick=${() => actions.write({ instruction: (item.draft && item.draft.instruction) || undefined })}>Try again</button>
       </div>` : null}
       <div class="box-head">
         <span class="box-label"><b>Suggested reply</b> · not sent</span>
@@ -225,6 +226,7 @@ function Box({ state, actions, item, reply }) {
   const editor = useRef(null);
   const main = useRef(null);
   useCtrlEnter(main, editor);
+  // sectionBox's view (boxsections.js): the same one the run bar reads.
   const view = boxViewOf(state, Date.now());
   if (view.kind !== 'editor') main.current = null;
   if (view.kind === 'writing') return html`<${Writing} state=${state} />`;

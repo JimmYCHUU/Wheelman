@@ -21,6 +21,7 @@ import { openViewer } from './views/Viewer.js';
 import { MoveMenu } from './views/MoveMenu.js';
 import { TemplatePicker, showsPicked, pickHolds, fillsIn } from './views/TemplatePicker.js';
 import { linkLine, placeLine } from './lib/insert.js';
+import { writesOnOpen } from './lib/onopen.js';
 
 // ---- state -------------------------------------------------------------------
 
@@ -1810,8 +1811,9 @@ async function open(key, followUpId = null, { write: writeNow = true } = {}) {
     markRead(item);
     if (item.vehicle && (!state.media.has(String(item.vehicle.stockNo)) || state.media.get(String(item.vehicle.stockNo)).status === 'error')) loadMedia(item.vehicle.stockNo);
     renderChat({ toBottom: true });
-    // Opened from the Follow-ups list: the follow-up is written now, unless it already is.
-    if (writeNow && state.followUp && followUpToWrite(item)) write(item, '');
+    // Opened from the Follow-ups list: the follow-up is written now, unless it already is. A waiting
+    // Facebook buyer, never written in the background, is written now too (web/lib/onopen.js).
+    if (writeNow && (state.followUp ? followUpToWrite(item) : writesOnOpen(item))) write(item, '');
     if (narrow()) $('.thread')?.focus({ preventScroll: true });
   } catch (e) {
     toast(e.message);

@@ -30,7 +30,6 @@ export const state = {
   lastDraftError: null, // { at, message }
   pausedUntil: 0,       // set when the AI daily limit is hit
   holdUntil: 0,         // set for a few minutes when every AI model was busy
-  mpHoldUntil: 0,       // Marketplace only: its own models are busy or used up; the dashboard carries on
   mpSyncing: false,
   mpSync: null,         // Marketplace: { at, ok, message, result }
   phone: null,          // the phone add-on's last report: { at, threads, stored, signedOut, found, hidden }
@@ -214,8 +213,8 @@ export async function draftWaiting({ max = 25 } = {}) {
   state.draftAgain = false;
   let made = 0;
   try {
-    // Dashboard customers first. Marketplace chats follow, within their own allowance,
-    // so a busy Marketplace day cannot use up the requests the dashboard needs.
+    // Dashboard customers first. No Facebook chat is written here, wherever it is listed: a waiting
+    // buyer is written when the chat is opened, on either page (web/lib/onopen.js).
     // The ten newest waiting conversations are written ahead however old their last message is
     // (every other gate still applies); the usual queue follows without visiting them twice.
     const queue = [];
@@ -229,17 +228,11 @@ export async function draftWaiting({ max = 25 } = {}) {
     // has texted since we last wrote. (A message pasted from WhatsApp is answered as it is pasted.)
     queue.push(...listItems({ source: 'auction', states: ['awaiting'] }));
     for (const r of orderRows()) if (r.dueKind === 'reply') { const order = itemFromKey(r.key); if (order?.autoDraft) queue.push(order); }
-    let marketplaceLeft = 0;
-    if (config.marketplace.enabled) {
-      marketplaceLeft = Math.max(0, config.marketplace.dailyDrafts - mpDraftsLastDay());
-      queue.push(...listItems({ source: 'marketplace', states: ['awaiting'] }));
-    }
     // Email threads from Gmail come last; they are few, and each is researched on the website first.
     if (config.mail.switchedOn) queue.push(...listItems({ source: 'importquery', states: ['awaiting'] }));
     for (const item of queue) {
       if (made >= max) break;
-      const chat = item.channel === 'marketplace';
-      if (chat && (marketplaceLeft <= 0 || Date.now() < state.mpHoldUntil)) continue;
+      if (item.channel === 'marketplace') continue; // a Facebook chat moved to another section is still written on open
       if (!item.autoDraft) continue;
       if (isHeld(item.itemKey)) continue; // the owner is typing a prompt for it: that write comes from the page
       if (isDismissed(item.itemKey, item.anchorKey)) continue;
@@ -260,19 +253,12 @@ export async function draftWaiting({ max = 25 } = {}) {
         // Only a problem that needs somebody (a rejected key, a fault) is put on the page.
         // Busy or used-up free models are tried again without bothering anyone.
         state.lastDraftError = d.temporary ? null : { at: Date.now(), message: d.error };
-        // Marketplace has its own models. When they are busy or used up, only Marketplace waits:
-        // the better models may still be answering for dashboard customers.
-        if (chat && d.temporary && providers({ marketplace: true }).length < providers().length) {
-          state.mpHoldUntil = Date.now() + (d.daily ? 60 * 60 * 1000 : HOLD_AFTER_BUSY_MS);
-          continue;
-        }
         if (d.daily) { state.pausedUntil = Date.now() + 60 * 60 * 1000; break; }
         if (d.temporary) { state.holdUntil = Date.now() + HOLD_AFTER_BUSY_MS; break; }
         if (/could not be reached|No AI key/i.test(d.error || '')) break;
       } else {
         state.lastDraftError = null;
         made++;
-        if (chat) marketplaceLeft--;
       }
     }
   } finally {
@@ -440,7 +426,8 @@ export function statusReport() {
       lastSync: config.marketplace.enabled ? state.mpSync || getMeta('mp_sync_status', null) : null,
       draftsLastDay: mpDraftsLastDay(),
       dailyDrafts: config.marketplace.dailyDrafts,
-      retryAt: Date.now() < state.mpHoldUntil ? state.mpHoldUntil : null,
+      // Nothing is written for Marketplace in the background, so nothing waits to start again.
+      retryAt: null,
     },
     phone: phoneStatus(),
     // Backups: whether they run by themselves, where they go, and the last one written.

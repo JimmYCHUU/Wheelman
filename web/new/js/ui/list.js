@@ -7,6 +7,7 @@ import { hashFor, parseRoute } from '../route.js';
 import { openAction } from '../hashsync.js';
 import { visibleRows, waitingCount } from '../store.js';
 import { oldestWaiting, runTakes } from '../runstore.js';
+import { marketplaceDown } from '../fbchat.js';
 import { initials, hue, ago } from '../../../lib/format.js';
 
 const PROBLEM = 'Wheelman is not responding. It tries again every 20 seconds.';
@@ -110,6 +111,8 @@ export function List({ state, actions, now, section = 'dashboard' }) {
   const loading = state.listState === 'loading';
   const failed = state.listState === 'error';
   const left = Math.max(0, (state.total || 0) - state.rows.length);
+  // A real problem, not a notice: the chats listed are from Marketplace's last good read.
+  const down = section === 'marketplace' ? marketplaceDown(state.status) : '';
   return html`<div class="list-inner">
     <div class="chips" role="group" aria-label="Show">
       ${chipsFor(section).map((c) => html`<button type="button" class="chip" aria-pressed=${state.chip === c.id} onClick=${() => choose(c.id)}>
@@ -117,6 +120,7 @@ export function List({ state, actions, now, section = 'dashboard' }) {
       </button>`)}
     </div>
     ${failed ? html`<p class="problem" role="alert">${PROBLEM}</p>` : null}
+    ${down ? html`<p class="problem" role="alert">${down}</p>` : null}
     <${RunOffer} state=${state} now=${now} onStart=${start} />
     <div class="rows" ref=${box} onKeyDown=${onKey}>
       ${loading ? html`<${Skeleton} />` : null}

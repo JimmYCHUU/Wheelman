@@ -74,13 +74,16 @@ const isOrder = (row) => String((row && row.key) || '').startsWith('ao:');
 /**
  * What one row shows in its section: the Dashboard's row, its channel, and the tone of its reason
  * ('' for the list's own). An order row not just copied says what is due ("Due: …"), else where
- * the order has got to: blue for a message of theirs to answer, amber for one of ours to send.
+ * the order has got to: blue for a message of theirs to answer, amber for one of ours to send. A
+ * Facebook chat the auto-reply handed to a person, still unanswered, says "Needs you" in blue when
+ * the row has nothing else to say.
  */
 export function sectionRowView(row, opts, section) {
   const view = rowView(row, opts);
   const order = isOrder(row) && !view.done;
-  const reason = order ? (row.due ? String(row.due).replace(/^Send: /, 'Due: ') : row.stage || '') : view.reason;
-  const tone = order && row.due ? (row.dueKind === 'reply' ? 'info' : 'warn') : '';
+  const needsYou = !order && !view.reason && !!row.needsPerson && !!row.unanswered;
+  const reason = order ? (row.due ? String(row.due).replace(/^Send: /, 'Due: ') : row.stage || '') : needsYou ? 'Needs you' : view.reason;
+  const tone = order && row.due ? (row.dueKind === 'reply' ? 'info' : 'warn') : needsYou ? 'info' : '';
   return { ...view, reason, channel: rowChannelWord(row, section), tone };
 }
 

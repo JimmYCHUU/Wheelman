@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { applyTestEnv } from './env.js';
 import { startStandins, aiBehaviour } from './standins.js';
-import { world, rawLead, rawConversation, rawMessage, STAFF } from './fixtures.js';
+import { world, rawLead, rawConversation, rawMessage, STAFF, chatRow, chatMessage } from './fixtures.js';
 import { pointConfigAt } from './wire.js';
 
 const PORT = 3211;
@@ -85,6 +85,15 @@ const pell = ['Pell', 'Invented', '0491 570 191'];
   const lead = rawLead(792, 792, oldham, now, { stocks: ['1800'], agoMs: 31 * 3600e3 });
   invented.leads.carbarnau.push(lead);
   invented.conversations.push({ row: rawConversation(792, lead, oldham, { direction: 'IN', at: now - 30 * 3600e3, body: 'Is the Voxy still for sale?' }), messages: [rawMessage(7920, 792, 'IN', 'Is the Voxy still for sale?', 30 * 3600e3, now)] });
+  // Two more Facebook buyers beside the fixtures' five, to see what the engine's auto-reply is doing:
+  // Tove's chat it handed to a person; Ulla's answer it wrote 20 minutes ago is still queued, not sent.
+  // Ulla's listing is not in the stock list, so her chat has the listing's own strip.
+  const tove = chatRow(506, 'Tove Invented', 25, now);
+  tove.agent = { ...tove.agent, locked: true, lock_reason: 'Asked to speak to a person' };
+  invented.chats.set(506, { row: tove, messages: [chatMessage(11, 'in', 'phone', 'Can I speak to someone about the Noah?', 25, now)] });
+  const alphard = { listing_title: '2019 Toyota Alphard SC', listing_price: '$45,900', car: { post_id: 3, vehicle_id: null, stock_id: '', title: '2019 Toyota Alphard SC', price: '$45,900', listing_url: 'https://www.facebook.com/marketplace/item/468135', image: '', dashboard_url: '' } };
+  const ulla = chatRow(507, 'Ulla Invented', 20, now, { ...alphard, last_direction: 'out', pending_outbound: 1, last_outbound_at: new Date(now - 20 * MIN).toISOString() });
+  invented.chats.set(507, { row: ulla, messages: [chatMessage(12, 'in', 'phone', 'Does it have a reversing camera?', 22, now), chatMessage(13, 'out', 'agent', 'Yes, it has a reversing camera.', 20, now, 'queued')] });
 }
 const standins = await startStandins({ world: invented, ai });
 const { config } = await import('../../src/config.js');

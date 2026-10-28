@@ -563,7 +563,8 @@ export function buildMarketplaceItem(id, { now = Date.now() } = {}) {
 
   const [first, ...rest] = String(c.buyerName || '').trim().split(/\s+/);
   const lead = { id: null, first_name: first || '', last_name: rest.join(' '), phone: '', email: '', status: '', source: 'Facebook Marketplace', state: '', stocks: c.stockId ? [c.stockId] : [], inquiries: [] };
-  const item = finishItem({ itemKey: `mp:${row.id}`, channel: 'marketplace', lead, hasLeadRecord: true, conversation: null, conversationId: null, phone: '' }, timeline);
+  // A waiting buyer is written when the chat is opened, however old the message: no age gate.
+  const item = finishItem({ itemKey: `mp:${row.id}`, channel: 'marketplace', lead, hasLeadRecord: true, conversation: null, conversationId: null, phone: '' }, timeline, { autoDraftMaxAgeHours: Infinity });
 
   const e = c.engine || {};
   const needsPerson = !!(e.locked || e.stage === 'handed_off' || c.failedOutbound > 0);

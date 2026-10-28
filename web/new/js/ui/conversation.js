@@ -1,8 +1,10 @@
 // The conversation: who it is with, the car, and the messages. Everything from a message is shown as
 // text; only an http or https address becomes a link.
 import { html, useState, useRef, useLayoutEffect, useEffect } from './html.js';
-import { whoLabel, boxViewOf } from '../model.js';
+import { whoLabel } from '../model.js';
+import { boxViewOf } from '../boxsections.js';
 import { headLine } from '../sections.js';
+import { marketplacePills, listingStrip } from '../fbchat.js';
 import { hashFor } from '../route.js';
 import { skipLabel, startAgain } from '../runstore.js';
 import { MenuButton } from './menu.js';
@@ -70,6 +72,17 @@ function CarStrip({ vehicle, details }) {
   </div>`;
 }
 
+/** A Marketplace listing that is not in the stock list: its title, that it is not, and the listing on Facebook. */
+function ListingStrip({ strip }) {
+  return html`<div class="carstrip">
+    <div class="info">
+      <div class="car-title"><b>${strip.title}</b></div>
+      <div class="unlisted">${strip.note}</div>
+    </div>
+    ${strip.url ? html`<a class="btn small listing" href=${strip.url} target="_blank" rel="noopener noreferrer">Open on Facebook</a>` : null}
+  </div>`;
+}
+
 function Photos({ message, side }) {
   if (!message.photos || !/^m:\d+$/.test(message.key)) return null;
   const id = message.key.slice(2);
@@ -95,7 +108,9 @@ function Message({ m, name }) {
     <${Photos} message=${m} side=${side} />
     ${m.media && !hasPhotos ? html`<span class="media">${m.media === 'photo' ? 'Photo' : 'Attachment'}</span>` : null}
     ${m.text ? html`<span class="text">${linked(m.text)}</span>` : null}
-    <span class="by">${clock(m.at)}</span>
+    ${m.sending
+      ? html`<span class="by sending" title="The Marketplace system is sending this into the chat from the phone.">Sending</span>`
+      : html`<span class="by">${clock(m.at)}</span>`}
   </div>`);
   return parts;
 }
@@ -139,9 +154,12 @@ function Thread({ item, name, now, older }) {
     if (d !== day) { day = d; if (m.at) out.push(html`<div class="day" key=${'d' + m.key}>${dayLabel(m.at, now)}</div>`); }
     out.push(html`<${Message} key=${m.key} m=${m} name=${name} />`);
   }
+  // Marketplace: what the engine's own auto-reply is doing with this chat, after the messages.
+  const pills = marketplacePills(item, now).map((p, i) => html`<div class=${'pill engine ' + p.tone} key=${'engine' + i}>${p.text}</div>`);
   return html`<div class="thread" ref=${box} role="log" aria-label="Messages" onScroll=${onScroll} onLoadCapture=${onImage}>
     ${item.earlier > 0 ? html`<button type="button" class="btn more-older" disabled=${busy} onClick=${loadOlder}>Load older messages<span class="num">${item.earlier} more</span></button>` : null}
     ${out}
+    ${pills}
   </div>`;
 }
 
@@ -187,7 +205,8 @@ export function Conversation({ state, actions, now, details }) {
   const item = state.item;
   if (!item) return html`${bar}<div class="chat-body"><p class="empty" role="status">Opening…</p></div>`;
   const name = item.name || item.phone || item.email || 'Customer';
+  const strip = listingStrip(item);
   return html`${bar}<${Head} state=${state} actions=${actions} details=${details} />
-    ${item.vehicle ? html`<${CarStrip} vehicle=${item.vehicle} details=${details} />` : null}
+    ${item.vehicle ? html`<${CarStrip} vehicle=${item.vehicle} details=${details} />` : strip ? html`<${ListingStrip} strip=${strip} />` : null}
     <${Thread} item=${item} name=${name} now=${now} older=${actions.older} key=${state.key} />`;
 }

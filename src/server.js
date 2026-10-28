@@ -328,7 +328,7 @@ function presentOrder(item) {
     ...summary(item),
     note: '', channel: 'auction', marketplace: null, mail: null, teaches: false,
     firstName: firstNameOf(item.lead), source: 'Auction order', leadStatus: '', location: '', email: item.lead.email || '',
-    noLead: false, autoDraft: false, autoReason: '', firstReply: item.isFirstReply, looking: null, vehicle: null,
+    noLead: false, autoDraft: false, autoReason: '', writeOnOpen: false, firstReply: item.isFirstReply, looking: null, vehicle: null,
     order: orderOf(item),
     // Its messages are in order.messages, gated by where the order stands.
     templates: [],
@@ -377,6 +377,10 @@ function present(item) {
     noLead: !item.hasLeadRecord,
     autoDraft: item.autoDraft,
     autoReason: item.autoReason,
+    // A Facebook buyer waiting on us: never written in the background, so both pages write it when
+    // it is opened (web/lib/onopen.js), however old the message. Not an archived chat, one not
+    // marked as a buyer, or a photo with no words.
+    writeOnOpen: item.channel === 'marketplace' && item.autoDraft && item.state === 'awaiting',
     firstReply: item.isFirstReply,
     // The follow-up in hand (opened from the Follow-ups list: the anchor is then "fu:<id>"), or the
     // one that is due for this conversation; null when there is none.

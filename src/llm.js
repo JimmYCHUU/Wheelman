@@ -295,7 +295,7 @@ export async function complete(system, user, { role = 'write', marketplace = fal
   const split = role !== 'write' && list.length < providers().length;
   if (usable.every((p) => (exhausted.get(keyOf(p)) || 0) > now)) {
     const back = Math.min(...usable.map((p) => exhausted.get(keyOf(p))));
-    if (split) throw new LlmError(`The AI models used for Marketplace have used up their allowance for today. Marketplace suggestions start again by themselves around ${formatSydney(back)}.`, { daily: true, detail });
+    if (split) throw new LlmError(`The AI models used for Marketplace have used up their allowance for today. Try again after ${formatSydney(back)}.`, { daily: true, detail });
     throw new LlmError(`Every free AI model has used up its allowance for today. Suggestions start again by themselves around ${formatSydney(back)}.`, { daily: true, detail });
   }
   if (split) throw new LlmError('The AI models used for Marketplace could not answer just now. Wheelman tries again by itself in a few minutes.', { detail });

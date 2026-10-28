@@ -1,8 +1,9 @@
-// The panel's Customer tab: who they are, where they came from, how far they have got (the stage
-// line), and what our records said that shaped the reply without being stated. The old page's
-// Customer tab (web/app.js customerSections) in the new page's components.
+// The panel's Customer tab: who they are, where they came from, a Facebook chat's Marketplace
+// section, how far they have got (the stage line), and what our records said that shaped the reply
+// without being stated. The old page's Customer tab (web/app.js customerSections) in the new page's components.
 import { html } from './html.js';
 import { stageLine, leadStatusWords, sourceWords } from '../model.js';
+import { marketplaceRows } from '../fbchat.js';
 import { Asked } from './cartab.js';
 
 /** A row of the customer's details; nothing at all when the value is not known. */
@@ -16,6 +17,18 @@ function Stage({ item }) {
       aria-current=${i === line.current ? 'step' : null}>${step}${i === line.current ? html`<span class="stage-now"> · now</span>` : null}</li>`)}</ol>
     <p class="fine">${line.source ? line.source + '.' : 'Nothing on file says more yet.'}</p>
   </section>`;
+}
+
+/** A Facebook chat: the seller account, the listing, what the auto-reply is doing, and what it noted (never checked). */
+function Marketplace({ m }) {
+  const { rows, notes } = marketplaceRows(m);
+  return html`<section class="car-sec"><h4>Marketplace</h4>
+      <dl class="asked">${rows.map((r) => row(r.label, r.url ? html`<a href=${r.url} target="_blank" rel="noopener noreferrer">${r.value}</a>` : r.value))}</dl>
+    </section>
+    ${notes ? html`<section class="car-sec"><h4>${notes.title}</h4>
+      <ul class="included">${notes.items.map((n, i) => html`<li key=${i}>${n}</li>`)}</ul>
+      <p class="fine">${notes.fine}</p>
+    </section>` : null}`;
 }
 
 /**
@@ -42,6 +55,7 @@ export function CustomerTab({ item, act }) {
       </dl>
       ${item.noLead ? html`<p class="fine">No customer record. This number has no customer in the dashboard.</p>` : null}
     </section>
+    ${item.marketplace ? html`<${Marketplace} m=${item.marketplace} />` : null}
     ${item.looking ? html`<section class="car-sec"><h4>Asking about</h4><${Asked} looking=${item.looking} /></section>` : null}
     ${stage ? html`<${Stage} item=${item} />` : null}
     ${insider.length ? html`<section class="car-sec"><h4>Shaped the reply, never stated</h4>

@@ -239,7 +239,7 @@ export const estimateFor = (bid) => {
 
 // ---- Marketplace chats, as the content engine sends them -----------------------------------------
 
-const chatRow = (id, buyer, minsAgo, now, extra = {}) => ({
+export const chatRow = (id, buyer, minsAgo, now, extra = {}) => ({
   id, device: 'dev-1', device_name: 'Yard phone 1', device_timezone: 'Australia/Sydney',
   thread_id: `thread-secret-${id}`, buyer_name: buyer, kind: 'buyer', thread_name: buyer,
   listing_title: '2021 Toyota Noah X', title: buyer, last_snippet: 'snippet',
@@ -251,7 +251,7 @@ const chatRow = (id, buyer, minsAgo, now, extra = {}) => ({
     lead: { phone: '0491 570 199', phone_confidence: 'high', email: 'buyer@example.com', name: buyer, kinds: [], booking: '', budget: '', trade_in: '', notes: {} } },
   ...extra,
 });
-const chatMessage = (id, direction, source, text, minsAgo, now, status = direction === 'in' ? '' : 'sent', extra = {}) => ({
+export const chatMessage = (id, direction, source, text, minsAgo, now, status = direction === 'in' ? '' : 'sent', extra = {}) => ({
   id, direction, source, text, status, sent_via: '', error: '', artifact: '', artifact_url: 'https://img.example/secret-artifact.jpg',
   phone_ts: now - minsAgo * MIN, sent_at: direction === 'out' ? new Date(now - minsAgo * MIN).toISOString() : null, seen_at: null, created_at: new Date(now - minsAgo * MIN).toISOString(),
   has_media: false, mentions: [], attachments: [], ...extra,
