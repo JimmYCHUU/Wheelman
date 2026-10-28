@@ -25,6 +25,8 @@ const chats = new Map([
   [604, { row: chatRow(604, 'Nell Invented', 10, now), messages: [chatMessage(64, 'in', 'phone', '', 10, now, '', { has_media: true })] }],
   // Answered by the auto-reply: nobody is waiting.
   [605, { row: chatRow(605, 'Oz Invented', 40, now, { last_direction: 'out' }), messages: [chatMessage(65, 'in', 'phone', 'Is it automatic?', 40, now), chatMessage(66, 'out', 'agent', 'Yes, it is automatic.', 39, now)] }],
+  // Waiting, never opened: moved to Imports in the last test.
+  [606, { row: chatRow(606, 'Pip Invented', 15, now), messages: [chatMessage(67, 'in', 'phone', 'Could you bring one in from Japan for me?', 15, now)] }],
 ]);
 
 const ai = aiBehaviour();
@@ -165,4 +167,27 @@ test('a refused Facebook write never says Wheelman will try again by itself', as
 test('the old page has no retry words for a Facebook chat, since nothing retries one', () => {
   assert.equal(Object.hasOwn(COPY, 'composer.retry.marketplace'), false);
   assert.ok(!fs.readFileSync(new URL('../web/app.js', import.meta.url), 'utf8').includes('composer.retry.marketplace'));
+});
+
+test('a move writes a Facebook chat again only where opening it would write it', async () => {
+  const db = await import('../src/db.js');
+  const { writingNow } = await import('../src/drafter.js');
+  const items = await import('../src/items.js');
+  const move = async (key, section) => (await fetch(`${base}/api/items/${key}/move`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ section }) })).json();
+  const stored = (key) => db.openDb().prepare('SELECT COUNT(*) AS n FROM drafts WHERE item_key = ?').get(key).n;
+  const settled = async (key) => { const it = items.itemFromKey(key); for (let i = 0; i < 200 && writingNow(it.itemKey, it.anchorKey); i++) await new Promise((r) => setTimeout(r, 20)); };
+  // A waiting buyer, moved to Imports: written again, as opening it would write it.
+  let out = await move('mp:606', 'importquery');
+  assert.deepEqual([out.item.section, out.writing], ['importquery', true]);
+  await settled('mp:606');
+  assert.equal(stored('mp:606'), 1);
+  // A chat not marked as a buyer, and a photo with no words: moved either way, and never written by a move.
+  for (const key of ['mp:603', 'mp:604']) {
+    out = await move(key, 'importquery');
+    assert.deepEqual([out.item.section, out.writing], ['importquery', false], key);
+    out = await move(key, 'marketplace');
+    assert.deepEqual([out.item.section, out.writing], ['marketplace', false], key);
+    await settled(key);
+    assert.equal(stored(key), 0, key);
+  }
 });

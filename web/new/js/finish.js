@@ -92,13 +92,17 @@ export function createFinish({ api, clipboard, storage, now, get, set, toast, te
   const copyNumber = async () => { const s = get(); if (s.item && s.item.phone) await copyText(s.item.phone, () => toast('Number copied')); };
   const copyEmail = async () => { const s = get(); if (s.item && s.item.email) await copyText(s.item.email, () => toast('Email copied')); };
 
-  async function dismiss() {
+  /**
+   * Dismiss, with Undo. words: the toast's (Not a customer says why); the More menu's Dismiss passes
+   * none, as its menu runs a choice with no arguments.
+   */
+  async function dismiss(words = 'Dismissed') {
     const key = get().key;
     if (!key) return;
     try {
       const out = await api('/api/items/' + key + '/dismiss', {});
       if (out.item && key === get().key) set({ item: out.item });
-      toast('Dismissed', { label: 'Undo', run: () => restore(key) });
+      toast(words, { label: 'Undo', run: () => restore(key) });
       await runner.dismissed(key); // in a reply run, the next customer
       await refresh();
     } catch (e) { toast(e.message); }

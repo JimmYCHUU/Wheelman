@@ -396,8 +396,9 @@ function present(item) {
     // one that is due for this conversation; null when there is none.
     followUp: item.followUp ? followUpOf(item.followUp) : item.followUpDue ? followUpOf(item.followUpDue) : null,
     looking: lookingFor(item),
-    // An ordinary enquiry read as an import enquiry (why, and the car), and the owner's ruling on it.
-    judged: item.judged ? { sign: item.judged.sign, why: item.judged.why, car: item.judged.car?.title || '' } : null,
+    // An ordinary enquiry read as an import enquiry (why, the car, and for the words sign the
+    // customer's sentence that holds them), and the owner's ruling on it.
+    judged: item.judged ? { sign: item.judged.sign, why: item.judged.why, car: item.judged.car?.title || '', quote: item.judged.quote || '' } : null,
     ruling: item.ruling ? { kind: item.ruling.kind } : null,
     // Answered the import way: from the Imports list or the website's import form, read so, ruled so, or listed with the auction customers.
     isImport: !!item.imports,
@@ -587,13 +588,18 @@ function whyNotMoved(item, section) {
 /**
  * After a ruling or a move, the suggestion is written again the new way: unless the owner has
  * already changed, copied or sent it, the customer is not waiting, or it is set aside. A
- * conversation now listed under an auction order is answered there instead.
+ * conversation now listed under an auction order is answered there instead. A Facebook chat is
+ * written only where opening it would write it (autoDraft: a buyer, with words, not archived), so a
+ * seller's chat or a photo with no words is not. With `keep` nothing is written: the owner has text
+ * in the box (the page's type change), and its edit may not have landed yet.
  */
-function writeAgainIfUntouched(key, item) {
+function writeAgainIfUntouched(key, item, { keep = false } = {}) {
   const fresh = itemFromKey(key) || item;
+  if (keep) return { fresh, writing: false };
   const d = latestDraft(fresh.itemKey, fresh.anchorKey);
   const untouched = !d || (['ready', 'failed'].includes(d.status) && typeof d.edited_text !== 'string' && !d.copied_at && !d.sent_here_at);
-  const writing = fresh.state === 'awaiting' && untouched && !fresh.underOrder && !isDismissed(fresh.itemKey, fresh.anchorKey);
+  const wanted = fresh.channel !== 'marketplace' || fresh.autoDraft;
+  const writing = fresh.state === 'awaiting' && untouched && wanted && !fresh.underOrder && !isDismissed(fresh.itemKey, fresh.anchorKey);
   if (writing) draftFor(fresh, { instruction: '' }).catch(() => {});
   return { fresh, writing };
 }
@@ -968,10 +974,10 @@ async function api(req, res, url) {
   }
 
   // The owner's ruling on a dashboard conversation: an import enquiry or not.
-  // { kind: 'import' | 'general' | '' }. An empty kind takes the ruling away, so Wheelman's own
-  // reading applies again. A `section` sent with it moves the conversation as /move does (the page
-  // once moved conversations this way). The suggestion is written again the new way, unless the
-  // owner has already changed its text.
+  // { kind: 'import' | 'general' | '', section?, keep? }. An empty kind takes the ruling away, so
+  // Wheelman's own reading applies again. A `section` sent with it moves the conversation as /move
+  // does (the new page's enquiry type rules and moves in one). The suggestion is written again the
+  // new way, unless the owner has already changed its text, or sent `keep: true` (text in the box).
   m = p.match(itemRoute('/ruling'));
   if (req.method === 'POST' && m) {
     const body = await readBody(req);
@@ -985,16 +991,16 @@ async function api(req, res, url) {
     if (kind) setItemRuling(item.itemKey, item.lead?.id || null, { kind });
     else clearItemRuling(item.itemKey, item.lead?.id || null);
     if (section && section !== item.section) moveTo(item, section);
-    const { fresh, writing } = writeAgainIfUntouched(m[1], item);
+    const { fresh, writing } = writeAgainIfUntouched(m[1], item, { keep: body.keep === true });
     logLine('rulings', `${fresh.itemKey}: ${kind ? (kind === 'import' ? 'an import enquiry' : 'not an import enquiry') : 'the ruling was taken away'}${section && section !== item.section ? `, moved to ${section}` : ''}${writing ? '; the suggestion is written again' : ''}`);
     return send(res, 200, { ok: true, item: present(fresh), writing });
   }
 
   // Moving a conversation to another section: Dashboard, Import Query or Auction, or a Facebook chat
-  // back to Marketplace. { section }. It keeps its key, and its replies still go out the way they
-  // came in; only the list it sits on, and how the customer is answered, change. Back in its own
-  // section, the move is forgotten. The suggestion is written again the new way, unless the owner
-  // has already changed its text. Undo is a move back to `from`.
+  // back to Marketplace. { section, keep? }. It keeps its key, and its replies still go out the way
+  // they came in; only the list it sits on, and how the customer is answered, change. Back in its
+  // own section, the move is forgotten. The suggestion is written again the new way, unless the
+  // owner has already changed its text, or sent `keep: true`. Undo is a move back to `from`.
   m = p.match(itemRoute('/move'));
   if (req.method === 'POST' && m) {
     const body = await readBody(req);
@@ -1004,7 +1010,7 @@ async function api(req, res, url) {
     if (!movesFor(item).includes(section)) return send(res, 400, { error: whyNotMoved(item, section) });
     const from = item.section;
     moveTo(item, section);
-    const { fresh, writing } = writeAgainIfUntouched(m[1], item);
+    const { fresh, writing } = writeAgainIfUntouched(m[1], item, { keep: body.keep === true });
     logLine('moves', `${fresh.itemKey}: moved from ${from} to ${fresh.section}${writing ? '; the suggestion is written again' : ''}`);
     return send(res, 200, { ok: true, from, item: present(fresh), writing });
   }

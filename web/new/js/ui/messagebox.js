@@ -7,6 +7,7 @@ import { html, useState, useEffect, useRef, useLayoutEffect } from './html.js';
 import { boxText, liveChecks, checkLines, trustLine, wordsLine, saveWords, segments, rememberOffer } from '../model.js';
 import { boxViewOf } from '../boxsections.js';
 import { messageOptions } from '../messages.js';
+import { typeView } from '../enquiry.js';
 import { MenuButton } from './menu.js';
 import { Research } from './research.js';
 import { replyChannel, mainFor, sendFor, sendingNow, sendFailedWords } from '../channel.js';
@@ -62,7 +63,10 @@ function Tell({ onSend, holdTell, button, disabled = false }) {
   </div>`;
 }
 
-/** The line above the box: the store's (a new message arrived while typing), else the follow-up in hand. */
+/**
+ * The line above the box: the store's (a new message arrived while typing), else the box's own (the
+ * follow-up in hand), else why it was read as an import enquiry (enquiry.js typeView).
+ */
 function Context({ context, words }) {
   if (context) {
     return html`<div class="context" role="status"><span>${context.message}</span>
@@ -119,7 +123,7 @@ function Quiet({ state, actions, item, view }) {
   const resending = !!send && send.state === 'sending';
   const resendFailed = send && send.state === 'failed' ? send : null;
   return html`<div class="box" role="group" aria-label="Message box">
-    <${Context} context=${state.context} />
+    <${Context} context=${state.context} words=${view.tell ? typeView(item).reason : ''} />
     ${resendFailed ? html`<div class="context bad" role="alert"><span>${sendFailedWords(resendFailed.error, resendFailed.outcome, { kept: false })}</span></div>` : null}
     <p class=${'box-note ' + view.tone} role="status">${view.sentence}</p>
     ${view.suggestion ? html`<div class="ghost"><span class="ghost-label">${view.suggestionLabel || 'The suggestion that was here'}</span><p>${view.suggestion}</p></div>` : null}
@@ -213,7 +217,7 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
 
   return html`<div class="box" role="group" aria-label="Message box">
     <div class="box-scroll">
-      <${Context} context=${state.context} words=${view.context} />
+      <${Context} context=${state.context} words=${view.context || typeView(item).reason} />
       ${view.failure ? html`<div class="context bad" role="status"><span>${view.failure}</span>
         <button type="button" class="btn small" disabled=${locked} onClick=${() => actions.write({ instruction: (item.draft && item.draft.instruction) || undefined })}>${failedSend ? 'Write it again' : 'Try again'}</button>
       </div>` : null}

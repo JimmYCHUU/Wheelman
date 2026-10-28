@@ -4,6 +4,7 @@ import { html, useState, useRef, useLayoutEffect, useEffect } from './html.js';
 import { whoLabel } from '../model.js';
 import { boxViewOf } from '../boxsections.js';
 import { headLine } from '../sections.js';
+import { typeView, typeLine } from '../enquiry.js';
 import { marketplacePills, listingStrip } from '../fbchat.js';
 import { hashFor } from '../route.js';
 import { skipLabel, startAgain } from '../runstore.js';
@@ -34,11 +35,17 @@ export function linked(text) {
 
 const safeUrl = (u) => (/^https?:\/\//i.test(String(u || '')) ? u : '');
 
+/**
+ * The head: ‹ List, the name, the line under it (the enquiry type first when it is not the
+ * section's own), More and Details. More starts with the enquiry type's three choices, under their
+ * heading (none for an auction order).
+ */
 function Head({ state, actions, details }) {
   const item = state.item;
   const name = item.name || item.phone || item.email || 'Unknown number';
   const back = () => { location.hash = hashFor({ section: state.section, chip: state.chip }); };
-  const sub = headLine(item);
+  const sub = [typeLine(item), headLine(item)].filter(Boolean).join(' · ');
+  const types = typeView(item).choices.map((c) => ({ label: c.label, hint: c.hint, checked: c.checked, run: () => actions.setType(c.type) }));
   return html`<div class="chat-head">
     <button type="button" class="btn quiet back" onClick=${back} aria-label="Back to the list">‹ List</button>
     <div class="title">
@@ -46,6 +53,9 @@ function Head({ state, actions, details }) {
       <div class="line2" role="status">${sub}</div>
     </div>
     <${MenuButton} label="More" items=${[
+      types.length && { heading: 'Enquiry type' },
+      ...types,
+      types.length && { separator: true },
       { label: 'Dismiss', hint: 'No reply needed. You can undo it.', run: actions.dismiss },
       item.followUp && { label: 'Dismiss this follow-up', run: actions.dismissFollowUp },
       item.phone ? { label: 'Copy number', hint: item.phone, run: actions.copyNumber }

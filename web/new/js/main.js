@@ -5,7 +5,7 @@ import { createStore } from './store.js';
 import { createPanelStore } from './panelstore.js';
 import { createSearchStore } from './searchstore.js';
 import { parseRoute } from './route.js';
-import { storeStep, addressAfter, leavesRun, sheetStep, sheetFirst, sheetOnPop, isSheetEntry, withSheet, offAddress, conversationOnScreen } from './hashsync.js';
+import { storeStep, addressAfter, leavesRun, sheetStep, sheetFirst, sheetOnPop, isSheetEntry, withSheet, offAddress, conversationOnScreen, goToHash } from './hashsync.js';
 import { html, render } from './ui/html.js';
 import { App } from './ui/app.js';
 import { readTheme, applyTheme } from './ui/topbar.js';
@@ -120,6 +120,10 @@ function follow() {
   window.dispatchEvent(new HashChangeEvent('hashchange')); // replaceState says nothing to the page's own route
 }
 store.subscribe(follow);
+// A move the store asks for (an enquiry type changed or put back): a new history entry, so Back
+// returns to where the conversation was. The hashchange above takes the store there, once.
+let goneTo = 0;
+store.subscribe(() => { const to = goToHash(goneTo, store.get()); if (!to) return; goneTo = to.n; location.hash = to.hash; });
 // An address on a section the server says is switched off goes to the Dashboard, in place of the
 // entry on screen; the store follows it there (the hashchange above).
 store.subscribe(() => { const to = offAddress(parseRoute(location.hash), store.get().sections); if (to) location.replace(to); });

@@ -162,6 +162,18 @@ const { parseDashboardTime, sydneyDay } = await import('../../src/time.js');
     { ref: 'msg-f:ph3', fromEmail: 'hollis@example.com', fromName: 'Hollis Invented', text: 'Also, how long would it take to arrive in Sydney?', at: now - 1 * HOUR },
   ] }, { now }), { now });
 }
+// Jory texts the dashboard about a car from Japan, with no car of ours attached, made as Wynn's is:
+// read as an import enquiry, his reason line shows in Dashboard, and Import enquiry in More moves him
+// to Imports. He writes in after the first suggestions, so Oldham is still written then.
+{
+  const now = Date.now(), MIN = 60e3;
+  const jory = ['Jory', 'Invented', '0491 570 195'];
+  const ask = 'Hi, can you import a Toyota Hiace from Japan for me?';
+  const lead = rawLead(795, 795, jory, now, { agoMs: 3 * 3600e3 });
+  invented.leads.carbarnau.push(lead);
+  invented.conversations.push({ row: rawConversation(795, lead, jory, { direction: 'IN', at: now - 4 * MIN, body: ask }), messages: [rawMessage(7950, 795, 'IN', ask, 4 * MIN, now)] });
+  await worker.runSync();
+}
 // The people just added are waiting too: the ten newest get their suggestions written ahead, as in daily use.
 await worker.draftWaiting();
 

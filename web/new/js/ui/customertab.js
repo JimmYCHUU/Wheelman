@@ -1,11 +1,13 @@
 // The panel's Customer tab: who they are, where they came from, a Facebook chat's Marketplace
-// section, how far they have got (the stage line), and what our records said that shaped the reply
-// without being stated. The old page's Customer tab (web/app.js customerSections) in the new page's components.
+// section, how far they have got (the stage line), where it is listed and why, and what our records
+// said that shaped the reply without being stated. The old page's Customer tab (web/app.js
+// customerSections) in the new page's components.
 import { html } from './html.js';
 import { stageLine, leadStatusWords, sourceWords } from '../model.js';
 import { marketplaceRows } from '../fbchat.js';
 import { Asked } from './cartab.js';
 import { emailRows } from '../emailview.js';
+import { listedWords } from '../enquiry.js';
 
 /** A row of the customer's details; nothing at all when the value is not known. */
 const row = (label, value) => (value ? [html`<dt key=${label}>${label}</dt>`, html`<dd key=${label + '='}>${value}</dd>`] : null);
@@ -51,6 +53,7 @@ export function CustomerTab({ item, act }) {
   const name = item.name || item.firstName || '';
   // The stage line is for conversations: not an auction order, and not a number with neither a record nor a sale.
   const stage = !item.order && (!item.noLead || !!item.deal);
+  const listed = listedWords(item);
   const copy = (value, what, run) => html`<button type="button" class="link-btn" title=${'Click to copy the ' + what}
     aria-label=${'Copy the ' + what + ' ' + value} onClick=${run}>${value}</button>`;
   return html`
@@ -69,6 +72,7 @@ export function CustomerTab({ item, act }) {
     ${item.mail ? html`<${Email} mail=${item.mail} />` : null}
     ${item.looking ? html`<section class="car-sec"><h4>Asking about</h4><${Asked} looking=${item.looking} /></section>` : null}
     ${stage ? html`<${Stage} item=${item} />` : null}
+    ${listed ? html`<section class="car-sec"><h4>Where it is listed</h4><p class="fine">${listed}</p></section>` : null}
     ${insider.length ? html`<section class="car-sec"><h4>Shaped the reply, never stated</h4>
       <ul class="included">${insider.map((x) => html`<li key=${x}>${x[0].toUpperCase() + x.slice(1)}</li>`)}</ul>
       <p class="fine">Wheelman used what our records show to choose what to say. It does not say any of it to the customer.</p>

@@ -37,7 +37,7 @@
   .menu button:hover, .menu a:hover { background: var(--surface-quiet); }
   .menu button[aria-checked="true"] { background: var(--accent-soft); }
   .menu hr { border: 0; border-top: 1px solid var(--line); margin: var(--s-2) 0; }
-  .menu .tick { width: var(--s-4); color: var(--accent); }
+  .menu .tick { flex: none; width: var(--s-4); color: var(--accent); }
 
   /* ---------- the toast ---------- */
   .toast-region { position: fixed; width: 0; height: 0; }

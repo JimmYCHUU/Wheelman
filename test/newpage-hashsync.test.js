@@ -1,7 +1,7 @@
 // Keeping the new page's address and its store in step (web/new/js/hashsync.js). Invented data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { openAction, conversationOnScreen, addressAfter, storeStep, sheetStep, sheetOnPop, isSheetEntry, withSheet } from '../web/new/js/hashsync.js';
+import { openAction, conversationOnScreen, addressAfter, storeStep, sheetStep, sheetOnPop, isSheetEntry, withSheet, goToHash } from '../web/new/js/hashsync.js';
 import { parseRoute } from '../web/new/js/route.js';
 
 /** The store as the sync sees it. */
@@ -118,4 +118,17 @@ test('the open conversation is on screen beside the list, and on a phone only wh
   // The address is ahead of the store, which is opening another one: not this one yet.
   assert.equal(conversationOnScreen({ narrow: true, storeKey: 'c:1', routeKey: 'c:2' }), false);
   assert.equal(conversationOnScreen({ narrow: false, storeKey: null, routeKey: null }), false);
+});
+
+test('a move the store asks for becomes a new address once', () => {
+  // An enquiry type changed: the store asks to follow the conversation to Imports.
+  const s = { ...S('waiting', 'c:7'), goTo: { section: 'importquery', chip: 'waiting', key: 'c:7', n: 1 } };
+  assert.deepEqual(goToHash(0, s), { hash: '#/importquery/waiting/c%3A7', n: 1 });
+  // Written once: the same request is not followed again, so Back stays where Jim put it.
+  assert.equal(goToHash(1, s), null);
+  assert.equal(goToHash(0, S('waiting', 'c:7')), null, 'nothing asked');
+  assert.deepEqual(goToHash(1, { ...s, goTo: { ...s.goTo, section: 'dashboard', n: 2 } }), { hash: '#/dashboard/waiting/c%3A7', n: 2 }, 'and Undo asks again');
+  // The store follows that address to the section, with the conversation it has open, and nothing is written over it.
+  assert.deepEqual(storeStep(parseRoute('#/importquery/waiting/c%3A7'), s), { section: 'importquery', chip: 'waiting', key: 'c:7' });
+  assert.equal(addressAfter(S('waiting', 'c:7'), '#/importquery/waiting/c%3A7', s), null);
 });

@@ -8,6 +8,7 @@ import { createRunner } from './runstore.js';
 import { createFinish, readDone } from './finish.js';
 import { createHold } from './hold.js';
 import { createSender } from './sender.js';
+import { createTypeChanger } from './typestore.js';
 import { sendingNow } from './channel.js';
 import { validChip, sectionOff, listFor } from './sections.js';
 import { writesOnOpen } from '../../lib/onopen.js';
@@ -23,6 +24,8 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
     limit: 20, key: null, item: null, itemState: 'idle', typed: null, save: { state: 'idle', at: null },
     overridden: false, ...readDone(storage), status: null, toast: null, context: null,
     writing: null, writeFailed: null, sending: {}, unconfirmed: {}, remembered: [], closedNotes: [], run: null, runSummary: null, runMore: 0, runSkipped: 0,
+    // A move the page is asked to follow (typestore.js): { section, chip, key, n }, n counting up.
+    goTo: null,
   };
   const listeners = new Set();
   const draftId = (item) => (item && item.draft ? item.draft.id : null);
@@ -147,6 +150,8 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
   // Send on Facebook (web/new/js/sender.js): only when its button is pressed, never by a key.
   const sender = createSender({ api, get: () => state, set, toast, text, refresh, take: takeItem, now, shown });
   const { send } = sender;
+  // The enquiry type, from the conversation's More menu (web/new/js/typestore.js).
+  const { setType } = createTypeChanger({ api, get: () => state, set, toast, flush, refresh, dismiss, timers });
   const open = (key, o) => { runner.end(); return show(key, o); };
 
   async function show(key, { followup } = {}) {
@@ -299,7 +304,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive, s
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     actions: {
       boot, refresh, setSection, setChip, more, open, type, flush, write, tell, holdTell: hold.holdTell, instead, copy, send, copyNumber, copyEmail, older, dismiss, dismissFollowUp,
-      putBack, restore, restoreFollowUp, copyLink, toast, remember, justOnce, switchLesson,
+      putBack, restore, restoreFollowUp, copyLink, toast, remember, justOnce, switchLesson, setType,
       startRun: runner.start, skipRun: runner.skip, endRun: runner.end,
       clear: () => type(''),
       bringBack: () => type((state.item && state.item.draft && state.item.draft.reply) || ''),

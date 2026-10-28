@@ -25,6 +25,18 @@ export function storeStep(route, s) {
 }
 
 /**
+ * A move the store asks the page to follow (state.goTo, set when an enquiry type changes or is put
+ * back): { hash, n } while its n is past seenN, the last one followed; else null. The page writes the
+ * hash as a new history entry, so Back returns to where the conversation was, and storeStep takes
+ * the store there with the conversation still open.
+ */
+export function goToHash(seenN, s) {
+  const to = s && s.goTo;
+  if (!to || !(to.n > seenN)) return null;
+  return { hash: hashFor({ section: to.section, chip: to.chip, key: to.key }), n: to.n };
+}
+
+/**
  * Whether an address the person reached (Back, ‹ List, a tab, a chip, a row, a link) leaves the
  * reply run: anything but the run's own conversation does, quietly. Any address at all puts away
  * the summary at the end of a run.
