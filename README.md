@@ -716,13 +716,38 @@ What to know:
 A new page is being built beside this one, at http://127.0.0.1:3210/new/. The old page has a
 quiet link, **Try the new page**, next to the cog. All four sections open on the new page, each
 with its own lists: Dashboard has Needs reply, Follow-ups and All, and Auction has To do, In
-progress and Finished. A section that is switched off has no tab. In each, the open conversation
+progress and Finished. Only Marketplace can be switched off, and then it has no tab. In each, the open conversation
 has the message box with its fill-in blanks, **Instead**, the "Tell Wheelman what to say…" line,
 and one main button for the channel: **Copy reply** for a text, **Copy for Gmail** for an email,
 **Copy for WhatsApp** for an auction order, and **Send on Facebook** for a Marketplace buyer.
-**Put back in Needs reply** is on Dashboard. Imports and Auction have their full tools on the old
-page until the next update. The old page stays at the normal address until the switch-over. The
-new page is built from `prototype/`.
+**Put back in Needs reply** is on Dashboard. The old page stays at the normal address until the
+switch-over. The new page is built from `prototype/`.
+
+**Imports** lists the leads on the dashboard's Imports list, and the import emails you sent from
+Gmail while the email intake is on. It is always there, even with the intake off; then it lists
+no emails. Each text enquiry has the same **Which message?** choices it had in Auction before
+the order exists, and the import ones. An email has its own three. Under the box of a ready email
+reply, **What Wheelman looked up** (closed until you open it) says what was found for the model,
+what could not be, and where it was read, and the reply is copied with **Copy for Gmail**. A message Gmail had folded reads
+**Folded in Gmail** in the list. **More messages**, after the **Instead** line, brings back the
+rest of a section's messages whenever more than three fit.
+
+**Enquiry type** is the first choice in a conversation's **More** menu: **Stock enquiry**,
+**Import enquiry** or **Not a customer**. A text read as an import enquiry says why in a line
+above the box, but it stays in Dashboard until you choose **Import enquiry**, which moves it to
+Imports. **Stock enquiry** moves it back (a Facebook chat goes back to Marketplace), and **Not a
+customer** dismisses it. The page follows the conversation, and for nine seconds a toast offers
+**Undo**, which puts the type and the section back. A reply you had not touched is written again
+for the new type; words you typed are kept as they are. An auction order has no type to choose,
+and nothing is moved into Marketplace or, by hand, into Auction.
+
+**Auction** holds auction orders. The open order has the **Which message?** choices for its
+stage, the first one being a reply to what they wrote, and **Paste what they wrote**, which opens
+a box with **We sent this** and **They wrote this**: a pasted message of theirs is answered, and
+**Remove** takes a pasted one out again. **Copy for WhatsApp** copies the message, and the toast
+offers **Put back in To do**. The panel's **Order** tab shows the stage, what they asked for, the auction car, what is
+charged and paid, and **Their texts**, with the button that answers those texts in Dashboard (and back). Nothing is learned
+from an order, so Remember is never offered there.
 
 **Send on Facebook** is the only send on the new page, and it goes only when you press it. It
 reads **Sending…**, then the box says **Sent on Facebook** at the time it went. If it fails, the
@@ -795,14 +820,14 @@ reply** as a plain button; in a run **Next** is the main one. A run passes over 
 when it reaches them; one no longer on the loaded page is opened, and says whether it still waits.
 
 The **search box** in the top bar looks across customers, cars and the words in messages, in
-every section. A Dashboard result opens on the new page. A Marketplace, Imports or Auction
-result says **Opens on the old page** and goes there until those sections move over.
+every section. A result opens in its own section on the new page.
 
 ### The top bar
 
 - **The sections** are tabs in the middle of the top bar: **Dashboard** (leads and text messages),
   **Marketplace** (Facebook Marketplace chats), **Auction** (auction orders) and **Import Query**
-  (import emails). A section that is switched off has no tab. The number beside a tab counts
+  (the dashboard's Imports list and import emails; **Imports** on the new page). Only Marketplace
+  can be switched off, and then it has no tab. The number beside a tab counts
   conversations with new messages you have not looked at.
 - **Find a car** finds any car in the stock list by its stock number or by words of its name
   ("1033", "hiace", "toyota noah"). Cars on offer come first, sold ones last. Pick one with the
@@ -1164,17 +1189,18 @@ dashboard, which moves through stages. Most of them are written to on WhatsApp, 
 cannot read. This section lists every order, says where it has got to, and has the next
 message to that customer written and waiting.
 
-It lists the auction customers who have no order yet too: every lead on the dashboard's
-Imports list, and any conversation you moved here. Their rows say where the enquiry has got to
-(Enquiry: asking for details · ready to search · car offered · compliance only), and they are
-answered the import way: what they are looking for is asked first, then the Japan auctions are
-searched and the best car is offered. They have the same **Which message?** list as an order,
-with the messages that fit before there is one: Thanks, with estimate and deposit · Car found,
-full or short · Cars coming up · Still searching · Deposit reminder. The one that suits where the
-enquiry has got to is marked "due now"; the first choice is the reply to what they wrote. Each is
-written from your wording with what the enquiry says (the car, years, kilometres, budget), the
-deposit amount a blank since there is no order yet, and fitted to the customer as an order's is.
-**One row per customer:** once a customer has an order
+A conversation you moved here from the old page's **Move** menu is listed too, as an auction
+customer who has no order yet. Its row says where the enquiry has got to (Enquiry: asking for
+details · ready to search · car offered · compliance only), and it is answered the import way:
+what they are looking for is asked first, then the Japan auctions are searched and the best car
+is offered. It has the same **Which message?** list as an order, with the messages that fit
+before there is one: Thanks, with estimate and deposit · Car found, full or short · Cars coming
+up · Still searching · Deposit reminder. The one that suits where the enquiry has got to is
+marked "due now"; the first choice is the reply to what they wrote. Each is written from your
+wording with what the enquiry says (the car, years, kilometres, budget), the deposit amount a
+blank since there is no order yet, and fitted to the customer as an order's is. The leads on the
+dashboard's Imports list are not here: they are listed in Import Query (Imports on the new page),
+with these same messages. **One row per customer:** once a customer has an order
 under way, the order stands for them and the conversation it reads (the one on the order's
 number, else its lead's) is no longer a row of its own. A text or website enquiry from them
 since the order opened (within the last week) puts the order in To do as a reply to what they
@@ -1305,8 +1331,8 @@ that knows their order. This is the one place the section asks an AI, on the bet
 Customers also ask about importing by email to the business mailbox: whether a model can be
 imported, what it would land for, how the process works. The mailbox holds much else besides, so
 Wheelman does not read it. Instead you hand each import enquiry over yourself: open the email in
-Gmail, press **Send to Wheelman**, and the whole thread appears in the Import Query section in
-the usual conversation, the customer on the left and the team's replies on the right. Nothing in
+Gmail, press **Send to Wheelman**, and the whole thread appears in the Import Query section (it
+also lists the leads on the dashboard's Imports list) in the usual conversation, the customer on the left and the team's replies on the right. Nothing in
 Gmail changes.
 
 - **One press per thread.** The button reads the subject and every message that is open on the
@@ -1372,7 +1398,7 @@ the small one Marketplace uses.
 
 | Setting in `.env` | What it does | Default |
 |---|---|---|
-| `MAIL_INTAKE` | Set to `0` to switch the section and the intake off | `1` |
+| `MAIL_INTAKE` | Set to `0` to switch the email intake off: Import Query then lists no emails but still lists the dashboard's Imports list | `1` |
 | `MAIL_OUR_DOMAINS` | The domains whose senders are our side of a thread, comma-separated | `carbarn.com.au` |
 | `MAIL_AUTO_DRAFT_MAX_AGE_DAYS` | An email older than this is listed but not written for unasked | `7` |
 | `SITE_API_URL` | Where the eligible-models list is read from | The website |
@@ -1550,8 +1576,9 @@ what the team really sends. **How to say it** comes from the two voices.
   of that kind, the same conversation included. Remember lessons apply to texts and emails, never
   to Marketplace chats. Each time a lesson is used it is counted, and it can be switched off,
   after which it is never used. Remembering the same instruction again keeps the one lesson.
-  **Just this once** stores nothing. Marketplace, the phone-only list, auction orders, follow-ups
-  and the Auction section teach nothing, so Remember is not offered there.
+  **Just this once** stores nothing. Marketplace, the phone-only list, auction orders, follow-ups,
+  the Auction section and the leads from the dashboard's Imports list teach nothing, so Remember
+  is not offered there.
 - **Only what you changed.** A suggestion used word for word is Wheelman's own text, so it
   is not kept as an example of how the team writes. Copying it unchanged counts as approval
   instead (see **Copying as written** above).
@@ -1977,7 +2004,7 @@ forms, dates, and bodies with the quoted history cut; a thread taken only from t
 its own route, with its own header; limits, time clamps and which side a sender is on; a thread
 sent again adding only what is new, a folded message filled in, and threads without Gmail's ids
 still told apart; a thread as an item (waiting, answered, an "unsubscribe" footer not an
-opt-out); the section's lists, counts and search, and the section off with the intake;
+opt-out); the section's lists, counts and search, and the emails off with the intake;
 dismiss, seen and put back; and nothing from a thread reaching what Wheelman has learned.
 
 ## Project layout
@@ -2208,6 +2235,15 @@ they are opened, on both pages, and not in the background. The server answers su
 engine has the reply, treats an engine timeout as a send that may have gone, and lets a check
 cover Marketplace alone. Checked on the automated tests and in a browser on invented data. Not
 yet used over a working day.
+
+28 October 2026, later: the new page gained Imports (the dashboard's Imports list and the import
+emails, with Copy for Gmail, the research notes and More messages), the enquiry type in a
+conversation's More menu with Undo, and auction orders (the message picker, the paste box, Remove,
+Put back in To do and Copy for WhatsApp). The dashboard's Imports-list leads are now listed in
+Import Query, not Auction, on both pages, and Import Query is always there, listing emails only
+while the email intake is on. Send on Facebook refuses the same words twice, from any page, and a
+Facebook chat answered on Facebook says so. Checked on the automated tests and in a browser on
+invented data. Not yet used over a working day.
 
 ### Open questions for Carbarn
 
