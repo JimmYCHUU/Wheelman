@@ -2,28 +2,22 @@
 // clock and timers are passed in, so the tests run it with fakes. The UI reads get() and calls actions.
 import { boxText } from './model.js';
 import { createAutosave } from './autosave.js';
-import { blanksIn } from '../../lib/blank.js';
-import { plural } from '../../lib/format.js';
 import { visibleRows, followUpOf, waitingCount } from './listview.js';
 import { createRemember } from './remember.js';
 import { createRunner } from './runstore.js';
+import { createFinish, readDone } from './finish.js';
+import { createHold } from './hold.js';
 
 export { visibleRows, followUpOf, waitingCount };
 
-const DONE_KEY = 'wheelman.new.done';
-const DONE_AT_KEY = 'wheelman.new.doneAt';
-const COPY_FAILED = 'Could not copy. Select the text and copy it yourself.';
 const NEW_MESSAGE = 'New message from the customer. Your text is kept.';
 
 export function createStore({ api, clipboard, storage, now, timers, keepalive }) {
-  const read = (k) => {
-    try { const v = JSON.parse(storage.getItem(k)); return v && typeof v === 'object' ? v : {}; } catch { return {}; }
-  };
   // Only the Dashboard is on the new page yet: the section never changes, whatever the address says.
   let state = {
     section: 'dashboard', chip: 'waiting', rows: [], total: 0, counts: {}, unread: {}, listState: 'loading', listError: '',
     limit: 20, key: null, item: null, itemState: 'idle', typed: null, save: { state: 'idle', at: null },
-    overridden: false, done: read(DONE_KEY), doneAt: read(DONE_AT_KEY), status: null, toast: null, context: null,
+    overridden: false, ...readDone(storage), status: null, toast: null, context: null,
     writing: null, remembered: [], closedNotes: [], run: null, runSummary: null, runMore: 0, runSkipped: 0,
   };
   const listeners = new Set();
@@ -40,8 +34,6 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
   let picked = null;              // the answer picked from "Instead:" ('' a reply to what they wrote), null for none
   let toastTimer = null;
   let toastSeq = 0;
-  let holdKey = null;
-  let holdTimer = null;
   let openSeq = 0;
   let olderLoaded = 0;            // messages in front of the newest ones, from Load older messages
   let listSeq = 0;
@@ -54,14 +46,6 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     const q = [picked !== null ? 'message=' + encodeURIComponent(picked) : '', followupId ? 'followup=' + followupId : ''].filter(Boolean).join('&');
     return '/api/items/' + key + (q ? '?' + q : '');
   };
-
-  function saveDone(done, doneAt) {
-    set({ done, doneAt });
-    try {
-      storage.setItem(DONE_KEY, JSON.stringify(done));
-      storage.setItem(DONE_AT_KEY, JSON.stringify(doneAt));
-    } catch { /* storage may be blocked */ }
-  }
 
   function toast(message, action = null) {
     const id = ++toastSeq;
@@ -82,30 +66,6 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     // "Saving…" from the first key: the save itself waits for a pause in the typing.
     set(id ? { typed, save: { state: 'saving', at: state.save.at } } : { typed });
     autosave.queue(id, typed);
-  }
-
-  // ---- the Tell hold: automatic writing never replaces a draft while an instruction is being typed
-
-  async function release() {
-    timers.clear(holdTimer);
-    const key = holdKey;
-    holdKey = null;
-    if (key) { try { await api('/api/items/' + key + '/hold', { on: false }); } catch { /* it lapses by itself */ } }
-  }
-
-  async function holdTell(on) {
-    if (!on) { await release(); return; }
-    if (!state.key) return;
-    if (holdKey && holdKey !== state.key) await release();
-    const key = state.key;
-    const beat = async () => {
-      if (holdKey !== key) return;
-      try { await api('/api/items/' + key + '/hold', { on: true }); } catch { /* retried at the next beat */ }
-      if (holdKey === key) holdTimer = timers.set(beat, 30000);
-    };
-    if (holdKey === key) return;
-    holdKey = key;
-    await beat();
   }
 
   // ---- the list and the open conversation
@@ -168,11 +128,14 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
 
   // The reply run (web/new/js/runstore.js). Its opens are the store's own; the person's end it.
   const runner = createRunner({ get: () => state, set, now, open: (key) => show(key), close });
+  const hold = createHold({ api, get: () => state, timers });
+  const { copy, putBack, restore, restoreFollowUp, copyLink, copyNumber, copyEmail, dismiss, dismissFollowUp } =
+    createFinish({ api, clipboard, storage, now, get: () => state, set, toast, text, refresh, runner });
   const open = (key, o) => { runner.end(); return show(key, o); };
 
   async function show(key, { followup } = {}) {
     flush();
-    if (holdKey && holdKey !== key) await release();
+    await hold.releaseFor(key);
     const seq = ++openSeq;
     followupId = followup || null;
     picked = null;
@@ -281,71 +244,6 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     } catch (e) { toast(e.message); }
   }
 
-  // ---- finishing with a conversation
-
-  async function copyText(value, thenDone) {
-    try { await clipboard.writeText(value); } catch { toast(COPY_FAILED); return false; }
-    if (thenDone) await thenDone();
-    return true;
-  }
-
-  // In a reply run a copy waits its turn, and the next customer opens once it worked (runstore.js).
-  const copy = () => runner.copy(state.key, copyNow);
-
-  /** Copies the reply in the box, and says whether it was copied. */
-  async function copyNow() {
-    const { key, item } = state;
-    if (!item) return false;
-    const value = text();
-    const fu = /^fu:(\d+)$/.exec(item.anchor || '');
-    return copyText(value, () => {
-      // The server keeps every reply copied, the person's own text beside a suggestion that could not
-      // be written too, and closes a follow-up that was copied (its anchor is fu:<id>). Nothing waits for it.
-      if (item.draft && value.trim()) api('/api/drafts/' + item.draft.id + '/copied', { text: value }).catch(() => { /* the copy itself worked */ });
-      saveDone({ ...state.done, [key]: item.anchor }, { ...state.doneAt, [key]: now() });
-      // A follow-up leaves Follow-ups on the server once it is copied, so it is put back there.
-      const left = blanksIn(value).length;
-      toast(left ? 'Copied, with ' + plural(left, 'blank') + ' still to fill' : 'Copied', fu
-        ? { label: 'Put back in Follow-ups', run: () => restoreFollowUp(Number(fu[1]), key) }
-        : { label: 'Put back in Needs reply', run: () => putBack(key) });
-    });
-  }
-
-  /** The row copied from this conversation goes back in Needs reply (nothing changes on the server). */
-  function putBack(key = state.key) {
-    const done = { ...state.done };
-    const doneAt = { ...state.doneAt };
-    delete done[key];
-    delete doneAt[key];
-    saveDone(done, doneAt);
-  }
-
-  /** Undo for Dismiss: the conversation is waiting again. */
-  async function restore(key = state.key) {
-    if (!key) return;
-    try {
-      const back = await api('/api/items/' + key + '/restore', {});
-      if (back.item && key === state.key) set({ item: back.item });
-      await refresh();
-    } catch (e) { toast(e.message); }
-  }
-
-  /** A follow-up copied or dismissed is due again, and the row copied from it is no longer done. */
-  async function restoreFollowUp(id = state.item && state.item.followUp && state.item.followUp.id, key = state.key) {
-    if (!id) return;
-    try {
-      const back = await api('/api/followups/' + id + '/restore', {});
-      if (back.item && key === state.key) set({ item: back.item });
-      if (state.done[key] !== undefined) putBack(key);
-      await refresh();
-    } catch (e) { toast(e.message); }
-  }
-
-  /** A car's photo, video or document link, from the panel; the customer's number or email address. */
-  const copyLink = (url) => copyText(url, () => toast('Link copied'));
-  const copyNumber = async () => { if (state.item && state.item.phone) await copyText(state.item.phone, () => toast('Number copied')); };
-  const copyEmail = async () => { if (state.item && state.item.email) await copyText(state.item.email, () => toast('Email copied')); };
-
   /** Load older messages: the twenty before the ones shown, put in front. */
   async function older() {
     const { key, item } = state;
@@ -360,35 +258,11 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     } catch (e) { toast(e.message); }
   }
 
-  async function dismiss() {
-    const key = state.key;
-    if (!key) return;
-    try {
-      const out = await api('/api/items/' + key + '/dismiss', {});
-      if (out.item && key === state.key) set({ item: out.item });
-      toast('Dismissed', { label: 'Undo', run: () => restore(key) });
-      await runner.dismissed(key); // in a reply run, the next customer
-      await refresh();
-    } catch (e) { toast(e.message); }
-  }
-
-  async function dismissFollowUp() {
-    const fu = state.item && state.item.followUp;
-    if (!fu) return;
-    const key = state.key;
-    try {
-      const out = await api('/api/followups/' + fu.id + '/dismiss', {});
-      if (out.item && key === state.key) set({ item: out.item });
-      toast('Follow-up dismissed', { label: 'Undo', run: () => restoreFollowUp(fu.id, key) });
-      await refresh();
-    } catch (e) { toast(e.message); }
-  }
-
   return {
     get: () => state,
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     actions: {
-      boot, refresh, setChip, more, open, type, flush, write, tell, holdTell, instead, copy, copyNumber, copyEmail, older, dismiss, dismissFollowUp,
+      boot, refresh, setChip, more, open, type, flush, write, tell, holdTell: hold.holdTell, instead, copy, copyNumber, copyEmail, older, dismiss, dismissFollowUp,
       putBack, restore, restoreFollowUp, copyLink, toast, remember, justOnce, switchLesson,
       startRun: runner.start, skipRun: runner.skip, endRun: runner.end,
       clear: () => type(''),
