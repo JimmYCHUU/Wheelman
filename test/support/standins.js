@@ -157,8 +157,9 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
 
   // The content engine: three GET addresses, and the one reply address its own inbox page uses. A
   // reply is queued (status "queued") for the engine's phone to type into the chat; a test marks it
-  // sent. world.engineRefusesSend makes the engine refuse; world.workerOnline = false means the
-  // phone is offline, so the reply is queued until it is back.
+  // sent. world.engineRefusesSend makes the engine refuse; world.refuseSendOnce (a Set of chat ids)
+  // makes it refuse each one's next reply, once; world.workerOnline = false means the phone is
+  // offline, so the reply is queued until it is back.
   const engine = await listen(async (req, res) => {
     const body = await readBody(req);
     const url = new URL(req.url, 'http://x');
@@ -167,6 +168,7 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
     const reply = url.pathname.match(/^\/inbox\/conversations\/(\d+)\/reply$/);
     if (req.method === 'POST' && reply) {
       if (world.engineRefusesSend) return json(res, 503, { detail: 'the phone is offline' });
+      if (world.refuseSendOnce && world.refuseSendOnce.delete(Number(reply[1]))) return json(res, 503, { detail: 'the phone is offline' });
       const c = chats.get(Number(reply[1]));
       if (!c) return json(res, 404, { error: 'not found' });
       let parsed = {};

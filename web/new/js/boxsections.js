@@ -1,7 +1,9 @@
 // What the message box shows where a section differs from the Dashboard: model.js boxView, plus
-// a write from this page that the AI refused with nothing to show for it. Pure functions (no DOM,
-// no globals) beside model.js, which the tests import in Node. PR 5b adds its sections' states here.
+// a write from this page that the AI refused with nothing to show for it, and a Facebook reply sent.
+// Pure functions (no DOM, no globals) beside model.js, which the tests import in Node. PR 5b adds
+// its sections' states here.
 import { boxView } from './model.js';
+import { clock } from '../../lib/format.js';
 
 const TRY_AGAIN = { label: 'Try again', act: 'retry', main: true };
 
@@ -16,16 +18,35 @@ const sentence = (words) => (/[.!?]$/.test(String(words).trim()) ? String(words)
 const stillAbout = (item, failed) => !!item && !!failed && failed.key === item.key && failed.anchor === item.anchor && failed.state === item.state;
 
 /**
+ * When a Facebook chat was answered from Wheelman, or null: the time Send was pressed
+ * (draft.sentHereAt), else the time of the reply that answered the buyer with Wheelman's suggestion
+ * (answered.at). Once a chat is answered the server shows no suggestion with it, so after a Send
+ * the second is what it says, on every refresh and every later open.
+ */
+function sentAt(item) {
+  if (!item || item.channel !== 'marketplace' || item.state !== 'answered') return null;
+  if (item.draft && item.draft.sentHereAt) return item.draft.sentHereAt;
+  return item.answered && item.answered.how === 'wheelman' ? item.answered.at || null : null;
+}
+
+/**
  * The box's view: boxView's, given its arguments, unless a write from this page ended with no
  * suggestion written, the conversation is still as it was when the write was asked, and no ready
  * suggestion is in the box. Then, where a write could be asked for, the box says why in the
  * server's words with Try again (the suggestion that was here stays to see); text the person typed
  * (or saved) stays in the editor with the reason above it. A failed suggestion is told by boxView,
  * as before. Writing, copied, opted out, dismissed and a follow-up done come first, as in boxView.
+ * A Facebook reply sent says so, quiet and good, with no button (a sent reply cannot be taken
+ * back), after Writing and before everything else.
  */
 export function sectionBox(args = {}) {
   const view = boxView(args);
   const { item, writeFailed } = args;
+  const sent = view.kind === 'writing' ? null : sentAt(item);
+  if (sent) {
+    const typing = item.marketplace && item.marketplace.sending ? " The engine's phone is typing it into the chat." : '';
+    return { kind: 'quiet', tone: 'good', sentence: 'Sent on Facebook at ' + clock(sent) + '.' + typing, button: null, tell: false };
+  }
   const refused = stillAbout(item, writeFailed) && !(item.draft && item.draft.status === 'ready');
   if (!refused) return view;
   if (view.kind === 'editor') return { ...view, failure: sentence(writeFailed.message) + ' Your text is kept.' };

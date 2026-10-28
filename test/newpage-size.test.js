@@ -23,7 +23,7 @@ test("the store's actions are the same after the split", () => {
     'boot', 'refresh', 'setChip', 'more', 'open', 'type', 'flush', 'write', 'tell', 'holdTell', 'instead', 'copy', 'copyNumber',
     'copyEmail', 'older', 'dismiss', 'dismissFollowUp', 'putBack', 'restore', 'restoreFollowUp', 'copyLink', 'toast', 'remember',
     'justOnce', 'switchLesson', 'startRun', 'skipRun', 'endRun', 'clear', 'bringBack', 'override',
-    // Added since the split: another section (PR 5, Task 2).
-    'setSection',
+    // Added since the split: another section (PR 5, Task 2), and Send on Facebook (PR 5, Task 4).
+    'setSection', 'send',
   ].sort());
 });

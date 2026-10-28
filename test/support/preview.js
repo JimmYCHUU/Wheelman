@@ -94,6 +94,9 @@ const pell = ['Pell', 'Invented', '0491 570 191'];
   const alphard = { listing_title: '2019 Toyota Alphard SC', listing_price: '$45,900', car: { post_id: 3, vehicle_id: null, stock_id: '', title: '2019 Toyota Alphard SC', price: '$45,900', listing_url: 'https://www.facebook.com/marketplace/item/468135', image: '', dashboard_url: '' } };
   const ulla = chatRow(507, 'Ulla Invented', 20, now, { ...alphard, last_direction: 'out', pending_outbound: 1, last_outbound_at: new Date(now - 20 * MIN).toISOString() });
   invented.chats.set(507, { row: ulla, messages: [chatMessage(12, 'in', 'phone', 'Does it have a reversing camera?', 22, now), chatMessage(13, 'out', 'agent', 'Yes, it has a reversing camera.', 20, now, 'queued')] });
+  // The first Send to Liam (chat 501) is refused, as if the engine's phone were offline, so the
+  // refusal and Try again can be seen. The stand-in engine takes the reply after that.
+  invented.refuseSendOnce = new Set([501]);
 }
 const standins = await startStandins({ world: invented, ai });
 const { config } = await import('../../src/config.js');

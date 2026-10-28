@@ -1,7 +1,7 @@
 // Finishing with a conversation: Copy and what follows it, the done marks kept in storage, Put back,
 // Dismiss with Undo, and copying a link, number or email. The store passes in what it holds.
 import { blanksIn } from '../../lib/blank.js';
-import { plural } from '../../lib/format.js';
+import { replyChannel, copiedWords } from './channel.js';
 
 const DONE_KEY = 'wheelman.new.done';
 const DONE_AT_KEY = 'wheelman.new.doneAt';
@@ -42,11 +42,12 @@ export function createFinish({ api, clipboard, storage, now, get, set, toast, te
     return copyText(value, () => {
       // The server keeps every reply copied, the person's own text beside a suggestion that could not
       // be written too, and closes a follow-up that was copied (its anchor is fu:<id>). Nothing waits for it.
-      if (item.draft && value.trim()) api('/api/drafts/' + item.draft.id + '/copied', { text: value }).catch(() => { /* the copy itself worked */ });
+      // Marketplace is never learned from: its Copy tells the server no text, as the old page does.
+      const kept = replyChannel(item) === 'facebook' ? '' : value;
+      if (item.draft && value.trim()) api('/api/drafts/' + item.draft.id + '/copied', { text: kept }).catch(() => { /* the copy itself worked */ });
       saveDone({ ...get().done, [key]: item.anchor }, { ...get().doneAt, [key]: now() });
       // A follow-up leaves Follow-ups on the server once it is copied, so it is put back there.
-      const left = blanksIn(value).length;
-      toast(left ? 'Copied, with ' + plural(left, 'blank') + ' still to fill' : 'Copied', fu
+      toast(copiedWords(item, blanksIn(value).length), fu
         ? { label: 'Put back in Follow-ups', run: () => restoreFollowUp(Number(fu[1]), key) }
         : { label: 'Put back in Needs reply', run: () => putBack(key) });
     });

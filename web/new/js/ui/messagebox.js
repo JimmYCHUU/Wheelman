@@ -1,10 +1,12 @@
 // The message box under the conversation, top to bottom: the context line, the suggested reply in
 // its editor, what the checks say about it, other answers ("Instead:"), then the Tell Wheelman line,
-// Clear and the one main button. Nothing is sent from here: a Dashboard reply is copied, then pasted
-// into the dashboard. When there is no suggestion to show, one sentence says why, with one button.
+// Clear and the one main button, its channel's (web/new/js/channel.js). Only a Facebook chat sends
+// from here, and only when Send on Facebook is pressed; every other reply is copied, then pasted
+// where it goes. When there is no suggestion to show, one sentence says why, with one button.
 import { html, useState, useEffect, useRef, useLayoutEffect } from './html.js';
-import { boxText, liveChecks, checkLines, mainAction, insteadOptions, trustLine, wordsLine, saveWords, segments, rememberOffer } from '../model.js';
+import { boxText, liveChecks, checkLines, insteadOptions, trustLine, wordsLine, saveWords, segments, rememberOffer } from '../model.js';
 import { boxViewOf } from '../boxsections.js';
+import { replyChannel, mainFor, sendFor, sendFailedWords } from '../channel.js';
 import { Trust } from './trust.js';
 import { Editor, focusFirstBlank, focusText } from './editor.js';
 import { cutBlock, putBackText } from '../segments.js';
@@ -130,23 +132,33 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
   const live = liveChecks(d, text);
   const lines = checkLines(live);
   const blanks = segments(text).filter((x) => x.kind === 'blank').length;
-  const action = empty ? null : mainAction({ text, checks: live, overridden: state.overridden });
+  const facebook = replyChannel(item) === 'facebook';
+  // A send of this chat's reply on its way, or one that did not go (kept by conversation, so it
+  // outlives closing the chat).
+  const sending = sendFor(item, state.sending[state.key]);
+  const action = empty ? null : mainFor({ item, text, checks: live, overridden: state.overridden, sending });
   const options = insteadOptions(item);
 
   const fill = () => focusFirstBlank(editor.current);
+  // Send on Facebook: a blank still in the text sends nothing, and the caret goes to it.
+  const send = async () => { if ((await actions.send()) === 'fill') fill(); };
   const run = () => {
-    if (!action || action.kind === 'blocked') return;
+    if (!action || action.kind === 'blocked' || action.kind === 'sending') return;
     if (action.kind === 'fill') fill();
+    else if (action.kind === 'send') send();
     else actions.copy({});
   };
   // Answered elsewhere, the text kept: no reply is needed, so no copy is the main button. In a reply
   // run Next is, and Ctrl+Enter with it: the run moves on and counts this one as answered elsewhere.
+  // Otherwise Ctrl+Enter copies (or goes to a blank) and never sends: Send needs its button.
   const next = boxIsNext(state, view) ? () => actions.skipRun() : null;
-  main.current = view.elsewhere ? next : run;
-  // Copy anyway: the person's own decision. Offered only while no blank is empty, so it copies.
-  const copyAnyway = () => {
+  main.current = view.elsewhere ? next : action && action.byKey ? run : null;
+  // Copy anyway, or Send anyway on Facebook: the person's own decision. Offered only while no blank
+  // is empty, so it copies or sends.
+  const anyway = () => {
     actions.override();
-    actions.copy({});
+    if (facebook) send();
+    else actions.copy({});
   };
   // After Clear or Bring back the button pressed is gone, so the caret goes into the text, once the
   // new text is on screen.
@@ -188,6 +200,7 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
       ${view.failure ? html`<div class="context bad" role="status"><span>${view.failure}</span>
         <button type="button" class="btn small" onClick=${() => actions.write({ instruction: (item.draft && item.draft.instruction) || undefined })}>Try again</button>
       </div>` : null}
+      ${sending && sending.state === 'failed' ? html`<div class="context bad" role="alert"><span>${sendFailedWords(sending.error)}</span></div>` : null}
       <div class="box-head">
         <span class="box-label"><b>Suggested reply</b> · not sent</span>
         ${note ? html`<span class=${'save-note' + (state.save.state === 'failed' ? ' bad' : '')}>${note}</span>` : null}
@@ -200,7 +213,7 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
       ${empty ? null : html`<div class="checks">
         ${trust ? html`<${Trust} line=${trust} id=${d ? d.id : 'none'} key=${d ? d.id : 'none'} />` : null}
         ${lines.fails.map((m, i) => html`<p class="check bad" key=${'f' + i}><span>${m}</span>
-          ${state.overridden || blanks ? null : html`<button type="button" class="btn small" onClick=${copyAnyway}>Copy anyway</button>`}</p>`)}
+          ${state.overridden || blanks ? null : html`<button type="button" class="btn small" onClick=${anyway}>${facebook ? 'Send anyway' : 'Copy anyway'}</button>`}</p>`)}
         ${[...lines.warns, ...lines.inputs].map((m, i) => html`<p class="check warn" key=${'w' + i}>${m}</p>`)}
       </div>`}
       ${options.length ? html`<div class="instead"><span>Instead:</span>
@@ -213,7 +226,8 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
             ? (d && d.reply ? html`<button type="button" class="btn" onClick=${bringBack}>Bring back the suggestion</button>` : null)
             : html`<button type="button" class="btn quiet" onClick=${clear}>Clear</button>`}
           ${action && action.secondary ? html`<button type="button" class="btn quiet" onClick=${() => actions.copy({ withBlanks: true })}>${action.secondary}</button>` : null}
-          ${action ? html`<button type="button" class=${view.elsewhere ? 'btn' : 'btn main'} disabled=${action.kind === 'blocked'} title=${view.elsewhere || action.kind === 'blocked' ? null : action.label + ' (Ctrl+Enter)'} onClick=${run}>${action.label}</button>` : null}
+          ${action ? html`<button type="button" class=${view.elsewhere ? 'btn' : 'btn main'} disabled=${action.kind === 'blocked' || action.kind === 'sending'}
+            title=${view.elsewhere || !action.byKey || action.kind === 'blocked' ? null : action.label + ' (Ctrl+Enter)'} onClick=${run}>${action.label}</button>` : null}
           ${next ? html`<button type="button" class="btn main" title="Next (Ctrl+Enter)" onClick=${next}>Next</button>` : null}
         </div>
       </div>

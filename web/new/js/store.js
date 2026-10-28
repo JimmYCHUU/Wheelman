@@ -7,6 +7,7 @@ import { createRemember } from './remember.js';
 import { createRunner } from './runstore.js';
 import { createFinish, readDone } from './finish.js';
 import { createHold } from './hold.js';
+import { createSender } from './sender.js';
 import { validChip, sectionOff, listFor } from './sections.js';
 import { writesOnOpen } from '../../lib/onopen.js';
 
@@ -19,7 +20,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     section: 'dashboard', chip: 'waiting', rows: [], total: 0, counts: {}, sections: {}, unread: {}, listState: 'loading', listError: '',
     limit: 20, key: null, item: null, itemState: 'idle', typed: null, save: { state: 'idle', at: null },
     overridden: false, ...readDone(storage), status: null, toast: null, context: null,
-    writing: null, writeFailed: null, remembered: [], closedNotes: [], run: null, runSummary: null, runMore: 0, runSkipped: 0,
+    writing: null, writeFailed: null, sending: {}, remembered: [], closedNotes: [], run: null, runSummary: null, runMore: 0, runSkipped: 0,
   };
   const listeners = new Set();
   const draftId = (item) => (item && item.draft ? item.draft.id : null);
@@ -132,6 +133,8 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
   const hold = createHold({ api, get: () => state, timers });
   const { copy, putBack, restore, restoreFollowUp, copyLink, copyNumber, copyEmail, dismiss, dismissFollowUp } =
     createFinish({ api, clipboard, storage, now, get: () => state, set, toast, text, refresh, runner });
+  // Send on Facebook (web/new/js/sender.js): only when its button is pressed, never by a key.
+  const { send } = createSender({ api, get: () => state, set, toast, text, refresh });
   const open = (key, o) => { runner.end(); return show(key, o); };
 
   async function show(key, { followup } = {}) {
@@ -281,7 +284,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     get: () => state,
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     actions: {
-      boot, refresh, setSection, setChip, more, open, type, flush, write, tell, holdTell: hold.holdTell, instead, copy, copyNumber, copyEmail, older, dismiss, dismissFollowUp,
+      boot, refresh, setSection, setChip, more, open, type, flush, write, tell, holdTell: hold.holdTell, instead, copy, send, copyNumber, copyEmail, older, dismiss, dismissFollowUp,
       putBack, restore, restoreFollowUp, copyLink, toast, remember, justOnce, switchLesson,
       startRun: runner.start, skipRun: runner.skip, endRun: runner.end,
       clear: () => type(''),
