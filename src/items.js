@@ -1,6 +1,6 @@
 // Builds the list of "work items": customers who have said something and are waiting for a reply.
 
-import { openDb, getLead, getLeadByConversation, getLeadByPhone, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor, getMailThread, getMailMessages, listMailThreads, itemRuling, itemMove, movedKeys, getAuctionOrder, liveOrderCustomers, getFollowUp, openFollowUpFor } from './db.js';
+import { openDb, isDismissed, oldRowsStamp, dashboardCandidates, getLead, getLeadByConversation, getLeadByPhone, getConversation, getMessages, getVehicleByStock, getMpConversation, getMpMessages, getOrder, orderNotes, getPhoneThread, getPhoneMessages, listPhoneThreads, phoneMessagesFor, getMailThread, getMailMessages, listMailThreads, itemRuling, itemMove, movedKeys, getAuctionOrder, liveOrderCustomers, getFollowUp, openFollowUpFor } from './db.js';
 import { orderKey, orderMarks, orderStatus, orderRow, occasionFor, listOrderRows, MESSAGES } from './orders.js';
 import { sameMessage, windowFor } from './phone.js';
 import { phoneKeys } from './normalize.js';
@@ -431,7 +431,7 @@ function asksToSeeCar(text, vehicles) {
 }
 
 /** Everything known about one customer, and whether they are waiting on us. */
-export function buildItem({ conversationId = null, leadId = null }) {
+export function buildItem({ conversationId = null, leadId = null, autoDraftMaxAgeHours }) {
   const conversation = conversationId ? getConversation(conversationId) : null;
   let lead = leadId ? getLead(leadId) : null;
   if (!lead && conversation?.lead_id) lead = getLead(conversation.lead_id);
@@ -472,7 +472,7 @@ export function buildItem({ conversationId = null, leadId = null }) {
     conversation,
     conversationId: convId,
     phone: conversation?.phone || lead?.phone || '',
-  }, timeline);
+  }, timeline, autoDraftMaxAgeHours === undefined ? {} : { autoDraftMaxAgeHours });
 
   // A sender on the ignore list is kept, never listed.
   if (isIgnoredSender(conversation?.customer_name) || isIgnoredSender(`${lead?.first_name || ''} ${lead?.last_name || ''}`)) {
@@ -703,11 +703,11 @@ export function buildOrderItem(id, { message = '', now = Date.now() } = {}) {
  * through finishItem like any text conversation; with no customer record nothing is written for it
  * unasked, as for any unknown number. A short code or a sender id is a notice, not a customer.
  */
-export function buildPhoneItem(id, { now = Date.now() } = {}) {
+export function buildPhoneItem(id, { now = Date.now(), autoDraftMaxAgeHours } = {}) {
   const t = getPhoneThread(Number(id));
   if (!t || !config.phone.switchedOn) return null;
-  if (t.conversation_id) return buildItem({ conversationId: t.conversation_id });
-  if (t.lead_id) return buildItem({ leadId: t.lead_id });
+  if (t.conversation_id) return buildItem({ conversationId: t.conversation_id, autoDraftMaxAgeHours });
+  if (t.lead_id) return buildItem({ leadId: t.lead_id, autoDraftMaxAgeHours });
   const timeline = getPhoneMessages(t.id).map(phoneEntry).filter((e) => e.text || e.media);
   if (!timeline.length) return null;
   const ignored = isIgnoredSender(t.name);
@@ -720,7 +720,7 @@ export function buildPhoneItem(id, { now = Date.now() } = {}) {
   const item = finishItem({
     itemKey: `ph:${t.id}`, channel: 'sms', lead, hasLeadRecord: false,
     conversation: { phone, customer_name: t.kind === 'contact' ? t.name : '' }, conversationId: null, phone,
-  }, timeline, { now });
+  }, timeline, autoDraftMaxAgeHours === undefined ? { now } : { now, autoDraftMaxAgeHours });
   if (ignored) {
     item.state = 'other';
     item.note = 'A sender on the ignore list (IGNORED_SENDERS in the .env file), not a customer.';
@@ -811,8 +811,9 @@ export function itemFromKey(key, opts = {}) {
   if (!m) return null;
   const id = Number(m[2]);
   if (m[1] === 'ao') return buildOrderItem(id, opts);
-  const item = m[1] === 'mp' ? buildMarketplaceItem(id) : m[1] === 'ph' ? buildPhoneItem(id) : m[1] === 'em' ? buildMailItem(id)
-    : buildItem(m[1] === 'c' ? { conversationId: id } : { leadId: id });
+  const age = opts.autoDraftMaxAgeHours; // Dashboard conversations only: the worker lifts the age gate for the ones it writes ahead
+  const item = m[1] === 'mp' ? buildMarketplaceItem(id) : m[1] === 'ph' ? buildPhoneItem(id, { autoDraftMaxAgeHours: age }) : m[1] === 'em' ? buildMailItem(id)
+    : buildItem(m[1] === 'c' ? { conversationId: id, autoDraftMaxAgeHours: age } : { leadId: id, autoDraftMaxAgeHours: age });
   // The template picked from "Which message?" ('' is the reply to what they wrote); left out, none was picked.
   if (item && typeof opts.message === 'string') item.templatePick = opts.message;
   // A follow-up in hand (opened from the Follow-ups list): its draft lives under its own anchor and
@@ -924,3 +925,44 @@ export function listItems({ maxAgeHours = config.draftMaxAgeHours, olderThanHour
   items.sort(newest);
   return items.slice(0, limit);
 }
+
+/**
+ * The keys of the Dashboard conversations the Waiting list shows first: waiting on us, not set
+ * aside, newest message first, the same exclusions as the list (sectionRows in server.js, which
+ * the worker cannot import without a cycle). Candidates come from the database newest first and
+ * are built in pages, only until the next page cannot hold anything newer than the count-th one
+ * found, and never more than `cap` in one pass. The answer is kept until the database changes in a
+ * way that touches a conversation (oldRowsStamp), so an unchanged database costs no rebuild.
+ * newestWaitingKeys.stats says how many were built by the last uncached pass and how often the cache served.
+ */
+const waitingCache = { stamp: null, count: 0, cap: 0, keys: [] };
+export function newestWaitingKeys(count = 10, { cap = 300, pageSize = 50 } = {}) {
+  const stamp = oldRowsStamp();
+  const stats = newestWaitingKeys.stats;
+  if (waitingCache.stamp === stamp && waitingCache.count === count && waitingCache.cap === cap) { stats.hits++; return [...waitingCache.keys]; }
+  const candidates = dashboardCandidates();
+  const found = [];
+  const seen = new Set();
+  const newest = (a, b) => (b.lastInboundAt || b.lastActivityAt) - (a.lastInboundAt || a.lastActivityAt);
+  let built = 0;
+  for (let at = 0; at < candidates.length && built < cap; at += pageSize) {
+    for (const c of candidates.slice(at, Math.min(at + pageSize, at + (cap - built)))) {
+      built++;
+      const item = itemFromKey(c.key);
+      if (!item || seen.has(item.itemKey)) continue;
+      seen.add(item.itemKey);
+      if (item.section !== 'dashboard' || item.underOrder || item.state !== 'awaiting' || isDismissed(item.itemKey, item.anchorKey)) continue;
+      found.push(item);
+    }
+    found.sort(newest);
+    const next = candidates[at + pageSize];
+    // Nothing further down can be newer than what is already the count-th found.
+    if (found.length >= count && (!next || next.t <= (found[count - 1].lastInboundAt || found[count - 1].lastActivityAt))) break;
+  }
+  const keys = found.slice(0, count).map((i) => i.itemKey);
+  Object.assign(waitingCache, { stamp: oldRowsStamp(), count, cap, keys });
+  stats.built = built;
+  stats.misses++;
+  return [...keys];
+}
+newestWaitingKeys.stats = { built: 0, hits: 0, misses: 0 };

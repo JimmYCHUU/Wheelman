@@ -15,6 +15,7 @@ import { availability } from './normalize.js';
 import { firstNameOf, isPlaceholderName } from './redact.js';
 import { signedName } from './signature.js';
 import { rowMatches } from '../web/lib/search.js';
+import { searchAll } from './search.js';
 import { RUNG_LABELS } from './selling.js';
 import { teachesHere } from './learn.js';
 import { validateMailReport, storeMailThread } from './mail.js';
@@ -27,12 +28,13 @@ import { vehicleMedia, vehiclePicture, findCars, carSummary, VIDEO_HOSTS } from 
 import { logLine } from './log.js';
 import { businessFactsForPrompt, loadBusinessFacts } from './knowledge.js';
 import * as worker from './worker.js';
-import { onCopied, onRated, onApproved, onAdvice, onEdited } from './learn.js';
+import { onCopied, onRated, onApproved, onAdvice, onEdited, onRemember, canLearnFrom } from './learn.js';
 import { displayNameFor } from './people.js';
+import { answeredBy, lastCustomerEntry } from './answered.js';
 import { reservedByAnother } from './deal.js';
 import { wantedFrom, enquiryStage } from './imports.js';
 import { SECTIONS, sectionOn, movesFor, onImportsList } from './placement.js';
-import { learnedStats } from './db.js';
+import { learnedStats, listLessons, switchLesson } from './db.js';
 import { validateReport, storePhoneReport } from './phone.js';
 import { sendReply, fetchConversation, normalizeMpMessage, tagMarketplaceLinks } from './marketplace.js';
 import { storeMpConversation } from './sync.js';
@@ -150,6 +152,13 @@ function draftOf(item) {
     needsHuman: (draft.needsHuman || []).filter((n) => n && n.marker && n.reason).map((n) => ({ marker: String(n.marker), reason: String(n.reason) })),
     // What the reply is for: the one next step it offers, and where the customer is on the way to a sale.
     nextStep: draft.next_step || '', rung: draft.rung || '', rungLabel: RUNG_LABELS[draft.rung] || '',
+    // The reply's parts: the AI's words and each block code added, with its label and why (src/parts.js).
+    parts: draft.context?.parts || null,
+    // Each figure and link in the AI's part and in the blocks, with where it came from (traceFacts in src/checks.js).
+    facts: draft.context?.facts || [],
+    // The owner's lessons the request carried ({ adviceId, n, do, scope, at }), and which of code's rules shaped the reply.
+    lessonsApplied: draft.context?.lessons || [],
+    rules: draft.context?.rules || null,
   } : null;
 }
 
@@ -165,9 +174,19 @@ function flagLevel(draft) {
 /** A follow-up as the page sees it: why it is due, and what became of it ('' while it is open). */
 const followUpOf = (r) => ({ id: r.id, kind: r.kind, reason: r.reason, dueAt: r.due_at, done: r.done_how || '', template: r.template });
 
+/**
+ * How a conversation was answered ({ how, by, at }), or null while it is not answered. The
+ * suggestion compared is the one for the customer message our reply answered.
+ */
+function answeredOf(item) {
+  if (item.state !== 'answered') return null;
+  const customer = lastCustomerEntry(item.timeline);
+  return answeredBy(item.timeline, customer ? latestDraft(item.itemKey, customer.key) : null, displayNameFor);
+}
+
 /** One row in the conversation list. Deliberately small. */
 function summary(item) {
-  if (item.order) return { ...item.orderRow, anchor: item.anchorKey, flag: flagLevel(draftOf(item)) };
+  if (item.order) return { ...item.orderRow, anchor: item.anchorKey, answered: null, flag: flagLevel(draftOf(item)) };
   const draft = draftOf(item);
   const last = item.timeline[item.timeline.length - 1];
   const lastShown = [...item.timeline].reverse().find((e) => !e.internal) || last;
@@ -182,6 +201,8 @@ function summary(item) {
     replyComing: !!item.marketplace?.replyComing,
     anchor: item.anchorKey,
     state: item.state,
+    // Who answered it, when it is answered: 'wheelman', 'auto', 'phone' or 'dashboard'.
+    answered: answeredOf(item),
     // Seen only on the phone: the dashboard has no conversation for this number.
     phoneOnly: !!item.phoneOnly,
     dismissed: isDismissed(item.itemKey, item.anchorKey),
@@ -338,7 +359,11 @@ function present(item) {
   const draft = draftOf(item);
   return {
     ...summary(item),
+    // The situation's key (SITUATIONS in src/situations.js) beside its label: the new page's Remember scope.
+    situationKey: item.situation.primary,
     note: item.note,
+    // The sale stage, when there is one: the new page's stage line reads it.
+    deal: item.deal ? { stage: item.deal.stage, stageText: item.deal.stageText, source: item.deal.source } : null,
     channel: item.channel,
     marketplace: marketplaceOf(item),
     mail: mailOf(item),
@@ -687,6 +712,17 @@ async function api(req, res, url) {
     return send(res, 200, { item: present(item) });
   }
 
+  // One search across every section that is on, the stock list and the words in messages.
+  if (req.method === 'GET' && p === '/api/search') {
+    // Auction's All is To do and In progress only: its Finished orders are found too.
+    const rowsOf = (s) => {
+      if (!sectionOn(s)) return null;
+      const r = sectionRows(s);
+      return s === 'auction' ? [...r.waiting, ...r.quiet, ...r.other] : r.all;
+    };
+    return send(res, 200, searchAll(url.searchParams.get('q'), { rowsOf }));
+  }
+
   // Find a car: cars from the stored stock list matching a stock number or words of the title.
   if (req.method === 'GET' && p === '/api/vehicles') {
     return send(res, 200, { cars: findCars(String(url.searchParams.get('q') || '').slice(0, 60)) });
@@ -983,6 +1019,30 @@ async function api(req, res, url) {
     return send(res, 200, { item: present(itemFromKey(draft.item_key) || item), ok: next.status === 'ready', error: next.error || '', learned: true, lessons: result.lessons || [], pending: !!result.pending });
   }
 
+  // "Remember": the instruction this suggestion was written from becomes a lesson for every later
+  // reply of its kind. "Just this once" is no call at all: nothing is stored.
+  m = p.match(/^\/api\/drafts\/(\d+)\/remember$/);
+  if (req.method === 'POST' && m) {
+    const body = await readBody(req);
+    const draft = getDraft(Number(m[1]));
+    if (!draft) return send(res, 404, { error: 'Suggestion not found.' });
+    // A Marketplace chat, a phone-only text or an auction order is refused without being looked up.
+    const out = onRemember(canLearnFrom(draft.item_key) ? itemFromKey(draft.item_key) : null, draft.id, body.scope);
+    // wasOn: the lesson was already there and switched on, so this press changed nothing Undo could take back.
+    return out.error ? send(res, out.status || 400, { error: out.error }) : send(res, 200, { lesson: out.lesson, wasOn: out.wasOn });
+  }
+
+  // Every lesson, newest first, each with its kind, channel, scope, date, off switch and use.
+  if (req.method === 'GET' && p === '/api/lessons') return send(res, 200, { lessons: listLessons() });
+
+  m = p.match(/^\/api\/lessons\/(\d+)\/switch$/);
+  if (req.method === 'POST' && m) {
+    const body = await readBody(req);
+    if (typeof body.on !== 'boolean') return send(res, 400, { error: 'Say whether to switch the lesson on or off.' });
+    const lesson = switchLesson(Number(m[1]), body.on);
+    return lesson ? send(res, 200, { lesson }) : send(res, 404, { error: 'That lesson was not found.' });
+  }
+
   // The Review page's runs: real conversations written two ways, and the owner's votes. The runs
   // hold real customer text, so they are never served through the team link.
   if (p === '/api/review' || p.startsWith('/api/review/')) {
@@ -1003,7 +1063,8 @@ async function api(req, res, url) {
 
 function serveStatic(res, url) {
   if (url.pathname === '/favicon.ico') { res.writeHead(204, { 'cache-control': 'max-age=86400' }); return res.end(); }
-  const rel = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\/+/, '');
+  // A path ending in / serves that folder's index.html (/ itself, and /new/ for the new page).
+  const rel = url.pathname.replace(/^\/+/, '') + (url.pathname.endsWith('/') ? 'index.html' : '');
   const file = path.resolve(config.webDir, rel);
   if (!file.startsWith(path.resolve(config.webDir) + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return send(res, 404, 'Not found', 'text/plain; charset=utf-8');
   send(res, 200, fs.readFileSync(file), TYPES[path.extname(file)] || 'application/octet-stream');
@@ -1076,6 +1137,7 @@ export function startServer() {
       }
       if (url.pathname.startsWith('/api/')) return await api(req, res, url);
       if (req.method !== 'GET') return send(res, 405, { error: 'Not allowed' });
+      if (url.pathname === '/new') { res.writeHead(303, { location: '/new/', 'cache-control': 'no-store' }); return res.end(); }
       return serveStatic(res, url);
     } catch (e) {
       send(res, 500, { error: e.message });

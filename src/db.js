@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { config } from './config.js';
-import { availability } from './normalize.js';
+import { availability, phoneKeys } from './normalize.js';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS leads (
@@ -338,6 +338,12 @@ export function openDb(file = config.dbPath) {
   ensureColumn(db, 'learned', 'channel', "TEXT NOT NULL DEFAULT 'sms'");
   ensureColumn(db, 'advice', 'channel', "TEXT NOT NULL DEFAULT 'sms'");
   ensureColumn(db, 'advice', 'lessons_json', 'TEXT');
+  // A lesson's kind ('note': taken from Could be better; 'remember': kept from an instruction), its
+  // off switch, and how often and when it last went into a request.
+  ensureColumn(db, 'advice', 'kind', "TEXT DEFAULT 'note'");
+  ensureColumn(db, 'advice', 'off', 'INTEGER DEFAULT 0');
+  ensureColumn(db, 'advice', 'used_count', 'INTEGER DEFAULT 0');
+  ensureColumn(db, 'advice', 'last_used_at', 'INTEGER');
   ensureColumn(db, 'leads', 'status_history_json', 'TEXT');
   ensureColumn(db, 'leads', 'signals_json', 'TEXT');
   ensureColumn(db, 'conversations', 'lead_platform', 'TEXT');
@@ -430,10 +436,41 @@ export function oldRowsStamp() {
       (SELECT COUNT(*) || ':' || IFNULL(MAX(at), 0) FROM item_moves) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(changed_at), 0) || ':' || IFNULL(SUM(gone_at IS NULL), 0) FROM auction_orders) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(changed_at), 0) || ':' || IFNULL(SUM(conversation_id), 0) FROM phone_threads) || '/' ||
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(id), 0) FROM phone_messages) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(last_message_at), 0) FROM mp_conversations) || '/' ||
       (SELECT COUNT(*) FROM mp_messages) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(changed_at), 0) FROM mail_threads) || '/' ||
       (SELECT COUNT(*) || ':' || IFNULL(MAX(updated_at), 0) FROM mail_messages) AS stamp`).get().stamp;
+}
+
+/**
+ * Every key a Dashboard conversation could have, newest activity first, from three quick reads of
+ * ids and times (no conversation is built). The time is a guide for paging, not the final order.
+ */
+export function dashboardCandidates() {
+  // A text the dashboard missed, read by the phone add-on, joins a conversation's timeline by its
+  // thread link or its number, so it can be newer than the conversation's own latest_at.
+  const byConv = new Map();
+  const byKey = new Map();
+  if (config.phone.switchedOn) {
+    for (const r of stmt("SELECT conversation_id AS cid, phone_key AS pk, latest_at AS t FROM phone_threads WHERE conversation_id IS NOT NULL OR phone_key != ''").all()) {
+      if (r.cid) byConv.set(r.cid, Math.max(byConv.get(r.cid) || 0, r.t || 0));
+      if (r.pk) byKey.set(r.pk, Math.max(byKey.get(r.pk) || 0, r.t || 0));
+    }
+  }
+  const best = new Map();
+  const note = (key, t, cid, ...phones) => {
+    let latest = t || 0;
+    if (cid) latest = Math.max(latest, byConv.get(cid) || 0);
+    if (byKey.size) for (const k of phoneKeys(...phones)) latest = Math.max(latest, byKey.get(k) || 0);
+    best.set(key, Math.max(best.get(key) || 0, latest));
+  };
+  for (const r of stmt('SELECT id, phone, latest_at AS t FROM conversations').all()) note(`c:${r.id}`, r.t, r.id, r.phone);
+  for (const r of stmt('SELECT id, conversation_id AS cid, phone, MAX(IFNULL(lead_at, 0), IFNULL(updated_at, 0)) AS t FROM leads').all()) note(r.cid ? `c:${r.cid}` : `l:${r.id}`, r.t, r.cid, r.phone);
+  for (const r of stmt('SELECT id, latest_at AS t FROM phone_threads WHERE conversation_id IS NULL AND lead_id IS NULL').all()) best.set(`ph:${r.id}`, r.t || 0);
+  // Conversations moved here from another section: few, and their activity is not known yet.
+  for (const key of movedKeys('dashboard')) best.set(key, Infinity);
+  return [...best].map(([key, t]) => ({ key, t })).sort((a, b) => b.t - a.t);
 }
 
 export function getMeta(key, fallback = null) {
@@ -1208,6 +1245,55 @@ export function allAdvice(limit = 300) {
 
 export function deleteAdvice(id) {
   stmt('DELETE FROM advice WHERE id = ?').run(id);
+}
+
+/**
+ * Remember: an instruction the owner keeps as a lesson for every later reply of its kind (scope) in
+ * its channel. It belongs to no suggestion (draft_id is null), so a Could be better note on the same
+ * suggestion never replaces it, nor it the note. The same instruction remembered again for the same
+ * kind of reply keeps the one lesson, switched on and dated afresh.
+ */
+export function insertRemember({ itemKey, scope, instruction, situations = [], at = Date.now() }) {
+  if (!TEACHES.test(String(itemKey || ''))) throw new Error('Refused: only dashboard conversations and import emails can be learned from.');
+  const channel = channelOfKey(itemKey);
+  const same = rememberedAlready({ itemKey, scope, instruction });
+  if (same) { stmt('UPDATE advice SET off = 0, at = ? WHERE id = ?').run(at, same.id); return same.id; }
+  return Number(stmt("INSERT INTO advice(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, note, lessons_json, at, channel, kind) VALUES(NULL, ?, ?, 0, '', '', ?, ?, ?, ?, 'remember')")
+    .run(itemKey, JSON.stringify(situations || []), instruction, JSON.stringify([{ scope, when: '', do: instruction, internal: false }]), at, channel).lastInsertRowid);
+}
+
+/** The Remember lesson that already holds this instruction for this kind of reply in this channel: { id, off }, or null. */
+export function rememberedAlready({ itemKey, scope, instruction }) {
+  const row = stmt("SELECT id, lessons_json, off FROM advice WHERE kind = 'remember' AND channel = ? AND note = ?").all(channelOfKey(itemKey), instruction)
+    .find((r) => JSON.parse(r.lessons_json || '[]')[0]?.scope === scope);
+  return row ? { id: Number(row.id), off: !!row.off } : null;
+}
+
+/** The lessons one advice row holds, as the page lists them. A note gives up to three; they share its switch and its count. */
+const lessonsOfRow = (r) => (r?.lessons_json ? JSON.parse(r.lessons_json) : []).map((l, n) => ({
+  id: Number(r.id), n, kind: r.kind || 'note', channel: r.channel || 'sms', scope: l.scope, do: l.do,
+  at: r.at, off: !!r.off, usedCount: r.used_count || 0, lastUsedAt: r.last_used_at || null,
+}));
+
+/** Every lesson, newest first: each Remember, and each lesson taken from a Could be better note. Notes still waiting for theirs are not lessons yet. */
+export function listLessons(limit = 300) {
+  return stmt('SELECT * FROM advice WHERE lessons_json IS NOT NULL ORDER BY at DESC, id DESC LIMIT ?').all(limit).flatMap(lessonsOfRow);
+}
+
+/** One advice row's (first) lesson, or null. */
+export const getLesson = (id) => lessonsOfRow(stmt('SELECT * FROM advice WHERE id = ?').get(id))[0] || null;
+
+/** Switches a lesson on or off (every lesson of its note with it). Returns the lesson, or null when there is none. */
+export function switchLesson(id, on) {
+  const lesson = getLesson(id);
+  if (!lesson) return null;
+  stmt('UPDATE advice SET off = ? WHERE id = ?').run(on ? 0 : 1, id);
+  return { ...lesson, off: !on };
+}
+
+/** These lessons went into the request for a suggestion that was kept: each advice row counted once. */
+export function countLessonUse(ids, at = Date.now()) {
+  for (const id of new Set(ids || [])) stmt('UPDATE advice SET used_count = IFNULL(used_count, 0) + 1, last_used_at = ? WHERE id = ?').run(at, id);
 }
 
 // ---- AI usage counter ----------------------------------------------------
