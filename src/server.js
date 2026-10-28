@@ -345,13 +345,16 @@ function presentOrder(item) {
  * "Which message?" for a conversation that is not an auction order: the templates that fit it, and
  * the one in the box even when it no longer fits (picked before the customer wrote again, or the
  * car sold since), so the list always says what the box holds. In Imports, a conversation that is
- * not an email has the enquiry messages it had in Auction first, the due one marked best, then the
- * Imports templates; an email has only its own.
+ * not an email has the enquiry messages it had in Auction first, then the Imports templates; an
+ * email has only its own. One mark of best in a list: the enquiry message that is due, else the
+ * Imports template that fits best.
  */
 function offeredTemplates(item, shown) {
   const imports = item.section === 'importquery';
+  const asks = imports ? enquiryTemplates(item) : [];
+  const due = asks.some((t) => t.due);
   const list = item.section === 'auction' ? enquiryTemplates(item)
-    : imports ? [...enquiryTemplates(item).map((t) => ({ ...t, best: t.due })), ...templatesFor(item)]
+    : imports ? [...asks.map((t) => ({ ...t, best: t.due })), ...templatesFor(item).map((t) => (due ? { ...t, best: false } : t))]
       : templatesFor(item);
   if (!shown || item.state === 'optout' || list.some((t) => t.id === shown)) return list;
   const label = item.section === 'auction' ? MESSAGES[shown] : imports ? MESSAGES[shown] || sectionTemplateLabel(item, shown) : sectionTemplateLabel(item, shown);

@@ -179,6 +179,22 @@ test('an email in Imports keeps its own three messages and is not offered the au
   assert.ok(row && !('stage' in row), 'an email row has no enquiry stage');
 });
 
+test('an Imports text with a due enquiry message has one best mark', async () => {
+  // They said what they want: a car to offer is due, and it is the one best mark in the list.
+  lead(9409, 'Quill', 'Hi, could you import a Honda N-Box for me? 2019 or newer, under 40,000 km.', { platform: 'IMPORTS', source: 'Import', phone: '0491 570 149' });
+  let { item } = await get('/api/items/l:9409');
+  assert.deepEqual(item.templates.filter((t) => t.best).map((t) => t.id), ['lot_offer']);
+  assert.ok(item.templates.some((t) => EMAIL_MESSAGES.includes(t.id)), 'the Imports templates are still offered');
+  assert.deepEqual(insteadOptions(item).map((o) => o.label), ['Car found, full', 'Thanks, with estimate and deposit', 'Car found, short']);
+
+  // Nothing due yet (they have not said what they want): the Imports template that fits best keeps its mark, alone.
+  lead(9410, 'Rue', 'Hi, could you import a Honda N-Box for me? What would it cost?', { platform: 'IMPORTS', source: 'Import', phone: '0491 570 151' });
+  ({ item } = await get('/api/items/l:9410'));
+  assert.ok(!item.templates.some((t) => t.due));
+  const best = item.templates.filter((t) => t.best);
+  assert.ok(best.length === 1 && EMAIL_MESSAGES.includes(best[0].id), JSON.stringify(item.templates));
+});
+
 // ---- answered the auction way --------------------------------------------------------------------
 
 test('moving a conversation into Imports searches the auction once, as a move into Auction did', async () => {
@@ -234,6 +250,40 @@ test('a conversation from the Imports list teaches nothing in Imports, and Remem
   await post('/api/items/c:99406/move', { section: 'importquery' });
   await settled('c:99406');
   assert.deepEqual([(await get('/api/items/c:99406')).item.section, (await get('/api/items/c:99406')).item.teaches], ['importquery', true]);
+});
+
+test('an Imports-list lead teaches nothing in Imports, and teaches again once moved to Dashboard', async () => {
+  lead(9408, 'Pim', 'Hi, could you import a Toyota Alphard Welcab for me?', { platform: 'IMPORTS', source: 'Import', conversationId: 99408, phone: '0491 570 148' });
+  conversation(99408, 9408, 'Pim', '0491 570 148', [['IN', 'Hi, could you import a Toyota Alphard Welcab for me?', 20 * MIN]], 'IMPORTS');
+  let shown = (await get('/api/items/c:99408')).item;
+  assert.deepEqual([shown.section, shown.teaches], ['importquery', false]);
+  const inImports = await drafter.draftFor(items.itemFromKey('c:99408'), { instruction: 'say we will look this week' });
+  assert.equal(inImports.context.section, 'importquery');
+
+  // Moved to Dashboard: it teaches there.
+  const out = await post('/api/items/c:99408/move', { section: 'dashboard' });
+  assert.deepEqual([out.json.item.section, out.json.item.teaches], ['dashboard', true]);
+  await settled('c:99408');
+  // What was written while it was in Imports still teaches nothing, as what was written in Auction does not.
+  let copied = await post(`/api/drafts/${inImports.id}/copied`, { text: 'Hello Pim, we will look for one this week.' });
+  assert.deepEqual([copied.json.learned, db.getLearned(inImports.id)], [false, null]);
+  const refused = await post(`/api/drafts/${inImports.id}/remember`, { scope: 'any' });
+  assert.deepEqual([refused.status, refused.json.error], [400, "Conversations from the dashboard's Imports list do not teach Wheelman."]);
+
+  // Written in Dashboard: copying it teaches, and Remember is offered and taken.
+  const d = await drafter.draftFor(items.itemFromKey('c:99408'), { instruction: 'say we can usually find one within a month' });
+  assert.equal(d.context.section, 'dashboard');
+  copied = await post(`/api/drafts/${d.id}/copied`, { text: 'Hello Pim, yes, we can usually find one within a month. When would suit you to talk it through?' });
+  assert.equal(copied.json.learned, true, JSON.stringify(copied.json));
+  shown = (await get('/api/items/c:99408')).item;
+  assert.equal(shown.draft.id, d.id);
+  assert.ok(rememberOffer(shown, shown.draft), 'the new page offers Remember');
+  assert.equal((await post(`/api/drafts/${d.id}/remember`, { scope: 'any' })).status, 200);
+
+  // Back in Imports: it teaches nothing again.
+  await post('/api/items/c:99408/move', { section: 'importquery' });
+  await settled('c:99408');
+  assert.equal((await get('/api/items/c:99408')).item.teaches, false);
 });
 
 // ---- written without being asked --------------------------------------------------------------------

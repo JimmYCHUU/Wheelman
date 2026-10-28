@@ -43,18 +43,24 @@ function sinceVoice(rows) {
 
 /** Only dashboard conversations and leads, and import emails, teach Wheelman. */
 export const canLearnFrom = (itemKey) => /^(?:[cl]|em):\d+$/.test(String(itemKey || ''));
+/** A conversation from the dashboard's Imports list, listed in Imports: it teaches nothing there. */
+const importsListHere = (item) => !!item && item.section === 'importquery' && onImportsList(item);
 /**
- * Whether this conversation teaches where it is listed now: one that can teach at all, is not in
- * the Auction section, and is not from the dashboard's Imports list. Nothing is learned from
- * Auction, whatever the conversation came from, nor from a lead on the Imports list, which taught
- * nothing when the list was in Auction either.
+ * Whether this conversation teaches where it is listed now: one that can teach at all, and is not
+ * in the Auction section, nor in Imports from the dashboard's Imports list. Nothing is learned from
+ * Auction, whatever the conversation came from, and nothing from the Imports list in Imports, as
+ * nothing was when the list was in Auction. Moved to Dashboard, such a lead teaches there.
  */
-export const teachesHere = (item) => !!item && canLearnFrom(item.itemKey) && item.section !== 'auction' && !onImportsList(item) && !/^fu:/.test(String(item.anchorKey || ''));
+export const teachesHere = (item) => !!item && canLearnFrom(item.itemKey) && item.section !== 'auction' && !importsListHere(item) && !/^fu:/.test(String(item.anchorKey || ''));
 /** A follow-up's suggestion (src/followup.js): it answers no customer message and teaches nothing. */
 const isFollowUp = (draft) => /^fu:\d+$/.test(String(draft?.anchor_key || '')) || !!draft?.context?.followUp;
 const FOLLOW_UP = 'a follow-up';
 /** A suggestion written while its conversation was in Auction teaches nothing, even after it is moved out. */
 const writtenInAuction = (draft) => draft?.context?.section === 'auction';
+/** Nor does one written for a conversation from the Imports list while it was in Imports. */
+const writtenInImports = (draft, item) => draft?.context?.section === 'importquery' && !!item && onImportsList(item);
+/** Written where nothing teaches: in Auction, or in Imports for the Imports list. */
+const writtenUntaught = (draft, item) => writtenInAuction(draft) || writtenInImports(draft, item);
 const NOT_HERE = 'not a dashboard conversation or an import email';
 const notHereWhy = (item) => (item?.section === 'auction' ? 'in the Auction section' : NOT_HERE);
 /** Which kind of reply a request wants lessons for: emails learn from emails, everything else from texts. */
@@ -118,6 +124,7 @@ export function learnFrom(item, draft, finalText, source, { at = Date.now() } = 
   if (isFollowUp(draft)) return { learned: false, why: FOLLOW_UP };
   if (draft.item_key !== undefined && !canLearnFrom(draft.item_key)) return { learned: false, why: NOT_HERE };
   if (writtenInAuction(draft)) return { learned: false, why: 'written in the Auction section' };
+  if (writtenInImports(draft, item)) return { learned: false, why: "written in Imports, from the dashboard's Imports list" };
   if (draft.rating === 'bad' && source === 'copied') return { learned: false, why: 'rated not usable' };
 
   const lead = item.lead;
@@ -181,7 +188,7 @@ export function onCopied(item, draftId, text) {
   recordCopied(draftId, String(text || '').slice(0, 4000));
   // Copied as Wheelman wrote it, with no blank left: the person says it is right, as Good reply did.
   // Not where nothing teaches (the Auction section).
-  if (copiedAsWritten(draft, text) && approvableCopy(draft, text) && teachesHere(item) && !writtenInAuction(draft)) {
+  if (copiedAsWritten(draft, text) && approvableCopy(draft, text) && teachesHere(item) && !writtenUntaught(draft, item)) {
     setDraftRating(draftId, 'good');
     return { ...onApproved(item, draftId, true), approved: true };
   }
@@ -223,7 +230,7 @@ export function onEdited(item, draftId, text) {
   recordEdit(draftId, edited ? clean : null);
   let rating = draft.rating || '';
   // A reply that was approved and is then changed: the approval follows the text. Emptied, it is taken back.
-  if (rating === 'good' && item && canLearnFrom(draft.item_key) && teachesHere(item) && !writtenInAuction(draft) && !isFollowUp(draft)) {
+  if (rating === 'good' && item && canLearnFrom(draft.item_key) && teachesHere(item) && !writtenUntaught(draft, item) && !isFollowUp(draft)) {
     if (clean.trim()) onApproved(item, draftId, true);
     else { setDraftRating(draftId, ''); onApproved(item, draftId, false); rating = ''; }
   }
@@ -249,7 +256,7 @@ export function onApproved(item, draftId, approved = true) {
   const draft = getDraft(draftId);
   if (!draft) return { learned: false, why: 'suggestion not found' };
   if (isFollowUp(draft)) return { learned: false, why: FOLLOW_UP };
-  if (!canLearnFrom(draft.item_key) || !teachesHere(item) || writtenInAuction(draft)) return { learned: false, why: item?.section === 'auction' || writtenInAuction(draft) ? 'in the Auction section' : 'not a dashboard conversation' };
+  if (!canLearnFrom(draft.item_key) || !teachesHere(item) || writtenUntaught(draft, item)) return { learned: false, why: item?.section === 'auction' || writtenInAuction(draft) ? 'in the Auction section' : 'not a dashboard conversation' };
   if (!approved) {
     if (getLearned(draftId)?.source === 'approved') deleteLearned(draftId);
     return { learned: false, why: 'approval taken back' };
@@ -344,7 +351,7 @@ export async function onAdvice(item, draftId, note) {
   const said = squash(String(note || '')).slice(0, 600);
   if (!draft) return { learned: false, why: 'suggestion not found' };
   if (!said) return { learned: false, why: 'nothing was said' };
-  if (!canLearnFrom(draft.item_key) || !teachesHere(item) || writtenInAuction(draft)) return { learned: false, why: item?.section === 'auction' || writtenInAuction(draft) ? 'in the Auction section' : 'not a dashboard conversation' };
+  if (!canLearnFrom(draft.item_key) || !teachesHere(item) || writtenUntaught(draft, item)) return { learned: false, why: item?.section === 'auction' || writtenInAuction(draft) ? 'in the Auction section' : 'not a dashboard conversation' };
   const { customerText, upto } = askedBefore(item, draft);
   const { situations, firstReply } = aboutOf(item, draft, upto);
   const row = {
@@ -385,7 +392,7 @@ export function onRemember(item, draftId, scope) {
   if (!canLearnFrom(draft.item_key) || /^out:/.test(String(draft.anchor_key || ''))) return { status: 400, error: REMEMBER_REFUSED };
   if (isFollowUp(draft)) return { status: 400, error: REMEMBER_FOLLOW_UP };
   if (writtenInAuction(draft) || item?.section === 'auction') return { status: 400, error: REMEMBER_AUCTION };
-  if (item && onImportsList(item)) return { status: 400, error: REMEMBER_IMPORTS_LIST };
+  if (importsListHere(item) || writtenInImports(draft, item)) return { status: 400, error: REMEMBER_IMPORTS_LIST };
   if (!item) return { status: 404, error: 'That conversation was not found.' };
   const instruction = squash(redact(String(draft.instruction || ''), item.lead)).slice(0, 600);
   if (!instruction) return { status: 400, error: NOTHING_TO_REMEMBER };
