@@ -109,12 +109,14 @@ export const sameText = (a, b) => plain(a) !== '' && plain(a) === plain(b);
 /**
  * Whether the chat shows this text as a reply of ours after the message a send answered (anchor):
  * the reply went, from here or another page of Jim's. A reply with other words (the auto-reply, a
- * colleague) is not it.
+ * colleague) is not it, and neither is an older one with the same words: with that message not in
+ * the thread shown, nothing counts.
  */
 export function sentSince(item, anchor, text) {
   if (!item) return false;
   const thread = item.thread || [];
   const at = thread.findIndex((m) => m.key === anchor);
+  if (at === -1) return false;
   return thread.slice(at + 1).some((m) => m.who === 'us' && !m.internal && sameText(m.text, text));
 }
 
@@ -125,11 +127,14 @@ export function sentWords(queued, name) {
   return who ? 'Sent to ' + who + '. It is on its way.' : 'Sent. It is on its way to the buyer.';
 }
 
-/** The line in the box after a send that did not go, by its outcome: "Not sent." only when the server said so. */
-export function sendFailedWords(error, outcome = 'refused') {
+/**
+ * The line in the box after a send that did not go, by its outcome: "Not sent." only when the server
+ * said so. kept: false where no text is on screen to stay (Send it again, from the quiet line).
+ */
+export function sendFailedWords(error, outcome = 'refused', { kept = true } = {}) {
   if (outcome === 'elsewhere') return 'Not sent from here: another page is sending a reply to this chat.';
   if (outcome === 'unknown') return ['Wheelman could not tell whether this reply went.', sentence(error)].filter(Boolean).join(' ');
-  return ['Not sent.', sentence(error), 'Your text is still in the box.'].filter(Boolean).join(' ');
+  return ['Not sent.', sentence(error), kept ? 'Your text is still in the box.' : ''].filter(Boolean).join(' ');
 }
 
 /** The toast for a send that did not go once another chat was open: whose, and why. */

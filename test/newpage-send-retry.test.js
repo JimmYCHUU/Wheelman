@@ -75,7 +75,7 @@ test('an unknown outcome where the chat shows the reply on the re-read says Sent
   takes(b);
   b.calls.length = 0;
   assert.equal(await b.store.actions.send(), 'sent');
-  assert.deepEqual(paths(b.calls).slice(0, 2), ['GET /api/items/mp:1', 'POST /api/items/mp:1/send']);
+  assert.deepEqual(paths(b.calls).slice(0, 3), ['POST /api/sync', 'GET /api/items/mp:1', 'POST /api/items/mp:1/send'], 'Marketplace read again, then the chat, then the send');
 
   // The chat cannot be read before Try again: nothing is posted.
   const c = fb();
@@ -96,6 +96,7 @@ test('the page can tell a send the server refused from one whose outcome it does
   assert.equal(sendOutcome(failure(OFFLINE, 502)), 'refused', "the server's own words: the engine said no, or was not reached");
   assert.equal(sendOutcome(failure('HTTP 502', 502, false)), 'unknown', 'a gateway in between, not the server');
   assert.equal(sendOutcome(failure('Something broke', 500)), 'unknown');
+  assert.equal(sendOutcome(failure('The Marketplace system did not answer in time, so the reply may have gone.', 504)), 'unknown', 'the engine did not answer in time');
   assert.equal(sendOutcome(failure(NOT_RESPONDING)), 'unknown', 'no answer at all');
   assert.equal(sendOutcome(new Error('x')), 'unknown');
   // The words: "Not sent." only when the server said so.
@@ -288,7 +289,7 @@ test('text that went is never left ready to be sent again', async () => {
   b.data.items['mp:1'] = { ...FB, anchor: 'fm:3', thread: [ASKED, { key: 'fm:2', who: 'us', text: typed }, { key: 'fm:3', who: 'customer', text: 'Hello?' }] };
   b.calls.length = 0;
   assert.equal(await b.store.actions.send(), 'replied');
-  assert.equal(paths(b.calls)[0], 'GET /api/items/mp:1');
+  assert.deepEqual(paths(b.calls).slice(0, 2), ['POST /api/sync', 'GET /api/items/mp:1']);
   assert.equal(sends(b).length, 0);
   assert.equal(b.store.get().typed, null);
   // Not there either way: the re-read comes first, then the reply goes.
@@ -302,7 +303,7 @@ test('text that went is never left ready to be sent again', async () => {
   takes(c);
   c.calls.length = 0;
   assert.equal(await c.store.actions.send(), 'sent');
-  assert.deepEqual(paths(c.calls).slice(0, 2), ['GET /api/items/mp:1', 'POST /api/items/mp:1/send']);
+  assert.deepEqual(paths(c.calls).slice(0, 3), ['POST /api/sync', 'GET /api/items/mp:1', 'POST /api/items/mp:1/send']);
   // A suggestion the server notes as sent here is never sent again from the box.
   const d = fb({ draft: { ...FB.draft, edited: typed, sentHereAt: AT } });
   await d.store.actions.open('mp:1');

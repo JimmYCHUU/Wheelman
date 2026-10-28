@@ -104,18 +104,26 @@ function Quiet({ state, actions, item, view }) {
     'put-back': () => actions.putBack(),
     restore: () => actions.restore(),
     'restore-followup': () => actions.restoreFollowUp(),
+    // A reply sent from here that did not reach the buyer: that suggestion's text again (sender.js).
+    resend: () => actions.send({ again: true }),
   };
   const tell = view.button && view.button.act === 'write-followup'
     ? (v) => actions.write({ instruction: v, followup: fu.id })
     : (v) => actions.tell(v);
   const b = view.button;
+  // Send it again reads Sending… while it goes, and says why if it does not go.
+  const send = b && b.act === 'resend' ? sendFor(item, state.sending[state.key]) : null;
+  const resending = !!send && send.state === 'sending';
+  const resendFailed = send && send.state === 'failed' ? send : null;
   return html`<div class="box" role="group" aria-label="Message box">
     <${Context} context=${state.context} />
+    ${resendFailed ? html`<div class="context bad" role="alert"><span>${sendFailedWords(resendFailed.error, resendFailed.outcome, { kept: false })}</span></div>` : null}
     <p class=${'box-note ' + view.tone} role="status">${view.sentence}</p>
     ${view.suggestion ? html`<div class="ghost"><span class="ghost-label">The suggestion that was here</span><p>${view.suggestion}</p></div>` : null}
     ${view.tell || b ? html`<div class="foot">
-      ${view.tell ? html`<${Tell} onSend=${tell} holdTell=${actions.holdTell} button="Write from this" />` : null}
-      <div class="right">${b ? html`<button type="button" class=${'btn' + (b.main ? ' main' : '')} onClick=${run[b.act]}>${b.label}</button>` : null}</div>
+      ${view.tell ? html`<${Tell} onSend=${tell} holdTell=${actions.holdTell} button="Write from this" disabled=${resending} />` : null}
+      <div class="right">${resending ? html`<button type="button" class="btn main" disabled>Sending…</button>`
+        : b ? html`<button type="button" class=${'btn' + (b.main ? ' main' : '')} onClick=${run[b.act]}>${b.label}</button>` : null}</div>
     </div>` : null}
   </div>`;
 }

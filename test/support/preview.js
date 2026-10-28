@@ -97,6 +97,9 @@ const pell = ['Pell', 'Invented', '0491 570 191'];
   // The first Send to Liam (chat 501) is refused, as if the engine's phone were offline, so the
   // refusal and Try again can be seen. The stand-in engine takes the reply after that.
   invented.refuseSendOnce = new Set([501]);
+  // The first reply sent to Tove (chat 506) is taken by the engine but fails to reach her, so the
+  // box's "did not reach the buyer" and Send it again can be seen.
+  invented.failDeliveryOnce = new Set([506]);
 }
 const standins = await startStandins({ world: invented, ai });
 const { config } = await import('../../src/config.js');

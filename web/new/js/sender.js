@@ -6,13 +6,14 @@
 // posted again, and a chat that has moved on since a failure posts nothing. No DOM: the store passes
 // in what it holds, how it takes a chat (take, as a refresh does) and whether a chat is on screen.
 import { blanksIn } from '../../lib/blank.js';
-import { liveChecks } from './model.js';
+import { liveChecks, boxText } from './model.js';
 import { hashFor } from './route.js';
+import { deliveryFailed } from './boxsections.js';
 import { replyChannel, sendFor, sendOutcome, repliedSince, sentSince, sameText, sentWords, sendFailedAwayWords } from './channel.js';
 
 const IDLE = { state: 'idle', at: null };
 
-export function createSender({ api, get, set, toast, text, refresh, take, shown = () => true }) {
+export function createSender({ api, get, set, toast, text, refresh, take, now, shown = () => true }) {
   const without = (sending, key) => { const rest = { ...sending }; delete rest[key]; return rest; };
   /** This chat's send from now on: a state, or null for none. */
   const mark = (key, value) => set({ sending: value ? { ...get().sending, [key]: value } : without(get().sending, key) });
@@ -32,12 +33,19 @@ export function createSender({ api, get, set, toast, text, refresh, take, shown 
 
   /**
    * The reply went: the send ends, and if the chat is still open its text goes with it (a later
-   * message from the buyer never brings it back to be sent again), and the chat as it is now is taken.
+   * message from the buyer never brings it back to be sent again), and the chat as it is now is
+   * taken. With no chat to take (the server could not show it), the one on screen has its
+   * suggestion marked as sent from here until a chat is taken, so Send is not offered again.
    */
   function went(key, item) {
     if (key !== get().key) { mark(key, null); return; }
-    set({ sending: without(get().sending, key), ...(item ? { item, itemState: 'ready' } : {}), typed: null, context: null, save: IDLE });
+    const was = get().item;
+    const shownNow = item || (was && was.draft ? { ...was, draft: { ...was.draft, sentHereAt: now() } } : null);
+    set({ sending: without(get().sending, key), ...(shownNow ? { item: shownNow, itemState: 'ready' } : {}), typed: null, context: null, save: IDLE });
   }
+
+  /** The chat a reply went to, in a toast's Open: its own address, as a row opens it. */
+  const openIt = (item, key) => ({ label: 'Open', href: hashFor({ section: item.section || 'marketplace', chip: 'waiting', key }) });
 
   /**
    * Sends the open Facebook chat's text, with the suggestion it came from, and says what happened:
@@ -46,39 +54,47 @@ export function createSender({ api, get, set, toast, text, refresh, take, shown 
    * 'fill' (a blank is still in the text: nothing is posted, and the box goes to the blank);
    * 'blocked' (a failed check not passed with Send anyway: nothing is posted); or null when there is
    * nothing to send here (not a Facebook chat, no text, its reply already on its way, or a
-   * suggestion the server notes as sent from here).
+   * suggestion the server notes as sent from here). again: Send it again, for a reply sent from here
+   * that did not reach the buyer (deliveryFailed): that suggestion's text, once the chat is read.
    */
-  async function send() {
+  async function send({ again = false } = {}) {
     const { key, item, sending, overridden } = get();
     if (!key || !item || replyChannel(item) !== 'facebook') return null;
-    if (item.draft && item.draft.sentHereAt) return null;
-    const value = text();
+    const resend = again && deliveryFailed(item);
+    if (item.draft && item.draft.sentHereAt && !resend) return null;
+    const value = resend ? boxText(item.draft) : text();
     const was = sending[key];
     if (!value.trim() || (was && was.state === 'sending')) return null;
-    // A blank is never sent to a buyer (the server refuses one too), and a failed check needs Send anyway.
+    // A blank is never sent to a buyer (the server refuses one too), and a failed check needs Send
+    // anyway (a reply sent again was passed when it first went).
     if (blanksIn(value).length) return 'fill';
     const ready = item.draft && item.draft.status === 'ready' ? item.draft : null;
-    if (!overridden && liveChecks(ready, value).some((c) => c.level === 'fail')) return 'blocked';
+    if (!resend && !overridden && liveChecks(ready, value).some((c) => c.level === 'fail')) return 'blocked';
     // Try again: a failure the box shows (about the chat on screen). After a send whose outcome
-    // could not be told, any send reads the chat first, whatever the box shows: that reply may have gone.
+    // could not be told, any send reads the chat first, whatever the box shows: that reply may have
+    // gone. Send it again reads it first too.
     const wasFailed = was && was.state === 'failed' ? was : null;
     const failed = wasFailed && sendFor(item, wasFailed) ? wasFailed : null;
-    const check = failed || (wasFailed && wasFailed.outcome === 'unknown' ? wasFailed : null);
+    const check = resend ? { anchor: item.anchor } : failed || (wasFailed && wasFailed.outcome === 'unknown' ? wasFailed : null);
     const anchor = item.anchor;
     mark(key, { state: 'sending' });
     if (check) {
       const since = check.anchor !== undefined ? check.anchor : anchor;
-      const now = await reread(key);
-      if (now.error) { mark(key, { ...check, error: now.error }); return 'failed'; }
+      // An outcome that could not be told: Wheelman first reads Marketplace again (Check now's
+      // sync), so a reply the engine queued is in the chat before anything is posted.
+      if (check.outcome === 'unknown') await api('/api/sync', {}).catch(() => { /* the chat is read all the same */ });
+      const read = await reread(key);
+      // Not read: nothing is posted. Send it again had nothing posted yet, so it is "Not sent".
+      if (read.error) { mark(key, resend ? { state: 'failed', error: read.error, outcome: 'refused', anchor, text: value } : { ...check, error: read.error }); return 'failed'; }
       // This text is in the chat already: it went. Nothing more is posted, and it leaves the box.
-      if (sentSince(now.item, since, value)) { went(key, now.item); await refresh(); return 'replied'; }
+      if (sentSince(read.item, since, value)) { went(key, read.item); await refresh(); return 'replied'; }
       // Try again on a chat that moved on since the failure (another reply, or the buyer wrote
       // again): nothing is posted, and the chat as it is now is on screen with the text kept.
-      if (failed && now.item.anchor !== since) {
+      if ((failed || resend) && read.item.anchor !== since) {
         mark(key, null);
-        show(key, now.item);
+        show(key, read.item);
         await refresh();
-        return repliedSince(now.item, since) ? 'replied' : 'moved';
+        return repliedSince(read.item, since) ? 'replied' : 'moved';
       }
     }
     let out;
@@ -89,7 +105,9 @@ export function createSender({ api, get, set, toast, text, refresh, take, shown 
     }
     const away = !onScreen(key);
     went(key, out.item);
-    toast(sentWords(out.queued, away ? item.name : ''));
+    // Taken by the engine but not delivered (it says so at once): never "Sent". The box says it; out of sight, a toast does.
+    if (deliveryFailed(out.item)) { if (away) toast('The reply to ' + (item.name || 'the buyer') + ' did not reach the buyer.', openIt(item, key)); }
+    else toast(sentWords(out.queued, away ? item.name : ''));
     await refresh();
     return 'sent';
   }
@@ -104,25 +122,25 @@ export function createSender({ api, get, set, toast, text, refresh, take, shown 
    */
   async function failedSend(key, item, anchor, value, e) {
     const outcome = sendOutcome(e);
-    const now = await reread(key);
+    const read = await reread(key);
     const away = !onScreen(key);
-    if (now.item && sentSince(now.item, anchor, value)) {
-      went(key, now.item);
+    if (read.item && sentSince(read.item, anchor, value)) {
+      went(key, read.item);
       toast(sentWords(false, away ? item.name : ''));
       await refresh();
       return 'sent';
     }
-    if (now.item && outcome !== 'unknown' && repliedSince(now.item, anchor)) {
+    if (read.item && outcome !== 'unknown' && repliedSince(read.item, anchor)) {
       mark(key, null);
-      show(key, now.item);
+      show(key, read.item);
       await refresh();
       return 'replied';
     }
     const open = key === get().key ? get().item : null;
-    const at = now.item ? now.item.anchor : open ? open.anchor : anchor;
+    const at = read.item ? read.item.anchor : open ? open.anchor : anchor;
     mark(key, { state: 'failed', error: e.message, outcome, anchor: at, text: value });
-    if (now.item && open && open.anchor !== now.item.anchor) show(key, now.item);
-    if (away) toast(sendFailedAwayWords(item.name, e.message, outcome), { label: 'Open', href: hashFor({ section: item.section || 'marketplace', chip: 'waiting', key }) });
+    if (read.item && open && open.anchor !== read.item.anchor) show(key, read.item);
+    if (away) toast(sendFailedAwayWords(item.name, e.message, outcome), openIt(item, key));
     return 'failed';
   }
 

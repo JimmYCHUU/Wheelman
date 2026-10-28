@@ -834,8 +834,10 @@ async function api(req, res, url) {
       try {
         out = await sendReply(item.marketplace.id, text);
       } catch (e) {
-        logLine('marketplace', `${item.itemKey}: the reply could not be sent. ${e.message}`);
-        return send(res, 502, { error: e.message });
+        // The engine refused, or could not be reached: 502. It did not answer in time, so it may
+        // have taken the reply: 504, which a page reads as an outcome it cannot tell.
+        logLine('marketplace', `${item.itemKey}: the reply ${e.mayHaveGone ? 'may not have been sent' : 'could not be sent'}. ${e.message}`);
+        return send(res, e.mayHaveGone ? 504 : 502, { error: e.message });
       }
       // The engine has the reply: it has gone. What follows is Wheelman's own record of it, and a
       // step that fails there is logged, never answered as "not sent" (a page would offer it again).

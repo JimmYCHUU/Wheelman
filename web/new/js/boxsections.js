@@ -8,6 +8,15 @@ import { clock, listTime, daysAgo } from '../../lib/format.js';
 
 const TRY_AGAIN = { label: 'Try again', act: 'retry', main: true };
 const ANYWAY = { label: 'Write a reply anyway', act: 'write', main: false };
+const SEND_AGAIN = { label: 'Send it again', act: 'resend', main: true };
+
+/**
+ * A Facebook chat whose reply went from here (its suggestion has sentHereAt) but did not reach the
+ * buyer: the engine took it, the chat still waits on us, and the engine says a reply failed (its
+ * failed outbound is left out of the thread and counted). Never "Sent"; Send it again resends it.
+ */
+export const deliveryFailed = (item) => !!item && item.channel === 'marketplace' && item.state === 'awaiting'
+  && !!(item.draft && item.draft.sentHereAt) && !!(item.marketplace && item.marketplace.failed > 0);
 
 /**
  * Whether a refused write (writeFailed: { key, anchor, state, message } from the store) is about the
@@ -26,8 +35,9 @@ function sentAt(item) {
   if (!item || item.channel !== 'marketplace') return null;
   const d = item.draft;
   // Still waiting in Wheelman's thread, yet its suggestion went from here: the engine took the reply
-  // and Wheelman's own record of it has not caught up. Sent all the same, so it is never offered again.
-  if (item.state === 'awaiting') return d && d.sentHereAt ? d.sentHereAt : null;
+  // and Wheelman's own record of it has not caught up. Sent all the same, so it is never offered
+  // again, while nothing says a reply failed (that is deliveryFailed, told on its own).
+  if (item.state === 'awaiting') return d && d.sentHereAt && !deliveryFailed(item) ? d.sentHereAt : null;
   if (item.state !== 'answered') return null;
   // A suggestion asked for after the answer is the person's to use, as in boxView: not "sent".
   if (d && item.answered && d.createdAt > item.answered.at) return null;
@@ -51,11 +61,15 @@ function sentWhen(at, now) {
  * as before. Writing, copied, opted out, dismissed and a follow-up done come first, as in boxView.
  * A Facebook reply sent says so, quiet and good, after Writing and before everything else, with
  * Write a reply anyway and the Tell line as for any chat answered with Wheelman's suggestion (a
- * sent reply cannot be taken back, so there is no Put back).
+ * sent reply cannot be taken back, so there is no Put back). A reply sent from here that did not
+ * reach the buyer (deliveryFailed) says so in red instead, with Send it again.
  */
 export function sectionBox(args = {}) {
   const view = boxView(args);
   const { item, writeFailed, now } = args;
+  if (view.kind !== 'writing' && deliveryFailed(item)) {
+    return { kind: 'quiet', tone: 'bad', sentence: 'The reply sent ' + sentWhen(item.draft.sentHereAt, now) + ' did not reach the buyer.', button: SEND_AGAIN, tell: true };
+  }
   const sent = view.kind === 'writing' ? null : sentAt(item);
   if (sent) {
     const typing = item.marketplace && item.marketplace.sending ? " The engine's phone is typing it into the chat." : '';

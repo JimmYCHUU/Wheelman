@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { applyTestEnv } from './support/env.js';
 import { startStandins, aiBehaviour } from './support/standins.js';
-import { marketplace } from './support/fixtures.js';
+import { marketplace, chatRow, chatMessage } from './support/fixtures.js';
 import { mainFor, sendFailedWords } from '../web/new/js/channel.js';
 import { boxViewOf } from '../web/new/js/boxsections.js';
 import { createStore } from '../web/new/js/store.js';
@@ -126,4 +126,54 @@ test('a reply the engine took is answered as sent even when Wheelman cannot keep
   // The step that failed is logged with the app's own logger.
   const server = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
   assert.match(server, /logLine\('marketplace', `\$\{item\.itemKey\}: the reply was sent, but \$\{what\}: \$\{e\.message\}`\)/);
+});
+
+test('an engine that does not answer in time may have taken the reply: Try again reads Marketplace again and posts nothing', async () => {
+  // The engine record the last test left with an id no database keeps: as the real engine's would be.
+  for (const c of standins.world.chats.values()) for (const m of c.messages) if (m.id === 1e300) m.id = 9001;
+  const { config } = await import('../src/config.js');
+  const { syncMarketplace } = await import('../src/sync.js');
+  standins.world.chats.set(510, { row: chatRow(510, 'Rosa Invented', 5, Date.now()), messages: [chatMessage(510, 'in', 'phone', 'Is the Noah still available?', 5, Date.now())] });
+  await syncMarketplace();
+  const real = createApi({ fetch: (p, init) => fetch(base + p, init), go: () => {} });
+  const calls = [];
+  const api = (p, b) => { calls.push((b === undefined ? 'GET ' : 'POST ') + p); return real(p, b); };
+  const store = createStore({ api, clipboard: { async writeText() {} }, storage: { getItem: () => null, setItem() {} }, now: Date.now, timers: fakeTimers(), keepalive: (p, b) => api(p, b) });
+  await store.actions.setSection('marketplace', { key: 'mp:510' });
+  await until(() => store.get().writing === null && !!(store.get().item && store.get().item.draft));
+  const text = store.get().item.draft.reply.replace(/\[[A-Z][A-Z0-9 &'/-]{1,30}\?\]/g, '$28,900');
+  store.actions.type(text);
+  const replies = () => standins.engineSeen.filter((r) => r.method === 'POST' && r.path === '/inbox/conversations/510/reply');
+
+  // The engine queues the reply but answers after Wheelman has stopped waiting.
+  const wait = config.marketplace.sendTimeoutMs;
+  config.marketplace.sendTimeoutMs = 200;
+  standins.world.replyDelayMs = 700;
+  try {
+    assert.equal(await store.actions.send(), 'failed');
+  } finally { config.marketplace.sendTimeoutMs = wait; }
+  let s = store.get();
+  const error = 'The Marketplace system did not answer in time, so the reply may have gone.';
+  assert.deepEqual([s.sending['mp:510'].outcome, s.sending['mp:510'].error], ['unknown', error], 'not a refusal: the route answers 504');
+  assert.equal(sendFailedWords(error, 'unknown'), 'Wheelman could not tell whether this reply went. ' + error);
+  assert.equal(replies().length, 1);
+  assert.equal(standins.world.chats.get(510).messages.filter((m) => m.direction === 'out').length, 1, 'the engine has it, queued');
+  await new Promise((r) => setTimeout(r, 800)); // the engine's late answer goes nowhere
+
+  // Try again: Wheelman reads Marketplace again first (Check now's sync), then the chat, which
+  // now shows the reply: nothing is posted.
+  calls.length = 0;
+  assert.equal(await store.actions.send(), 'replied');
+  assert.deepEqual(calls.slice(0, 2), ['POST /api/sync', 'GET /api/items/mp:510']);
+  assert.ok(!calls.includes('POST /api/items/mp:510/send'));
+  assert.equal(replies().length, 1, 'the buyer gets it once');
+  s = store.get();
+  assert.deepEqual(s.sending, {});
+  assert.equal(s.typed, null);
+  assert.equal(s.item.state, 'answered');
+  // The route says it in its own words, with its own status.
+  const marketplaceSrc = fs.readFileSync(new URL('../src/marketplace.js', import.meta.url), 'utf8');
+  assert.match(marketplaceSrc, /AbortSignal\.timeout\(config\.marketplace\.sendTimeoutMs \|\| 20000\)/);
+  const server = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+  assert.match(server, /return send\(res, e\.mayHaveGone \? 504 : 502, \{ error: e\.message \}\);/);
 });
