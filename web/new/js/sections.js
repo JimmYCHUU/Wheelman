@@ -2,6 +2,7 @@
 // empty lists, its Load more, the channel a row is on, an order row's reason, the head line and where
 // a search result opens. Pure functions (no DOM, no globals) beside model.js, which the tests import in Node.
 import { SECTIONS, CHIPS, rowView } from './model.js';
+import { sendFor } from './channel.js';
 
 // ---- the tabs
 
@@ -80,10 +81,14 @@ const pastedInDashboard = (row) => /^[cl]:/.test(String((row && row.key) || ''))
  * Facebook chat the auto-reply handed to a person, still unanswered, says "Needs you" in blue when
  * the row has nothing else to say. A row just copied waits to show on the dashboard only when it is
  * a Dashboard text; a Facebook chat, an email, an order and a text seen only on the phone (answered
- * from the phone) go elsewhere, and say "Copied".
+ * from the phone) go elsewhere, and say "Copied". A Facebook reply that did not go (opts.sending,
+ * the store's send for this row) says "Not sent" in red, before anything else, while the chat is as
+ * it was when it failed.
  */
 export function sectionRowView(row, opts, section) {
   const view = rowView(row, opts);
+  const failed = sendFor(row, opts && opts.sending);
+  if (failed && failed.state === 'failed') return { ...view, reason: 'Not sent', channel: rowChannelWord(row, section), tone: 'bad' };
   const order = isOrder(row) && !view.done;
   const needsYou = !order && !view.reason && !!row.needsPerson && !!row.unanswered;
   const said = view.done && !pastedInDashboard(row) ? 'Copied' : view.reason;

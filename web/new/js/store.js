@@ -16,7 +16,8 @@ export { visibleRows, followUpOf, waitingCount };
 
 const NEW_MESSAGE = 'New message from the customer. Your text is kept.';
 
-export function createStore({ api, clipboard, storage, now, timers, keepalive }) {
+/** shown(key): the page's word on whether that open conversation is on screen (a phone showing the list hides it); none: always. */
+export function createStore({ api, clipboard, storage, now, timers, keepalive, shown }) {
   let state = {
     section: 'dashboard', chip: 'waiting', rows: [], total: 0, counts: {}, sections: {}, unread: {}, listState: 'loading', listError: '',
     limit: 20, key: null, item: null, itemState: 'idle', typed: null, save: { state: 'idle', at: null },
@@ -79,6 +80,8 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
   // ---- the list and the open conversation
 
   function takeItem(taken) {
+    // A reply whose send could not be told, now in the chat: taken with its text gone (sender.js).
+    if (sender.settle(taken)) return;
     const old = state.item;
     // Answered by someone else: its anchor moved on and the suggestion went with it, so the one that was there is kept to show.
     const elsewhere = taken.state === 'answered' && !!taken.answered;
@@ -140,7 +143,8 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
   const { copy, putBack, restore, restoreFollowUp, copyLink, copyNumber, copyEmail, dismiss, dismissFollowUp } =
     createFinish({ api, clipboard, storage, now, get: () => state, set, toast, text, refresh, runner });
   // Send on Facebook (web/new/js/sender.js): only when its button is pressed, never by a key.
-  const { send } = createSender({ api, get: () => state, set, toast, text, refresh });
+  const sender = createSender({ api, get: () => state, set, toast, text, refresh, take: takeItem, shown });
+  const { send } = sender;
   const open = (key, o) => { runner.end(); return show(key, o); };
 
   async function show(key, { followup } = {}) {

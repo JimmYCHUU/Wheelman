@@ -31,9 +31,10 @@ export const draft = (id, o = {}) => ({ id, status: 'ready', reply: 'Hello from 
  * store's clock (1000 throughout unless a test moves it). The Dashboard's list is data.rows and
  * data.counts; another section's is data.sections[section] = { rows, counts } (none: an empty list).
  * A section in data.off is switched off: as the server does, its list is answered with the
- * Dashboard's, `section: 'dashboard'`, and null for it in `sections`.
+ * Dashboard's, `section: 'dashboard'`, and null for it in `sections`. shown: the page's check of
+ * whether the open conversation is on screen (none: always, as on a wide window).
  */
-export function setup(over = {}, { stored = {}, now = () => 1000 } = {}) {
+export function setup(over = {}, { stored = {}, now = () => 1000, shown } = {}) {
   const calls = [];
   const data = {
     rows: [row('c:1'), row('c:2')],
@@ -92,7 +93,7 @@ export function setup(over = {}, { stored = {}, now = () => 1000 } = {}) {
     const edit = p.match(/^\/api\/drafts\/(\d+)\/edit$/);
     if (edit) keepEdit(Number(edit[1]), b.text);
   };
-  const store = createStore({ api, clipboard, storage, now, timers, keepalive });
+  const store = createStore({ api, clipboard, storage, now, timers, keepalive, shown });
   return { store, calls, data, timers, written, clipboard, mem, storage, beacons };
 }
 export const paths = (calls) => calls.map((c) => (c.body === undefined ? 'GET ' : 'POST ') + c.path);

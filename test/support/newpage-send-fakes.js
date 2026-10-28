@@ -19,8 +19,12 @@ export const TYPING = "Sent on Facebook at " + clock(AT) + ". The engine's phone
 export const ANYWAY = { label: 'Write a reply anyway', act: 'write', main: false };
 export const OFFLINE = 'The Marketplace system did not accept the reply: the phone is offline';
 
-/** The fake server with the buyer's chat in it (o: changes to the chat). */
-export const fb = (o = {}) => { const a = setup(); a.data.items['mp:1'] = { ...FB, ...o }; return a; };
+/** The fake server with the buyer's chat in it (o: changes to the chat; shown: the page's on-screen check). */
+export const fb = (o = {}, shown) => { const a = setup({}, { shown }); a.data.items['mp:1'] = { ...FB, ...o }; return a; };
+/** The buyer's message, as the chat's thread has it. */
+export const ASKED = { key: 'fm:1', who: 'customer', text: 'Hi, is this still available?' };
+/** The chat answered by a reply of ours with this text after the buyer's message (the server's thread). */
+export const sentWith = (text) => ({ ...SENT, thread: [ASKED, { key: 'fm:2', who: 'us', text, sending: true }] });
 /** The sends posted so far. */
 export const sends = (a) => a.calls.filter((c) => c.path === '/api/items/mp:1/send');
 /** The server takes the send: the chat is answered from then on. */

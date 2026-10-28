@@ -100,6 +100,24 @@ export function repliedSince(item, anchor) {
   return at !== -1 && thread.slice(at + 1).some((m) => m.who === 'us' && !m.internal);
 }
 
+/** A reply's words compared as the chat keeps them: the link tag the server adds and runs of space set aside. */
+const plain = (s) => String(s ?? '').replace(/\r/g, '').replace(/[?&]utm_source=marketplace\b/g, '').replace(/\s+/g, ' ').trim();
+
+/** Whether two replies are the same words, as the chat keeps them. */
+export const sameText = (a, b) => plain(a) !== '' && plain(a) === plain(b);
+
+/**
+ * Whether the chat shows this text as a reply of ours after the message a send answered (anchor):
+ * the reply went, from here or another page of Jim's. A reply with other words (the auto-reply, a
+ * colleague) is not it.
+ */
+export function sentSince(item, anchor, text) {
+  if (!item) return false;
+  const thread = item.thread || [];
+  const at = thread.findIndex((m) => m.key === anchor);
+  return thread.slice(at + 1).some((m) => m.who === 'us' && !m.internal && sameText(m.text, text));
+}
+
 /** The toast after a send: the chat still open says it plainly; another chat open by now names the buyer. */
 export function sentWords(queued, name) {
   const who = String(name || '').trim();

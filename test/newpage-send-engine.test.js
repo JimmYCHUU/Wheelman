@@ -3,6 +3,7 @@
 // chat as the server answers a Send. Invented data only.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { applyTestEnv } from './support/env.js';
 import { startStandins, aiBehaviour } from './support/standins.js';
 import { marketplace } from './support/fixtures.js';
@@ -65,7 +66,7 @@ test('a failed send keeps the text, says why and offers Try again', async () => 
   assert.equal(await store.actions.send(), 'failed');
   let s = store.get();
   const error = 'The Marketplace system did not accept the reply: the phone is offline';
-  assert.deepEqual(s.sending['mp:501'], { state: 'failed', error, outcome: 'refused', anchor: s.item.anchor });
+  assert.deepEqual(s.sending['mp:501'], { state: 'failed', error, outcome: 'refused', anchor: s.item.anchor, text });
   assert.equal(s.typed, text, 'the text stays');
   assert.equal(s.item.state, 'awaiting');
   assert.equal(sendFailedWords(error, 'refused'), 'Not sent. The Marketplace system did not accept the reply: the phone is offline. Your text is still in the box.');
@@ -93,4 +94,36 @@ test('a failed send keeps the text, says why and offers Try again', async () => 
   // Try again pressed once more (a button left on screen): the chat has a reply since, so nothing is posted.
   assert.equal(await store.actions.send(), null, 'nothing waits to be sent: the box holds no text now');
   assert.equal(standins.engineSeen.filter((r) => r.method === 'POST').length, 2);
+});
+
+test('a reply the engine took is answered as sent even when Wheelman cannot keep its own record of it', async () => {
+  // The engine answers with a record id Wheelman's database cannot keep: its own note of the reply
+  // fails after the engine has taken it.
+  standins.world.nextReplyId = 1e300;
+  const api = createApi({ fetch: (p, init) => fetch(base + p, init), go: () => {} });
+  const store = createStore({ api, clipboard: { async writeText() {} }, storage: { getItem: () => null, setItem() {} }, now: Date.now, timers: fakeTimers(), keepalive: (p, b) => api(p, b) });
+  await store.actions.setSection('marketplace', { key: 'mp:504' });
+  await until(() => store.get().writing === null && !!(store.get().item && store.get().item.draft));
+  const text = store.get().item.draft.reply.replace(/\[[A-Z][A-Z0-9 &'/-]{1,30}\?\]/g, '$27,500');
+  store.actions.type(text);
+  const reply = () => standins.engineSeen.filter((r) => r.method === 'POST' && r.path === '/inbox/conversations/504/reply');
+
+  // The route answers success: the reply went.
+  assert.equal(await store.actions.send(), 'sent');
+  const s = store.get();
+  assert.deepEqual(s.sending, {});
+  assert.equal(s.typed, null);
+  assert.equal(s.toast.message, 'Sent. It is on its way to the buyer.');
+  assert.equal(reply().length, 1);
+  // Not in Wheelman's own thread yet, so the chat still reads as waiting; its suggestion is noted as
+  // sent here, so the box says Sent and offers no Send.
+  assert.equal(s.item.state, 'awaiting');
+  assert.ok(s.item.draft.sentHereAt);
+  assert.equal(boxViewOf(s, Date.now()).sentence, 'Sent on Facebook at ' + clock(s.item.draft.sentHereAt) + '.');
+  // Pressed anyway (a button left on screen): nothing goes, so the buyer never gets it twice.
+  assert.equal(await store.actions.send(), null);
+  assert.equal(reply().length, 1);
+  // The step that failed is logged with the app's own logger.
+  const server = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+  assert.match(server, /logLine\('marketplace', `\$\{item\.itemKey\}: the reply was sent, but \$\{what\}: \$\{e\.message\}`\)/);
 });

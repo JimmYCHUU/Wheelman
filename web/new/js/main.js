@@ -5,7 +5,7 @@ import { createStore } from './store.js';
 import { createPanelStore } from './panelstore.js';
 import { createSearchStore } from './searchstore.js';
 import { parseRoute } from './route.js';
-import { storeStep, addressAfter, leavesRun, sheetStep, sheetFirst, sheetOnPop, isSheetEntry, withSheet, offAddress } from './hashsync.js';
+import { storeStep, addressAfter, leavesRun, sheetStep, sheetFirst, sheetOnPop, isSheetEntry, withSheet, offAddress, conversationOnScreen } from './hashsync.js';
 import { html, render } from './ui/html.js';
 import { App } from './ui/app.js';
 import { readTheme, applyTheme } from './ui/topbar.js';
@@ -25,6 +25,10 @@ const keepalive = async (path, body) => {
   if (!res.ok) throw new Error('HTTP ' + res.status);
 };
 
+// The deal panel: a column from 1280 px (open unless it was closed), a drawer from 900 px, a sheet below.
+const WIDE = matchMedia('(min-width: 1280px)');
+const NARROW = matchMedia('(max-width: 899px)');
+
 const store = createStore({
   api,
   clipboard: { writeText: (t) => navigator.clipboard.writeText(t) },
@@ -32,12 +36,10 @@ const store = createStore({
   now: Date.now,
   timers: { set: (fn, ms) => setTimeout(fn, ms), clear: (id) => clearTimeout(id) },
   keepalive,
+  // From 900 px the open conversation is on screen; on a phone only while the address names it (‹ List hides it).
+  shown: (key) => conversationOnScreen({ narrow: NARROW.matches, storeKey: key, routeKey: parseRoute(location.hash).key }),
 });
 const { actions } = store;
-
-// The deal panel: a column from 1280 px (open unless it was closed), a drawer from 900 px, a sheet below.
-const WIDE = matchMedia('(min-width: 1280px)');
-const NARROW = matchMedia('(max-width: 899px)');
 const panel = createPanelStore({ api, storage, now: Date.now, wide: () => WIDE.matches });
 
 // On a phone the sheet is a history entry of its own, so Back closes it and the conversation stays

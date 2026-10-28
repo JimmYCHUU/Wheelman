@@ -159,7 +159,8 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
   // reply is queued (status "queued") for the engine's phone to type into the chat; a test marks it
   // sent. world.engineRefusesSend makes the engine refuse; world.refuseSendOnce (a Set of chat ids)
   // makes it refuse each one's next reply, once; world.workerOnline = false means the phone is
-  // offline, so the reply is queued until it is back.
+  // offline, so the reply is queued until it is back; world.nextReplyId gives the next reply's
+  // record that id, once (one Wheelman's database cannot keep, to see the reply taken all the same).
   const engine = await listen(async (req, res) => {
     const body = await readBody(req);
     const url = new URL(req.url, 'http://x');
@@ -176,7 +177,8 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
       const text = String(parsed.text || '').trim();
       if (!text) return json(res, 400, { error: 'text is required' });
       const at = new Date().toISOString();
-      const id = Math.max(0, ...[...chats.values()].flatMap((x) => x.messages.map((m) => Number(m.id) || 0))) + 1;
+      const id = world.nextReplyId !== undefined ? world.nextReplyId : Math.max(0, ...[...chats.values()].flatMap((x) => x.messages.map((m) => Number(m.id) || 0))) + 1;
+      delete world.nextReplyId;
       const message = { id, direction: 'out', source: 'dashboard', text, status: 'queued', sent_via: '', error: '', artifact: '', artifact_url: '', phone_ts: null, sent_at: null, seen_at: null, created_at: at, has_media: false, mentions: [], attachments: [] };
       c.messages.push(message);
       Object.assign(c.row, { last_direction: 'out', last_message_at: at, last_outbound_at: at, unread: false, pending_outbound: (c.row.pending_outbound || 0) + 1 });

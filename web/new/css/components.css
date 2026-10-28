@@ -41,7 +41,7 @@
 
   /* ---------- the toast ---------- */
   .toast-region { position: fixed; width: 0; height: 0; }
-  .toast { position: fixed; z-index: 60; left: 50%; bottom: var(--s-6); transform: translateX(-50%); display: flex; align-items: center; gap: var(--s-3); max-width: calc(100vw - 2 * var(--page-edge)); padding: var(--s-3) var(--s-4); border-radius: var(--r-box); background: var(--ink); color: var(--surface); box-shadow: var(--shadow-2); font-weight: var(--fw-semi); }
+  .toast { position: fixed; z-index: 60; left: 50%; bottom: var(--s-6); transform: translateX(-50%); display: flex; align-items: center; gap: var(--s-3); width: max-content; max-width: calc(100vw - 2 * var(--page-edge)); padding: var(--s-3) var(--s-4); border-radius: var(--r-box); background: var(--ink); color: var(--surface); box-shadow: var(--shadow-2); font-weight: var(--fw-semi); }
   .toast .btn { border-color: var(--surface); background: transparent; color: var(--surface); }
   .toast .btn:hover { background: var(--ink-2); }
 

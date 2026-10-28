@@ -830,22 +830,34 @@ async function api(req, res, url) {
     if (sendingNow.has(item.itemKey)) return send(res, 409, { error: 'This reply is already on its way.' });
     sendingNow.add(item.itemKey);
     try {
-      const out = await sendReply(item.marketplace.id, text);
+      let out;
+      try {
+        out = await sendReply(item.marketplace.id, text);
+      } catch (e) {
+        logLine('marketplace', `${item.itemKey}: the reply could not be sent. ${e.message}`);
+        return send(res, 502, { error: e.message });
+      }
+      // The engine has the reply: it has gone. What follows is Wheelman's own record of it, and a
+      // step that fails there is logged, never answered as "not sent" (a page would offer it again).
+      const note = (what, step) => { try { step(); } catch (e) { logLine('marketplace', `${item.itemKey}: the reply was sent, but ${what}: ${e.message}`); } };
       // The suggestion it came from: what was in the box is kept with it, and that Send was pressed.
-      const draft = Number(body.draftId) ? getDraft(Number(body.draftId)) : null;
-      if (draft && draft.item_key === item.itemKey) { onEdited(item, draft.id, text); recordSentHere(draft.id); }
+      note('the suggestion could not be marked as sent', () => {
+        const draft = Number(body.draftId) ? getDraft(Number(body.draftId)) : null;
+        if (draft && draft.item_key === item.itemKey) { onEdited(item, draft.id, text); recordSentHere(draft.id); }
+      });
       // The engine's record of the queued reply goes into the thread at once; then the chat is read
       // again so everything else is current too. If that read fails, the next check brings it.
-      if (out.message && Number.isInteger(Number(out.message.id))) appendMpMessage(item.marketplace.id, normalizeMpMessage(out.message, 0, item.marketplace.id));
+      note('it could not be put in the chat', () => {
+        if (out.message && Number.isInteger(Number(out.message.id))) appendMpMessage(item.marketplace.id, normalizeMpMessage(out.message, 0, item.marketplace.id));
+      });
       try {
         const detail = await fetchConversation(item.marketplace.id);
         if (detail?.conversation?.id === item.marketplace.id) storeMpConversation(detail.conversation, detail.messages || []);
       } catch (e) { logLine('marketplace', `${item.itemKey}: the reply was sent, but the chat could not be read back: ${e.message}`); }
       logLine('marketplace', `${item.itemKey}: a reply was sent from the page (${text.length} characters)${out.workerOnline ? '' : '; the engine\'s phone is offline, so it is queued'}`);
-      return send(res, 200, { ok: true, queued: !out.workerOnline, item: present(itemFromKey(m[1]) || item) });
-    } catch (e) {
-      logLine('marketplace', `${item.itemKey}: the reply could not be sent. ${e.message}`);
-      return send(res, 502, { error: e.message });
+      let shown = null;
+      note('the chat could not be shown', () => { shown = present(itemFromKey(m[1]) || item); });
+      return send(res, 200, { ok: true, queued: !out.workerOnline, item: shown });
     } finally { sendingNow.delete(item.itemKey); }
   }
 

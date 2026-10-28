@@ -23,9 +23,13 @@ const stillAbout = (item, failed) => !!item && !!failed && failed.key === item.k
  * the second is what it says, on every refresh and every later open.
  */
 function sentAt(item) {
-  if (!item || item.channel !== 'marketplace' || item.state !== 'answered') return null;
-  // A suggestion asked for after the answer is the person's to use, as in boxView: not "sent".
+  if (!item || item.channel !== 'marketplace') return null;
   const d = item.draft;
+  // Still waiting in Wheelman's thread, yet its suggestion went from here: the engine took the reply
+  // and Wheelman's own record of it has not caught up. Sent all the same, so it is never offered again.
+  if (item.state === 'awaiting') return d && d.sentHereAt ? d.sentHereAt : null;
+  if (item.state !== 'answered') return null;
+  // A suggestion asked for after the answer is the person's to use, as in boxView: not "sent".
   if (d && item.answered && d.createdAt > item.answered.at) return null;
   if (d && d.sentHereAt) return d.sentHereAt;
   return item.answered && item.answered.how === 'wheelman' ? item.answered.at || null : null;
