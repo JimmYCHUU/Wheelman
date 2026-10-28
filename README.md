@@ -726,16 +726,19 @@ new page is built from `prototype/`.
 
 **Send on Facebook** is the only send on the new page, and it goes only when you press it. It
 reads **Sending…**, then the box says **Sent on Facebook** at the time it went. If it fails, the
-box says why and offers **Try again**. A send that may have gone is never sent twice. When
-Marketplace does not answer in time, Wheelman remembers, while it is running, that the reply may
-have gone. Before that chat is sent to again, from this page after a reload, from the old page or
-from another computer, Wheelman reads Marketplace afresh and looks at the chat. If the reply is
-there, nothing more is sent and Wheelman says it has gone already. If the engine took the reply
-but did not deliver it, the box says it did not reach the buyer, shows that reply with **Copy**,
-and offers **Send it again**, and the row reads **Not delivered**. When the chat is off screen, a
-failure appears as a message with **Open**, and the row reads **Not sent** or **Not confirmed**. A
-sent reply cannot be taken back. Ctrl+Enter never sends: in a Facebook chat it does nothing while
-the main button is **Send on Facebook**, and in the other sections it copies the reply.
+box says why and offers **Try again**. Wheelman does not send words that are already in the chat as
+our reply since the buyer last wrote, from any page. When Marketplace does not answer in time,
+Wheelman remembers, while it is running, that the reply may have gone. Before that chat is sent to
+again, from this page after a reload, from the old page or from another computer, Wheelman reads
+Marketplace afresh and looks at the chat. If the reply is there, nothing more is sent and Wheelman
+says it has gone already. While it is running, it does not send those words to that chat again,
+even after the buyer has written back, and the box is cleared only when the words you sent are the
+ones that went. If the engine took the reply but did not deliver it, the box says it did not reach
+the buyer, shows that reply with **Copy**, and offers **Send it again**, and the row reads
+**Not delivered**. When the chat is off screen, a failure appears as a message with **Open**, and
+the row reads **Not sent** or **Not confirmed**. A sent reply cannot be taken back. Ctrl+Enter
+never sends: in a Facebook chat it does nothing while the main button is **Send on Facebook**, and
+in the other sections it copies the reply.
 
 Beside the open conversation is the **deal panel** (a column on a wide screen, a drawer on a
 medium one, a sheet from the bottom on a phone; it remembers whether you left it open). Its
@@ -2199,9 +2202,9 @@ changed, and Marketplace drafting is as before. Checked on the automated tests a
 invented data. Not yet used over a working day.
 
 28 October 2026: every section opens on the new page, each with its own lists, and Facebook buyers
-are answered with Send on Facebook, which never sends twice and says plainly when a reply did not
-reach the buyer. Facebook chats are now written when they are opened, on both pages, and not in
-the background. The server answers success once the engine has the reply, treats an engine timeout
+are answered with Send on Facebook, which checks the chat before a reply that may have gone is sent
+again, and says plainly when a reply did not reach the buyer. Facebook chats are now written when
+they are opened, on both pages, and not in the background. The server answers success once the engine has the reply, treats an engine timeout
 as a send that may have gone, and lets a check cover Marketplace alone. Checked on the automated
 tests and in a browser on invented data. Not yet used over a working day.
 

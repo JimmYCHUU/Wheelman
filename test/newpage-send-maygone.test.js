@@ -115,7 +115,7 @@ test("the old page's send is checked the same way, and a chat that cannot be rea
   // Readable again: the reply is in the chat, so 409, and nothing more is posted.
   standins.world.listDown = false;
   const again = await post('/api/items/mp:514/send', { text, draftId: null });
-  assert.deepEqual([again.status, again.json], [409, { error: GONE, gone: true }]);
+  assert.deepEqual([again.status, again.json], [409, { error: GONE, gone: true, same: true }]);
   assert.equal(replies(514).length, 1);
   assert.equal((await chat('mp:514')).state, 'answered', 'every page sees it answered now');
 });
@@ -148,4 +148,86 @@ test('the 504 starts a Marketplace read of its own, and a reply that did not go 
   assert.equal((await post('/api/items/mp:516/send', { text: 'And one more thing.', draftId: null })).status, 200);
   assert.equal(lists(), read);
   assert.equal(replies(516).length, 3);
+});
+
+// ---- PR 5b, Task 0a: the same words are never sent to a buyer twice
+
+const lists = () => standins.engineSeen.filter((r) => r.method === 'GET' && r.path === '/inbox/conversations').length;
+/** The buyer writes again, in the engine and in Wheelman. */
+async function writesAgain(id, text) {
+  const all = [...standins.world.chats.values()].flatMap((x) => x.messages.map((m) => Number(m.id) || 0));
+  const c = standins.world.chats.get(id);
+  c.messages.push(chatMessage(Math.max(0, ...all) + 1, 'in', 'phone', text, 0, Date.now()));
+  Object.assign(c.row, { last_direction: 'in', last_message_at: new Date().toISOString() });
+  await (await import('../src/sync.js')).syncMarketplace();
+}
+
+test('a second press with the same words after "This reply has gone already." is refused again, from the old page too', async () => {
+  await buyer(517, 'Mila Invented');
+  const text = 'Yes, it is still here. Come by on Saturday.';
+  assert.equal((await timesOut(() => post('/api/items/mp:517/send', { text, draftId: null }))).status, 504);
+  await until(async () => (await chat('mp:517')).state === 'answered', 'the chat shows the reply');
+  for (const press of [1, 2]) {
+    const again = await post('/api/items/mp:517/send', { text, draftId: null });
+    assert.deepEqual([again.status, again.json], [409, { error: GONE, gone: true, same: true }], `press ${press}`);
+  }
+  assert.equal(replies(517).length, 1, 'the buyer gets it once');
+});
+
+test('the reply that timed out is refused again after the buyer wrote, and other words go', async () => {
+  await buyer(518, 'Nils Invented');
+  const text = 'Yes, it is still here.';
+  assert.equal((await timesOut(() => post('/api/items/mp:518/send', { text, draftId: null }))).status, 504);
+  await until(async () => (await chat('mp:518')).state === 'answered', 'the chat shows the reply');
+  await writesAgain(518, 'Great, can I see it tomorrow?');
+  assert.equal((await chat('mp:518')).state, 'awaiting', 'the buyer is waiting again');
+  // The words that went: refused, whatever the buyer wrote since.
+  const same = await post('/api/items/mp:518/send', { text, draftId: null });
+  assert.deepEqual([same.status, same.json], [409, { error: GONE, gone: true, same: true }]);
+  // Other words go.
+  const other = await post('/api/items/mp:518/send', { text: 'Yes, tomorrow at 10 works.', draftId: null });
+  assert.equal(other.status, 200);
+  assert.equal(replies(518).length, 2);
+});
+
+test('the 409 says whether the words sent are the ones that went, compared on the tagged text', async () => {
+  // The box's link carries another tag; the server tags it utm_source=marketplace before it goes.
+  await buyer(519, 'Oona Invented');
+  const text = `Here it is: ${config.site.baseUrl}/vehicles/1159?utm_source=facebook`;
+  assert.equal((await timesOut(() => post('/api/items/mp:519/send', { text, draftId: null }))).status, 504);
+  await until(async () => (await chat('mp:519')).state === 'answered', 'the chat shows the reply');
+  assert.match(replies(519)[0].body, /utm_source=marketplace/);
+  const same = await post('/api/items/mp:519/send', { text, draftId: null });
+  assert.deepEqual([same.status, same.json], [409, { error: GONE, gone: true, same: true }]);
+  assert.equal(replies(519).length, 1);
+
+  // Other words, with nothing from the buyer since that reply: 409 once, saying they are not the
+  // words that went; the same words pressed again go.
+  await buyer(520, 'Pia Invented');
+  assert.equal((await timesOut(() => post('/api/items/mp:520/send', { text: 'Yes, it is still here.', draftId: null }))).status, 504);
+  await until(async () => (await chat('mp:520')).state === 'answered', 'the chat shows the reply');
+  const other = 'Yes, it is still here today. Come by any time after 10.';
+  const first = await post('/api/items/mp:520/send', { text: other, draftId: null });
+  assert.deepEqual([first.status, first.json], [409, { error: GONE, gone: true, same: false }]);
+  assert.equal(replies(520).length, 1);
+  assert.equal((await post('/api/items/mp:520/send', { text: other, draftId: null })).status, 200);
+  assert.equal(replies(520).length, 2);
+});
+
+test('the same words as our reply since the buyer last wrote are refused on any chat, and a reply that did not reach the buyer can be sent again', async () => {
+  await buyer(521, 'Quinn Invented');
+  const text = 'Yes, it is still here. Would you like to see it?';
+  assert.equal((await post('/api/items/mp:521/send', { text, draftId: null })).status, 200);
+  const read = lists();
+  const again = await post('/api/items/mp:521/send', { text, draftId: null });
+  assert.deepEqual([again.status, again.json], [409, { error: GONE, gone: true, same: true }]);
+  assert.equal(lists(), read, 'no Marketplace read first');
+  assert.equal(replies(521).length, 1);
+  // The engine takes it but cannot deliver it: it is not in the chat, so the same words go again.
+  await buyer(522, 'Rhea Invented');
+  standins.world.failDeliveryOnce = new Set([522]);
+  assert.equal((await post('/api/items/mp:522/send', { text, draftId: null })).status, 200);
+  assert.equal((await chat('mp:522')).marketplace.failed, 1, 'not delivered');
+  assert.equal((await post('/api/items/mp:522/send', { text, draftId: null })).status, 200);
+  assert.equal(replies(522).length, 2);
 });

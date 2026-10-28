@@ -53,17 +53,46 @@ export function answeredBy(timeline, latestDraft, nameOf = (x) => x) {
 const plainReply = (s, tag) => String(s ?? '').replace(/\r/g, '').split(`?utm_source=${tag}`).join('').split(`&utm_source=${tag}`).join('').replace(/\s+/g, ' ').trim();
 
 /**
+ * Whether two replies are the same words as a chat keeps them: the link tag (utm_source=<tag>) and
+ * runs of space set aside, as the new page compares them (web/new/js/channel.js sameText). False
+ * when either is empty.
+ */
+export function sameReply(a, b, tag = 'marketplace') {
+  const want = plainReply(a, tag);
+  return want !== '' && want === plainReply(b, tag);
+}
+
+/** Where in these entries the first reply of ours with this text is, or -1. */
+const oursWith = (entries, text, tag) => entries.findIndex((e) => e.who === 'us' && !e.internal && sameReply(e.text, text, tag));
+const fromCustomer = (entries) => entries.some((e) => e.who === 'customer' && !e.internal);
+
+/**
  * Whether the timeline shows a reply of ours with this text after the message `anchor` (the one a
- * send answered), with nothing from the customer since: that reply went, and the chat is answered by
- * it. Compared as the new page compares them (web/new/js/channel.js sentSince): the link tag
- * (utm_source=<tag>) and runs of space set aside. With that message not in the timeline, false.
+ * send answered), whatever the customer wrote since: that reply went. With that message not in the
+ * timeline, false.
+ */
+export function wentAfter(timeline, anchor, text, tag = 'marketplace') {
+  const at = timeline.findIndex((e) => e.key === anchor);
+  return at !== -1 && oursWith(timeline.slice(at + 1), text, tag) !== -1;
+}
+
+/**
+ * wentAfter, with nothing from the customer after that reply: it went, and the chat is answered by
+ * it. With that message not in the timeline, false.
  */
 export function replyShown(timeline, anchor, text, tag = 'marketplace') {
   const at = timeline.findIndex((e) => e.key === anchor);
   if (at === -1) return false;
-  const want = plainReply(text, tag);
-  if (!want) return false;
   const after = timeline.slice(at + 1);
-  const ours = after.findIndex((e) => e.who === 'us' && !e.internal && plainReply(e.text, tag) === want);
-  return ours !== -1 && !after.slice(ours + 1).some((e) => e.who === 'customer' && !e.internal);
+  const ours = oursWith(after, text, tag);
+  return ours !== -1 && !fromCustomer(after.slice(ours + 1));
+}
+
+/**
+ * Whether these words are a reply of ours already in the chat since the customer last wrote (or
+ * anywhere, when the customer has written nothing): sent again, the buyer would have them twice.
+ */
+export function alreadySent(timeline, text, tag = 'marketplace') {
+  const customer = lastCustomerEntry(timeline);
+  return oursWith(customer ? timeline.slice(timeline.indexOf(customer) + 1) : timeline, text, tag) !== -1;
 }

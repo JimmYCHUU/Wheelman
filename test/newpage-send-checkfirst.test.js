@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { sendFailedWords, sendFor, sendOutcome } from '../web/new/js/channel.js';
+import { sendFailedWords, sendFor, sendOutcome, sameText } from '../web/new/js/channel.js';
 import { sectionRowView } from '../web/new/js/sections.js';
 import { boxViewOf, sectionBox } from '../web/new/js/boxsections.js';
 import { NOT_RESPONDING, createApi } from '../web/new/js/api.js';
@@ -206,12 +206,14 @@ test('a reply that did not reach the buyer says Not delivered on its row', async
 // ---- the final fix wave
 
 const GONE = 'This reply has gone already.';
-const gone = () => Object.assign(failure(GONE, 409), { gone: true });
+/** The server's 409 for a reply that had gone: same says whether the words sent are the ones that went. */
+const gone = (same = true) => Object.assign(failure(GONE, 409), { gone: true, same });
 
 test('a 409 that says the reply has gone already shows it sent, and nothing more is posted', async () => {
   // The page's api carries the server's word, and a send reads it as its own outcome.
-  const api = createApi({ fetch: async () => ({ status: 409, ok: false, json: async () => ({ error: GONE, gone: true }) }), go: () => {} });
-  await assert.rejects(api('/api/items/mp:1/send', {}), (e) => e.status === 409 && e.gone === true && e.message === GONE);
+  const api = (same) => createApi({ fetch: async () => ({ status: 409, ok: false, json: async () => ({ error: GONE, gone: true, same }) }), go: () => {} });
+  await assert.rejects(api(true)('/api/items/mp:1/send', {}), (e) => e.status === 409 && e.gone === true && e.same === true && e.message === GONE);
+  await assert.rejects(api(false)('/api/items/mp:1/send', {}), (e) => e.status === 409 && e.gone === true && e.same === false);
   assert.equal(sendOutcome(gone()), 'gone');
   assert.equal(sendOutcome(failure('This reply is already on its way.', 409)), 'elsewhere');
   // A fresh page (nothing in memory) presses Send on a chat whose earlier reply timed out: the
@@ -244,7 +246,7 @@ test('a 409 after a timed-out send keeps a different reply in the box', async ()
   // The chat as the server has it after its check: answered by the reply that timed out.
   const answeredBy = { ...SENT, thread: [ASKED, { key: 'fm:2', who: 'us', text: went, sending: true }] };
   const a = fb();
-  a.data.on = { '/api/items/mp:1/send': () => { a.data.items['mp:1'] = answeredBy; throw gone(); } };
+  a.data.on = { '/api/items/mp:1/send': () => { a.data.items['mp:1'] = answeredBy; throw gone(false); } };
   await a.store.actions.open('mp:1');
   a.store.actions.type(other);
   assert.equal(await a.store.actions.send(), 'replied');
@@ -263,14 +265,14 @@ test('a 409 after a timed-out send keeps a different reply in the box', async ()
   assert.equal(a.store.get().typed, null);
   // A suggestion in the box with other words than the reply that went stays too.
   const b = fb({ draft: draft(22, { reply: other }) });
-  b.data.on = { '/api/items/mp:1/send': () => { b.data.items['mp:1'] = answeredBy; throw gone(); } };
+  b.data.on = { '/api/items/mp:1/send': () => { b.data.items['mp:1'] = answeredBy; throw gone(false); } };
   await b.store.actions.open('mp:1');
   assert.equal(await b.store.actions.send(), 'replied');
   assert.equal(b.store.get().typed, other);
   assert.equal(boxViewOf(b.store.get(), AT).kind, 'editor');
   // The chat cannot be read after the 409: his words stay, and his next press reads Marketplace first.
   const c = fb();
-  c.data.on = { '/api/items/mp:1/send': () => { c.data.fail.add('/api/items/mp:1'); throw gone(); } };
+  c.data.on = { '/api/items/mp:1/send': () => { c.data.fail.add('/api/items/mp:1'); throw gone(false); } };
   await c.store.actions.open('mp:1');
   c.store.actions.type(other);
   assert.equal(await c.store.actions.send(), 'replied');
@@ -281,4 +283,27 @@ test('a 409 after a timed-out send keeps a different reply in the box', async ()
   // that went leaves the box after a 409, as the test above shows.)
   assert.equal(sectionBox({ item: answeredBy, typed: true, typedText: went, now: AT }).kind, 'quiet');
   assert.equal(sectionBox({ item: answeredBy, typed: true, typedText: other, now: AT }).kind, 'editor');
+});
+
+test('a 409 clears the box only when the server says these words are the ones that went', async () => {
+  // The server compares the words on its own tagged text: the box's link carries utm_source=facebook,
+  // which the server tags utm_source=marketplace, and the page's own comparison says they differ.
+  const link = 'https://www.carbarn.com.au/vehicles/1159';
+  const typed = 'Here it is: ' + link + '?utm_source=facebook';
+  const inChat = 'Here it is: ' + link + '?utm_source=marketplace';
+  assert.equal(sameText(typed, inChat), false, 'the page alone cannot tell');
+  const a = fb();
+  a.data.on = { '/api/items/mp:1/send': () => { a.data.items['mp:1'] = sentWith(inChat); throw gone(true); } };
+  await a.store.actions.open('mp:1');
+  a.store.actions.type(typed);
+  assert.equal(await a.store.actions.send(), 'replied');
+  assert.deepEqual([a.store.get().typed, a.store.get().sending], [null, {}]);
+  // The server says these are other words: they stay, even where the thread shows the box's very words.
+  const other = 'Yes, it is still here today. Come by any time after 10.';
+  const b = fb();
+  b.data.on = { '/api/items/mp:1/send': () => { b.data.items['mp:1'] = sentWith(other); throw gone(false); } };
+  await b.store.actions.open('mp:1');
+  b.store.actions.type(other);
+  assert.equal(await b.store.actions.send(), 'replied');
+  assert.equal(b.store.get().typed, other);
 });

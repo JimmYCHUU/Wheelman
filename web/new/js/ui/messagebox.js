@@ -122,7 +122,7 @@ function Quiet({ state, actions, item, view }) {
     ${view.suggestion ? html`<div class="ghost"><span class="ghost-label">${view.suggestionLabel || 'The suggestion that was here'}</span><p>${view.suggestion}</p></div>` : null}
     ${view.tell || b ? html`<div class="foot">
       ${view.tell ? html`<${Tell} onSend=${tell} holdTell=${actions.holdTell} button="Write from this" disabled=${resending} />` : null}
-      <div class="right">${view.copy && !resending ? html`<button type="button" class="btn" onClick=${() => actions.copy({})}>Copy</button>` : null}
+      <div class="right">${view.copy && !resending ? html`<button type="button" class="btn quiet" onClick=${() => actions.copy({})}>Copy</button>` : null}
         ${resending ? html`<button type="button" class="btn main" disabled>Sending…</button>`
         : b ? html`<button type="button" class=${'btn' + (b.main ? ' main' : '')} onClick=${run[b.act]}>${b.label}</button>` : null}</div>
     </div>` : null}

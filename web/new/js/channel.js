@@ -75,8 +75,9 @@ export function copiedWords(item, left = 0) {
 
 /**
  * What a send that threw means, from the page's api error (web/new/js/api.js): 'gone' (409: the
- * server read Marketplace and found the reply of a send that timed out, from here or another page,
- * so nothing more was sent), 'elsewhere' (409: another page is sending a reply to this chat),
+ * server found the reply of a send that timed out, from here or another page, or these words as our
+ * reply since the buyer last wrote, so nothing more was sent; e.same says whether the words sent
+ * are the ones that went), 'elsewhere' (409: another page is sending a reply to this chat),
  * 'refused' (the server said it was not sent: a 4xx, or its own 502 when the engine said no or was
  * not reached), or 'unknown' (no answer at all, or a failure not in the server's words, after which
  * the reply may have gone).

@@ -30,7 +30,7 @@ import { businessFactsForPrompt, loadBusinessFacts } from './knowledge.js';
 import * as worker from './worker.js';
 import { onCopied, onRated, onApproved, onAdvice, onEdited, onRemember, canLearnFrom } from './learn.js';
 import { displayNameFor } from './people.js';
-import { answeredBy, lastCustomerEntry, replyShown } from './answered.js';
+import { answeredBy, lastCustomerEntry, replyShown, wentAfter, sameReply, alreadySent } from './answered.js';
 import { reservedByAnother } from './deal.js';
 import { wantedFrom, enquiryStage } from './imports.js';
 import { SECTIONS, sectionOn, movesFor, onImportsList } from './placement.js';
@@ -421,8 +421,11 @@ const olderCache = new Map();
 // while the first is still being answered cannot send the same reply twice.
 const sendingNow = new Set();
 // Marketplace chats whose last send the engine did not answer in time, so the reply may have gone:
-// { text, anchor, draftId, at } by key. The next send on that chat, from any page, first has a fresh
-// Marketplace read and looks for that reply (kept in memory: a restart forgets it).
+// { text, anchor, draftId, at, found, told } by key. The next send on that chat, from any page,
+// first has a fresh Marketplace read and looks for that reply. Not there: the note goes. There
+// (found): those words are never sent to that chat again, and other words are held back once
+// (told) while the chat is answered by that reply. A later send the engine takes ends the note
+// (kept in memory: a restart forgets it).
 const mayHaveGone = new Map();
 const ALL_STATES = ['awaiting', 'answered', 'ack', 'closed', 'optout', 'other'];
 // Conversations with activity in the last fortnight are rebuilt whenever anything is written;
@@ -844,26 +847,46 @@ async function api(req, res, url) {
     if (sendingNow.has(item.itemKey)) return send(res, 409, { error: 'This reply is already on its way.' });
     sendingNow.add(item.itemKey);
     try {
+      const tag = config.marketplace.linkSource;
+      // Refused as gone already: nothing is sent. same: whether these words are the ones that went
+      // (compared on the text as tagged here), so a page clears only those from its box.
+      const gone = (same, why) => {
+        logLine('marketplace', `${item.itemKey}: ${why}`);
+        return send(res, 409, { error: 'This reply has gone already.', gone: true, same });
+      };
+      // Wheelman's copy of the chat, or the one read afresh just below.
+      let chat = item;
       // The last send on this chat may have gone (the engine did not answer in time): Marketplace is
-      // read afresh and the chat looked at first, whichever page sends. That reply in the chat, with
-      // nothing from the buyer since: 409, and nothing is sent twice. Not there: it is sent as normal.
-      // Marketplace not read: nothing is sent, and the note stays for the next try.
+      // read afresh and the chat looked at first, whichever page sends. Marketplace not read: nothing
+      // is sent, and the note stays for the next try. That reply not in the chat: the note goes.
       const unsure = mayHaveGone.get(item.itemKey);
-      if (unsure) {
+      if (unsure && !unsure.found) {
         const read = await worker.runMarketplaceSync({ wait: true });
         if (!read || !read.ok) return send(res, 502, { error: `Wheelman could not read the Marketplace chat first. ${read ? read.message : 'Marketplace is switched off.'}` });
-        mayHaveGone.delete(item.itemKey);
-        const now = itemFromKey(m[1]) || item;
-        if (replyShown(now.timeline, unsure.anchor, unsure.text, config.marketplace.linkSource)) {
+        chat = itemFromKey(m[1]) || item;
+        if (!wentAfter(chat.timeline, unsure.anchor, unsure.text, tag)) mayHaveGone.delete(item.itemKey);
+        else {
+          unsure.found = true;
           // It went from here: its suggestion is marked as sent, as it would have been then.
           try {
             const draft = unsure.draftId ? getDraft(unsure.draftId) : null;
-            if (draft && draft.item_key === item.itemKey) { onEdited(now, draft.id, unsure.text); recordSentHere(draft.id, unsure.at); }
+            if (draft && draft.item_key === item.itemKey) { onEdited(chat, draft.id, unsure.text); recordSentHere(draft.id, unsure.at); }
           } catch (e) { logLine('marketplace', `${item.itemKey}: the reply had gone, but the suggestion could not be marked as sent: ${e.message}`); }
-          logLine('marketplace', `${item.itemKey}: a reply that timed out had gone, so the next send was not sent again`);
-          return send(res, 409, { error: 'This reply has gone already.', gone: true });
         }
       }
+      // That reply went: its words are never sent to this chat again, whatever the buyer wrote since.
+      // Other words, while the chat is answered by it, are held back once so the page can say so,
+      // and the next press sends them.
+      if (unsure && unsure.found) {
+        if (sameReply(text, unsure.text, tag)) return gone(true, 'a reply that timed out had gone, so the same words were not sent again');
+        if (!unsure.told && replyShown(chat.timeline, unsure.anchor, unsure.text, tag)) {
+          unsure.told = true;
+          return gone(false, 'a reply that timed out had gone, so other words were held back once');
+        }
+      }
+      // On any chat: these words are a reply of ours already since the buyer last wrote. Wheelman's
+      // copy is enough (no Marketplace read): a reply sent from here is in it as soon as it goes.
+      if (alreadySent(chat.timeline, text, tag)) return gone(true, 'these words are already our reply since the buyer last wrote, so they were not sent again');
       let out;
       try {
         out = await sendReply(item.marketplace.id, text);
@@ -874,13 +897,16 @@ async function api(req, res, url) {
         // the engine has it.
         logLine('marketplace', `${item.itemKey}: the reply ${e.mayHaveGone ? 'may not have been sent' : 'could not be sent'}. ${e.message}`);
         if (!e.mayHaveGone) return send(res, 502, { error: e.message });
-        mayHaveGone.set(item.itemKey, { text, anchor: item.anchorKey, draftId: Number(body.draftId) || null, at: Date.now() });
+        // A fresh note, in place of any.
+        mayHaveGone.set(item.itemKey, { text, anchor: chat.anchorKey, draftId: Number(body.draftId) || null, at: Date.now(), found: false, told: false });
         send(res, 504, { error: e.message });
         worker.runMarketplaceSync({ wait: true }).catch(() => { /* the next read brings it */ });
         return;
       }
-      // The engine has the reply: it has gone. What follows is Wheelman's own record of it, and a
-      // step that fails there is logged, never answered as "not sent" (a page would offer it again).
+      // The engine has the reply: it has gone, and any note on this chat is over. What follows is
+      // Wheelman's own record of it, and a step that fails there is logged, never answered as "not
+      // sent" (a page would offer it again).
+      mayHaveGone.delete(item.itemKey);
       const note = (what, step) => { try { step(); } catch (e) { logLine('marketplace', `${item.itemKey}: the reply was sent, but ${what}: ${e.message}`); } };
       // The suggestion it came from: what was in the box is kept with it, and that Send was pressed.
       note('the suggestion could not be marked as sent', () => {

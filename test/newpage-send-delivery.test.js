@@ -155,9 +155,9 @@ test('a failed send is Not sent on its row when refused, Not confirmed when its 
 test('a reply that did not reach the buyer is shown with a quiet Copy, and once copied the box says Copied as its row does', async () => {
   const view = sectionBox({ item: UNDELIVERED, now: AT + 60e3 });
   assert.deepEqual([view.suggestion, view.suggestionLabel, view.copy], [TEXT, 'The reply that did not reach the buyer', true]);
-  // The message box shows it as a ghost line with that label, and Copy beside Send it again.
+  // The message box shows it as a ghost line with that label, and a quiet Copy beside Send it again.
   assert.match(BOX, /<span class="ghost-label">\$\{view\.suggestionLabel \|\| 'The suggestion that was here'\}<\/span>/);
-  assert.match(BOX, /view\.copy && !resending \? html`<button type="button" class="btn" onClick=\$\{\(\) => actions\.copy\(\{\}\)\}>Copy<\/button>`/);
+  assert.match(BOX, /view\.copy && !resending \? html`<button type="button" class="btn quiet" onClick=\$\{\(\) => actions\.copy\(\{\}\)\}>Copy<\/button>`/);
   // Copied: the text Send it again would send, with nothing of it told to the server.
   const a = fb(UNDELIVERED);
   await a.store.actions.open('mp:1');
