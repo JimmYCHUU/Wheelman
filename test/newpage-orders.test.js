@@ -440,6 +440,56 @@ test('Put back of the first of two messages copied on one order never brings bac
   assert.deepEqual([restores.at(-1), s.typed], [{ draftId: 50 }, 'Deposit reminder text, thanks Omar']);
 });
 
+/**
+ * Older words for the due message, copied; the toast's Put back pressed with another conversation
+ * open, so they are not given back there. Then the message again: newer words, saved; away and
+ * back, so nothing is typed and the box shows the newer saved words.
+ */
+async function newerSaved() {
+  const a = await opened(orderItem({ draft: ready(41, 'Due message') }));
+  a.data.rows = [row(KEY, { anchor: DUE }), row('c:1')];
+  a.data.on = { ['/api/items/' + KEY + '/restore']: () => ({ ok: true, item: a.data.items[KEY] }), ['/api/items/' + KEY + '/dismiss']: () => ({ ok: true }) };
+  a.store.actions.type('Due message, older words');
+  await a.store.actions.copy();
+  await a.timers.advance(1000);
+  const toast = a.store.get().toast;
+  await a.store.actions.open('c:1');
+  await toast.action.run();
+  await settle();
+  await a.store.actions.open(KEY);
+  a.store.actions.type('Due message, newer words');
+  await a.timers.advance(1000);
+  await a.store.actions.open('c:1');
+  await a.store.actions.open(KEY);
+  assert.deepEqual([a.store.get().typed, a.data.items[KEY].draft.edited], [null, 'Due message, newer words']);
+  return a;
+}
+
+/** After the Put back or the Undo: nothing typed, the newer saved words in the box and on the server. */
+async function newerKept(a) {
+  await settle();
+  await a.timers.advance(1000);
+  const s = a.store.get();
+  assert.deepEqual([s.typed, a.data.items[KEY].draft.edited, boxViewOf(s, NOW).kind], [null, 'Due message, newer words', 'editor']);
+}
+
+test('words kept from an earlier copy never come back over a newer edit, after Copy with nothing typed and Put back', async () => {
+  const a = await newerSaved();
+  await a.store.actions.copy();
+  await settle();
+  assert.equal(a.written.at(-1), 'Due message, newer words');
+  await a.store.get().toast.action.run();
+  await newerKept(a);
+});
+
+test('words kept from an earlier copy never come back over a newer edit, after Dismiss with nothing typed and Undo', async () => {
+  const a = await newerSaved();
+  await a.store.actions.dismiss();
+  assert.equal(a.store.get().toast.message, 'Dismissed');
+  await a.store.get().toast.action.run();
+  await newerKept(a);
+});
+
 test('We sent this or Remove under typed text says what is due has changed, and offers the new suggestion', async () => {
   const a = await opened(orderItem({ draft: ready(41) }));
   a.data.on = {

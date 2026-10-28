@@ -23,13 +23,19 @@ export function createFinish({ api, clipboard, storage, now, get, set, toast, te
   const copiedHere = new Map();
   const handed = new Map();
 
+  /** Whether words kept were typed for this message: its anchor, and its suggestion when one was kept. */
+  const forMessage = (h, item) => !!h && !!item && item.anchor === h.anchor && (h.draftId === null || (!!item.draft && item.draft.id === h.draftId));
+
   /**
    * An order's message copied or dismissed: the text typed for it leaves the box, kept with the
-   * message it was for. Words for a later message replace it; nothing typed leaves it as it was.
+   * message it was for. Words for a later message replace it. With nothing typed, the box held the
+   * message's own saved words, which are newer than any kept for it: those are forgotten, and
+   * words kept for another message keep waiting.
    */
   function handOver(key, item) {
     const typed = get().typed;
     if (typed !== null) handed.set(key, { words: typed, anchor: item.anchor, draftId: item.draft ? item.draft.id : null });
+    else if (forMessage(handed.get(key), item)) handed.delete(key);
     set({ typed: null, context: null });
   }
 
@@ -41,8 +47,7 @@ export function createFinish({ api, clipboard, storage, now, get, set, toast, te
   function giveBack(key) {
     const h = handed.get(key);
     const s = get();
-    if (!h || key !== s.key || s.typed !== null || !s.item || s.item.anchor !== h.anchor) return;
-    if (h.draftId !== null && !(s.item.draft && s.item.draft.id === h.draftId)) return;
+    if (key !== s.key || s.typed !== null || !forMessage(h, s.item)) return;
     handed.delete(key);
     type(h.words);
   }
