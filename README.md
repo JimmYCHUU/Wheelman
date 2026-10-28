@@ -1066,9 +1066,9 @@ setting; the photo viewer is dark in both.
 
 ## The Marketplace section
 
-Wheelman reads the Facebook Marketplace chats from the content engine and suggests a reply for
-every chat where the buyer wrote last. It works like the Dashboard section, with these
-differences:
+Wheelman reads the Facebook Marketplace chats from the content engine and lists every chat where
+the buyer wrote last. A chat is written when it is opened, on either page, and never in the
+background. It works like the Dashboard section, with these differences:
 
 - **The shape the team sends.** Learned from the replies sent on Marketplace over 18 to 20 Oct
   2026: the content engine's own first reply to every buyer (written for it by an AI, with the
@@ -1132,10 +1132,12 @@ differences:
 - **The small AI model.** Marketplace chats are written by `gemini-3.5-flash-lite` and the
   models after it in the list. The three better models are never asked, so their small daily
   allowance is kept for dashboard customers. When Marketplace's models are busy or used up,
-  only Marketplace waits.
+  only Marketplace waits, and the chat says so with **Try again**. A chat written on open counts
+  as an asked-for write, like **Write it now**, and the usual budget and the Used so far panel
+  apply.
 
-Dashboard customers are drafted first, and Marketplace has its own allowance so it cannot use
-up the day's free AI requests.
+Marketplace uses only the small models, so it cannot use up the day's free AI requests that
+Dashboard customers need.
 
 | Setting in `.env` | What it does | Default |
 |---|---|---|
@@ -1607,7 +1609,7 @@ often you asked for a rewrite. Counts only; no customer text.
 | "Below" | A reply never points at the address block. It answers in the sentence itself |
 | The message box | An editor: change the text or clear it, and it is saved as you type. A changed reply teaches Wheelman when it is copied or approved |
 | AI models | The better models are kept for dashboard customers. Marketplace chats use the small one |
-| Marketplace | A suggestion for every chat where the buyer wrote last; warm and selling (up to about 90 words, opening with a thank-you, the car's strongest points and what is included, an easy next step), with the car's page link and the booking link when asked, and the invitation once in a chat |
+| Marketplace | A suggestion, written when the chat is opened, for every chat where the buyer wrote last; warm and selling (up to about 90 words, opening with a thank-you, the car's strongest points and what is included, an easy next step), with the car's page link and the booking link when asked, and the invitation once in a chat |
 | Your Prompt | Comes first in every section: it decides the length, tone, layout and greeting; only the facts still bind. No price reply or invitation is added under a prompted reply unless the Prompt asks for the booking link |
 | The deposit | Proposed only once the price is agreed: booked or seen, asked to hold it, or accepted our figure. Never while the customer is making an offer, says it is too dear, or is leaving |
 | Offers | Thanked and left to a person (`[PRICE?]`), never turned down or called too low; the price reply goes once |
@@ -1855,7 +1857,7 @@ computer. Git never sees any of it.
 | "A suggestion could not be written" in red at the top of the list | An AI key was rejected, or something in Wheelman failed | `npm run check-model`, and look at `data\wheelman.log` |
 | "A suggestion could not be written. No AI model could answer just now" in one conversation | Every free model was busy or used up at that moment | Nothing. It is tried again in a few minutes, or press **Try again** |
 | "Suggestions are paused" | Every free model has used up its allowance for the day | It resumes by itself at the time shown |
-| "The AI models used for Marketplace have used up their allowance for today" in a chat | The small model's day is used up | Nothing. Dashboard suggestions carry on, and Marketplace resumes at the time shown. Press **Try again** later, or set `MARKETPLACE_MODEL=` (empty) to let Marketplace use every model |
+| "The AI models used for Marketplace have used up their allowance for today" in a chat | The small model's day is used up | Nothing. Dashboard suggestions carry on, and Marketplace resumes at the time shown. Open the chat or press **Try again** later, or set `MARKETPLACE_MODEL=` (empty) to let Marketplace use every model |
 | Something went wrong and the black window has scrolled past it | | Open `data\wheelman.log`: each problem is noted there with its time |
 | "The live auction could not be read, so no car was looked for" | The website's auction feed did not answer | Press **Rewrite** to try again. The reply names no car in the meantime |
 | An import customer gets the asking reply although they told us what they want | What they want was said on the phone, not in writing | Press **Rewrite** and type it, for example "2015 or newer, under 100,000 km, budget 12k", or paste a live-auction link |
@@ -1909,7 +1911,7 @@ and how "far away" is recognised, and the Marketplace section: three GET address
 send address, which only the Send button reaches, redirects refused, identifiers and contact
 details not stored, a failed reply not counting as a reply, the auto-reply's price not
 trusted, the booking link and the car's page link in the reply itself, nothing learned from a
-copied or sent Marketplace suggestion, its own allowance, the engine being down, dismiss with
+copied or sent Marketplace suggestion, writing on open, the engine being down, dismiss with
 undo, the unread counts, and Send: the text in the box to the engine's reply address and
 nothing else, shown on its way and the chat out of Waiting, a blank refused, a refused or
 unreachable engine changing nothing, an offline phone meaning queued, and a queued auto-reply
