@@ -7,6 +7,10 @@
 // person made.
 import { parseRoute, hashFor } from './route.js';
 import { followUpOf } from './store.js';
+import { sectionOff } from './sections.js';
+
+/** In place of an address on a section the server says is switched off: the Dashboard's. null for any other. */
+export const offAddress = (route, sections) => (sectionOff(route.section, sections) ? hashFor({ section: 'dashboard', chip: 'waiting' }) : null);
 
 /**
  * What the store does when the address changes: null for nothing, { section, chip, key } for

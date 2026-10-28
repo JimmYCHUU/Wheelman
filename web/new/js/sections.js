@@ -1,7 +1,36 @@
-// What differs from one section to the next on the new page: its chips, its empty lists, its Load
-// more, the channel a row is on, an order row's reason, the head line and where a search result
-// opens. Pure functions (no DOM, no globals) beside model.js, which the tests import in Node.
-import { CHIPS, rowView } from './model.js';
+// What differs from one section to the next on the new page: which ones have a tab, its chips, its
+// empty lists, its Load more, the channel a row is on, an order row's reason, the head line and where
+// a search result opens. Pure functions (no DOM, no globals) beside model.js, which the tests import in Node.
+import { SECTIONS, CHIPS, rowView } from './model.js';
+
+// ---- the tabs
+
+/**
+ * Whether the server says a section is switched off: null for it in the list's `sections`, the old
+ * page's signal (web/views/TopBar.js). Not known yet (before the first answer) is on.
+ */
+export const sectionOff = (id, sections) => id !== 'dashboard' && !!sections && sections[id] === null;
+
+/** The section tabs: every section but one switched off. */
+export const shownSections = (sections) => SECTIONS.filter((s) => !sectionOff(s.id, sections));
+
+/**
+ * Where the tab track scrolls so the chosen tab is in view, from both rects (getBoundingClientRect)
+ * and the track's scrollLeft; null when it is in view already. A tab wider than the track shows its start.
+ */
+export function tabInView(tab, track, scrollLeft) {
+  if (tab.left < track.left || tab.right - tab.left > track.right - track.left) return scrollLeft + tab.left - track.left;
+  if (tab.right > track.right) return scrollLeft + tab.right - track.right;
+  return null;
+}
+
+// ---- the lists
+
+/** What a list answer holds for this section: nothing when the server answered for another (this one is switched off). */
+export function listFor(list, section) {
+  if (list.section && list.section !== section) return { rows: [], total: 0, counts: {} };
+  return { rows: list.items || [], total: list.total || 0, counts: list.counts || {} };
+}
 
 // The ids are the server's `tab` values.
 export const SECTION_CHIPS = {

@@ -7,7 +7,7 @@ import { createRemember } from './remember.js';
 import { createRunner } from './runstore.js';
 import { createFinish, readDone } from './finish.js';
 import { createHold } from './hold.js';
-import { validChip } from './sections.js';
+import { validChip, sectionOff, listFor } from './sections.js';
 
 export { visibleRows, followUpOf, waitingCount };
 
@@ -15,7 +15,7 @@ const NEW_MESSAGE = 'New message from the customer. Your text is kept.';
 
 export function createStore({ api, clipboard, storage, now, timers, keepalive }) {
   let state = {
-    section: 'dashboard', chip: 'waiting', rows: [], total: 0, counts: {}, unread: {}, listState: 'loading', listError: '',
+    section: 'dashboard', chip: 'waiting', rows: [], total: 0, counts: {}, sections: {}, unread: {}, listState: 'loading', listError: '',
     limit: 20, key: null, item: null, itemState: 'idle', typed: null, save: { state: 'idle', at: null },
     overridden: false, ...readDone(storage), status: null, toast: null, context: null,
     writing: null, remembered: [], closedNotes: [], run: null, runSummary: null, runMore: 0, runSkipped: 0,
@@ -112,7 +112,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
       const status = await api('/api/status');
       const list = await api('/api/items?section=' + state.section + '&tab=' + state.chip + '&limit=' + state.limit);
       if (seq !== listSeq) return;
-      set({ status, rows: list.items || [], total: list.total || 0, counts: list.counts || {}, unread: list.unread || {}, listState: 'ready', listError: '' });
+      set({ status, ...listFor(list, state.section), sections: list.sections || {}, unread: list.unread || {}, listState: 'ready', listError: '' });
     } catch (e) {
       if (seq === listSeq) set({ listState: 'error', listError: e.message });
       return;
@@ -181,7 +181,7 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     if (key && key === state.key) flush(); else close();
     set({ section: id, chip: validChip(id, chip), rows: [], total: 0, listState: 'loading', limit: 20 });
     await refresh();
-    if (state.section !== id) return; // another section was chosen meanwhile
+    if (state.section !== id || sectionOff(id, state.sections)) return; // another section was chosen meanwhile, or this one is off
     const to = key || (wide && visibleRows(state)[0] ? visibleRows(state)[0].key : null);
     if (to && to !== state.key) await show(to, { followup: followUpOf(state, to) });
   }

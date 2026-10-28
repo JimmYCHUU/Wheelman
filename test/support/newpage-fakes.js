@@ -30,6 +30,8 @@ export const draft = (id, o = {}) => ({ id, status: 'ready', reply: 'Hello from 
  * demand. stored: what the browser already keeps (key to value) when the page opens; now: the
  * store's clock (1000 throughout unless a test moves it). The Dashboard's list is data.rows and
  * data.counts; another section's is data.sections[section] = { rows, counts } (none: an empty list).
+ * A section in data.off is switched off: as the server does, its list is answered with the
+ * Dashboard's, `section: 'dashboard'`, and null for it in `sections`.
  */
 export function setup(over = {}, { stored = {}, now = () => 1000 } = {}) {
   const calls = [];
@@ -38,6 +40,7 @@ export function setup(over = {}, { stored = {}, now = () => 1000 } = {}) {
     items: { 'c:1': { key: 'c:1', anchor: 'a-c:1', phone: '0491 570 101', draft: draft(11) }, 'c:2': { key: 'c:2', anchor: 'a-c:2', draft: null } },
     counts: { all: 2, waiting: 2, quiet: 0, other: 0, followups: 1 },
     sections: {},
+    off: new Set(),
     fail: new Set(),
     ...over,
   };
@@ -59,9 +62,11 @@ export function setup(over = {}, { stored = {}, now = () => 1000 } = {}) {
       if (path.startsWith('/api/items?')) {
         const q = new URLSearchParams(path.split('?')[1]);
         const limit = Number(q.get('limit')) || Infinity;
-        const section = q.get('section') || 'dashboard';
+        const asked = q.get('section') || 'dashboard';
+        const section = data.off.has(asked) ? 'dashboard' : asked;
         const { rows, counts } = listOf(section);
-        return { items: rows.slice(0, limit), total: rows.length, counts, unread: { dashboard: 2 }, sections: {}, section };
+        const sections = Object.fromEntries(['dashboard', 'marketplace', 'importquery', 'auction'].map((s) => [s, data.off.has(s) ? null : (listOf(s).counts || {}).waiting || 0]));
+        return { items: rows.slice(0, limit), total: rows.length, counts, unread: { dashboard: 2 }, sections, section };
       }
       const t = path.match(/^\/api\/items\/[^/]+\/thread\?shown=(\d+)&limit=(\d+)$/);
       if (t) return data.thread(Number(t[1]), Number(t[2]));

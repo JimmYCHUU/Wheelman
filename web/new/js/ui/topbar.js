@@ -1,6 +1,7 @@
 // The bar across the top: the mark, the four sections, what Wheelman is doing, and the menu.
 import { html, useState, useEffect, useRef } from './html.js';
-import { SECTIONS, statusWords, statusAnnouncement } from '../model.js';
+import { statusWords, statusAnnouncement } from '../model.js';
+import { shownSections, tabInView } from '../sections.js';
 import { MenuButton } from './menu.js';
 import { Search } from './search.js';
 
@@ -34,19 +35,45 @@ function StatusLive({ status }) {
   return html`<span class="sr" role="status" aria-live="polite">${said}</span>`;
 }
 
-/** inert: the bar waits while a drawer or sheet is open over the page. */
+/**
+ * The chosen tab stays in view where the track scrolls (a phone): when it changes, when the tabs
+ * change or change width (a number arriving, the font loading), and when the window does. Only the
+ * track's scroll position is set.
+ */
+function useTabInView(track, key) {
+  useEffect(() => {
+    const el = track.current;
+    if (!el) return undefined;
+    const show = () => {
+      const on = el.querySelector('.tab[aria-current="page"]');
+      if (!on) return;
+      const to = tabInView(on.getBoundingClientRect(), el.getBoundingClientRect(), el.scrollLeft);
+      if (to !== null) el.scrollLeft = to;
+    };
+    const sized = typeof ResizeObserver === 'function' ? new ResizeObserver(show) : null;
+    if (sized) for (const t of el.children) sized.observe(t);
+    show();
+    window.addEventListener('resize', show);
+    return () => { if (sized) sized.disconnect(); window.removeEventListener('resize', show); };
+  }, [key]);
+}
+
+/** inert: the bar waits while a drawer or sheet is open over the page. A section switched off has no tab. */
 export function TopBar({ state, tab, onTab, now, inert = false, search, onOpen, onCar }) {
   const [theme, setTheme] = useState(readTheme);
   const status = statusWords(state.status, now);
   const choose = (id) => { setTheme(id); applyTheme(id); };
+  const tabs = shownSections(state.sections);
+  const track = useRef(null);
+  useTabInView(track, tab + '|' + tabs.map((s) => s.id).join());
   return html`<header class="tile topbar" role="banner" inert=${inert}>
     <div class="brand">
       <svg class="mark" aria-hidden="true"><use href="../assets/brand.svg#mark"></use></svg>
       <h1 class="brand-word">WHEELMAN</h1>
     </div>
     <nav class="tabs" aria-label="Sections">
-      <div class="tab-track">
-        ${SECTIONS.map((s) => {
+      <div class="tab-track" ref=${track}>
+        ${tabs.map((s) => {
           const n = (state.unread && state.unread[s.id]) || 0;
           return html`<button type="button" class="tab" aria-current=${tab === s.id ? 'page' : null} onClick=${() => onTab(s.id)}>
             ${s.label}${n > 0 ? html`<span class="badge">${n}<span class="sr"> unread</span></span>` : null}

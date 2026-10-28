@@ -5,7 +5,7 @@ import { createStore } from './store.js';
 import { createPanelStore } from './panelstore.js';
 import { createSearchStore } from './searchstore.js';
 import { parseRoute } from './route.js';
-import { storeStep, addressAfter, leavesRun, sheetStep, sheetFirst, sheetOnPop, isSheetEntry, withSheet } from './hashsync.js';
+import { storeStep, addressAfter, leavesRun, sheetStep, sheetFirst, sheetOnPop, isSheetEntry, withSheet, offAddress } from './hashsync.js';
 import { html, render } from './ui/html.js';
 import { App } from './ui/app.js';
 import { readTheme, applyTheme } from './ui/topbar.js';
@@ -118,6 +118,9 @@ function follow() {
   window.dispatchEvent(new HashChangeEvent('hashchange')); // replaceState says nothing to the page's own route
 }
 store.subscribe(follow);
+// An address on a section the server says is switched off goes to the Dashboard, in place of the
+// entry on screen; the store follows it there (the hashchange above).
+store.subscribe(() => { const to = offAddress(parseRoute(location.hash), store.get().sections); if (to) location.replace(to); });
 window.addEventListener('popstate', () => { if (sheetGoing) { sheetGoing = false; follow(); } });
 
 actions.boot(parseRoute(location.hash), { wide: innerWidth >= 1280 }).catch(() => { /* the list shows its own error state */ }).finally(() => { booted = true; follow(); });

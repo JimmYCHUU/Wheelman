@@ -3,10 +3,10 @@
 // data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SECTION_CHIPS, chipsFor, validChip, emptyWords, moreLabel, rowChannelWord, sectionRowView, headLine, resultAddress } from '../web/new/js/sections.js';
+import { SECTION_CHIPS, chipsFor, validChip, emptyWords, moreLabel, rowChannelWord, sectionRowView, headLine, resultAddress, shownSections, tabInView } from '../web/new/js/sections.js';
 import { rowView } from '../web/new/js/model.js';
 import { parseRoute, hashFor } from '../web/new/js/route.js';
-import { storeStep, addressAfter } from '../web/new/js/hashsync.js';
+import { storeStep, addressAfter, offAddress } from '../web/new/js/hashsync.js';
 import { setup, row, draft, paths } from './support/newpage-fakes.js';
 
 const labels = (section) => chipsFor(section).map((c) => c.id + ' ' + c.label);
@@ -233,4 +233,52 @@ test('a search result opens in its own section, on the list it is on', async () 
   await a.store.actions.setSection(step.section, { chip: step.chip, key: step.key, wide: true });
   assert.deepEqual([a.store.get().section, a.store.get().chip, a.store.get().key], ['marketplace', 'waiting', 'mp:502']);
   assert.deepEqual(opened(a.calls), ['mp:502'], 'the result, not the first row');
+});
+
+test('a switched-off section has no tab, and its address opens Dashboard', async () => {
+  // The signal is the old page's: the server's `sections`, null for a section that is switched off.
+  const off = { dashboard: 3, marketplace: null, importquery: null, auction: 2 };
+  assert.deepEqual(shownSections(off).map((s) => s.id), ['dashboard', 'auction']);
+  assert.deepEqual(shownSections({ dashboard: 3, marketplace: 0, importquery: 1, auction: 0 }).map((s) => s.id), ['dashboard', 'marketplace', 'importquery', 'auction']);
+  assert.deepEqual(shownSections({}).map((s) => s.id), ['dashboard', 'marketplace', 'importquery', 'auction'], 'before the first answer every tab stays');
+  // An address on a switched-off section goes to the Dashboard; any other is left as it is.
+  assert.equal(offAddress(parseRoute('#/marketplace/all/mp%3A501'), off), '#/dashboard/waiting');
+  assert.equal(offAddress(parseRoute('#/importquery/waiting'), off), '#/dashboard/waiting');
+  assert.equal(offAddress(parseRoute('#/auction/quiet/ao%3A5'), off), null);
+  assert.equal(offAddress(parseRoute('#/dashboard/all'), off), null);
+  assert.equal(offAddress(parseRoute('#/marketplace/waiting'), {}), null, 'not known yet');
+
+  // The store: the server answers a switched-off section with the Dashboard's list. None of it is
+  // shown under that section, and nothing is opened there, not even the conversation the address names.
+  const a = withAuction();
+  a.data.off.add('marketplace');
+  await a.store.actions.boot(parseRoute('#/marketplace/waiting/mp%3A501'), { wide: true });
+  let st = a.store.get();
+  assert.equal(st.section, 'marketplace');
+  assert.deepEqual([st.rows, st.total, st.key, st.listState], [[], 0, null, 'ready']);
+  assert.equal(st.sections.marketplace, null);
+  assert.deepEqual(opened(a.calls), []);
+  assert.equal(paths(a.calls).some((p) => p.startsWith('GET /api/items/')), false);
+  // A refresh while there takes none of it either.
+  await a.store.actions.refresh();
+  assert.deepEqual(a.store.get().rows, []);
+
+  // The address then goes to the Dashboard, and the store follows it there.
+  const to = offAddress(parseRoute('#/marketplace/waiting/mp%3A501'), st.sections);
+  const step = storeStep(parseRoute(to), st);
+  assert.deepEqual(step, { section: 'dashboard', chip: 'waiting', key: null });
+  await a.store.actions.setSection(step.section, { chip: step.chip, key: step.key, wide: true });
+  st = a.store.get();
+  assert.deepEqual([st.section, st.rows.map((r) => r.key), st.key], ['dashboard', ['c:1', 'c:2'], 'c:1']);
+});
+
+test('the chosen tab is scrolled into the tab track', () => {
+  // A track 200 px wide from x = 10, scrolled 0: a tab cut off on the right comes in by its overflow,
+  // one cut off on the left by its own, and one in view leaves the track where it is.
+  const track = { left: 10, right: 210 };
+  assert.equal(tabInView({ left: 180, right: 260 }, track, 0), 50);
+  assert.equal(tabInView({ left: -30, right: 60 }, track, 120), 80);
+  assert.equal(tabInView({ left: 40, right: 120 }, track, 30), null);
+  // A tab wider than the track shows its start.
+  assert.equal(tabInView({ left: 100, right: 400 }, track, 0), 90);
 });
