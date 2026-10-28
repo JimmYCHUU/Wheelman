@@ -161,10 +161,18 @@ export function createSender({ api, get, set, toast, text, refresh, take, now, s
     const read = await reread(key);
     const away = !onScreen(key);
     // The server found the reply of a send that timed out (this page's, or another's, before a
-    // reload): nothing more was sent. The chat shows it sent, and the text leaves the box.
+    // reload): nothing more was sent. Jim's words are never thrown away: the box is cleared only
+    // when its text is the reply that went. A different reply stays in the box, with the chat shown
+    // as sent, and his next press sends it (read first if the chat could not be read now).
     if (outcome === 'gone') {
-      went(key, read.item);
       toast(goneWords(away ? item.name : ''));
+      if (read.item && sentSince(read.item, anchor, value)) went(key, read.item);
+      else {
+        mark(key, null);
+        if (read.item) confirmed(key); else doubt(key, anchor, 'unknown');
+        if (key === get().key && get().typed === null) set({ typed: value });
+        show(key, read.item);
+      }
       await refresh();
       return 'replied';
     }

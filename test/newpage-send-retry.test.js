@@ -28,8 +28,8 @@ test('a 409 says another page is sending, and Try again posts nothing once that 
   assert.equal(sendFailedWords(s.sending['mp:1'].error, 'elsewhere'), 'Not sent from here: another page is sending a reply to this chat.');
   assert.equal(s.toast, null, 'the chat is open: the box says it');
   assert.equal(mainNow(s).label, 'Try again');
-  // The other page's reply goes: the chat is answered. Try again reads Marketplace, then the chat, and posts nothing.
-  a.data.items['mp:1'] = SENT;
+  // The other page's reply goes: the chat is answered with it. Try again reads Marketplace, then the chat, and posts nothing.
+  a.data.items['mp:1'] = sentWith('Yes, it is still here.');
   a.calls.length = 0;
   assert.equal(await a.store.actions.send(), 'replied');
   assert.deepEqual(paths(a.calls).slice(0, 2), ['POST /api/sync', 'GET /api/items/mp:1'], 'Marketplace and the chat are read before anything is posted');

@@ -4,6 +4,7 @@
 // its sections' states here.
 import { boxView, boxText } from './model.js';
 import { sentence } from './words.js';
+import { sameText } from './channel.js';
 import { clock, listTime, daysAgo } from '../../lib/format.js';
 
 const TRY_AGAIN = { label: 'Try again', act: 'retry', main: true };
@@ -47,6 +48,18 @@ function sentAt(item) {
   return item.answered && item.answered.how === 'wheelman' ? item.answered.at || null : null;
 }
 
+/**
+ * Whether typed text is words of Jim's other than the reply that answered the chat: a reply of ours
+ * after the buyer's last message with the same words (as sentSince compares them) is not.
+ */
+function otherWords(item, typed) {
+  if (typeof typed !== 'string' || !typed.trim()) return false;
+  const thread = item.thread || [];
+  let last = -1;
+  thread.forEach((m, i) => { if (m.who === 'customer' && !m.internal) last = i; });
+  return !thread.slice(last + 1).some((m) => m.who === 'us' && !m.internal && sameText(m.text, typed));
+}
+
 /** When it was sent, mid-sentence: "at 3:43 pm" today, else "yesterday", "on Monday" or "on 29 Sep" (as answeredWords says the day). */
 function sentWhen(at, now) {
   if (daysAgo(at, now) === 0) return 'at ' + clock(at);
@@ -78,6 +91,9 @@ export function sectionBox(args = {}) {
     };
   }
   const sent = view.kind === 'writing' ? null : sentAt(item);
+  // Answered by a reply from Wheelman while the box holds other words of Jim's (a reply that timed
+  // out had gone): his words are never hidden. They stay in the editor, with the sent state above.
+  if (sent && item.state === 'answered' && otherWords(item, args.typedText)) return { kind: 'editor', context: 'Sent on Facebook ' + sentWhen(sent, now) + '. Your text is kept.', elsewhere: true };
   if (sent) {
     const unseen = item.state === 'awaiting' && now - sent >= SHOW_WITHIN;
     const typing = item.marketplace && item.marketplace.sending ? " The engine's phone is typing it into the chat." : '';
@@ -96,5 +112,5 @@ export function sectionBox(args = {}) {
 /** The box's view of the open conversation from the store's state: the message box's, and the run bar's. */
 export const boxViewOf = (s, now) => sectionBox({
   item: s.item, writing: s.writing === s.key, done: !!s.item && s.done[s.key] === s.item.anchor, doneAt: s.doneAt[s.key],
-  typed: s.typed !== null, writeFailed: s.writeFailed || null, now,
+  typed: s.typed !== null, typedText: s.typed, writeFailed: s.writeFailed || null, now,
 });

@@ -8,8 +8,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { sendFailedWords, sendFor, sendOutcome } from '../web/new/js/channel.js';
 import { sectionRowView } from '../web/new/js/sections.js';
-import { boxViewOf } from '../web/new/js/boxsections.js';
+import { boxViewOf, sectionBox } from '../web/new/js/boxsections.js';
 import { NOT_RESPONDING, createApi } from '../web/new/js/api.js';
+import { clock } from '../web/lib/format.js';
 import { draft, paths } from './support/newpage-fakes.js';
 import { AT, FB, SENT, ASKED, TYPING, OFFLINE, fb, sends, takes, failure, mainNow, sentWith } from './support/newpage-send-fakes.js';
 
@@ -235,4 +236,49 @@ test('a 409 that says the reply has gone already shows it sent, and nothing more
   b.store.actions.type(typed);
   assert.equal(await b.store.actions.send(), 'replied');
   assert.equal(b.store.get().toast.message, 'The reply to Liam Invented has gone already.');
+});
+
+test('a 409 after a timed-out send keeps a different reply in the box', async () => {
+  const went = 'Yes, it is still here.';
+  const other = 'Yes, it is still here today. Come by any time after 10.';
+  // The chat as the server has it after its check: answered by the reply that timed out.
+  const answeredBy = { ...SENT, thread: [ASKED, { key: 'fm:2', who: 'us', text: went, sending: true }] };
+  const a = fb();
+  a.data.on = { '/api/items/mp:1/send': () => { a.data.items['mp:1'] = answeredBy; throw gone(); } };
+  await a.store.actions.open('mp:1');
+  a.store.actions.type(other);
+  assert.equal(await a.store.actions.send(), 'replied');
+  let s = a.store.get();
+  assert.equal(s.typed, other, 'his words stay');
+  assert.equal(s.toast.message, GONE);
+  assert.deepEqual([s.sending, s.unconfirmed], [{}, {}]);
+  assert.equal(s.item.state, 'answered', 'the chat as it is now');
+  // The box shows the sent state above his text, and its button sends it.
+  const view = boxViewOf(s, AT);
+  assert.deepEqual([view.kind, view.context, view.elsewhere], ['editor', 'Sent on Facebook at ' + clock(AT) + '. Your text is kept.', true]);
+  assert.equal(mainNow(s).label, 'Send on Facebook');
+  takes(a);
+  assert.equal(await a.store.actions.send(), 'sent');
+  assert.deepEqual(sends(a).map((c) => c.body.text), [other, other], 'the 409, then his reply');
+  assert.equal(a.store.get().typed, null);
+  // A suggestion in the box with other words than the reply that went stays too.
+  const b = fb({ draft: draft(22, { reply: other }) });
+  b.data.on = { '/api/items/mp:1/send': () => { b.data.items['mp:1'] = answeredBy; throw gone(); } };
+  await b.store.actions.open('mp:1');
+  assert.equal(await b.store.actions.send(), 'replied');
+  assert.equal(b.store.get().typed, other);
+  assert.equal(boxViewOf(b.store.get(), AT).kind, 'editor');
+  // The chat cannot be read after the 409: his words stay, and his next press reads Marketplace first.
+  const c = fb();
+  c.data.on = { '/api/items/mp:1/send': () => { c.data.fail.add('/api/items/mp:1'); throw gone(); } };
+  await c.store.actions.open('mp:1');
+  c.store.actions.type(other);
+  assert.equal(await c.store.actions.send(), 'replied');
+  s = c.store.get();
+  assert.equal(s.typed, other);
+  assert.ok(s.unconfirmed['mp:1'], 'read first next time');
+  // The words of the reply in the chat are not offered again: the box is the sent state. (The text
+  // that went leaves the box after a 409, as the test above shows.)
+  assert.equal(sectionBox({ item: answeredBy, typed: true, typedText: went, now: AT }).kind, 'quiet');
+  assert.equal(sectionBox({ item: answeredBy, typed: true, typedText: other, now: AT }).kind, 'editor');
 });
