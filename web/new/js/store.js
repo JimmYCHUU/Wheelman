@@ -218,6 +218,8 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     const fu = followup !== undefined ? followup : followupId || undefined;
     const msg = message !== undefined ? message : templateInHand(state.item);
     const seq = ++writeSeq;
+    // A refusal is about the chat as it is now: its message and its state (sectionBox tells it only while they hold).
+    const asked = { key, anchor: state.item ? state.item.anchor : null, state: state.item ? state.item.state : null };
     set({ writing: key, writeFailed: null });
     try {
       const out = await api('/api/items/' + key + '/draft', { instruction, message: msg, followup: fu });
@@ -236,9 +238,9 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
       // A failed suggestion says why in the box. With none to say it (the budget used, say), the
       // box says the server's words with Try again (boxsections.js), never only a toast that goes.
       const shown = !!(out.item && out.item.draft && out.item.draft.status === 'failed');
-      if (out.error && !shown) { set({ writeFailed: { key, message: out.error } }); toast(out.error); }
+      if (out.error && !shown) { set({ writeFailed: { ...asked, message: out.error } }); toast(out.error); }
     } catch (e) {
-      if (key === state.key) { set({ writeFailed: { key, message: e.message } }); toast(e.message); }
+      if (key === state.key) { set({ writeFailed: { ...asked, message: e.message } }); toast(e.message); }
     } finally {
       if (seq === writeSeq) set({ writing: null });
     }

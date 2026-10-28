@@ -53,6 +53,12 @@ after(async () => {
 const open = async (key) => (await (await fetch(`${base}/api/items/${key}`)).json()).item;
 
 test('a waiting buyer is written on open however old the message; an archived chat, one not marked as a buyer and a photo with no words are not', async () => {
+  // The background pass runs first: it writes the dashboard customer, and no chat.
+  const worker = await import('../src/worker.js');
+  const db = await import('../src/db.js');
+  assert.equal(await worker.draftWaiting(), 1, 'the dashboard customer');
+  assert.ok(db.openDb().prepare("SELECT 1 FROM drafts WHERE item_key = 'c:911' AND status = 'ready'").get());
+  assert.equal(db.openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key LIKE 'mp:%'").get().n, 0);
   const old = await open('mp:601');
   assert.equal(old.state, 'awaiting');
   assert.equal(old.writeOnOpen, true, 'three days old, and still written when opened');

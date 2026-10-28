@@ -140,7 +140,7 @@ test('a chat written on open that the AI refuses says why and offers Try again',
   a.data.draftReply = () => ({ ok: false, error: BUDGET, item: { ...BUYER } });
   await a.store.actions.open('mp:501');
   await settle();
-  assert.deepEqual(a.store.get().writeFailed, { key: 'mp:501', message: BUDGET });
+  assert.deepEqual(a.store.get().writeFailed, { key: 'mp:501', anchor: 'fm:1', state: 'awaiting', message: BUDGET });
   assert.deepEqual(boxViewOf(a.store.get(), 5000), { kind: 'quiet', tone: 'bad', sentence: BUDGET, button: TRY_AGAIN, tell: true });
 
   // The request itself failing.
@@ -149,11 +149,11 @@ test('a chat written on open that the AI refuses says why and offers Try again',
   a.data.fail.add('/draft');
   await a.store.actions.open('mp:501');
   await settle();
-  assert.deepEqual(a.store.get().writeFailed, { key: 'mp:501', message: 'Network down' });
+  assert.deepEqual(a.store.get().writeFailed, { key: 'mp:501', anchor: 'fm:1', state: 'awaiting', message: 'Network down' });
   assert.deepEqual(boxViewOf(a.store.get(), 5000), { kind: 'quiet', tone: 'bad', sentence: 'Network down', button: TRY_AGAIN, tell: true });
   // Typed meanwhile: the text stays in the editor, and the reason is above it.
   a.store.actions.type('Yes, still here.');
-  assert.deepEqual(boxViewOf(a.store.get(), 5000), { kind: 'editor', context: '', failure: 'Network down Your text is kept.' });
+  assert.deepEqual(boxViewOf(a.store.get(), 5000), { kind: 'editor', context: '', failure: 'Network down. Your text is kept.' }, 'a full stop goes in where the words have none');
   // Try again: the words go as the write starts, and the suggestion comes.
   a.data.fail.delete('/draft');
   const trying = a.store.actions.write({});
@@ -176,19 +176,74 @@ test('a chat written on open that the AI refuses says why and offers Try again',
   assert.equal(fromModel, boxViewOf);
 });
 
+test('a refused write is told only while the chat is as it was: a new buyer message or an answer takes the words away', async () => {
+  // (a) The request failed on open, then the buyer wrote again: their new message has no suggestion yet.
+  let a = setup();
+  a.data.items['mp:501'] = { ...BUYER };
+  a.data.fail.add('/draft');
+  await a.store.actions.open('mp:501');
+  await settle();
+  assert.equal(boxViewOf(a.store.get(), 5000).sentence, 'Network down');
+  a.data.fail.delete('/draft');
+  a.data.items['mp:501'] = { ...BUYER, anchor: 'fm:2' };
+  await a.store.actions.refresh();
+  let view = boxViewOf(a.store.get(), 5000);
+  assert.equal(view.sentence, 'No suggestion yet.');
+  assert.equal(view.tone, '');
+  assert.deepEqual(view.button, { label: 'Write it now', act: 'write', main: true });
+  assert.equal(writesOf(a).length, 1, 'the new message is not written by itself');
+
+  // (b) The request failed, then the chat was answered (the auto-reply): the box says so, not the old failure.
+  a = setup();
+  a.data.items['mp:501'] = { ...BUYER };
+  a.data.fail.add('/draft');
+  await a.store.actions.open('mp:501');
+  await settle();
+  a.data.fail.delete('/draft');
+  const answered = { how: 'auto', at: 4000, by: '' };
+  a.data.items['mp:501'] = { ...BUYER, state: 'answered', writeOnOpen: false, answered };
+  await a.store.actions.refresh();
+  view = boxViewOf(a.store.get(), 5000);
+  assert.match(view.sentence, /^Answered by an auto-reply .*No reply needed\.$/);
+  assert.equal(view.tone, '');
+  assert.equal(view.button.label, 'Write a reply anyway');
+
+  // The same after a rewrite that never arrived over a ready suggestion: the suggestion that was here stays to see.
+  a = setup();
+  a.data.items['mp:501'] = { ...BUYER, draft: draft(95, { reply: 'Yes, it is still here.' }) };
+  await a.store.actions.open('mp:501');
+  a.data.fail.add('/draft');
+  await a.store.actions.tell('Shorter');
+  assert.equal(a.store.get().writeFailed.key, 'mp:501');
+  a.data.items['mp:501'] = { ...BUYER, state: 'answered', writeOnOpen: false, answered, draft: null };
+  await a.store.actions.refresh();
+  view = boxViewOf(a.store.get(), 5000);
+  assert.match(view.sentence, /No reply needed\.$/);
+  assert.equal(view.suggestion, 'Yes, it is still here.');
+});
+
 test('sectionBox: a refused write is told only where a write could be asked, and only with no ready suggestion', () => {
-  const failed = { key: 'mp:501', message: 'Wheelman is not responding. Check that it is running.' };
+  const failed = { key: 'mp:501', anchor: 'fm:1', state: 'awaiting', message: 'Wheelman is not responding. Check that it is running.' };
   const item = { ...BUYER };
   assert.deepEqual(sectionBox({ item, writeFailed: failed }), { kind: 'quiet', tone: 'bad', sentence: failed.message, button: TRY_AGAIN, tell: true });
   // For another conversation, or none: as boxView says.
   assert.equal(sectionBox({ item, writeFailed: { ...failed, key: 'mp:502' } }).sentence, 'No suggestion yet.');
   assert.equal(sectionBox({ item, writeFailed: null }).sentence, 'No suggestion yet.');
+  // Only while the chat is as it was when the write was asked: not after a new message or a change of state.
+  assert.equal(sectionBox({ item: { ...item, anchor: 'fm:2' }, writeFailed: failed }).sentence, 'No suggestion yet.');
+  assert.equal(sectionBox({ item: { ...item, state: 'answered' }, writeFailed: failed }).sentence, 'We have replied. Nothing is waiting here.');
+  // Asked for anyway on an answered chat, it is told there, and the suggestion that was here stays.
+  const asked = sectionBox({ item: { ...item, state: 'answered', answered: { how: 'auto', at: 4000 }, lastSuggestion: 'Yes, it is still here.' }, writeFailed: { ...failed, state: 'answered' }, now: 5000 });
+  assert.deepEqual(asked, { kind: 'quiet', tone: 'bad', sentence: failed.message, button: TRY_AGAIN, tell: true, suggestion: 'Yes, it is still here.' });
+  // Words with no full stop of their own get one before "Your text is kept."
+  assert.equal(sectionBox({ item, writeFailed: { ...failed, message: 'Not found' }, typed: true }).failure, 'Not found. Your text is kept.');
+  assert.equal(sectionBox({ item, writeFailed: { ...failed, message: 'Is it running?' }, typed: true }).failure, 'Is it running? Your text is kept.');
   // A ready suggestion in the box stays, as today.
   assert.deepEqual(sectionBox({ item: { ...item, draft: draft(5) }, writeFailed: failed }), { kind: 'editor', context: '' });
   // Writing, copied, opted out and dismissed come first.
   assert.equal(sectionBox({ item, writeFailed: failed, writing: true }).kind, 'writing');
   assert.equal(sectionBox({ item, writeFailed: failed, done: true }).sentence, 'Copied.');
-  assert.equal(sectionBox({ item: { ...item, state: 'optout' }, writeFailed: failed }).sentence, 'This customer asked not to be contacted. Do not reply.');
+  assert.equal(sectionBox({ item: { ...item, state: 'optout' }, writeFailed: { ...failed, state: 'optout' } }).sentence, 'This customer asked not to be contacted. Do not reply.');
   assert.match(sectionBox({ item: { ...item, dismissed: true }, writeFailed: failed }).sentence, /^You dismissed this conversation/);
   // A failed suggestion with its own words is newer news only when no write followed it.
   const older = { ...item, draft: draft(6, { status: 'failed', reply: '', error: 'The model is overloaded.' }) };

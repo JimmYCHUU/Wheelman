@@ -556,6 +556,9 @@ test('a chat written from the page uses the Marketplace model and says when its 
   // Opened on either page: the page asks for it, as Write it now does.
   const write = async () => (await fetch(`${base}/api/items/mp:506/draft`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).json();
 
+  // Marketplace's own daily allowance was for the background: at nothing left, a write the page asks for still writes.
+  const allowance = config.marketplace.dailyDrafts;
+  config.marketplace.dailyDrafts = 0;
   llm.resetModelState();
   aiSeen.length = 0; ai.script = [];
   let out = await write();
@@ -580,7 +583,7 @@ test('a chat written from the page uses the Marketplace model and says when its 
     assert.ok(worker.state.pausedUntil < Date.now(), 'the dashboard is not paused');
     assert.equal(worker.state.lastDraftError, null);
     assert.equal(worker.statusReport().marketplace.retryAt, null, 'the status keeps its field, with nothing to wait for');
-  } finally { globalThis.setTimeout = real; usedUpModels.clear(); llm.resetModelState(); }
+  } finally { globalThis.setTimeout = real; usedUpModels.clear(); llm.resetModelState(); config.marketplace.dailyDrafts = allowance; }
 });
 
 // ---- sending ---------------------------------------------------------------------------
