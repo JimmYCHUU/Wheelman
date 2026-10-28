@@ -854,8 +854,9 @@ async function api(req, res, url) {
         logLine('marketplace', `${item.itemKey}: ${why}`);
         return send(res, 409, { error: 'This reply has gone already.', gone: true, same });
       };
-      // Wheelman's copy of the chat, or the one read afresh just below.
-      let chat = item;
+      // Wheelman's copy of the chat, built again now that this send holds the chat (another send on
+      // it may have gone while this one's words came in), or the one read afresh just below.
+      let chat = itemFromKey(m[1]) || item;
       // The last send on this chat may have gone (the engine did not answer in time): Marketplace is
       // read afresh and the chat looked at first, whichever page sends. Marketplace not read: nothing
       // is sent, and the note stays for the next try. That reply not in the chat: the note goes.
@@ -874,10 +875,12 @@ async function api(req, res, url) {
           } catch (e) { logLine('marketplace', `${item.itemKey}: the reply had gone, but the suggestion could not be marked as sent: ${e.message}`); }
         }
       }
-      // That reply went: its words are never sent to this chat again, whatever the buyer wrote since.
-      // Other words, while the chat is answered by it, are held back once so the page can say so,
-      // and the next press sends them.
-      if (unsure && unsure.found) {
+      // That reply went, and the chat still shows it: its words are never sent to this chat again,
+      // whatever the buyer wrote since. Other words, while the chat is answered by it, are held back
+      // once so the page can say so, and the next press sends them. No longer in the chat (the engine
+      // could not deliver it): the note goes, and it is words like any other.
+      if (unsure && unsure.found && !wentAfter(chat.timeline, unsure.anchor, unsure.text, tag)) mayHaveGone.delete(item.itemKey);
+      else if (unsure && unsure.found) {
         if (sameReply(text, unsure.text, tag)) return gone(true, 'a reply that timed out had gone, so the same words were not sent again');
         if (!unsure.told && replyShown(chat.timeline, unsure.anchor, unsure.text, tag)) {
           unsure.told = true;
@@ -887,6 +890,9 @@ async function api(req, res, url) {
       // On any chat: these words are a reply of ours already since the buyer last wrote. Wheelman's
       // copy is enough (no Marketplace read): a reply sent from here is in it as soon as it goes.
       if (alreadySent(chat.timeline, text, tag)) return gone(true, 'these words are already our reply since the buyer last wrote, so they were not sent again');
+      // This send's reply may have gone with Wheelman's copy of the chat not showing it: a fresh note,
+      // in place of any, so the next send on this chat looks for it first.
+      const mayBeThere = () => mayHaveGone.set(item.itemKey, { text, anchor: chat.anchorKey, draftId: Number(body.draftId) || null, at: Date.now(), found: false, told: false });
       let out;
       try {
         out = await sendReply(item.marketplace.id, text);
@@ -897,8 +903,7 @@ async function api(req, res, url) {
         // the engine has it.
         logLine('marketplace', `${item.itemKey}: the reply ${e.mayHaveGone ? 'may not have been sent' : 'could not be sent'}. ${e.message}`);
         if (!e.mayHaveGone) return send(res, 502, { error: e.message });
-        // A fresh note, in place of any.
-        mayHaveGone.set(item.itemKey, { text, anchor: chat.anchorKey, draftId: Number(body.draftId) || null, at: Date.now(), found: false, told: false });
+        mayBeThere();
         send(res, 504, { error: e.message });
         worker.runMarketplaceSync({ wait: true }).catch(() => { /* the next read brings it */ });
         return;
@@ -915,13 +920,20 @@ async function api(req, res, url) {
       });
       // The engine's record of the queued reply goes into the thread at once; then the chat is read
       // again so everything else is current too. If that read fails, the next check brings it.
+      let kept = false;
       note('it could not be put in the chat', () => {
-        if (out.message && Number.isInteger(Number(out.message.id))) appendMpMessage(item.marketplace.id, normalizeMpMessage(out.message, 0, item.marketplace.id));
+        if (out.message && Number.isInteger(Number(out.message.id))) { appendMpMessage(item.marketplace.id, normalizeMpMessage(out.message, 0, item.marketplace.id)); kept = true; }
       });
       try {
         const detail = await fetchConversation(item.marketplace.id);
-        if (detail?.conversation?.id === item.marketplace.id) storeMpConversation(detail.conversation, detail.messages || []);
+        if (detail?.conversation?.id === item.marketplace.id) { storeMpConversation(detail.conversation, detail.messages || []); kept = true; }
       } catch (e) { logLine('marketplace', `${item.itemKey}: the reply was sent, but the chat could not be read back: ${e.message}`); }
+      // Neither put it in Wheelman's copy of the chat: noted as a send that timed out is, so the same
+      // words are refused until the reply is found there or a later send is taken.
+      if (!kept) {
+        mayBeThere();
+        logLine('marketplace', `${item.itemKey}: the reply was sent, but Wheelman's copy of the chat does not have it, so the next send on this chat reads Marketplace first`);
+      }
       logLine('marketplace', `${item.itemKey}: a reply was sent from the page (${text.length} characters)${out.workerOnline ? '' : '; the engine\'s phone is offline, so it is queued'}`);
       let shown = null;
       note('the chat could not be shown', () => { shown = present(itemFromKey(m[1]) || item); });

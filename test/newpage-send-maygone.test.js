@@ -5,6 +5,7 @@
 // normal. The real routes and the stand-in engine. Invented data only.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import { applyTestEnv } from './support/env.js';
 import { startStandins, aiBehaviour } from './support/standins.js';
 import { chatRow, chatMessage } from './support/fixtures.js';
@@ -230,4 +231,116 @@ test('the same words as our reply since the buyer last wrote are refused on any 
   assert.equal((await chat('mp:522')).marketplace.failed, 1, 'not delivered');
   assert.equal((await post('/api/items/mp:522/send', { text, draftId: null })).status, 200);
   assert.equal(replies(522).length, 2);
+});
+
+// ---- Task 0a, fix round 1
+
+const ok = (r) => [r.status, r.json];
+const goneSame = (same) => [409, { error: GONE, gone: true, same }];
+/** A 504 on this chat whose reply the engine took, read into Wheelman by the read the 504 starts. */
+async function timedOutAndShown(id, text) {
+  assert.equal((await timesOut(() => post(`/api/items/mp:${id}/send`, { text, draftId: null }))).status, 504);
+  await until(async () => (await chat(`mp:${id}`)).state === 'answered', 'the chat shows the reply');
+  await sleep(800); // the engine's late answer goes nowhere
+}
+/** The engine reports a queued reply failed (its phone could not type it), and Wheelman reads it. */
+async function failsLater(id, text) {
+  const c = standins.world.chats.get(id);
+  c.messages.find((x) => x.direction === 'out' && x.text === text).status = 'failed';
+  Object.assign(c.row, { failed_outbound: (c.row.failed_outbound || 0) + 1, pending_outbound: 0, last_message_at: new Date().toISOString() });
+  await (await import('../src/sync.js')).syncMarketplace();
+}
+
+test('a reply that timed out and was found while on its way, then did not reach the buyer, can be sent again', async () => {
+  // Found while queued, other words held once; then it fails, and Send it again goes, once.
+  await buyer(523, 'Sami Invented');
+  const text = 'Yes, it is still here.';
+  await timedOutAndShown(523, text);
+  assert.deepEqual(ok(await post('/api/items/mp:523/send', { text: 'Also, it has new tyres.', draftId: null })), goneSame(false));
+  await failsLater(523, text);
+  assert.equal((await chat('mp:523')).state, 'awaiting', 'the buyer is waiting again');
+  assert.equal((await post('/api/items/mp:523/send', { text, draftId: null })).status, 200);
+  assert.equal(replies(523).length, 2);
+  // In the chat now: those words are refused again.
+  assert.deepEqual(ok(await post('/api/items/mp:523/send', { text, draftId: null })), goneSame(true));
+  // Found while queued by its own words pressed again; then it fails, and Send it again goes.
+  await buyer(524, 'Tara Invented');
+  const words = 'Yes, it is still here. Come by on Saturday.';
+  await timedOutAndShown(524, words);
+  assert.deepEqual(ok(await post('/api/items/mp:524/send', { text: words, draftId: null })), goneSame(true));
+  await failsLater(524, words);
+  assert.equal((await post('/api/items/mp:524/send', { text: words, draftId: null })).status, 200);
+  assert.equal(replies(524).length, 2);
+});
+
+test('a found note holds after the buyer writes and after the engine refuses a send, and a later send taken ends it', async () => {
+  await buyer(525, 'Uli Invented');
+  const text = 'Yes, it is still here.';
+  const other = 'Yes, tomorrow at 10 works.';
+  await timedOutAndShown(525, text);
+  assert.deepEqual(ok(await post('/api/items/mp:525/send', { text, draftId: null })), goneSame(true), 'found');
+  await writesAgain(525, 'Great, can I see it tomorrow?');
+  assert.deepEqual(ok(await post('/api/items/mp:525/send', { text, draftId: null })), goneSame(true), 'after the buyer wrote');
+  // The engine refuses other words (502): the note stays.
+  standins.world.refuseSendOnce = new Set([525]);
+  assert.equal((await post('/api/items/mp:525/send', { text: other, draftId: null })).status, 502);
+  assert.deepEqual(ok(await post('/api/items/mp:525/send', { text, draftId: null })), goneSame(true), 'after the refusal');
+  assert.equal(replies(525).length, 2, 'the first and the refused one');
+  // The engine takes them: the note is over, and the reply that timed out is words like any other.
+  assert.equal((await post('/api/items/mp:525/send', { text: other, draftId: null })).status, 200);
+  assert.equal((await post('/api/items/mp:525/send', { text, draftId: null })).status, 200);
+  assert.equal(replies(525).length, 4);
+});
+
+test('a 504 sets a fresh note in place of any', async () => {
+  await buyer(526, 'Vera Invented');
+  const first = 'Yes, it is still here.';
+  const second = 'Yes, it is still here today. Come by any time after 10.';
+  await timedOutAndShown(526, first);
+  assert.deepEqual(ok(await post('/api/items/mp:526/send', { text: first, draftId: null })), goneSame(true));
+  assert.deepEqual(ok(await post('/api/items/mp:526/send', { text: second, draftId: null })), goneSame(false), 'held once');
+  // Pressed again, it goes and times out too: the note is now its own, held once again for other words.
+  assert.equal((await timesOut(() => post('/api/items/mp:526/send', { text: second, draftId: null }))).status, 504);
+  await until(async () => (await chat('mp:526')).thread.filter((e) => e.who === 'us').length === 2, 'both replies show');
+  await sleep(800);
+  assert.deepEqual(ok(await post('/api/items/mp:526/send', { text: 'See you then.', draftId: null })), goneSame(false), 'the fresh note holds other words once');
+  assert.deepEqual(ok(await post('/api/items/mp:526/send', { text: second, draftId: null })), goneSame(true));
+  assert.equal(replies(526).length, 2);
+});
+
+/** A POST whose body is sent only when finish() is called: the server has the request, and waits for its words. */
+function postLater(p, body) {
+  const data = JSON.stringify(body);
+  const req = http.request(base + p, { method: 'POST', headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(data) } });
+  const answer = new Promise((resolve, reject) => {
+    req.on('response', (res) => { let s = ''; res.on('data', (c) => { s += c; }); res.on('end', () => resolve({ status: res.statusCode, json: JSON.parse(s) })); });
+    req.on('error', reject);
+  });
+  req.flushHeaders();
+  return { finish: () => { req.end(data); return answer; } };
+}
+
+test('a send whose words arrive after another send on that chat went is checked against the chat as it is then', async () => {
+  await buyer(527, 'Wim Invented');
+  const text = 'Yes, it is still here.';
+  standins.world.replyDelayMs = 300; // the engine takes its time, but answers in time
+  const first = post('/api/items/mp:527/send', { text, draftId: null });
+  await sleep(60);
+  const second = postLater('/api/items/mp:527/send', { text, draftId: null });
+  await sleep(60);
+  assert.equal((await first).status, 200);
+  assert.deepEqual(ok(await second.finish()), goneSame(true));
+  assert.equal(replies(527).length, 1);
+});
+
+test('a reply the engine took that Wheelman could not record is noted, so the same words are refused from another page', async () => {
+  // The engine answers with no record of the reply, and the chat cannot be read back after it.
+  await buyer(528, 'Xia Invented');
+  const text = 'Yes, it is still here.';
+  standins.world.bareReplyOnce = new Set([528]);
+  standins.world.detailFailOnce = new Set([528]);
+  assert.equal((await post('/api/items/mp:528/send', { text, draftId: null })).status, 200);
+  assert.equal((await chat('mp:528')).state, 'awaiting', 'not in Wheelman yet');
+  assert.deepEqual(ok(await post('/api/items/mp:528/send', { text, draftId: null })), goneSame(true));
+  assert.equal(replies(528).length, 1);
 });

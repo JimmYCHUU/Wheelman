@@ -163,7 +163,9 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
   // record that id, once (one Wheelman's database cannot keep, to see the reply taken all the same);
   // world.replyDelayMs makes it queue the next reply and answer that late, once (Wheelman may stop
   // waiting first); world.failDeliveryOnce (a Set of chat ids) makes it take each one's next reply
-  // and fail to deliver it, once (its status "failed", counted on the chat).
+  // and fail to deliver it, once (its status "failed", counted on the chat); world.bareReplyOnce (a
+  // Set of chat ids) makes it take each one's next reply and answer with no record of it, once; and
+  // world.detailFailOnce (a Set of chat ids) makes the next read of each one's chat answer 503, once.
   const engine = await listen(async (req, res) => {
     const body = await readBody(req);
     const url = new URL(req.url, 'http://x');
@@ -190,6 +192,7 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
       const late = world.replyDelayMs;
       delete world.replyDelayMs;
       if (late) await new Promise((r) => setTimeout(r, late));
+      if (world.bareReplyOnce && world.bareReplyOnce.delete(Number(reply[1]))) return json(res, 200, { worker_online: world.workerOnline !== false });
       return json(res, 200, { message, worker_online: world.workerOnline !== false });
     }
     if (req.method !== 'GET') return json(res, 405, { error: 'no' });
@@ -208,6 +211,7 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
     }
     const m = url.pathname.match(/^\/inbox\/conversations\/(\d+)$/);
     if (m && chats.has(Number(m[1]))) {
+      if (world.detailFailOnce && world.detailFailOnce.delete(Number(m[1]))) return json(res, 503, { error: 'Service Unavailable' });
       const c = chats.get(Number(m[1]));
       return json(res, 200, { conversation: c.row, messages: c.messages, phone: '0491 570 199', will_send_via: 'device' });
     }

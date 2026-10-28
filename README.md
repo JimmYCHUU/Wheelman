@@ -2204,9 +2204,10 @@ invented data. Not yet used over a working day.
 28 October 2026: every section opens on the new page, each with its own lists, and Facebook buyers
 are answered with Send on Facebook, which checks the chat before a reply that may have gone is sent
 again, and says plainly when a reply did not reach the buyer. Facebook chats are now written when
-they are opened, on both pages, and not in the background. The server answers success once the engine has the reply, treats an engine timeout
-as a send that may have gone, and lets a check cover Marketplace alone. Checked on the automated
-tests and in a browser on invented data. Not yet used over a working day.
+they are opened, on both pages, and not in the background. The server answers success once the
+engine has the reply, treats an engine timeout as a send that may have gone, and lets a check
+cover Marketplace alone. Checked on the automated tests and in a browser on invented data. Not
+yet used over a working day.
 
 ### Open questions for Carbarn
 
