@@ -12,6 +12,7 @@ import { OPEN_FAILED } from './conversation.js';
 const WIDE = '(min-width: 1280px)';
 const DRAWER = '(min-width: 900px)';
 const NO_REPLY = 'Open a conversation with a suggestion first, then Add to reply puts the link in it.';
+const NOT_ADDED = 'Not added to the reply: it is sending.';
 const TABS = [{ id: 'car', label: 'Car' }, { id: 'customer', label: 'Customer' }, { id: 'used', label: 'What Wheelman used' }];
 const NONE = { car: 'its car', customer: 'its customer', used: 'what Wheelman used' };
 
@@ -77,9 +78,10 @@ export function Panel({ state, pstate, panel, actions, mode, setPanel, reply, no
     if (!ed) { actions.toast(NO_REPLY); return; }
     const out = placeLink(ed.text(), label, url, ed.caret());
     ed.land(out.text, out.caret);
+    // Not while the reply is sending: the box is locked until the send ends, so it is said, and the drawer stays.
+    if (actions.type(out.text) === false) { actions.toast(NOT_ADDED); return; }
     if (overlay) close();
-    // Not while the reply is sending: the box is locked until the send ends.
-    if (actions.type(out.text) !== false) actions.toast('Added to the reply');
+    actions.toast('Added to the reply');
   };
 
   const item = state.key ? state.item : null;

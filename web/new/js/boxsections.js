@@ -3,12 +3,11 @@
 // Pure functions (no DOM, no globals) beside model.js, which the tests import in Node. PR 5b adds
 // its sections' states here.
 import { boxView } from './model.js';
-import { clock } from '../../lib/format.js';
+import { sentence } from './words.js';
+import { clock, listTime, daysAgo } from '../../lib/format.js';
 
 const TRY_AGAIN = { label: 'Try again', act: 'retry', main: true };
-
-/** The words, ending in a full stop unless they end in one of their own (or a question or exclamation mark). */
-const sentence = (words) => (/[.!?]$/.test(String(words).trim()) ? String(words).trim() : String(words).trim() + '.');
+const ANYWAY = { label: 'Write a reply anyway', act: 'write', main: false };
 
 /**
  * Whether a refused write (writeFailed: { key, anchor, state, message } from the store) is about the
@@ -25,8 +24,18 @@ const stillAbout = (item, failed) => !!item && !!failed && failed.key === item.k
  */
 function sentAt(item) {
   if (!item || item.channel !== 'marketplace' || item.state !== 'answered') return null;
-  if (item.draft && item.draft.sentHereAt) return item.draft.sentHereAt;
+  // A suggestion asked for after the answer is the person's to use, as in boxView: not "sent".
+  const d = item.draft;
+  if (d && item.answered && d.createdAt > item.answered.at) return null;
+  if (d && d.sentHereAt) return d.sentHereAt;
   return item.answered && item.answered.how === 'wheelman' ? item.answered.at || null : null;
+}
+
+/** When it was sent, mid-sentence: "at 3:43 pm" today, else "yesterday", "on Monday" or "on 29 Sep" (as answeredWords says the day). */
+function sentWhen(at, now) {
+  if (daysAgo(at, now) === 0) return 'at ' + clock(at);
+  const day = listTime(at, now);
+  return day === 'Yesterday' ? 'yesterday' : 'on ' + day;
 }
 
 /**
@@ -36,20 +45,21 @@ function sentAt(item) {
  * server's words with Try again (the suggestion that was here stays to see); text the person typed
  * (or saved) stays in the editor with the reason above it. A failed suggestion is told by boxView,
  * as before. Writing, copied, opted out, dismissed and a follow-up done come first, as in boxView.
- * A Facebook reply sent says so, quiet and good, with no button (a sent reply cannot be taken
- * back), after Writing and before everything else.
+ * A Facebook reply sent says so, quiet and good, after Writing and before everything else, with
+ * Write a reply anyway and the Tell line as for any chat answered with Wheelman's suggestion (a
+ * sent reply cannot be taken back, so there is no Put back).
  */
 export function sectionBox(args = {}) {
   const view = boxView(args);
-  const { item, writeFailed } = args;
+  const { item, writeFailed, now } = args;
   const sent = view.kind === 'writing' ? null : sentAt(item);
   if (sent) {
     const typing = item.marketplace && item.marketplace.sending ? " The engine's phone is typing it into the chat." : '';
-    return { kind: 'quiet', tone: 'good', sentence: 'Sent on Facebook at ' + clock(sent) + '.' + typing, button: null, tell: false };
+    return { kind: 'quiet', tone: 'good', sentence: 'Sent on Facebook ' + sentWhen(sent, now) + '.' + typing, button: ANYWAY, tell: true };
   }
   const refused = stillAbout(item, writeFailed) && !(item.draft && item.draft.status === 'ready');
   if (!refused) return view;
-  if (view.kind === 'editor') return { ...view, failure: sentence(writeFailed.message) + ' Your text is kept.' };
+  if (view.kind === 'editor') return { ...view, failure: [sentence(writeFailed.message), 'Your text is kept.'].filter(Boolean).join(' ') };
   if (view.kind === 'quiet' && view.tell) {
     return { kind: 'quiet', tone: 'bad', sentence: writeFailed.message, button: TRY_AGAIN, tell: true, ...(view.suggestion ? { suggestion: view.suggestion } : {}) };
   }

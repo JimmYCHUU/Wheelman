@@ -1,46 +1,19 @@
 // Send on Facebook, the only send anywhere, and one main button for each channel: Copy reply, Send
-// on Facebook, Copy for Gmail and Copy for WhatsApp. The store with a fake server, and one whole send
-// against the server and the stand-in Marketplace engine. Invented data only.
-import test, { before, after } from 'node:test';
+// on Facebook, Copy for Gmail and Copy for WhatsApp. The store with a fake server. A send that fails
+// is in newpage-send-retry.test.js, and the whole send against the server and the stand-in
+// Marketplace engine in newpage-send-engine.test.js. Invented data only.
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { applyTestEnv } from './support/env.js';
-import { startStandins, aiBehaviour } from './support/standins.js';
-import { marketplace } from './support/fixtures.js';
-import { replyChannel, mainFor, copiedWords, sendFailedWords, sendFailedAwayWords, sendFor, sendingNow } from '../web/new/js/channel.js';
+import { replyChannel, mainFor, copiedWords, sentWords } from '../web/new/js/channel.js';
 import { boxViewOf, sectionBox } from '../web/new/js/boxsections.js';
-import { createStore } from '../web/new/js/store.js';
-import { createApi } from '../web/new/js/api.js';
-import { liveChecks, boxText } from '../web/new/js/model.js';
-import { clock } from '../web/lib/format.js';
-import { setup, draft, fakeTimers, settle, paths } from './support/newpage-fakes.js';
+import { sentence } from '../web/new/js/words.js';
+import { clock, listTime } from '../web/lib/format.js';
+import { setup, draft, settle, paths } from './support/newpage-fakes.js';
+import { AT, DAY, SENT, TYPING, ANYWAY, fb, sends, takes, mainNow } from './support/newpage-send-fakes.js';
 
-applyTestEnv({ MARKETPLACE_ENABLED: '1', DASHBOARD_USERNAME: '', DASHBOARD_PASSWORD: '' });
-
-const AT = Date.parse('2026-10-28T23:42:00Z');
-// A buyer waiting on us, with a suggestion that leaves the price blank, as GET /api/items/mp:1 answers.
-const FB = {
-  key: 'mp:1', anchor: 'fm:1', name: 'Liam Invented', channel: 'marketplace', section: 'marketplace', state: 'awaiting', writeOnOpen: true,
-  dismissed: false, writing: false, marketplace: { account: 'Yard phone 1', sending: false }, draft: draft(21, { reply: 'The price is [PRICE?]. Would you like to see it?' }),
-};
-// The same chat as the server answers a Send: answered with Wheelman's suggestion, the reply on its
-// way, and no suggestion shown (the chat is no longer waiting on one).
-const SENT = { ...FB, anchor: 'fm:2', state: 'answered', writeOnOpen: false, answered: { how: 'wheelman', by: '', at: AT }, draft: null, marketplace: { account: 'Yard phone 1', sending: true } };
-const TYPING = "Sent on Facebook at " + clock(AT) + ". The engine's phone is typing it into the chat.";
 const BOX = fs.readFileSync(new URL('../web/new/js/ui/messagebox.js', import.meta.url), 'utf8');
-
-const fb = (o = {}) => { const a = setup(); a.data.items['mp:1'] = { ...FB, ...o }; return a; };
-const sends = (a) => a.calls.filter((c) => c.path === '/api/items/mp:1/send');
-/** The server takes the send: the chat is answered from then on. */
-const takes = (a, out = { ok: true, queued: false }) => {
-  a.data.on = { ...a.data.on, '/api/items/mp:1/send': () => { a.data.items['mp:1'] = SENT; return { ...out, item: SENT }; } };
-};
-/** The main button for the open conversation, as the message box asks for it. */
-const mainNow = (s) => {
-  const text = s.typed !== null ? s.typed : boxText(s.item.draft);
-  const ready = s.item.draft && s.item.draft.status === 'ready' ? s.item.draft : null;
-  return mainFor({ item: s.item, text, checks: liveChecks(ready, text), overridden: s.overridden, sending: s.sending[s.key] });
-};
+const source = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8');
 
 test('one main button per channel', () => {
   const text = { channel: 'sms' };
@@ -86,7 +59,7 @@ test('one main button per channel', () => {
   assert.deepEqual(main(chat, { sending }), { kind: 'sending', label: 'Sending…', secondary: null, byKey: false });
   assert.equal(main(chat, { sending, text: blank, checks: fail }).kind, 'sending');
   // Not sent: Try again, while the chat is as it was then.
-  const failed = { state: 'failed', error: 'The phone is offline.', anchor: 'fm:1' };
+  const failed = { state: 'failed', error: 'The phone is offline.', outcome: 'refused', anchor: 'fm:1' };
   assert.deepEqual(main(chat, { sending: failed }), { kind: 'send', label: 'Try again', secondary: 'Copy', byKey: false });
   assert.equal(main(chat, { sending: { state: 'failed', error: 'x' } }).label, 'Try again');
   assert.equal(main({ ...chat, anchor: 'fm:2' }, { sending: failed }).label, 'Send on Facebook', 'the buyer wrote again since');
@@ -121,6 +94,7 @@ test('send posts the text with its draft and says Sent with the time', async () 
   a.calls.length = 0;
   assert.equal(await a.store.actions.send(), 'sent');
   assert.deepEqual(sends(a).map((c) => c.body), [{ text: 'The price is $28,900. Would you like to see it?', draftId: 21 }]);
+  assert.equal(paths(a.calls)[0], 'POST /api/items/mp:1/send', 'a first send is posted at once');
   let s = a.store.get();
   assert.deepEqual(s.sending, {});
   assert.equal(s.item.state, 'answered');
@@ -129,8 +103,8 @@ test('send posts the text with its draft and says Sent with the time', async () 
   // Then the list, after the send.
   const p = paths(a.calls);
   assert.ok(p.lastIndexOf('GET /api/items?section=dashboard&tab=waiting&limit=20') > p.indexOf('POST /api/items/mp:1/send'));
-  // Quiet and good, with no button; the engine's phone typing it while it is on its way.
-  assert.deepEqual(boxViewOf(s, AT + 60e3), { kind: 'quiet', tone: 'good', sentence: TYPING, button: null, tell: false });
+  // Quiet and good; the engine's phone typing it while it is on its way. A reply can still be written.
+  assert.deepEqual(boxViewOf(s, AT + 60e3), { kind: 'quiet', tone: 'good', sentence: TYPING, button: ANYWAY, tell: true });
   // Typed into the chat: the time alone. Opened again later: the same.
   a.data.items['mp:1'] = { ...SENT, marketplace: { ...SENT.marketplace, sending: false } };
   await a.store.actions.refresh();
@@ -141,11 +115,13 @@ test('send posts the text with its draft and says Sent with the time', async () 
   assert.equal(sends(a).length, 1);
 
   // The Send's own time, where the server shows the suggestion that was sent.
-  assert.equal(sectionBox({ item: { ...SENT, draft: draft(21, { sentHereAt: AT - 120e3 }) } }).sentence, "Sent on Facebook at " + clock(AT - 120e3) + ". The engine's phone is typing it into the chat.");
+  assert.equal(sectionBox({ item: { ...SENT, draft: draft(21, { sentHereAt: AT - 120e3 }) }, now: AT }).sentence, "Sent on Facebook at " + clock(AT - 120e3) + ". The engine's phone is typing it into the chat.");
   // A Facebook chat answered any other way, or a Dashboard text answered with the suggestion: as before.
   assert.match(sectionBox({ item: { ...SENT, answered: { how: 'auto', by: '', at: AT } }, now: AT }).sentence, /^Answered by an auto-reply/);
   assert.match(sectionBox({ item: { ...SENT, channel: 'sms' }, now: AT }).sentence, /^Answered with Wheelman's suggestion/);
   assert.equal(sectionBox({ item: SENT, writing: true }).kind, 'writing');
+  // A reply asked for after the send is the person's to use (boxView's rule): the editor, not the sent words.
+  assert.deepEqual(sectionBox({ item: { ...SENT, draft: draft(30, { createdAt: AT + 60e3 }) }, now: AT + 120e3 }), { kind: 'editor', context: '' });
 
   // The engine's phone is offline: the reply is queued, and the toast says so.
   const b = fb();
@@ -157,7 +133,7 @@ test('send posts the text with its draft and says Sent with the time', async () 
   assert.equal(s.toast.message, 'Queued. The Marketplace system sends it as soon as its phone is back online.');
   assert.equal(boxViewOf(s, AT).sentence, TYPING);
 
-  // Sent while another conversation is open: that one stays as it is, and the send is still told.
+  // Sent while another conversation is open: that one stays as it is, and the toast names the buyer.
   const c = fb();
   let answer = null;
   c.data.on = { '/api/items/mp:1/send': () => new Promise((r) => { answer = () => { c.data.items['mp:1'] = SENT; r({ ok: true, queued: false, item: SENT }); }; }) };
@@ -173,7 +149,19 @@ test('send posts the text with its draft and says Sent with the time', async () 
   assert.equal(s.typed, 'My words for Sam');
   assert.equal(s.item.key, 'c:1');
   assert.deepEqual(s.sending, {});
-  assert.equal(s.toast.message, 'Sent. It is on its way to the buyer.');
+  assert.equal(s.toast.message, 'Sent to Liam Invented. It is on its way.');
+  assert.equal(sentWords(true, 'Liam Invented'), 'Queued for Liam Invented. The Marketplace system sends it as soon as its phone is back online.');
+  assert.equal(sentWords(false, ''), 'Sent. It is on its way to the buyer.');
+});
+
+test('a send on an earlier day says the day, as the other answers do', () => {
+  const sent = { ...SENT, marketplace: { ...SENT.marketplace, sending: false } };
+  const at = (now) => sectionBox({ item: sent, now }).sentence;
+  assert.equal(at(AT + 3600e3), 'Sent on Facebook at ' + clock(AT) + '.', 'the same day: the clock');
+  assert.equal(at(AT + DAY), 'Sent on Facebook yesterday.');
+  assert.equal(at(AT + 3 * DAY), 'Sent on Facebook on ' + listTime(AT, AT + 3 * DAY) + '.');
+  assert.equal(at(AT + 10 * DAY), 'Sent on Facebook on ' + listTime(AT, AT + 10 * DAY) + '.');
+  assert.match(at(AT + 10 * DAY), /^Sent on Facebook on \d+ \w+\.$/);
 });
 
 test('a second press while sending sends nothing', async () => {
@@ -198,83 +186,6 @@ test('a second press while sending sends nothing', async () => {
   assert.equal(await first, 'sent');
   assert.equal(sends(a).length, 1, 'exactly one reply');
   assert.equal(boxViewOf(a.store.get(), AT).sentence, TYPING);
-
-  // Sent from somewhere else at the same moment (the old page): the server's 409 is said in words.
-  const b = fb();
-  b.data.on = { '/api/items/mp:1/send': () => { throw new Error('This reply is already on its way.'); } };
-  await b.store.actions.open('mp:1');
-  b.store.actions.type('Yes, it is still here.');
-  assert.equal(await b.store.actions.send(), 'failed');
-  assert.deepEqual(b.store.get().sending, { 'mp:1': { state: 'failed', error: 'This reply is already on its way.', anchor: 'fm:1' } });
-  assert.equal(sendFailedWords(b.store.get().sending['mp:1'].error), 'Not sent. This reply is already on its way. Your text is still in the box.');
-  assert.equal(b.store.get().toast, null, 'the chat is open: the box says it');
-});
-
-test('a send that fails after another chat is opened says so, and the chat keeps Try again', async () => {
-  const a = fb();
-  let refuse = null;
-  a.data.on = { '/api/items/mp:1/send': () => new Promise((_, no) => { refuse = () => no(new Error('The Marketplace system did not accept the reply: the phone is offline')); }) };
-  await a.store.actions.open('mp:1');
-  a.store.actions.type('The price is $28,900. Would you like to see it?');
-  const going = a.store.actions.send();
-  // Jim moves on to the next customer while the reply is on its way, and it is refused.
-  await a.store.actions.open('c:1');
-  refuse();
-  assert.equal(await going, 'failed');
-  let s = a.store.get();
-  assert.equal(s.key, 'c:1', 'the chat open now stays open');
-  assert.equal(s.toast.message, 'Not sent to Liam Invented. The Marketplace system did not accept the reply: the phone is offline.');
-  assert.equal(sendFailedAwayWords('', 'Not found'), 'Not sent to the buyer. Not found.');
-  // Back in the chat: why, the text, and Try again.
-  await a.store.actions.open('mp:1');
-  s = a.store.get();
-  assert.equal(boxText(s.item.draft), 'The price is $28,900. Would you like to see it?', 'the text was saved as Jim left the chat');
-  assert.deepEqual(mainNow(s), { kind: 'send', label: 'Try again', secondary: 'Copy', byKey: false });
-  assert.equal(sendFor(s.item, s.sending[s.key]).error, 'The Marketplace system did not accept the reply: the phone is offline');
-  takes(a);
-  assert.equal(await a.store.actions.send(), 'sent');
-  assert.equal(sends(a).length, 2);
-});
-
-test('the box cannot be edited while its reply is sending', async () => {
-  const a = fb();
-  let answer = null;
-  a.data.on = { '/api/items/mp:1/send': () => new Promise((yes, no) => { answer = { yes, no }; }) };
-  await a.store.actions.open('mp:1');
-  a.store.actions.type('Yes, it is still here.');
-  assert.equal(sendingNow(a.store.get().item, a.store.get().sending['mp:1']), false);
-  const going = a.store.actions.send();
-  let s = a.store.get();
-  assert.equal(sendingNow(s.item, s.sending[s.key]), true);
-  // Typing, Clear, Bring back and Add to reply all go through type(): none takes while it is sending.
-  assert.equal(a.store.actions.type('Something else'), false);
-  a.store.actions.clear();
-  a.store.actions.bringBack();
-  assert.equal(a.store.get().typed, 'Yes, it is still here.');
-  // Another chat is not held up by it.
-  assert.equal(sendingNow({ ...FB, key: 'mp:2' }, undefined), false);
-  // Not sent: the box is Jim's again.
-  answer.no(new Error('The phone is offline.'));
-  assert.equal(await going, 'failed');
-  s = a.store.get();
-  assert.equal(sendingNow(s.item, s.sending[s.key]), false);
-  assert.equal(a.store.actions.type('Yes, it is still here today.'), true);
-  assert.equal(a.store.get().typed, 'Yes, it is still here today.');
-  // Sent: the text goes with the reply, as before.
-  a.data.on = { '/api/items/mp:1/send': () => new Promise((yes) => { answer = { yes }; }) };
-  const again = a.store.actions.send();
-  a.data.items['mp:1'] = SENT;
-  answer.yes({ ok: true, queued: false, item: SENT });
-  assert.equal(await again, 'sent');
-  assert.equal(a.store.get().typed, null);
-  // The message box locks its editor, Clear, the block Remove, Tell Wheelman and Instead while it is sending.
-  assert.match(BOX, /const locked = sendingNow\(item, state\.sending\[state\.key\]\);/);
-  assert.match(BOX, /<\$\{Editor\} [^>]*readOnly=\$\{locked\}/);
-  assert.match(BOX, /<\$\{Tell\} [^>]*disabled=\$\{locked\}/);
-  assert.match(BOX, /class="opt" [^>]*disabled=\$\{locked\}/);
-  const editor = fs.readFileSync(new URL('../web/new/js/ui/editor.js', import.meta.url), 'utf8');
-  assert.match(editor, /contenteditable=\$\{readOnly \? 'false' :/);
-  assert.match(editor, /readOnly=\$\{readOnly\}/);
 });
 
 test('send with a blank posts nothing and moves to the blank', async () => {
@@ -352,73 +263,16 @@ test('Send anyway past a failed check sends', async () => {
   assert.match(BOX, /actions\.override\(\);\s*if \(facebook\) send\(\);/);
 });
 
-// ---- one whole send, against the server and the stand-in Marketplace engine
-
-const now = Date.now();
-const ai = aiBehaviour({ behave: () => ({ reply: 'Thanks for your message. The price is [PRICE?].', needs_human: [{ marker: '[PRICE?]', reason: 'A person decides the price.' }], facts_used: [], hold: false }) });
-let standins, app, base;
-
-before(async () => {
-  standins = await startStandins({ world: { now, chats: marketplace(now) }, ai });
-  const { config } = await import('../src/config.js');
-  config.marketplace.url = `${standins.engineBase}/inbox`;
-  config.llm.gemini.url = `${standins.base}/chat`;
-  await (await import('../src/sync.js')).syncMarketplace();
-  app = await (await import('../src/server.js')).startServer();
-  base = `http://127.0.0.1:${app.address().port}`;
-});
-
-after(async () => {
-  if (app) await new Promise((r) => { app.close(r); app.closeAllConnections?.(); });
-  if (standins) await standins.close();
-});
-
-/** Waits for the store to be done with something it does not hand back (a write on open). */
-async function until(ok) {
-  for (let i = 0; i < 400 && !ok(); i++) await new Promise((r) => setTimeout(r, 10));
-  assert.ok(ok(), 'it happened');
-}
-
-test('a failed send keeps the text, says why and offers Try again', async () => {
-  standins.world.refuseSendOnce = new Set([501]);
-  const api = createApi({ fetch: (p, init) => fetch(base + p, init), go: () => {} });
-  const storage = { getItem: () => null, setItem() {} };
-  const store = createStore({ api, clipboard: { async writeText() {} }, storage, now: Date.now, timers: fakeTimers(), keepalive: (p, b) => api(p, b) });
-  // Liam's chat, opened from Marketplace's Needs reply: written as it opens.
-  await store.actions.setSection('marketplace', { key: 'mp:501' });
-  await until(() => store.get().writing === null && !!(store.get().item && store.get().item.draft));
-  const d = store.get().item.draft;
-  assert.equal(d.status, 'ready');
-  assert.match(d.reply, /\[PRICE\?\]/);
-  const text = d.reply.replace(/\[PRICE\?\]/g, '$28,900');
-  store.actions.type(text);
-
-  // The engine's phone is offline: refused, once.
-  assert.equal(await store.actions.send(), 'failed');
-  let s = store.get();
-  const error = 'The Marketplace system did not accept the reply: the phone is offline';
-  assert.deepEqual(s.sending['mp:501'], { state: 'failed', error, anchor: s.item.anchor });
-  assert.equal(s.typed, text, 'the text stays');
-  assert.equal(s.item.state, 'awaiting');
-  assert.equal(sendFailedWords(error), 'Not sent. The Marketplace system did not accept the reply: the phone is offline. Your text is still in the box.');
-  assert.equal(mainNow(s).label, 'Try again');
-  assert.equal(standins.world.chats.get(501).messages.filter((m) => m.direction === 'out').length, 0, 'nothing reached the buyer');
-
-  // Try again: sent, once.
-  assert.equal(await store.actions.send(), 'sent');
-  s = store.get();
-  const posts = standins.engineSeen.filter((r) => r.method === 'POST');
-  assert.deepEqual(posts.map((r) => `${r.path} ${JSON.parse(r.body).text}`), [`/inbox/conversations/501/reply ${text}`, `/inbox/conversations/501/reply ${text}`], 'refused once, then taken');
-  assert.equal(standins.world.chats.get(501).messages.filter((m) => m.direction === 'out').length, 1, 'one reply reached the buyer');
-  assert.deepEqual(s.sending, {});
-  assert.equal(s.toast.message, 'Sent. It is on its way to the buyer.');
-  // As the server answers a Send: answered with Wheelman's suggestion, and no suggestion shown.
-  assert.equal(s.item.state, 'answered');
-  assert.equal(s.item.draft, null);
-  assert.equal(s.item.answered.how, 'wheelman');
-  assert.equal(s.item.marketplace.sending, true);
-  assert.equal(boxViewOf(s, Date.now()).sentence, 'Sent on Facebook at ' + clock(s.item.answered.at) + ". The engine's phone is typing it into the chat.");
-  assert.ok(!s.rows.some((r) => r.key === 'mp:501'), 'no longer in Needs reply');
-  // The refusal was once: the stand-in has forgotten it.
-  assert.equal(standins.world.refuseSendOnce.size, 0);
+test('the full stop helper is one, shared by the box and the send words', () => {
+  assert.equal(sentence('Not found'), 'Not found.');
+  assert.equal(sentence('  Is it running?  '), 'Is it running?');
+  assert.equal(sentence('Done!'), 'Done!');
+  assert.equal(sentence('Done.'), 'Done.');
+  assert.equal(sentence(''), '');
+  assert.equal(sentence(null), '');
+  for (const f of ['../web/new/js/boxsections.js', '../web/new/js/channel.js']) {
+    const src = source(f);
+    assert.match(src, /import \{[^}]*\bsentence\b[^}]*\} from '\.\/words\.js';/, f);
+    assert.doesNotMatch(src, /const sentence =/, f);
+  }
 });

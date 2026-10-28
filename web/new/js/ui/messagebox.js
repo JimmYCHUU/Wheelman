@@ -140,6 +140,7 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
   // While it is on its way the box is read-only, as on the old page: what goes is the text as Send
   // was pressed. It is Jim's again if the send fails, and cleared once it is sent.
   const locked = sendingNow(item, state.sending[state.key]);
+  const failedSend = sending && sending.state === 'failed' ? sending : null;
   const action = empty ? null : mainFor({ item, text, checks: live, overridden: state.overridden, sending });
   const options = insteadOptions(item);
 
@@ -202,9 +203,9 @@ function Draft({ state, actions, item, view, editor, main, reply }) {
     <div class="box-scroll">
       <${Context} context=${state.context} words=${view.context} />
       ${view.failure ? html`<div class="context bad" role="status"><span>${view.failure}</span>
-        <button type="button" class="btn small" onClick=${() => actions.write({ instruction: (item.draft && item.draft.instruction) || undefined })}>Try again</button>
+        <button type="button" class="btn small" disabled=${locked} onClick=${() => actions.write({ instruction: (item.draft && item.draft.instruction) || undefined })}>${failedSend ? 'Write it again' : 'Try again'}</button>
       </div>` : null}
-      ${sending && sending.state === 'failed' ? html`<div class="context bad" role="alert"><span>${sendFailedWords(sending.error)}</span></div>` : null}
+      ${failedSend ? html`<div class="context bad" role="alert"><span>${sendFailedWords(failedSend.error, failedSend.outcome)}</span></div>` : null}
       <div class="box-head">
         <span class="box-label"><b>Suggested reply</b> · not sent</span>
         ${note ? html`<span class=${'save-note' + (state.save.state === 'failed' ? ' bad' : '')}>${note}</span>` : null}

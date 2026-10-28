@@ -198,12 +198,12 @@ test("a row shows its channel only when it differs from its section's own, and a
 test('a copied row says where it will show only for a Dashboard text', () => {
   const now = Date.UTC(2026, 9, 28, 1, 0);
   const copied = (key, section) => sectionRowView(row(key), { now, doneAnchor: 'a-' + key }, section);
-  // A text is pasted into the dashboard, wherever it is listed (an enquiry in Auction too).
+  // A Dashboard text is pasted into the dashboard, wherever it is listed (an enquiry in Auction too).
   assert.equal(copied('c:1', 'dashboard').reason, 'Copied, waiting for it to show on the dashboard');
   assert.equal(copied('l:1', 'auction').reason, 'Copied, waiting for it to show on the dashboard');
-  assert.equal(copied('ph:1', 'dashboard').reason, 'Copied, waiting for it to show on the dashboard');
-  // A Facebook chat, an email and an order go elsewhere, and their row says only that it was copied.
-  for (const [key, section] of [['mp:1', 'marketplace'], ['mp:1', 'dashboard'], ['em:1', 'importquery'], ['ao:1', 'auction']]) {
+  // A Facebook chat, an email, an order and a text seen only on the phone (answered from the phone)
+  // go elsewhere, and their row says only that it was copied.
+  for (const [key, section] of [['mp:1', 'marketplace'], ['mp:1', 'dashboard'], ['em:1', 'importquery'], ['ao:1', 'auction'], ['ph:1', 'dashboard']]) {
     const v = copied(key, section);
     assert.deepEqual([v.reason, v.tone, v.done, v.unread], ['Copied', '', true, 0], key + ' in ' + section);
   }

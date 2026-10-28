@@ -1,8 +1,9 @@
 // Which way a reply goes, and the message box's one main button for it: Copy reply for a text, Send
 // on Facebook for a Marketplace chat, Copy for Gmail for an email, Copy for WhatsApp for an auction
-// order. Then the words after a copy, and after a send that did not go. Pure functions (no DOM, no
-// globals) beside model.js, which the tests import in Node.
+// order. Then what a send's failure means, and the words after a copy, a send, and a send that did
+// not go. Pure functions (no DOM, no globals) beside model.js, which the tests import in Node.
 import { mainAction } from './model.js';
+import { sentence } from './words.js';
 import { blanksIn } from '../../lib/blank.js';
 import { plural } from '../../lib/format.js';
 
@@ -72,11 +73,51 @@ export function copiedWords(item, left = 0) {
   return COPIED[replyChannel(item)] || 'Copied';
 }
 
-/** The words, ending in a full stop unless they end in one of their own (as boxsections.js reads a refused write). */
-const sentence = (words) => { const s = String(words || '').trim(); return !s || /[.!?]$/.test(s) ? s : s + '.'; };
+/**
+ * What a send that threw means, from the page's api error (web/new/js/api.js): 'elsewhere' (409:
+ * another page is sending a reply to this chat), 'refused' (the server said it was not sent: a 4xx,
+ * or its own 502 when the engine said no or was not reached), or 'unknown' (no answer at all, or a
+ * failure not in the server's words, after which the reply may have gone).
+ */
+export function sendOutcome(e) {
+  const status = e && e.status;
+  if (status === 409) return 'elsewhere';
+  if (status >= 400 && status < 500) return 'refused';
+  if (status === 502 && e.said) return 'refused';
+  return 'unknown';
+}
 
-/** The line in the box after a send that did not go: why, in the server's words, and that the text stays. */
-export const sendFailedWords = (error) => ['Not sent.', sentence(error), 'Your text is still in the box.'].filter(Boolean).join(' ');
+/**
+ * Whether the chat, as the server has it now, shows a reply since the message a send was answering
+ * (anchor): it is answered, or one of ours follows that message in its thread. Only what the chat
+ * shows counts: a new message from the buyer alone is not a reply.
+ */
+export function repliedSince(item, anchor) {
+  if (!item || item.anchor === anchor) return false;
+  if (item.state !== 'awaiting') return true;
+  const thread = item.thread || [];
+  const at = thread.findIndex((m) => m.key === anchor);
+  return at !== -1 && thread.slice(at + 1).some((m) => m.who === 'us' && !m.internal);
+}
+
+/** The toast after a send: the chat still open says it plainly; another chat open by now names the buyer. */
+export function sentWords(queued, name) {
+  const who = String(name || '').trim();
+  if (queued) return (who ? 'Queued for ' + who + '.' : 'Queued.') + ' The Marketplace system sends it as soon as its phone is back online.';
+  return who ? 'Sent to ' + who + '. It is on its way.' : 'Sent. It is on its way to the buyer.';
+}
+
+/** The line in the box after a send that did not go, by its outcome: "Not sent." only when the server said so. */
+export function sendFailedWords(error, outcome = 'refused') {
+  if (outcome === 'elsewhere') return 'Not sent from here: another page is sending a reply to this chat.';
+  if (outcome === 'unknown') return ['Wheelman could not tell whether this reply went.', sentence(error)].filter(Boolean).join(' ');
+  return ['Not sent.', sentence(error), 'Your text is still in the box.'].filter(Boolean).join(' ');
+}
 
 /** The toast for a send that did not go once another chat was open: whose, and why. */
-export const sendFailedAwayWords = (name, error) => ['Not sent to ' + (String(name || '').trim() || 'the buyer') + '.', sentence(error)].filter(Boolean).join(' ');
+export function sendFailedAwayWords(name, error, outcome = 'refused') {
+  const who = String(name || '').trim() || 'the buyer';
+  if (outcome === 'elsewhere') return 'Not sent to ' + who + ' from here: another page is sending a reply to this chat.';
+  if (outcome === 'unknown') return ['Wheelman could not tell whether the reply to ' + who + ' went.', sentence(error)].filter(Boolean).join(' ');
+  return ['Not sent to ' + who + '.', sentence(error)].filter(Boolean).join(' ');
+}

@@ -50,11 +50,12 @@ export function createStore({ api, clipboard, storage, now, timers, keepalive })
     return '/api/items/' + key + (q ? '?' + q : '');
   };
 
+  /** A toast; action: { label, run } or { label, href } (an address the page goes to, as a row does). */
   function toast(message, action = null) {
     const id = ++toastSeq;
     timers.clear(toastTimer);
-    const run = action && (() => { timers.clear(toastTimer); set({ toast: null }); return action.run(); });
-    set({ toast: { message, action: action ? { label: action.label, run } : null } });
+    const run = action && (() => { timers.clear(toastTimer); set({ toast: null }); return action.run ? action.run() : undefined; });
+    set({ toast: { message, action: action ? { label: action.label, run, href: action.href || null } : null } });
     toastTimer = timers.set(() => { if (id === toastSeq) set({ toast: null }); }, action ? 9000 : 4000);
   }
 
