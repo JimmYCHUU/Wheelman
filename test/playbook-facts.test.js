@@ -10,6 +10,8 @@ import { fileURLToPath } from 'node:url';
 import { applyTestEnv } from './support/env.js';
 import { startStandins, aiBehaviour } from './support/standins.js';
 import { inventedFacts, INVENTED_FACTS } from './support/facts.js';
+import { orders } from './support/fixtures.js';
+import { trustLine } from '../web/new/js/trustview.js';
 
 applyTestEnv({ DAILY_DRAFT_LIMIT: '200' });
 delete process.env.PROMPT_STYLE;
@@ -17,7 +19,7 @@ delete process.env.PROMPT_STYLE;
 const now = Date.now();
 const MIN = 60e3, HOUR = 3600e3;
 const NAME = 'business-facts.md';
-let standins, app, base, db, items, knowledge, promptModule, sydneyDay, dir;
+let standins, app, base, db, items, knowledge, promptModule, sydneyDay, dir, sync;
 
 before(async () => {
   standins = await startStandins({ ai: aiBehaviour() });
@@ -31,7 +33,7 @@ before(async () => {
   knowledge = await import('../src/knowledge.js');
   promptModule = await import('../src/prompt.js');
   ({ sydneyDay } = await import('../src/time.js'));
-  const sync = await import('../src/sync.js');
+  sync = await import('../src/sync.js');
   sync.storeVehicles([{ id: 1, stockNo: '1300', year: '2021', title: '2021 Toyota Noah X', make: 'TOYOTA', model: 'Noah', modelCode: 'ABC10', auPublishPrice: 21900, odometer: 60000, seats: 8, status: 'PUBLISHED', soldStatus: 'UnSold', stockIn: 'Online', outline: ['6 Months NSW Registration'] }]);
   app = await (await import('../src/server.js')).startServer();
   base = `http://127.0.0.1:${app.address().port}`;
@@ -68,7 +70,10 @@ const fileAnswer = (title) => INVENTED_FACTS.find((f) => f.title === title).answ
 //   - the first two tests run before any save, as they are written first: both check the file alone
 //     before anything is saved, and the second's counts after its save assume no other fact is saved;
 //   - every later test answers its own fact (Holding deposit, Car covers, Opening hours, Roof racks,
-//     Tinted windows) and saves what it checks, so their saves never meet;
+//     Tinted windows) and saves what it checks, so their saves never meet; Tinted windows is answered
+//     by the second test too, and the journey test puts it back to Needs answer before it starts;
+//   - the test after the journey test needs Tinted windows answered (by the journey test) and Car
+//     covers with no answer (put back by the fourth test);
 //   - a test that edits the scratch facts file by hand puts it back when it ends.
 test('with nothing saved in the Playbook, the facts are the file\'s, as before', () => {
   assert.equal(db.countRows('playbook_versions'), 0);
@@ -263,6 +268,96 @@ test('a topic the file no longer has keeps its saved answer, listed after the fi
   } finally {
     fs.writeFileSync(factsFile(), text);
   }
+});
+
+// Journey 6, story 15.
+const TINT_ASKED = 'Can you tint the windows on the Noah before I pick it up?';
+const TINT_USED = 'Yes, we can arrange window tinting before pickup, and we will quote the cost for you.';
+const answer = (reply, needs = []) => ({ reply, next_step: '', needs_human: needs, facts_used: [], hold: false });
+const blankFor = (what) => ({ marker: '[CHECK?]', reason: `Nobody has said whether ${what}.` });
+
+test('a Needs-answer fact answered in the Playbook is Confirmed with today\'s date, and the next suggestion\'s trust line cites it', async () => {
+  // The second test answered it: put back to Needs answer first, as the Playbook can.
+  let out = await post('/api/playbook/facts', { title: 'Tinted windows', answer: '', status: 'needs_answer' });
+  assert.equal(out.status, 200, out.error);
+  const key = customer(4, 'Dee', TINT_ASKED);
+
+  // 1. With no answer the AI leaves a blank for it, and the box names the fact.
+  standins.ai.script.push(answer('Thank you for asking. Whether we can tint the windows before pickup is [CHECK?].', [blankFor('we tint windows')]));
+  let item = (await post(`/api/items/${key}/draft`)).item;
+  assert.equal(item.draft.status, 'ready', item.draft.error);
+  assert.ok(item.draft.reply.includes('[CHECK?]'));
+  assert.deepEqual(item.draft.openTopics, [{ title: 'Tinted windows', answered: false }]);
+  assert.deepEqual(item.draft.topics, [], 'nothing answered was used');
+  const first = item.draft.id;
+
+  // 2. Answered in the Playbook: Confirmed, today.
+  const ANSWER = 'Yes, we can arrange window tinting before pickup; a person quotes the cost.';
+  out = await post('/api/playbook/facts', { title: 'Tinted windows', answer: ANSWER });
+  assert.equal(out.status, 200, out.error);
+  assert.deepEqual([out.fact.status, out.fact.answer, out.fact.from], ['confirmed', ANSWER, 'playbook']);
+  assert.equal(sydneyDay(out.fact.at), sydneyDay(), 'confirmed with today\'s date');
+
+  // 3. The same conversation says it has its answer now. Nothing is written again by itself.
+  const asks = standins.ai.seen.length;
+  item = (await get(`/api/items/${key}`)).item;
+  assert.equal(item.draft.id, first);
+  assert.deepEqual(item.draft.openTopics, [{ title: 'Tinted windows', answered: true }]);
+  assert.equal(standins.ai.seen.length, asks, 'no request was made');
+  // The list's rows carry no facts: only the open conversation reads them.
+  const rows = (await get('/api/items?section=dashboard&tab=all&limit=50')).items || [];
+  const row = rows.find((r) => r.key === key);
+  assert.ok(row, 'listed');
+  assert.ok(!('draft' in row) && !('openTopics' in row) && !('topics' in row));
+
+  // 4. Written again: the AI's words use the answer, and the draft names the fact with the save's day.
+  standins.ai.script.push(answer(TINT_USED));
+  item = (await post(`/api/items/${key}/draft`)).item;
+  assert.equal(item.draft.status, 'ready', item.draft.error);
+  assert.ok(item.draft.reply.includes(TINT_USED), item.draft.reply);
+  assert.deepEqual(item.draft.topics, [{ title: 'Tinted windows', status: 'confirmed', at: out.fact.at }]);
+  assert.deepEqual(item.draft.openTopics, []);
+
+  // 5. The trust line says so.
+  const line = trustLine(item.draft, item.draft.reply, Date.now());
+  assert.ok(line.text.endsWith('Uses your business fact “Tinted windows”.'), line.text);
+});
+
+test('a template, an auction message or code\'s own wording cites no business fact', async () => {
+  // Asked about tinting (answered) and car covers (not). As a reply to what they wrote, the AI uses
+  // the tinting answer's words and leaves a blank for the covers. Fitting a template, it puts the same
+  // tinting words after the template's own (a blank the template lacks would not be kept, and the
+  // template would be used word for word).
+  const key = customer(5, 'Eli', `${TINT_ASKED} Do you sell car covers for it too?`);
+  const was = standins.ai.behave;
+  standins.ai.behave = (req) => {
+    const fit = String(req.messages?.[1]?.content || '').match(/<<<\n([\s\S]*?)\n>>>/);
+    return fit ? answer(`${fit[1]}\n\n${TINT_USED}`) : answer(`${TINT_USED} Whether we can supply a car cover is [CHECK?].`, [blankFor('we sell car covers')]);
+  };
+  try {
+    // The control: as a reply to what they wrote, both facts are named.
+    let d = (await post(`/api/items/${key}/draft`)).item.draft;
+    assert.equal(d.status, 'ready', d.error);
+    assert.deepEqual(d.topics.map((t) => t.title), ['Tinted windows']);
+    assert.deepEqual(d.openTopics, [{ title: 'Car covers', answered: false }]);
+
+    // A Dashboard template fitted by the AI, with the same words in it: none.
+    d = (await post(`/api/items/${key}/draft`, { message: 'still_available' })).item.draft;
+    assert.equal(d.status, 'ready', d.error);
+    assert.equal(d.template, 'still_available');
+    assert.notEqual(d.provider, 'none', 'fitted by the AI');
+    assert.ok(d.reply.includes(TINT_USED), d.reply);
+    assert.deepEqual([d.topics, d.openTopics], [[], []]);
+  } finally {
+    standins.ai.behave = was;
+  }
+
+  // An auction order's message, written by code from the owner's wording: none.
+  sync.storeAuctionOrders([orders(now).find((o) => o.id === 502)], { complete: false, now });
+  const order = (await post('/api/items/ao:502/draft', { message: 'search_update' })).item;
+  assert.equal(order.draft.status, 'ready', order.draft.error);
+  assert.equal(order.draft.provider, 'none', 'code\'s own wording, with no AI');
+  assert.deepEqual([order.draft.topics, order.draft.openTopics], [[], []]);
 });
 
 test('no statement changes or removes a saved version', () => {

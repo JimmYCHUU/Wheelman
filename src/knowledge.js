@@ -67,6 +67,7 @@ function withPlaybook(topics) {
   return out;
 }
 
+/** The business facts as a request carries them, and `topics`, the list they were read from. */
 export function businessFactsForPrompt() {
   const topics = loadBusinessFacts();
   const usable = topics.filter((t) => t.status !== 'needs_answer');
@@ -75,7 +76,26 @@ export function businessFactsForPrompt() {
     text: usable.map((t) => `- ${t.title}: ${t.answer.replace(/\n+/g, ' ')}`).join('\n'),
     unanswered: open.map((t) => t.title),
     counts: { confirmed: topics.filter((t) => t.status === 'confirmed').length, working: topics.filter((t) => t.status === 'working').length, needsAnswer: open.length },
+    topics,
   };
+}
+
+/** The words of a text that count when it is matched to a topic: lower case, with the small words left out. */
+export function factWords(text) {
+  return words(text);
+}
+
+/**
+ * How much a message is about one business fact: each of its words counts 2 when it is in the
+ * topic's title and 1 when it is only in its answer. 2 or more is asked about (relevantFacts).
+ * `titleOnly` counts the title alone, for a topic with no answer.
+ */
+export function topicScore(topic, query, { titleOnly = false } = {}) {
+  const head = new Set(words(topic.title));
+  const body = new Set(titleOnly ? [] : words(topic.answer));
+  let score = 0;
+  for (const w of new Set(words(query))) { if (head.has(w)) score += 2; else if (body.has(w)) score += 1; }
+  return score;
 }
 
 // ---- how Carbarn works ----------------------------------------------------
@@ -97,14 +117,10 @@ export function relevantFacts(query, { max = 5, core = ['address', 'opening hour
   const usable = topics.filter((t) => t.status !== 'needs_answer');
   const line = (t) => `- ${t.title}: ${t.answer.replace(/\n+/g, ' ')}`;
   const isCore = (t) => core.some((c) => t.title.toLowerCase().includes(c.toLowerCase()));
-  const q = new Set(words(query));
   const ranked = [];
   usable.forEach((t, order) => {
     if (isCore(t)) return;
-    const head = new Set(words(t.title));
-    const body = new Set(words(t.answer));
-    let score = 0;
-    for (const w of q) { if (head.has(w)) score += 2; else if (body.has(w)) score += 1; }
+    const score = topicScore(t, query);
     if (score >= 2) ranked.push({ t, score, order });
   });
   ranked.sort((a, b) => b.score - a.score || a.order - b.order);

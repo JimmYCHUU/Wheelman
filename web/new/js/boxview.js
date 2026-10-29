@@ -1,8 +1,75 @@
 // What the message box holds and shows, and its one main button: the rules for one conversation's
-// box, moved out of model.js so that boxsections.js and channel.js need nothing from it (no import
-// cycle). Pure functions (no DOM, no globals); model.js re-exports them, the tests import them in Node.
+// box, moved out of model.js so that boxsections.js, channel.js and trustview.js need nothing from
+// it (no import cycle). With them, the box's text in pieces and the checks that still apply to it.
+// Pure functions (no DOM, no globals); model.js re-exports them, the tests import them in Node.
 import { blanksIn } from '../../lib/blank.js';
 import { listTime, clock } from '../../lib/format.js';
+
+/** Text split into plain text and blanks: [{kind:'text',text}|{kind:'blank',label,raw}]. */
+export function segments(text) {
+  const s = String(text || '');
+  const out = [];
+  let at = 0;
+  for (const b of blanksIn(s)) {
+    if (b.index > at) out.push({ kind: 'text', text: s.slice(at, b.index) });
+    out.push({ kind: 'blank', label: b.kind, raw: b.text });
+    at = b.index + b.length;
+  }
+  if (at < s.length) out.push({ kind: 'text', text: s.slice(at) });
+  return out;
+}
+
+export function checkLines(checks) {
+  const at = (level) => (checks || []).filter((c) => c.level === level).map((c) => c.message);
+  return { fails: at('fail'), warns: at('warn'), inputs: at('input') };
+}
+
+/**
+ * Whether the person changed the words of the suggestion, not only filled its blanks: each blank
+ * may hold anything of one character or more, every other part must be as Wheelman wrote it.
+ */
+export function wordsChanged(reply, text) {
+  const r = String(reply || '');
+  const t = String(text ?? '');
+  if (r === t) return false;
+  // The suggestion's fixed parts: before the first blank, between the blanks, after the last one.
+  const fixed = [''];
+  for (const s of segments(r)) {
+    if (s.kind === 'blank') fixed.push('');
+    else fixed[fixed.length - 1] += s.text;
+  }
+  if (fixed.length === 1) return true;
+  const head = fixed[0];
+  const tail = fixed[fixed.length - 1];
+  if (!t.startsWith(head) || !t.endsWith(tail)) return true;
+  const end = t.length - tail.length;
+  let at = head.length;
+  for (const part of fixed.slice(1, -1)) {
+    const i = t.indexOf(part, at + 1);
+    if (i === -1 || i + part.length > end) return true;
+    at = i + part.length;
+  }
+  return end - at < 1;
+}
+
+/**
+ * The checks that still apply to the text in the box. The blank line goes (the pills show the
+ * blanks), and so does the "all match" line. Once the person has changed the words, a check about
+ * words that are no longer there goes, and so does a warning about the suggestion as a whole (its
+ * length, say), which was never about what they typed.
+ */
+export function liveChecks(draft, text) {
+  if (!draft) return [];
+  const t = String(text ?? '');
+  const changed = wordsChanged(draft.reply, t);
+  const there = (c) => !(c.tokens && c.tokens.length) || c.tokens.some((k) => t.includes(k));
+  return (draft.checks || []).filter((c) => {
+    if (c.level === 'ok' || c.code === 'marker') return false;
+    if (!changed) return true;
+    if (c.level === 'warn') return (c.tokens && c.tokens.length > 0 && there(c)) || c.code === 'auction';
+    return there(c);
+  });
+}
 
 /**
  * Who answered a customer instead of us, in words: "Answered on the phone 10:42". The time is the clock

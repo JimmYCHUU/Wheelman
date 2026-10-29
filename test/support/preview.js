@@ -4,12 +4,14 @@
 //
 // The dashboard, the website and the model are stand-ins on this computer, so nothing real is read
 // and nothing is sent. Run with plain `node`, so .env is never read. Stop it with Ctrl+C.
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { applyTestEnv } from './env.js';
 import { startStandins, aiBehaviour } from './standins.js';
 import { world, rawLead, rawConversation, rawMessage, STAFF, chatRow, chatMessage } from './fixtures.js';
 import { pointConfigAt } from './wire.js';
+import { inventedFacts } from './facts.js';
 
 const PORT = 3211;
 // Every section is on, as they all open on the new page: Marketplace reads the stand-in engine's
@@ -21,8 +23,12 @@ applyTestEnv({ DAILY_DRAFT_LIMIT: '200', MARKETPLACE_ENABLED: '1', MAIL_INTAKE: 
 // Wheelman gets a shorter one, so the rewrite shows. Three instructions are for seeing the rarer
 // states: "fail this one" makes the model fail, "use the right figure" gives the car's own price and link,
 // and "use a wrong figure" gives a price that is not
-// in the records, so the check fails.
+// in the records, so the check fails. A customer who asks about tinting (Dara) gets a blank for it
+// while the invented facts have no answer, and the answer's words once the Playbook has one.
 const said = (req) => (req.messages || []).map((m) => String(m.content || '')).join('\n');
+/** One section of a request: its lines from the heading to the next heading. */
+const section = (prompt, heading) => (prompt.match(new RegExp(`=== ${heading} ===\\n([\\s\\S]*?)(?=\\n=== |$)`)) || [])[1] || '';
+const customerWords = (prompt) => [...prompt.matchAll(/<customer_message>\n([\s\S]*?)\n<\/customer_message>/g)].map((m) => m[1]).join('\n');
 const ai = aiBehaviour({
   behave: (req) => {
     const prompt = said(req);
@@ -34,6 +40,10 @@ const ai = aiBehaviour({
     const template = prompt.match(/<<<\n([\s\S]*?)\n>>>/);
     if (template) return { reply: template[1], next_step: '', needs_human: [], facts_used: [], hold: false };
     if (/=== FOLLOW-UP ===/.test(prompt)) return { reply: 'Team Carbarn here. How did you find the Hiace? You are welcome to come and see it again.', needs_human: [], facts_used: [], hold: false };
+    if (/\btint/i.test(customerWords(prompt))) {
+      if (/^- Tinted windows: /m.test(section(prompt, 'BUSINESS FACTS'))) return { reply: 'Yes, we can arrange window tinting before pickup, and we will quote the cost for you.', needs_human: [], facts_used: [], hold: false };
+      if (/^- Tinted windows$/m.test(section(prompt, 'TOPICS WITH NO CONFIRMED ANSWER'))) return { reply: 'Thank you for asking. Whether we can tint the windows before pickup is [CHECK?].', needs_human: [{ marker: '[CHECK?]', reason: 'Nobody has said whether we tint windows before pickup.' }], facts_used: [], hold: false };
+    }
     if (told) return { reply: 'The price is [PRICE?]. When would you like to come and see it?', needs_human: [{ marker: '[PRICE?]', reason: 'A person decides the price.' }], facts_used: [], hold: false };
     return { reply: 'Thanks for your message. The price is [PRICE?], and we can book you in to see it.', needs_human: [{ marker: '[PRICE?]', reason: 'A person decides the price.' }], facts_used: [], hold: false };
   },
@@ -119,6 +129,10 @@ const pell = ['Pell', 'Invented', '0491 570 191'];
 const standins = await startStandins({ world: invented, ai });
 const { config } = await import('../../src/config.js');
 pointConfigAt(config, standins, { port: PORT, sessionPath: path.join(os.tmpdir(), `wheelman-preview-session-${process.pid}.json`) });
+// The business facts are invented too (test/support/facts.js), in a scratch folder, so the preview
+// never reads the facts file in this folder; an answer saved in its Playbook stays in its database.
+const factsDir = inventedFacts();
+config.knowledgeDir = factsDir;
 
 const worker = await import('../../src/worker.js');
 const app = await (await import('../../src/server.js')).startServer();
@@ -184,6 +198,18 @@ const { parseDashboardTime, sydneyDay } = await import('../../src/time.js');
   invented.conversations.push({ row: rawConversation(795, lead, jory, { direction: 'IN', at: now - 4 * MIN, body: ask }), messages: [rawMessage(7950, 795, 'IN', ask, 4 * MIN, now)] });
   await worker.runSync();
 }
+// Dara texts the dashboard about the Voxy (stock 1800), made as Wynn's is, after the first suggestions
+// too: she asks about tinting, which the invented facts have no answer for. Her suggestion leaves a
+// blank for it and the box names the fact; answered in the Playbook, the box offers Write it again.
+{
+  const now = Date.now(), MIN = 60e3;
+  const dara = ['Dara', 'Invented', '0491 570 196'];
+  const ask = 'Can you tint the windows on the Voxy before I pick it up?';
+  const lead = rawLead(797, 797, dara, now, { stocks: ['1800'], agoMs: 3 * 3600e3 });
+  invented.leads.carbarnau.push(lead);
+  invented.conversations.push({ row: rawConversation(797, lead, dara, { direction: 'IN', at: now - 2 * MIN, body: ask }), messages: [rawMessage(7970, 797, 'IN', ask, 2 * MIN, now)] });
+  await worker.runSync();
+}
 // Omar wrote on WhatsApp, pasted into his order as the paste box does: we had said we would let him
 // know after the auction (pasted as sent by us), then he asked for news. His reply is written then.
 {
@@ -221,6 +247,7 @@ process.on('SIGINT', async () => {
   closing = true;
   await new Promise((r) => { app.close(r); app.closeAllConnections?.(); });
   await standins.close();
+  fs.rmSync(factsDir, { recursive: true, force: true });
   process.exit(0);
 });
 console.log(`Preview: http://127.0.0.1:${PORT}/new/ (invented data)`);

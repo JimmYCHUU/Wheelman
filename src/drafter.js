@@ -21,6 +21,7 @@ import { tagMarketplaceLinks } from './marketplace.js';
 import { mediaForReply } from './vehiclemedia.js';
 import { inventedLiterals, unknownMarkers, restoreAnswer, restoreFacts, maskFacts, hasFactMarker, markerForFigure, factShaped, netFacts } from './factmarkers.js';
 import { partsOf, blockOf, reasonIn } from './parts.js';
+import { citedTopics, openTopics } from './factcite.js';
 
 /**
  * What a reply may legitimately quote, split by how far it can be trusted.
@@ -654,6 +655,12 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
     // template used word for word, a fitting used again, or the standard opening of an offer.
     const answered = !result.byCode && !result.reused;
     context.lessons = answered ? (prompt.owner?.lessons || []).map((l) => ({ adviceId: l.adviceId, n: l.n, do: l.do, scope: l.scope, at: l.at })) : [];
+    // The business facts the AI's words used, for the trust line, and those with no answer the reply
+    // left a blank for, for the line above the box (src/factcite.js). Only for a reply the AI wrote
+    // from the whole request: a template, an auction or import message, or code's own wording, none.
+    const plain = answered && !fit && !plan;
+    context.topics = plain ? citedTopics({ asked: prompt.askedText, reply: aiPart, topics: prompt.factTopics }) : [];
+    context.openTopics = plain ? openTopics({ asked: prompt.askedText, reply, topics: prompt.factTopics }) : [];
     // The once-a-day rule shaped the reply only when both the greeting and the closing were left out:
     // not for a template (its own greeting and closing), a Prompt or Rewrite (the greeting is kept),
     // or an import, auction or order reply (their closing lines are kept).

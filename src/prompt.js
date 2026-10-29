@@ -1043,6 +1043,10 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     sameModelUrl: sameModel?.url || '',
     importUrls: importPages.map((p) => p.url),
     businessFactsText: facts.text,
+    // What the customer is waiting on us for, with their details taken out, and the business facts the
+    // request was built from: which facts the reply used is worked out from these (src/factcite.js).
+    askedText: waitingText,
+    factTopics: facts.topics,
     // An import email: every figure and link the research gave, which the reply may state.
     researchText: rendered ? rendered.trustedText : '',
     researchBlanks: research?.blanks || [],

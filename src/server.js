@@ -160,7 +160,23 @@ function draftOf(item) {
     // The owner's lessons the request carried ({ adviceId, n, do, scope, at }), and which of code's rules shaped the reply.
     lessonsApplied: draft.context?.lessons || [],
     rules: draft.context?.rules || null,
+    // The business facts the AI's words used ({ title, status, at }), and those with no answer it left a
+    // blank for (src/factcite.js). Whether each has been answered since, present() says.
+    topics: draft.context?.topics || [],
+    openTopics: (draft.context?.openTopics || []).map((title) => ({ title, answered: false })),
   } : null;
+}
+
+/**
+ * The open conversation's suggestion, with each fact it left a blank for marked answered once the
+ * Playbook (or the file) has an answer for it: one read of the facts, and none when there is no such
+ * fact. Only the open conversation reads them; the list's rows never do.
+ */
+function withAnswers(draft) {
+  if (!draft || !draft.openTopics.length) return draft;
+  const state = new Map(loadBusinessFacts().map((t) => [t.title, t.status]));
+  const answered = (title) => state.has(title) && state.get(title) !== 'needs_answer';
+  return { ...draft, openTopics: draft.openTopics.map((o) => ({ ...o, answered: answered(o.title) })) };
 }
 
 function flagLevel(draft) {
@@ -367,7 +383,7 @@ function present(item) {
   if (item.order) return presentOrder(item);
   const v = item.vehicles[0];
   const shown = item.timeline.slice(-THREAD_LIMIT);
-  const draft = draftOf(item);
+  const draft = withAnswers(draftOf(item));
   return {
     ...summary(item),
     // The situation's key (SITUATIONS in src/situations.js) beside its label: the new page's Remember scope.

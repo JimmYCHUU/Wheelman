@@ -12,7 +12,7 @@ import { typeView } from '../enquiry.js';
 import { Picker, PasteButton, PasteBox, usePaste } from './orderbox.js';
 import { Research } from './research.js';
 import { replyChannel, mainFor, sendFor, sendingNow, sendFailedWords } from '../channel.js';
-import { Trust } from './trust.js';
+import { Trust, FactAsk } from './trust.js';
 import { Editor, focusFirstBlank, focusText } from './editor.js';
 import { cutBlock, putBackText } from '../segments.js';
 import { boxIsNext } from '../runstore.js';
@@ -223,6 +223,7 @@ function Draft({ state, actions, item, view, editor, main, reply, paste }) {
   return html`<div class="box" role="group" aria-label="Message box">
     <div class="box-scroll">
       <${Context} context=${state.context} words=${view.context || typeView(item).reason} />
+      <${FactAsk} item=${item} typed=${state.typed} actions=${actions} locked=${locked} />
       ${view.failure ? html`<div class="context bad" role="status"><span>${view.failure}</span>
         <button type="button" class="btn small" disabled=${locked} onClick=${() => actions.write({ instruction: (item.draft && item.draft.instruction) || undefined })}>${failedSend ? 'Write it again' : 'Try again'}</button>
       </div>` : null}

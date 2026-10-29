@@ -1,6 +1,5 @@
 // The new page's model: pure functions (no DOM, no globals) that turn the server's data into what
 // the page shows, in plain words. The browser loads this as a module and the tests import it in Node.
-import { blanksIn } from '../../lib/blank.js';
 import { listTime, ago, clock, plural } from '../../lib/format.js';
 import { listOf } from '../../lib/copy.js';
 import { answeredWords } from './boxview.js';
@@ -60,20 +59,7 @@ export function whoLabel(m, customerName) {
   return 'Us';
 }
 
-/** Text split into plain text and blanks: [{kind:'text',text}|{kind:'blank',label,raw}]. */
-export function segments(text) {
-  const s = String(text || '');
-  const out = [];
-  let at = 0;
-  for (const b of blanksIn(s)) {
-    if (b.index > at) out.push({ kind: 'text', text: s.slice(at, b.index) });
-    out.push({ kind: 'blank', label: b.kind, raw: b.text });
-    at = b.index + b.length;
-  }
-  if (at < s.length) out.push({ kind: 'text', text: s.slice(at) });
-  return out;
-}
-
+/** Segments (segments in boxview.js) joined back into text, each blank as written. */
 export const joinSegments = (segs) => segs.map((x) => (x.kind === 'blank' ? x.raw : x.text)).join('');
 
 /** A new array with the i-th blank turned into text; an empty value keeps the blank. */
@@ -82,13 +68,6 @@ export function fillBlank(segs, i, value) {
   if (!v || !segs[i] || segs[i].kind !== 'blank') return segs.slice();
   return segs.map((x, n) => (n === i ? { kind: 'text', text: v } : x));
 }
-
-
-export function checkLines(checks) {
-  const at = (level) => (checks || []).filter((c) => c.level === level).map((c) => c.message);
-  return { fails: at('fail'), warns: at('warn'), inputs: at('input') };
-}
-
 
 export function statusWords(status, now) {
   const { missing = [], syncing, drafting, lastSync } = status || {};
@@ -142,55 +121,10 @@ const BLANK_WORDS = {
 };
 export const blankWords = (label) => BLANK_WORDS[label] || 'the ' + String(label || '').toLowerCase();
 
-/**
- * Whether the person changed the words of the suggestion, not only filled its blanks: each blank
- * may hold anything of one character or more, every other part must be as Wheelman wrote it.
- */
-export function wordsChanged(reply, text) {
-  const r = String(reply || '');
-  const t = String(text ?? '');
-  if (r === t) return false;
-  // The suggestion's fixed parts: before the first blank, between the blanks, after the last one.
-  const fixed = [''];
-  for (const s of segments(r)) {
-    if (s.kind === 'blank') fixed.push('');
-    else fixed[fixed.length - 1] += s.text;
-  }
-  if (fixed.length === 1) return true;
-  const head = fixed[0];
-  const tail = fixed[fixed.length - 1];
-  if (!t.startsWith(head) || !t.endsWith(tail)) return true;
-  const end = t.length - tail.length;
-  let at = head.length;
-  for (const part of fixed.slice(1, -1)) {
-    const i = t.indexOf(part, at + 1);
-    if (i === -1 || i + part.length > end) return true;
-    at = i + part.length;
-  }
-  return end - at < 1;
-}
-
-/**
- * The checks that still apply to the text in the box. The blank line goes (the pills show the
- * blanks), and so does the "all match" line. Once the person has changed the words, a check about
- * words that are no longer there goes, and so does a warning about the suggestion as a whole (its
- * length, say), which was never about what they typed.
- */
-export function liveChecks(draft, text) {
-  if (!draft) return [];
-  const t = String(text ?? '');
-  const changed = wordsChanged(draft.reply, t);
-  const there = (c) => !(c.tokens && c.tokens.length) || c.tokens.some((k) => t.includes(k));
-  return (draft.checks || []).filter((c) => {
-    if (c.level === 'ok' || c.code === 'marker') return false;
-    if (!changed) return true;
-    if (c.level === 'warn') return (c.tokens && c.tokens.length > 0 && there(c)) || c.code === 'auction';
-    return there(c);
-  });
-}
-
 // The message box's rules (boxview.js), kept importable from here.
-export { answeredWords, boxText, mainAction, boxView } from './boxview.js';
+export { answeredWords, boxText, mainAction, boxView, segments, wordsChanged, checkLines, liveChecks } from './boxview.js';
+// The trust line under the box (trustview.js), kept importable from here.
+export { trustLine, factLine } from './trustview.js';
 
 /** "48 words", and "· about 2 texts" once the reply runs past one text message. */
 export function wordsLine(text) {
@@ -206,46 +140,6 @@ export function saveWords({ save, draft, typed }) {
   if (s.state === 'saved') return 'Your changes are saved · ' + clock(s.at);
   if (typed === null && draft && draft.edited !== null && draft.edited !== undefined && draft.editedAt) return 'Your changes are saved · ' + clock(draft.editedAt);
   return '';
-}
-
-// Beside no suggestion, the text is all the person's own. Beside one, any difference (typing, or a
-// block removed) means the check no longer holds.
-const UNCHECKED = 'What you typed has not been checked.';
-const CHANGED = 'Changed since it was checked.';
-
-/** A traced figure with the sentence's own punctuation taken off the end. */
-const shown = (v) => String(v).replace(/[.,;:!?]+$/, '');
-
-/**
- * The trust line under the message box. Text that differs from Wheelman's own, typed or with a block
- * removed, is never called checked, whatever the facts say. For Wheelman's own text it counts the
- * facts the server traced (only those it listed, so the count may understate, never overstate),
- * counts the ones not in the records, and is green only when no check is failing, warning or
- * waiting for a blank.
- */
-export function trustLine(draft, text) {
-  const t = String(text ?? '');
-  if (!t.trim()) return null;
-  const ready = draft && draft.status === 'ready' ? draft : null;
-  if (!ready) return { tone: 'none', text: UNCHECKED };
-  if (t !== ready.reply) return { tone: 'none', text: CHANGED };
-  const facts = Array.isArray(ready.facts) ? ready.facts : [];
-  if (!facts.length) return { tone: 'none', text: 'No figures or links to check.' };
-  const n = (k) => (k === 1 ? '1 fact' : `${k} facts`);
-  const notFound = facts.filter((f) => f.ok === false).length;
-  if (notFound) return { tone: 'bad', text: `${n(notFound)} not in your records`, facts };
-  // Green only while nothing else is wrong: no failed check, no warning, no blank to fill.
-  const lines = checkLines(liveChecks(ready, t));
-  const clear = !lines.fails.length && !lines.warns.length && !lines.inputs.length && !blanksIn(t).length;
-  return { tone: clear ? 'good' : 'none', text: `${n(facts.length)} checked`, facts };
-}
-
-/** One fact in the opened list: where it came from, or in red words that it is not in the records. */
-export function factLine(f) {
-  const value = shown(f.value);
-  if (f.ok === false) return `${value} · not in your records`;
-  const name = f.label && f.label !== f.value ? `${f.label} · ` : '';
-  return `${name}${value} · from ${f.source}`;
 }
 
 /** Pasted text as plain text: Windows line ends and non-breaking spaces made plain. */
