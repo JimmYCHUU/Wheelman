@@ -88,7 +88,7 @@ export const COPY = {
   'list.loading': 'Loading conversations',
 
   'footer.orders': '{orders} read from the dashboard: {waiting} to do, {quiet} in progress, {other} finished.',
-  'footer.orders.title': "Every order on the dashboard's auction page, and every lead on its Imports list, is read on each check. A customer with an order is listed once, under the order. To do: a message is due, or the customer wrote. In progress: under way, nothing due. Finished: completed, cancelled or refunded (kept for 60 days). Search looks through all of them.",
+  'footer.orders.title': "Every order on the dashboard's auction page is read on each check, with the conversations you moved here and those of a customer whose order is under way. The conversation an order reads is listed under the order, even when it is a lead on the dashboard's Imports list; the other leads on the Imports list are in Import Query. To do: a message is due, or the customer wrote. In progress: under way, nothing due. Finished: completed, cancelled or refunded (kept for 60 days). Search looks through all of them.",
 
   'welcome.waiting': '{n} {noun} waiting for a reply',
   'welcome.todo': '{n} {noun} with something to do',

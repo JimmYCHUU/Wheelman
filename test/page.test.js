@@ -129,6 +129,24 @@ test('the section registry names every section, its lists and where a key belong
   }
 });
 
+test("the old page's Import Query words hold for the Imports list's texts as well as for emails", () => {
+  // Import Query holds the leads on the dashboard's Imports list (texts) and, while the email intake is on, the emails.
+  const iq = SECTIONS.importquery;
+  assert.ok(!/email/i.test(iq.unknown), 'a text lead with no name is not called an email: ' + iq.unknown);
+  assert.match(iq.search.placeholder, /number/);
+  assert.ok(!/email/i.test(iq.empty.all[0]), iq.empty.all[0]);
+  assert.match(iq.empty.all[1], /Imports list/);
+  assert.match(iq.empty.all[1], /while the email intake is on/i);
+  assert.ok(!/^Email/.test(iq.empty.waiting[1]), iq.empty.waiting[1]);
+  assert.match(iq.empty.search[1], /number/);
+  assert.match(iq.welcome.paste, /dashboard/);
+  assert.match(iq.welcome.paste, /Gmail/);
+  // Auction's footer no longer says the Imports list is read for it: those leads are in Import Query.
+  const footer = t('footer.orders.title');
+  assert.ok(!/every lead on its Imports list/.test(footer), footer);
+  assert.match(footer, /Imports list are in Import Query/);
+});
+
 test('a search looks at names, words and digits; in Auction it looks through every list', () => {
   const list = [
     { key: 'c:1', name: 'Priya Raman', phone: '0491 570 101', preview: { text: 'Is the Noah still available?' } },
