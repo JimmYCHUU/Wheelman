@@ -10,10 +10,11 @@ const newestFirst = (a, b) => (b.at || 0) - (a.at || 0) || (b.id || 0) - (a.id |
 /**
  * { review, on, off, notRules }: the proposals waiting, the lessons in use and switched off (newest
  * first), and those marked not a rule. An edit lesson whose edit waits for review again (after an
- * Undo) is shown only as that proposal, so the one edit is never in two places.
+ * Undo), or is marked not a rule (where Keep it after all is), is shown only there, so the one edit
+ * is never in two places.
  */
 export function lessonGroups({ lessons = [], proposals = [], notRules = [] } = {}) {
-  const waiting = new Set((proposals || []).map((p) => p.key));
+  const waiting = new Set([...(proposals || []), ...(notRules || [])].map((p) => p.key));
   const all = [...(lessons || [])].filter((l) => !(l.kind === 'edit' && l.from && l.from.key && waiting.has(l.from.key))).sort(newestFirst);
   return { review: proposals || [], on: all.filter((l) => !l.off), off: all.filter((l) => l.off), notRules: notRules || [] };
 }
@@ -82,15 +83,33 @@ export function factTag(f, now = Date.now()) {
   return { text: f.at ? 'Confirmed ' + dayInLine(f.at, now) : 'Confirmed in your file', tone: 'good' };
 }
 
+/** "needs an answer" for one fact, "need an answer" for more. */
+export const needsAnswerWords = (n) => (n === 1 ? 'needs an answer' : 'need an answer');
+
+const toReview = (status) => (status && status.playbook && status.playbook.toReview) || 0;
+const needsAnswer = (status) => (status && status.facts && status.facts.needsAnswer) || 0;
+
 /** The Menu's line under Playbook: what waits for Jim there, or what it holds when nothing waits. */
 export function menuHint(status) {
-  const review = (status && status.playbook && status.playbook.toReview) || 0;
-  const needs = (status && status.facts && status.facts.needsAnswer) || 0;
+  const review = toReview(status);
+  const needs = needsAnswer(status);
   const parts = [
     review ? plural(review, 'lesson') + ' to review' : '',
-    needs ? plural(needs, 'fact') + (needs === 1 ? ' needs an answer' : ' need an answer') : '',
+    needs ? plural(needs, 'fact') + ' ' + needsAnswerWords(needs) : '',
   ].filter(Boolean);
   return parts.length ? parts.join(' · ') : 'Lessons and business facts';
+}
+
+/**
+ * The note beside each Playbook tab, '' when nothing waits there: { lessons, facts }. The tab on
+ * screen uses its own count, just read; the other one the status's, which the page reads again
+ * after every change.
+ */
+export function tabNotes(pstate, status) {
+  const own = (tab, n) => (pstate.tab === tab && n !== null && n !== undefined ? n : null);
+  const review = own('lessons', pstate.counts && pstate.counts.toReview) ?? toReview(status);
+  const needs = own('facts', pstate.counts && pstate.counts.needsAnswer) ?? needsAnswer(status);
+  return { lessons: review > 0 ? review + ' to review' : '', facts: needs > 0 ? needs + ' ' + needsAnswerWords(needs) : '' };
 }
 
 /**

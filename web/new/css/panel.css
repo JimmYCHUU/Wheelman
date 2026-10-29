@@ -47,6 +47,8 @@
   .avail.bad { color: var(--bad); }
   .car-top .btn { justify-self: start; margin-top: var(--s-1); color: var(--ink); text-decoration: none; }
   .car-sec { display: grid; gap: var(--s-2); }
+  /* the link to every lesson: a full target on a phone, not just its line of text */
+  .used-playbook { justify-self: start; display: inline-flex; align-items: center; min-height: var(--touch); }
   .car-sec h4 { margin: 0; font-size: var(--fs-13); font-weight: var(--fw-bold); color: var(--ink-2); }
   .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); }
   .photo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-1); }

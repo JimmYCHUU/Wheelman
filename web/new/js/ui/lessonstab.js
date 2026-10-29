@@ -18,7 +18,8 @@ function Examples({ examples }) {
   </li>`)}</ul>`;
 }
 
-function Proposal({ p, n, actions }) {
+/** busy: a change on its way, so the buttons wait (a press is not posted twice). */
+function Proposal({ p, n, actions, busy }) {
   const w = proposalWords(p);
   const id = 'pb-proposal-' + n;
   return html`<article class="pb-card" aria-labelledby=${id}>
@@ -26,8 +27,8 @@ function Proposal({ p, n, actions }) {
     <p class="pb-meta">${w.applies}</p>
     <${Examples} examples=${w.examples} />
     <div class="pb-acts">
-      <button type="button" class="btn main" aria-describedby=${id} onClick=${() => actions.keep(p.key)}>Keep as a lesson</button>
-      <button type="button" class="btn" aria-describedby=${id} onClick=${() => actions.notRule(p.key)}>Not a rule</button>
+      <button type="button" class="btn main" aria-describedby=${id} aria-disabled=${busy} onClick=${() => actions.keep(p.key)}>Keep as a lesson</button>
+      <button type="button" class="btn" aria-describedby=${id} aria-disabled=${busy} onClick=${() => actions.notRule(p.key)}>Not a rule</button>
     </div>
   </article>`;
 }
@@ -53,16 +54,16 @@ const lessonKey = (l) => l.id + '-' + (l.n || 0);
 
 /**
  * A lesson with its switch: on, it shapes new suggestions of its kind; off, it is never sent to the
- * AI. press(l): the switch was pressed.
+ * AI. press(l): the switch was pressed; busy: a change on its way.
  */
-function Lesson({ l, press, now }) {
+function Lesson({ l, press, now, busy }) {
   const on = !l.off;
   const history = historyLines(l, now);
   return html`<article class=${'pb-card' + (on ? '' : ' off')} data-lesson=${lessonKey(l)}>
     <div class="pb-card-top">
       <p class="pb-words">${l.do}</p>
       <button type="button" class="pb-switch" role="switch" aria-checked=${on} aria-label=${(on ? 'Switch off: ' : 'Switch on: ') + l.do}
-        onClick=${() => press(l)}>
+        aria-disabled=${busy} onClick=${() => press(l)}>
         <span class="pb-knob" aria-hidden="true"></span><span class="pb-switch-word" aria-hidden="true">${on ? 'On' : 'Off'}</span>
       </button>
     </div>
@@ -74,13 +75,13 @@ function Lesson({ l, press, now }) {
   </article>`;
 }
 
-function NotRule({ p, n, actions }) {
+function NotRule({ p, n, actions, busy }) {
   const w = proposalWords(p);
   const id = 'pb-notrule-' + n;
   return html`<article class="pb-card off" aria-labelledby=${id}>
     <div class="pb-card-top">
       <p class="pb-words" id=${id}>${w.headline}</p>
-      <button type="button" class="btn" aria-describedby=${id} onClick=${() => actions.keep(p.key)}>Keep it after all</button>
+      <button type="button" class="btn" aria-describedby=${id} aria-disabled=${busy} onClick=${() => actions.keep(p.key)}>Keep it after all</button>
     </div>
     <p class="pb-meta">${w.applies}</p>
   </article>`;
@@ -104,18 +105,19 @@ export function LessonsTab({ pstate, actions, now }) {
     moving.current = { key: lessonKey(l), off: !l.off };
     actions.switchLesson(l.id, l.off).then((done) => { if (!done) moving.current = null; });
   };
-  const lessons = (list) => list.map((l) => html`<${Lesson} key=${lessonKey(l)} l=${l} press=${press} now=${now} />`);
+  const busy = !!pstate.busy;
+  const lessons = (list) => list.map((l) => html`<${Lesson} key=${lessonKey(l)} l=${l} press=${press} now=${now} busy=${busy} />`);
   return html`<div class="pb-body" ref=${root}>
     <p class="pb-intro">${INTRO}</p>
     <section class="pb-group" aria-labelledby="pb-review"><h3 id="pb-review">To review</h3>
-      ${g.review.length ? g.review.map((p, i) => html`<${Proposal} key=${p.key} p=${p} n=${i} actions=${actions} />`) : html`<p class="pb-none">${NOTHING}</p>`}
+      ${g.review.length ? g.review.map((p, i) => html`<${Proposal} key=${p.key} p=${p} n=${i} actions=${actions} busy=${busy} />`) : html`<p class="pb-none">${NOTHING}</p>`}
     </section>
     <section class="pb-group" aria-labelledby="pb-on"><h3 id="pb-on">In use (${g.on.length})</h3>
       ${g.on.length ? lessons(g.on) : html`<p class="pb-none">No lesson is in use yet.</p>`}
     </section>
     ${g.off.length ? html`<section class="pb-group" aria-labelledby="pb-off"><h3 id="pb-off">Switched off</h3>${lessons(g.off)}</section>` : null}
     ${g.notRules.length ? html`<section class="pb-group" aria-labelledby="pb-notrules"><h3 id="pb-notrules">Not a rule</h3>
-      ${g.notRules.map((p, i) => html`<${NotRule} key=${p.key} p=${p} n=${i} actions=${actions} />`)}
+      ${g.notRules.map((p, i) => html`<${NotRule} key=${p.key} p=${p} n=${i} actions=${actions} busy=${busy} />`)}
     </section>` : null}
   </div>`;
 }

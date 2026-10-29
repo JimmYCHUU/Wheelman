@@ -13,7 +13,8 @@ const STATE = { confirmed: 'Confirmed', working: 'Working', needs_answer: 'Needs
 /** An earlier version's day (or "In your file" for the file's own), and its state then: "Today, Confirmed". */
 const earlierDay = (e, now) => (e.from === 'file' || !e.at ? 'In your file' : dayLabel(e.at, now)) + (STATE[e.status] ? ', ' + STATE[e.status] : '');
 
-function Fact({ f, n, actions, now }) {
+/** busy: a change on its way, so Save and Confirm wait (a press is not posted twice). */
+function Fact({ f, n, actions, now, busy }) {
   const needs = f.status === 'needs_answer';
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState('');
@@ -44,11 +45,11 @@ function Fact({ f, n, actions, now }) {
       <textarea id=${id} ref=${box} rows="3" maxlength="2000" value=${text} aria-describedby=${id + '-title'}
         onInput=${(e) => setText(e.currentTarget.value)}></textarea>
       <div class="pb-acts">
-        <button type="button" class="btn main" onClick=${save}>Save as Confirmed</button>
+        <button type="button" class="btn main" aria-disabled=${busy} onClick=${save}>Save as Confirmed</button>
         ${editing && !needs ? html`<button type="button" class="btn" onClick=${close}>Cancel</button>` : null}
       </div>
     </div>` : html`<div class="pb-acts">
-      ${f.status === 'working' ? html`<button type="button" class="btn main" aria-describedby=${id + '-title'} onClick=${() => actions.saveFact(f.title, f.answer, 'confirmed')}>Confirm</button>` : null}
+      ${f.status === 'working' ? html`<button type="button" class="btn main" aria-describedby=${id + '-title'} aria-disabled=${busy} onClick=${() => actions.saveFact(f.title, f.answer, 'confirmed')}>Confirm</button>` : null}
       <button type="button" class="btn" aria-describedby=${id + '-title'} onClick=${() => use(f.answer)}>Change the answer</button>
     </div>`}
     ${f.earlier && f.earlier.length ? html`<details class="pb-more"><summary>Earlier answers (${f.earlier.length})</summary>
@@ -79,7 +80,7 @@ export function FactsTab({ pstate, actions, now }) {
 
   const g = factGroups(pstate.facts);
   const n = (f) => pstate.facts.indexOf(f);
-  const cards = (list) => list.map((f) => html`<${Fact} key=${f.title} f=${f} n=${n(f)} actions=${actions} now=${now} />`);
+  const cards = (list) => list.map((f) => html`<${Fact} key=${f.title} f=${f} n=${n(f)} actions=${actions} now=${now} busy=${!!pstate.busy} />`);
   return html`<div class="pb-body" ref=${root}>
     <p class="pb-intro">${INTRO}</p>
     ${g.needs.length ? html`<section class="pb-group" aria-labelledby="pb-needs"><h3 id="pb-needs">Needs your answer</h3>${cards(g.needs)}</section>` : null}

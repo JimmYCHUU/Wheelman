@@ -60,6 +60,9 @@
   .pb-switch[aria-checked="true"] .pb-knob { background: var(--accent); }
   .pb-switch[aria-checked="true"] .pb-knob::after { transform: translateX(calc(var(--switch-w) - var(--knob) - 2 * var(--s-hair))); }
   .pb-switch-word { min-width: 3ch; text-align: left; }
+  /* a change on its way: the change buttons wait, and say so by their look as well as to a screen reader */
+  .playbook [aria-disabled="true"] { opacity: 0.55; cursor: progress; }
+  .playbook .btn[aria-disabled="true"]:active { transform: none; }
 
   /* a business fact: its answer, the box to answer or change it, and its earlier answers */
   .pb-answer { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }

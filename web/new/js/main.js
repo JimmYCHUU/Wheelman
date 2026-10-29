@@ -7,6 +7,7 @@ import { createPanelStore } from './panelstore.js';
 import { createSearchStore } from './searchstore.js';
 import { createPlaybookStore } from './playbookstore.js';
 import { playbookRoute } from './playbookroute.js';
+import { dropOnOpen } from './unsent.js';
 import { parseRoute } from './route.js';
 import { storeStep, addressAfter, leavesRun, sheetStep, sheetFirst, sheetOnPop, isSheetEntry, withSheet, offAddress, conversationOnScreen, goToHash, bootFor } from './hashsync.js';
 import { html, render } from './ui/html.js';
@@ -84,6 +85,9 @@ document.addEventListener('keydown', (e) => {
 WIDE.addEventListener('change', () => panel.actions.fit());
 NARROW.addEventListener('change', () => panel.actions.fit());
 
+// Another conversation, or none: the Tell line's and paste box's words kept for the one before are
+// forgotten. They last only while that conversation stays open (the trip to the Playbook).
+dropOnOpen(store);
 // Another conversation: the panel shows its car, and the car's photos are read for the car strip.
 let panelKey = null;
 let readFor = null;

@@ -5,11 +5,7 @@
 import { PLAYBOOK_TABS } from './playbookroute.js';
 
 const PATH = { lessons: '/api/playbook/lessons', facts: '/api/playbook/facts' };
-const SAVED = {
-  confirmed: 'Saved as Confirmed. New suggestions use it.',
-  working: 'Saved as Working.',
-  needs_answer: 'Saved. It needs an answer again.',
-};
+const SAVED = { confirmed: 'Saved as Confirmed. New suggestions use it.', working: 'Saved as Working.' };
 const BACK = 'Put back as it was.';
 
 export function createPlaybookStore({ api, toast, changed = () => {} }) {
@@ -18,6 +14,8 @@ export function createPlaybookStore({ api, toast, changed = () => {} }) {
     lessons: [], proposals: [], notRules: [], facts: [],
     // What waits on each tab, from its last read: null until it has been read.
     counts: { toReview: null, needsAnswer: null },
+    // A change on its way: the page holds its change buttons until it has landed.
+    busy: false,
   };
   const listeners = new Set();
   const set = (patch) => {
@@ -47,7 +45,11 @@ export function createPlaybookStore({ api, toast, changed = () => {} }) {
         set({ state: 'ready', error: '', facts, counts: { ...state.counts, needsAnswer: needs } });
       }
     } catch (e) {
-      if (mine === seq) set({ state: 'error', error: e.message });
+      if (mine !== seq) return;
+      // Read again with the tab on screen: what is there stays (and anything typed in it), and the
+      // toast says why. A first read says so on the page, with Try again.
+      if (again) toast(e.message);
+      else set({ state: 'error', error: e.message });
     }
   }
 
@@ -57,13 +59,15 @@ export function createPlaybookStore({ api, toast, changed = () => {} }) {
   /**
    * Posts a change; on its answer the toast says what happened, with Undo when there is one, and the
    * tab is read again. Undo posts what was there before and says so. True when the change was taken.
+   * A refusal is read again too (it may have moved on); a post that got no answer is not, since the
+   * read would fail the same way.
    */
   async function change(path, body, words, undo) {
     try {
       await api(path, body);
     } catch (e) {
       toast(e.message);
-      await reload();
+      if (e.status) await reload();
       return false;
     }
     toast(words, undo ? { label: 'Undo', run: () => change(undo.path, undo.body, undo.words, null) } : null);
@@ -72,13 +76,14 @@ export function createPlaybookStore({ api, toast, changed = () => {} }) {
     return true;
   }
 
-  // One change at a time: a second press while the first is on its way (or the tab is read again
-  // after it) is not posted twice. Undo is never held back.
+  // One change at a time: while one is on its way (or the tab is read again after it) the page holds
+  // its buttons (busy), and a second press is not posted. Undo is never held back.
   let posting = false;
   async function once(path, body, words, undo) {
     if (posting) return false;
     posting = true;
-    try { return await change(path, body, words, undo); } finally { posting = false; }
+    set({ busy: true });
+    try { return await change(path, body, words, undo); } finally { posting = false; set({ busy: false }); }
   }
 
   const decide = (key, decision) => ({ path: '/api/playbook/proposals', body: { key, decision } });
@@ -112,7 +117,7 @@ export function createPlaybookStore({ api, toast, changed = () => {} }) {
   function saveFact(title, answer, status) {
     const was = state.facts.find((f) => f.title === title);
     const undo = was ? { path: PATH.facts, body: { title, answer: was.answer || '', status: was.status }, words: BACK } : null;
-    return once(PATH.facts, { title, answer, status }, SAVED[status] || SAVED.confirmed, undo);
+    return once(PATH.facts, { title, answer, status }, status === 'working' ? SAVED.working : SAVED.confirmed, undo);
   }
 
   return {
