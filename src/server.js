@@ -46,7 +46,7 @@ import { budgetStatus } from './budget.js';
 import { listRuns, readRun, vote as reviewVote, summarise } from './review.js';
 import { providers as aiProviders, usageDetail } from './llm.js';
 import { playbookApi } from './playbookapi.js';
-import { editProposals } from './editrules.js';
+import { editProposals, keptBySwitch } from './editrules.js';
 
 const TYPES = { '.woff2': 'font/woff2', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(config.root, 'package.json'), 'utf8')).version || ''; } catch { return ''; } })();
@@ -648,7 +648,8 @@ async function api(req, res, url) {
     // Sharing with the team: the address colleagues open, once the tunnel has one.
     const shared = { on: config.share.on && !!config.share.password, url: share.url || '', running: share.running, error: share.error };
     // The edits proposed as lessons, waiting in the Playbook: counted for its Menu item only.
-    const playbook = { toReview: editProposals().length };
+    const playbook = { toReview: 0 };
+    try { playbook.toReview = editProposals().length; } catch { /* the count is a courtesy too */ }
     return send(res, 200, { ...worker.statusReport(), learned: learnedStats(), practice, share: shared, facts: { ...facts.counts, unanswered: facts.unanswered, toConfirm: loadBusinessFacts().filter((t) => t.status === 'working').map((t) => t.title) }, playbook });
   }
 
@@ -1213,7 +1214,8 @@ async function api(req, res, url) {
   if (req.method === 'POST' && m) {
     const body = await readBody(req);
     if (typeof body.on !== 'boolean') return send(res, 400, { error: 'Say whether to switch the lesson on or off.' });
-    const lesson = switchLesson(Number(m[1]), body.on);
+    // An edit lesson switched on while its edit waits for review again is kept (src/editrules.js).
+    const lesson = keptBySwitch(switchLesson(Number(m[1]), body.on));
     return lesson ? send(res, 200, { lesson }) : send(res, 404, { error: 'That lesson was not found.' });
   }
 

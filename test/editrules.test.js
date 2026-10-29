@@ -76,6 +76,10 @@ test('repeated edits are proposed only from replies copied from Wheelman, never 
   assert.deepEqual(rules.proposalsFrom(three('See it here: https://www.carbarn.com.au/vehicles/toyota/noah/1', 'See it here: https://www.carbarn.com.au/vehicles/toyota/noah/2')), []);
   assert.deepEqual(rules.proposalsFrom(three('We will see you at ten.', 'We will see you and Dana at ten.')), []);
   assert.deepEqual(rules.proposalsFrom(three('Hello {{NAME}}, we are open today.', 'Hello, we are open today.')), []);
+  // An edit holding a figure, a link or a name proposes none of its other words either.
+  assert.deepEqual(rules.proposalsFrom(three('Thanks for your message.', 'Thanks for your message. You can call us on 0491 570 100.')), []);
+  assert.deepEqual(rules.proposalsFrom(three('Thanks for your message.', 'Thanks for your message. Book your inspection here: https://www.carbarn.com.au/book')), []);
+  assert.deepEqual(rules.proposalsFrom(three('We can show you the car.', 'We can show you the car with Dana tomorrow.')), []);
   // Only small words, or more than eight words at once, are not an edit to learn.
   assert.deepEqual(rules.proposalsFrom(three('Yes, we can do that for you.', 'Yes, we can do that.')), []);
   assert.deepEqual(rules.proposalsFrom(three('Thanks.', 'Thanks. We have three more like it coming in from the auction next week, all checked.')), []);

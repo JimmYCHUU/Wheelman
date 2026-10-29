@@ -1402,12 +1402,15 @@ export function editRows(limit = 2000) {
 
 /**
  * A stamp that moves when the rows editRows reads or the decisions change, so the proposals are
- * worked out again only then (the page asks for the count with every status).
+ * worked out again only then (the page asks for the count with every status). Each row's channel
+ * and first situation are in it, as a proposal's channel and scope come from them.
  */
 export function editsStamp() {
   return stmt(`SELECT
       (SELECT COUNT(*) || ':' || IFNULL(MAX(l.at), 0) || ':' || IFNULL(SUM(l.draft_id), 0) || ':' || IFNULL(SUM(LENGTH(l.final_text) + LENGTH(l.draft_text)), 0)
          FROM learned l JOIN drafts d ON d.id = l.draft_id WHERE l.changed = 1 AND d.copied_at IS NOT NULL) || '/' ||
+      (SELECT IFNULL(group_concat(r, ','), '') FROM (SELECT l.draft_id || '=' || l.channel || '=' || IFNULL(json_extract(l.situations_json, '$[0]'), '') AS r
+         FROM learned l JOIN drafts d ON d.id = l.draft_id WHERE l.changed = 1 AND d.copied_at IS NOT NULL ORDER BY l.draft_id)) || '/' ||
       (SELECT IFNULL(group_concat(key, char(10)), '') FROM (SELECT key FROM edit_rules ORDER BY key)) AS stamp`).get().stamp;
 }
 
@@ -1450,6 +1453,9 @@ export function insertEditLesson({ key, itemKey, scope, text, evidence, at = Dat
 
 /** The edit lesson kept from this repeated edit, as listLessons gives it, or null. */
 export const editLessonOf = (key) => lessonsOfRow(stmt("SELECT * FROM advice WHERE kind = 'edit' AND rule_key = ? ORDER BY id DESC LIMIT 1").get(key))[0] || null;
+
+/** The repeated edit an edit lesson was kept from (its key), or null for any other lesson. */
+export const editRuleOf = (id) => stmt("SELECT rule_key FROM advice WHERE id = ? AND kind = 'edit'").get(id)?.rule_key || null;
 
 // ---- the Playbook ----------------------------------------------------------
 //

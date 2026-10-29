@@ -10,7 +10,7 @@
 // and no figure, link, blank, placeholder or capitalised word inside a sentence (a name, a place,
 // a car).
 
-import { editRows, editsStamp, editDecisions, setEditDecision, clearEditDecision, insertEditLesson, editLessonOf, addLessonEvent, switchLesson, getLesson, lessonDetails } from './db.js';
+import { editRows, editsStamp, editDecisions, setEditDecision, clearEditDecision, insertEditLesson, editLessonOf, editRuleOf, addLessonEvent, switchLesson, getLesson, lessonDetails } from './db.js';
 import { SMALL_WORDS } from './learn.js';
 
 /** On how many different suggestions an edit is made before it is proposed. */
@@ -148,30 +148,28 @@ export function editHunks(before, after) {
   return hunksOf(before, after).map((h) => ({ removed: runText(h.rem), added: runText(h.add), beforeSentence: h.beforeSentence, afterSentence: h.afterSentence }));
 }
 
-/** Whether a run removed and a run added are an edit to learn (the owner's ruling, at the top). */
-function counts(rem, add) {
-  if (rem.length > MAX_WORDS || add.length > MAX_WORDS) return false;
-  const ws = [...rem, ...add];
-  if (ws.some((w) => /\d/.test(w.w) || LINK.test(w.w) || PLACEHOLDER.test(w.w))) return false;
-  if (ws.some((w) => !w.first && CAPITAL.test(w.w) && !PRONOUN_I.test(w.w))) return false;
-  return ws.some((w) => (w.k.match(/\p{L}/gu) || []).length >= 3 && !SMALL_WORDS.has(w.k));
-}
+/** The edit holds a figure, a link, a blank or placeholder, or a capitalised word inside a sentence (a name, a place, a car). */
+const excluded = (ws) => ws.some((w) => /\d/.test(w.w) || LINK.test(w.w) || PLACEHOLDER.test(w.w) || (!w.first && CAPITAL.test(w.w) && !PRONOUN_I.test(w.w)));
+/** The words hold one of three letters or more that is not a small word. */
+const teachesWord = (ws) => ws.some((w) => (w.k.match(/\p{L}/gu) || []).length >= 3 && !SMALL_WORDS.has(w.k));
 
 /**
- * The edits one hunk makes. A change is the run as it is. Words taken out or put in are also each of
- * their runs (taking out "would kindly" takes out "kindly"); a run that only ever comes inside a
- * longer one is dropped later, so a sentence removed is proposed as the sentence.
+ * The edits one hunk makes, by the owner's ruling (at the top). The whole edit is judged first: one
+ * of more than eight words a side, or holding a figure, a link, a blank or a name, gives none at all,
+ * not even its other words. A change is then the run as it is. Words taken out or put in are also
+ * each of their runs (taking out "would kindly" takes out "kindly"); a run that only ever comes inside
+ * a longer one is dropped later, so a sentence removed is proposed as the sentence.
  */
 function editsIn(h) {
-  if (h.rem.length && h.add.length) return counts(h.rem, h.add) ? [{ rem: h.rem, add: h.add }] : [];
+  const whole = [...h.rem, ...h.add];
+  if (h.rem.length > MAX_WORDS || h.add.length > MAX_WORDS || excluded(whole)) return [];
+  if (h.rem.length && h.add.length) return teachesWord(whole) ? [{ rem: h.rem, add: h.add }] : [];
   const ws = h.rem.length ? h.rem : h.add;
-  if (ws.length > MAX_WORDS) return [];
   const out = [];
   for (let i = 0; i < ws.length; i++) {
     for (let j = i + 1; j <= ws.length; j++) {
       const run = ws.slice(i, j);
-      const e = h.rem.length ? { rem: run, add: [] } : { rem: [], add: run };
-      if (counts(e.rem, e.add)) out.push(e);
+      if (teachesWord(run)) out.push(h.rem.length ? { rem: run, add: [] } : { rem: [], add: run });
     }
   }
   return out;
@@ -270,4 +268,18 @@ export function decideProposal(key, decision, { now = Date.now() } = {}) {
   }
   clearEditDecision(key);
   return { lesson: detailed(switchOff(key, 'undone', now)) };
+}
+
+/**
+ * An edit lesson switched on from the Lessons list (POST /api/lessons/:id/switch) while its edit
+ * waits for review again, after an Undo: that is a Keep, so the edit is recorded as kept, with its
+ * event, and is no longer to review. Returns the lesson as it is now; any other lesson is returned
+ * as it was given.
+ */
+export function keptBySwitch(lesson, { now = Date.now() } = {}) {
+  if (!lesson || lesson.kind !== 'edit' || lesson.off) return lesson;
+  const key = editRuleOf(lesson.id);
+  if (!key || !editProposals().some((p) => p.key === key)) return lesson;
+  decideProposal(key, 'keep', { now });
+  return getLesson(lesson.id);
 }

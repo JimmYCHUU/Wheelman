@@ -168,5 +168,60 @@ test('the status counts the lessons waiting to be reviewed', async () => {
   assert.equal((await get('/api/status')).playbook.toReview, 2);
   assert.equal((await decide('sms|remove|truly|', 'keep')).status, 200);
   assert.deepEqual((await get('/api/status')).playbook, { toReview: 1 });
+  // Proposals that cannot be read leave the rest of the status as it is, with nothing to review.
+  db.openDb().exec('ALTER TABLE edit_rules RENAME TO edit_rules_away');
+  try {
+    const res = await fetch(base + '/api/status');
+    assert.equal(res.status, 200);
+    assert.deepEqual((await res.json()).playbook, { toReview: 0 });
+  } finally {
+    db.openDb().exec('ALTER TABLE edit_rules_away RENAME TO edit_rules');
+  }
+  assert.deepEqual((await get('/api/status')).playbook, { toReview: 1 });
+  forget(made);
+});
+
+test('Not a rule on an edit kept as a lesson switches the lesson off', async () => {
+  const key = customer(56, 'Fay', 'Is the Noah still for sale?');
+  const made = ['We sincerely thank you.', 'It is sincerely ready.', 'We sincerely hope so.'].map((w) => copiedEdit(key, w, w.replace('sincerely ', '')));
+  const K = 'sms|remove|sincerely|';
+  const { lesson } = await decide(K, 'keep');
+  const out = await decide(K, 'reject');
+  assert.deepEqual([out.status, out.lesson.id, out.lesson.off], [200, lesson.id, true]);
+  const listed = await playbook();
+  assert.deepEqual(listed.lessons.find((l) => l.id === lesson.id).history.map((e) => e.what), ['made', 'kept', 'off']);
+  assert.ok(listed.notRules.some((x) => x.key === K) && !listed.proposals.some((x) => x.key === K));
+  forget(made);
+});
+
+test('an edit lesson switched on again from the Lessons list is kept, and is no longer waiting to be reviewed', async () => {
+  const key = customer(57, 'Gus', 'Is the Noah still for sale?');
+  const made = ['We genuinely care.', 'It is genuinely clean.', 'We genuinely hope so.'].map((w) => copiedEdit(key, w, w.replace('genuinely ', '')));
+  const K = 'sms|remove|genuinely|';
+  const { lesson } = await decide(K, 'keep');
+  await decide(K, 'undo');
+  assert.equal((await get('/api/status')).playbook.toReview, 1, 'undone: waiting again');
+  const out = await post(`/api/lessons/${lesson.id}/switch`, { on: true });
+  assert.deepEqual([out.status, out.lesson.id, out.lesson.off], [200, lesson.id, false]);
+  assert.equal((await get('/api/status')).playbook.toReview, 0);
+  const listed = await playbook();
+  assert.ok(!listed.proposals.some((x) => x.key === K) && !listed.notRules.some((x) => x.key === K));
+  assert.deepEqual(listed.lessons.find((l) => l.id === lesson.id).history.map((e) => e.what), ['made', 'kept', 'undone', 'on', 'kept']);
+  // Switched off and on again once it is kept: an ordinary switch, nothing more.
+  await post(`/api/lessons/${lesson.id}/switch`, { on: false });
+  await post(`/api/lessons/${lesson.id}/switch`, { on: true });
+  assert.deepEqual((await playbook()).lessons.find((l) => l.id === lesson.id).history.map((e) => e.what).slice(-2), ['off', 'on']);
+  forget(made);
+});
+
+test("a learned row saved again with other situations changes the proposal's scope", async () => {
+  const key = customer(58, 'Hal', 'Is the Noah still for sale?');
+  const at = now - 2 * HOUR;
+  const texts = ['We certainly can.', 'It is certainly ready.', 'We certainly hope so.'];
+  const made = texts.map((w) => copiedEdit(key, w, w.replace('certainly ', ''), { situations: ['availability'], at }));
+  const K = 'sms|remove|certainly|';
+  assert.equal((await playbook()).proposals.find((x) => x.key === K).scope, 'availability');
+  db.upsertLearned({ draftId: made[0], itemKey: key, situations: ['finance'], firstReply: false, customerText: 'Is it still available?', draftText: texts[0], finalText: texts[0].replace('certainly ', ''), source: 'copied', changed: true, similarity: 0.9, at });
+  assert.equal((await playbook()).proposals.find((x) => x.key === K).scope, 'any');
   forget(made);
 });
