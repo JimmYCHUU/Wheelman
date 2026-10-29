@@ -97,3 +97,24 @@ test("a follow-up's suggestion and one written in Auction say they teach nothing
   assert.equal((await post(`/api/items/${key2}/move`, { section: 'auction' })).item.section, 'auction');
   assert.equal((await draftOf(key2)).teaches, false, 'listed in Auction');
 });
+
+test('a lead from the Imports list teaches nothing in Imports, nor a suggestion written there once it is moved out', async () => {
+  const { config } = await import('../src/config.js');
+  const key = customer(46, 'Quin', 'Can you import a Suzuki Jimny for me?');
+  db.upsertLead({ id: 46, conversationId: 546, firstName: 'Quin', lastName: 'Test', phone: '0491 570 146', email: '', source: 'carsales', status: 'FOLLOW_UP', platform: config.dashboard.importsPlatform, state: 'NSW', leadAt: now - 30 * HOUR, updatedAt: now - 5 * MIN, stocks: [], inquiries: [], statusHistory: [] });
+  db.insertDraft({ itemKey: key, anchorKey: anchorOf(key), situation: 'import_sourcing', reply: 'Yes.', status: 'ready', checks: [], instruction: 'Be brief.', context: { section: 'importquery' } });
+  assert.equal((await get(`/api/items/${key}`)).item.section, 'importquery', 'listed in Imports by its platform');
+  assert.equal((await draftOf(key)).teaches, false, 'listed in Imports from the Imports list');
+  assert.equal((await post(`/api/items/${key}/move`, { section: 'dashboard' })).item.section, 'dashboard');
+  assert.equal((await draftOf(key)).teaches, false, 'written in Imports, moved back to Dashboard');
+});
+
+test('Marketplace, phone-only and order suggestions say they teach nothing', () => {
+  for (const [itemKey, anchorKey] of [['mp:77', 'fm:1'], ['ph:5', 'pm:1'], ['ao:3', 'out:deposit']]) {
+    assert.equal(learn.draftTeaches({ itemKey, anchorKey, section: 'dashboard' }, { item_key: itemKey, anchor_key: anchorKey, context: {} }), false, itemKey);
+  }
+});
+
+test("the old page's advice tip follows the same gate as its buttons", () => {
+  assert.match(readFileSync(new URL('../web/app.js', import.meta.url), 'utf8'), /const teaches = !!item\.teaches && d\.teaches !== false;/);
+});

@@ -923,7 +923,7 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
   function paintAdvice() {
     const blanks = blanksIn(ta.value);
     const lines = [];
-    const teaches = !!item.teaches;
+    const teaches = !!item.teaches && d.teaches !== false;
     // The box was cleared: what the checks said about the suggestion no longer applies.
     if (isEmpty()) {
       advice.replaceChildren(h('div', { class: 'tip input' }, icon('pencil'),

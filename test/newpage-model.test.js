@@ -391,3 +391,8 @@ test("an answered row's reason leaves out a time the row already shows", () => {
   const day = NOW - 86400000;
   assert.equal(rowView(row({ state: 'answered', lastAt: day + 60000, answered: { how: 'phone', by: '', at: day } }), { now: NOW }).reason, 'Answered on the phone');
 });
+
+test('rememberOffer still offers on a draft from an older payload with no teaches field', () => {
+  const item = { key: 'c:1', anchor: 'm:12', section: 'dashboard', situationKey: 'price_negotiation' };
+  assert.deepEqual(rememberOffer(item, { id: 5, instruction: 'Be brief' }), { scope: 'price_negotiation', label: 'Remember for price questions' });
+});
