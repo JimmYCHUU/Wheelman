@@ -6,6 +6,7 @@
 import { html, useState, useRef, useEffect } from './html.js';
 import { messageOptions } from '../messages.js';
 import { MenuButton } from './menu.js';
+import { unsentWords, keepUnsent } from '../unsent.js';
 
 /**
  * The Instead line, with More messages; none when there is nothing else to write. locked: while
@@ -25,11 +26,16 @@ export function Picker({ item, actions, locked = false, extra = null }) {
  * The paste box's state, held by the message box so that a paste on its way (while the box reads
  * Writing…) keeps its text. paste(direction, text) is the store's: true once the paste is in, and
  * the box then closes and empties; otherwise the text stays. Opened, the focus goes into the box;
- * cancelled, back to the button that opened it.
+ * cancelled, back to the button that opened it. key: the conversation. Whether it is open and what
+ * is in it are kept for it as they change (web/new/js/unsent.js), so an open box comes back with its
+ * text when the message box does (from the Playbook, say).
  */
-export function usePaste(paste) {
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState('');
+export function usePaste(paste, key) {
+  const kept = unsentWords(key, 'paste');
+  const [open, setOpenRaw] = useState(kept !== null);
+  const [text, setTextRaw] = useState(kept || '');
+  const put = (o, t) => { setOpenRaw(o); setTextRaw(t); keepUnsent(key, 'paste', o ? t : null); };
+  const setText = (t) => put(open, t);
   const [busy, setBusy] = useState(false);
   const area = useRef(null);
   const opener = useRef(null);
@@ -44,10 +50,10 @@ export function usePaste(paste) {
     setBusy(true);
     let taken = false;
     try { taken = await paste(direction, text); } finally { setBusy(false); }
-    if (taken) { setText(''); setOpen(false); }
+    if (taken) put(false, '');
   };
-  const show = () => setOpen(true);
-  const cancel = () => { back.current = true; setText(''); setOpen(false); };
+  const show = () => put(true, text);
+  const cancel = () => { back.current = true; put(false, ''); };
   return { open, text, busy, area, opener, setText, send, show, cancel };
 }
 

@@ -1355,7 +1355,7 @@ export function lessonDetails(lessons) {
   const ids = [...new Set((lessons || []).map((l) => l.id))];
   if (!ids.length) return [];
   const marks = ids.map(() => '?').join(',');
-  const rows = new Map(stmt(`SELECT id, kind, note, customer_text, draft_text, evidence_json, at FROM advice WHERE id IN (${marks})`).all(...ids).map((r) => [Number(r.id), r]));
+  const rows = new Map(stmt(`SELECT id, kind, note, customer_text, draft_text, evidence_json, rule_key, at FROM advice WHERE id IN (${marks})`).all(...ids).map((r) => [Number(r.id), r]));
   const events = new Map();
   for (const e of stmt(`SELECT advice_id, what, at FROM lesson_events WHERE advice_id IN (${marks}) ORDER BY at, id`).all(...ids)) {
     const id = Number(e.advice_id);
@@ -1373,11 +1373,14 @@ export function lessonDetails(lessons) {
   });
 }
 
-/** What an edit lesson was kept from: its examples (newest first) and on how many suggestions the edit was made. */
+/**
+ * What an edit lesson was kept from: its examples (newest first), on how many suggestions the edit
+ * was made, and the edit's key, so the Playbook can tell when that edit waits for review again.
+ */
 function editEvidence(r) {
   let e = {};
   try { e = JSON.parse(r?.evidence_json || '{}') || {}; } catch { /* an unreadable record shows no examples */ }
-  return { examples: Array.isArray(e.examples) ? e.examples : [], count: Number(e.count) || 0 };
+  return { examples: Array.isArray(e.examples) ? e.examples : [], count: Number(e.count) || 0, key: r?.rule_key || null };
 }
 
 /** These lessons went into the request for a suggestion that was kept: each advice row counted once. */

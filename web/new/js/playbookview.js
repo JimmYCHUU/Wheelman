@@ -7,9 +7,14 @@ import { hashFor } from './route.js';
 
 const newestFirst = (a, b) => (b.at || 0) - (a.at || 0) || (b.id || 0) - (a.id || 0);
 
-/** { review, on, off, notRules }: the proposals waiting, the lessons in use and switched off (newest first), and those marked not a rule. */
+/**
+ * { review, on, off, notRules }: the proposals waiting, the lessons in use and switched off (newest
+ * first), and those marked not a rule. An edit lesson whose edit waits for review again (after an
+ * Undo) is shown only as that proposal, so the one edit is never in two places.
+ */
 export function lessonGroups({ lessons = [], proposals = [], notRules = [] } = {}) {
-  const all = [...(lessons || [])].sort(newestFirst);
+  const waiting = new Set((proposals || []).map((p) => p.key));
+  const all = [...(lessons || [])].filter((l) => !(l.kind === 'edit' && l.from && l.from.key && waiting.has(l.from.key))).sort(newestFirst);
   return { review: proposals || [], on: all.filter((l) => !l.off), off: all.filter((l) => l.off), notRules: notRules || [] };
 }
 
@@ -88,5 +93,14 @@ export function menuHint(status) {
   return parts.length ? parts.join(' · ') : 'Lessons and business facts';
 }
 
-/** The address "Back to <section>" goes to: the conversation the store kept open, on its list. */
-export const backHref = (s) => hashFor({ section: s.section, chip: s.chip, key: s.key });
+/**
+ * The address "Back to <section>" goes to: what was on screen when the Playbook opened. left is the
+ * address on screen then ({ section, chip, key }), null when there was none (a boot on the
+ * Playbook's address). On a phone showing the list, the store keeps the last conversation open and
+ * hidden: Back is the list. Otherwise, or when the store has moved to another list since, it is
+ * the conversation the store has open, on its list.
+ */
+export function backHref(s, left = null) {
+  const same = !!left && left.section === s.section && left.chip === s.chip;
+  return hashFor({ section: s.section, chip: s.chip, key: same && !left.key ? null : s.key });
+}

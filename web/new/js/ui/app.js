@@ -50,6 +50,10 @@ export function App({ store, panel, setPanel, search, playbook, now = Date.now }
   const { route: address, book } = useRoute();
   // On the Playbook the address names no conversation: the one the store has open is behind it.
   const route = book ? { section: state.section, chip: state.chip, key: null } : address;
+  // The address on screen before the Playbook opened (none after a boot on it), so Back returns to
+  // what was on screen: on a phone showing the list, the list.
+  const left = useRef(null);
+  if (!book) left.current = address;
   const mode = useMode();
   const reply = useRef(null);
   const unread = unreadTotal(state);
@@ -61,7 +65,7 @@ export function App({ store, panel, setPanel, search, playbook, now = Date.now }
   // On the Playbook no tab is on screen, and any tab leaves it: the store's own section as it was
   // left, another at its first list.
   const onTab = (id) => {
-    if (book) { location.hash = id === state.section ? backHref(state) : hashFor({ section: id, chip: chipsFor(id)[0].id }); return; }
+    if (book) { location.hash = id === state.section ? backHref(state, left.current) : hashFor({ section: id, chip: chipsFor(id)[0].id }); return; }
     if (id !== section.id) location.hash = hashFor({ section: id, chip: chipsFor(id)[0].id });
   };
   // The panel: a column on a wide window, else a drawer or sheet over the conversation (then the
@@ -93,7 +97,7 @@ export function App({ store, panel, setPanel, search, playbook, now = Date.now }
   // A car opens in the panel as "Another car": the panel opens the way the Details button opens it
   // (on a phone as a history entry, so Back closes the sheet), then shows the car.
   const openCar = (car) => {
-    if (book) location.hash = backHref(state); // the panel is beside the conversation, not the Playbook
+    if (book) location.hash = backHref(state, left.current); // the panel is beside the conversation, not the Playbook
     setPanel(true);
     panel.actions.showCar(String(car.stockNo));
   };
@@ -101,7 +105,7 @@ export function App({ store, panel, setPanel, search, playbook, now = Date.now }
   return html`<div class="shell">
     <${TopBar} state=${state} tab=${book ? null : section.id} onTab=${onTab} now=${now()} inert=${overlay}
       search=${search} onOpen=${openResult} onCar=${openCar} />
-    ${book ? html`<${PlaybookPage} state=${state} pstate=${bstate} playbook=${playbook} now=${now()} />` : html`<main class=${'work' + (shown && !overlay ? ' with-panel' : '')} data-view=${route.key || state.runSummary ? 'chat' : 'list'}>
+    ${book ? html`<${PlaybookPage} state=${state} pstate=${bstate} playbook=${playbook} left=${left.current} now=${now()} />` : html`<main class=${'work' + (shown && !overlay ? ' with-panel' : '')} data-view=${route.key || state.runSummary ? 'chat' : 'list'}>
       <section class="tile list-col" aria-label="Conversations" inert=${overlay}>
         <${List} state=${state} actions=${store.actions} now=${now()} section=${state.section} />
       </section>

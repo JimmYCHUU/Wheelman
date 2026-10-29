@@ -76,6 +76,7 @@ test('Keep makes a lesson from the edit, with its examples, and it is not propos
   const lesson = listed.lessons.find((l) => l.id === out.lesson.id);
   assert.deepEqual([lesson.do, lesson.kind, lesson.from.examples.length, lesson.from.count], ['Leave out “kindly”.', 'edit', 3, 4]);
   assert.deepEqual(lesson.from.examples, p.examples);
+  assert.equal(lesson.from.key, p.key, 'the edit it was kept from, so the Playbook can tell when that edit waits again');
   assert.deepEqual(lesson.history.map((e) => e.what), ['made', 'kept']);
   assert.ok(!listed.proposals.some((x) => x.key === p.key), 'not proposed again');
   // The old page's list of lessons has it too, in its usual shape.

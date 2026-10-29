@@ -291,7 +291,57 @@ test('the Menu opens the Playbook, which stands in place of the work grid and ke
   // A Playbook address: the main store is only flushed, and the boot never reads that address as a conversation.
   const main = src('js/main.js');
   assert.match(main, /if \(book\) \{ actions\.flush\(\); playbook\.actions\.load\(book\.tab, book\.id\); return; \}/);
-  assert.match(main, /actions\.boot\(\w+ \? \{ section: 'dashboard', chip: 'waiting', key: null \} : parseRoute\(location\.hash\)/);
+  assert.match(main, /const boot = bootFor\(location\.hash, innerWidth >= 1280\);\nactions\.boot\(boot\.route, \{ wide: boot\.wide \}\)/);
   // The What Wheelman used tab links to every lesson.
   assert.match(src('js/ui/usedtab.js'), /See every lesson in the Playbook/);
+});
+
+test('an edit lesson whose edit waits for review again is shown only under To review', () => {
+  // Kept, then Undo: the lesson is off and its edit is proposed again. Only the proposal is shown.
+  const undone = { id: 12, n: 0, kind: 'edit', channel: 'sms', scope: 'any', do: 'Leave out “kindly”.', at: TODAY, off: true, usedCount: 0, from: { examples: [], count: 4, key: kindly.key } };
+  // Another edit lesson, switched off by Jim, whose edit is not waiting: still under Switched off.
+  const other = { ...undone, id: 13, do: 'Write “car”, not “vehicle”.', from: { examples: [], count: 3, key: 'sms|replace|vehicle|car' } };
+  const g = lessonGroups({ lessons: [undone, other, finance], proposals: [kindly], notRules: [] });
+  assert.deepEqual(g.review, [kindly]);
+  assert.deepEqual(g.off.map((l) => l.id), [13]);
+  assert.deepEqual(g.on.map((l) => l.id), [7]);
+  // An edit lesson with no key recorded, and a lesson of another kind, are never taken out.
+  const noKey = { ...undone, id: 14, from: { examples: [], count: 4 } };
+  assert.deepEqual(lessonGroups({ lessons: [noKey], proposals: [kindly] }).off.map((l) => l.id), [14]);
+});
+
+test("words typed in the Tell line or an order's paste box are kept for their conversation while the box is away", async () => {
+  const { unsentWords, keepUnsent } = await import('../web/new/js/unsent.js');
+  assert.equal(unsentWords('c:901', 'tell'), null, 'nothing kept yet');
+  keepUnsent('c:901', 'tell', 'Mention the warranty');
+  keepUnsent('c:902', 'tell', 'Offer a video call');
+  keepUnsent('ao:903', 'paste', 'Any news on the XV?');
+  assert.equal(unsentWords('c:901', 'tell'), 'Mention the warranty');
+  assert.equal(unsentWords('c:902', 'tell'), 'Offer a video call', 'each conversation its own');
+  assert.equal(unsentWords('c:901', 'paste'), null, 'each field its own');
+  assert.equal(unsentWords('ao:903', 'paste'), 'Any news on the XV?');
+  // An open paste box with nothing in it yet is kept as open.
+  keepUnsent('ao:904', 'paste', '');
+  assert.equal(unsentWords('ao:904', 'paste'), '');
+  // Sent, emptied or closed: nothing is kept.
+  keepUnsent('c:901', 'tell', null);
+  keepUnsent('ao:904', 'paste', null);
+  assert.equal(unsentWords('c:901', 'tell'), null);
+  assert.equal(unsentWords('ao:904', 'paste'), null);
+  assert.equal(unsentWords(null, 'tell'), null, 'no conversation, nothing');
+  keepUnsent(null, 'tell', 'lost');
+  assert.equal(unsentWords(null, 'tell'), null);
+
+  // The Tell line and the paste box start from what was kept, and keep what is in them; the Tell
+  // line holds Wheelman back again when it brings words back.
+  const src = (f) => fs.readFileSync(new URL('../web/new/js/' + f, import.meta.url), 'utf8');
+  const box = src('ui/messagebox.js');
+  assert.match(box, /const \[value, setRaw\] = useState\(\(\) => unsentWords\(at, 'tell'\) \|\| ''\);/);
+  assert.match(box, /const setValue = \(v\) => \{ setRaw\(v\); keepUnsent\(at, 'tell', v \|\| null\); \};/);
+  assert.match(box, /if \(value\.trim\(\)\) holdTell\(true\);/);
+  assert.equal((box.match(/<\$\{Tell\} at=\$\{state\.key\}/g) || []).length, 2, 'both Tell lines name their conversation');
+  assert.match(box, /usePaste\(actions\.paste, state\.key\)/);
+  const order = src('ui/orderbox.js');
+  assert.match(order, /const kept = unsentWords\(key, 'paste'\);/);
+  assert.match(order, /keepUnsent\(key, 'paste', o \? t : null\)/);
 });

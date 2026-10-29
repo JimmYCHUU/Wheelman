@@ -34,13 +34,16 @@ function Body({ pstate, actions, now }) {
     : html`<${LessonsTab} pstate=${pstate} actions=${actions} now=${now} />`;
 }
 
-/** state: the main store's (the conversation to go back to); pstate and playbook: the Playbook's store and the store itself. */
-export function PlaybookPage({ state, pstate, playbook, now }) {
+/**
+ * state: the main store's (the conversation to go back to); pstate and playbook: the Playbook's
+ * store and the store itself; left: the address on screen before the Playbook opened, or null.
+ */
+export function PlaybookPage({ state, pstate, playbook, left = null, now }) {
   const notes = waiting(pstate, state.status);
   const tabs = [{ id: 'lessons', label: 'Lessons' }, { id: 'facts', label: 'Business facts' }];
   return html`<main class="tile playbook" aria-labelledby="pb-title">
     <div class="pb-inner">
-      <a class="pb-back" href=${backHref(state)}>‹ Back to ${sectionName(state.section)}</a>
+      <a class="pb-back" href=${backHref(state, left)}>‹ Back to ${sectionName(state.section)}</a>
       <header class="pb-head">
         <h2 id="pb-title">Playbook</h2>
         <p class="pb-lead">${LEAD}</p>

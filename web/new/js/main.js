@@ -8,7 +8,7 @@ import { createSearchStore } from './searchstore.js';
 import { createPlaybookStore } from './playbookstore.js';
 import { playbookRoute } from './playbookroute.js';
 import { parseRoute } from './route.js';
-import { storeStep, addressAfter, leavesRun, sheetStep, sheetFirst, sheetOnPop, isSheetEntry, withSheet, offAddress, conversationOnScreen, goToHash } from './hashsync.js';
+import { storeStep, addressAfter, leavesRun, sheetStep, sheetFirst, sheetOnPop, isSheetEntry, withSheet, offAddress, conversationOnScreen, goToHash, bootFor } from './hashsync.js';
 import { html, render } from './ui/html.js';
 import { App } from './ui/app.js';
 import { readTheme, applyTheme } from './ui/topbar.js';
@@ -140,11 +140,11 @@ store.subscribe(() => { if (playbookRoute(location.hash)) return; const to = off
 window.addEventListener('popstate', () => { if (sheetGoing) { sheetGoing = false; follow(); } });
 
 // A boot on the Playbook's address shows it, and the store starts on the Dashboard's first list
-// behind it: that address is never read as a conversation's (a fact's title is no key).
+// behind it with no conversation open (web/new/js/hashsync.js bootFor).
 const bootBook = playbookRoute(location.hash);
 if (bootBook) playbook.actions.load(bootBook.tab, bootBook.id);
-actions.boot(bootBook ? { section: 'dashboard', chip: 'waiting', key: null } : parseRoute(location.hash), { wide: innerWidth >= 1280 })
-  .catch(() => { /* the list shows its own error state */ }).finally(() => { booted = true; follow(); });
+const boot = bootFor(location.hash, innerWidth >= 1280);
+actions.boot(boot.route, { wide: boot.wide }).catch(() => { /* the list shows its own error state */ }).finally(() => { booted = true; follow(); });
 setInterval(() => actions.refresh(), 20000);
 // The last edit goes out when the page hides (another tab, the phone locked) and when it closes.
 window.addEventListener('pagehide', () => actions.flush());

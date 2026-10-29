@@ -152,3 +152,39 @@ test('on a Playbook address the store is left where it was and nothing is writte
   assert.equal(storeStep(parseRoute('#/dashboard/waiting/c%3A1'), S('waiting', 'c:1')), null);
   assert.equal(addressAfter(S('waiting', 'c:1'), '#/dashboard/waiting/c%3A1', S('waiting', 'c:1')), null);
 });
+
+test('Back from the Playbook returns to what was on screen: the list on a phone showing it, else the conversation', async () => {
+  const { backHref } = await import('../web/new/js/playbookview.js');
+  const open = S('waiting', 'c:1');
+  // On a phone showing the list (‹ List), the store keeps the conversation open, hidden: Back is the list.
+  assert.equal(backHref(open, parseRoute('#/dashboard/waiting')), '#/dashboard/waiting');
+  // The conversation was on screen (a phone showing it, or any wider window): Back is the conversation.
+  assert.equal(backHref(open, parseRoute('#/dashboard/waiting/c%3A1')), '#/dashboard/waiting/c%3A1');
+  // Nothing on screen before it (a boot on the Playbook's address): the store's list.
+  assert.equal(backHref(S('waiting', null), null), '#/dashboard/waiting');
+  assert.equal(backHref(open, null), '#/dashboard/waiting/c%3A1');
+  // The store has moved on since (another list): where the store is.
+  assert.equal(backHref(S('all', 'c:2'), parseRoute('#/dashboard/waiting/c%3A1')), '#/dashboard/all/c%3A2');
+});
+
+test('a boot on a Playbook address opens no conversation behind it, so nothing is marked seen', async () => {
+  const { bootFor } = await import('../web/new/js/hashsync.js');
+  const { setup } = await import('./support/newpage-fakes.js');
+  // On a wide window too: the Dashboard's first list, with no conversation, whatever the width.
+  const b = bootFor('#/playbook/lessons', true);
+  assert.deepEqual(b, { route: { section: 'dashboard', chip: 'waiting', key: null }, wide: false });
+  assert.deepEqual(bootFor('#/playbook/facts/Tinted%20windows', true).route.key, null, "a fact's title is never read as a key");
+  const { store, calls } = setup();
+  await store.actions.boot(b.route, { wide: b.wide });
+  assert.equal(store.get().key, null);
+  assert.equal(store.get().item, null);
+  assert.ok(!calls.some((c) => /^\/api\/items\/[^?]/.test(c.path)), 'no conversation asked for');
+  assert.ok(!calls.some((c) => c.path.endsWith('/seen')), 'nothing marked seen');
+  // Any other address boots as before: on a wide window the first row opens, and is seen.
+  assert.deepEqual(bootFor('#/dashboard/all', true), { route: parseRoute('#/dashboard/all'), wide: true });
+  const control = setup();
+  const c = bootFor('#/dashboard/waiting', true);
+  await control.store.actions.boot(c.route, { wide: c.wide });
+  assert.equal(control.store.get().key, 'c:1');
+  assert.ok(control.calls.some((x) => x.path === '/api/items/c:1/seen'));
+});

@@ -2,7 +2,7 @@
 // or mark as not a rule; the lessons in use and those switched off, each with its switch, where it
 // came from and its history; and the edits marked not a rule. Proposals are counted only here and in
 // the Menu: nothing about them appears while Jim works.
-import { html } from './html.js';
+import { html, useEffect, useRef } from './html.js';
 import { plural } from '../../../lib/format.js';
 import { lessonGroups, lessonLine, historyLines, proposalWords, shownText, shownExamples } from '../playbookview.js';
 
@@ -49,15 +49,20 @@ function From({ l }) {
   </div>`;
 }
 
-/** A lesson with its switch: on, it shapes new suggestions of its kind; off, it is never sent to the AI. */
-function Lesson({ l, actions, now }) {
+const lessonKey = (l) => l.id + '-' + (l.n || 0);
+
+/**
+ * A lesson with its switch: on, it shapes new suggestions of its kind; off, it is never sent to the
+ * AI. press(l): the switch was pressed.
+ */
+function Lesson({ l, press, now }) {
   const on = !l.off;
   const history = historyLines(l, now);
-  return html`<article class=${'pb-card' + (on ? '' : ' off')}>
+  return html`<article class=${'pb-card' + (on ? '' : ' off')} data-lesson=${lessonKey(l)}>
     <div class="pb-card-top">
       <p class="pb-words">${l.do}</p>
       <button type="button" class="pb-switch" role="switch" aria-checked=${on} aria-label=${(on ? 'Switch off: ' : 'Switch on: ') + l.do}
-        onClick=${() => actions.switchLesson(l.id, !on)}>
+        onClick=${() => press(l)}>
         <span class="pb-knob" aria-hidden="true"></span><span class="pb-switch-word" aria-hidden="true">${on ? 'On' : 'Off'}</span>
       </button>
     </div>
@@ -84,8 +89,23 @@ function NotRule({ p, n, actions }) {
 /** pstate: the Playbook's store; actions: its actions; now: the time, for the days. */
 export function LessonsTab({ pstate, actions, now }) {
   const g = lessonGroups(pstate);
-  const lessons = (list) => list.map((l) => html`<${Lesson} key=${l.id + '-' + (l.n || 0)} l=${l} actions=${actions} now=${now} />`);
-  return html`<div class="pb-body">
+  // A switched lesson moves to the other group, drawn afresh there: the focus follows its switch.
+  const root = useRef(null);
+  const moving = useRef(null); // { key, off }: the switch pressed, until its lesson has moved
+  useEffect(() => {
+    const m = moving.current;
+    const l = m && pstate.lessons.find((x) => lessonKey(x) === m.key);
+    if (!l || l.off !== m.off || !root.current) return;
+    moving.current = null;
+    const sw = root.current.querySelector('[data-lesson="' + m.key + '"] [role="switch"]');
+    if (sw && document.activeElement !== sw) sw.focus();
+  });
+  const press = (l) => {
+    moving.current = { key: lessonKey(l), off: !l.off };
+    actions.switchLesson(l.id, l.off).then((done) => { if (!done) moving.current = null; });
+  };
+  const lessons = (list) => list.map((l) => html`<${Lesson} key=${lessonKey(l)} l=${l} press=${press} now=${now} />`);
+  return html`<div class="pb-body" ref=${root}>
     <p class="pb-intro">${INTRO}</p>
     <section class="pb-group" aria-labelledby="pb-review"><h3 id="pb-review">To review</h3>
       ${g.review.length ? g.review.map((p, i) => html`<${Proposal} key=${p.key} p=${p} n=${i} actions=${actions} />`) : html`<p class="pb-none">${NOTHING}</p>`}

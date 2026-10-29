@@ -10,6 +10,7 @@ import { boxText, liveChecks, checkLines, trustLine, wordsLine, saveWords, segme
 import { boxViewOf } from '../boxsections.js';
 import { typeView } from '../enquiry.js';
 import { Picker, PasteButton, PasteBox, usePaste } from './orderbox.js';
+import { unsentWords, keepUnsent } from '../unsent.js';
 import { Research } from './research.js';
 import { replyChannel, mainFor, sendFor, sendingNow, sendFailedWords } from '../channel.js';
 import { Trust, FactAsk } from './trust.js';
@@ -40,11 +41,17 @@ function useCtrlEnter(main, editor) {
 /**
  * "Tell Wheelman what to say…": Enter sends it and empties the line, Escape empties it. While it
  * has text, Wheelman holds back from writing this conversation by itself. disabled: while the
- * reply is sending, nothing can be asked for.
+ * reply is sending, nothing can be asked for. at: the conversation. What is typed is kept for it as
+ * it is typed (web/new/js/unsent.js), so it is still here when the box comes back (from the
+ * Playbook, say), and Wheelman holds back again.
  */
-function Tell({ onSend, holdTell, button, disabled = false }) {
-  const [value, setValue] = useState('');
-  useEffect(() => () => { holdTell(false); }, []);
+function Tell({ at, onSend, holdTell, button, disabled = false }) {
+  const [value, setRaw] = useState(() => unsentWords(at, 'tell') || '');
+  const setValue = (v) => { setRaw(v); keepUnsent(at, 'tell', v || null); };
+  useEffect(() => {
+    if (value.trim()) holdTell(true);
+    return () => { holdTell(false); };
+  }, []);
   const send = () => {
     const v = value.trim();
     if (!v) return;
@@ -133,7 +140,7 @@ function Quiet({ state, actions, item, view, paste }) {
     ${view.suggestion ? html`<div class="ghost"><span class="ghost-label">${view.suggestionLabel || 'The suggestion that was here'}</span><p>${view.suggestion}</p></div>` : null}
     ${item.order ? html`<${Picker} item=${item} actions=${actions} extra=${html`<${PasteButton} paste=${paste} />`} />` : null}
     ${view.tell || b ? html`<div class="foot">
-      ${view.tell ? html`<${Tell} onSend=${tell} holdTell=${actions.holdTell} button="Write from this" disabled=${resending} />` : null}
+      ${view.tell ? html`<${Tell} at=${state.key} onSend=${tell} holdTell=${actions.holdTell} button="Write from this" disabled=${resending} />` : null}
       <div class="right">${view.copy && !resending ? html`<button type="button" class="btn quiet" onClick=${() => actions.copy({})}>Copy</button>` : null}
         ${resending ? html`<button type="button" class="btn main" disabled>Sending…</button>`
         : b ? html`<button type="button" class=${'btn' + (b.main ? ' main' : '')} onClick=${run[b.act]}>${b.label}</button>` : null}</div>
@@ -245,7 +252,7 @@ function Draft({ state, actions, item, view, editor, main, reply, paste }) {
       </div>`}
       <${Picker} item=${item} actions=${actions} locked=${locked} extra=${item.order ? html`<${PasteButton} paste=${paste} />` : null} />
       <div class="foot">
-        <${Tell} disabled=${locked} onSend=${(v) => actions.tell(v)} holdTell=${actions.holdTell} button="Rewrite" />
+        <${Tell} at=${state.key} disabled=${locked} onSend=${(v) => actions.tell(v)} holdTell=${actions.holdTell} button="Rewrite" />
         <div class="right">
           ${empty
             ? (d && d.reply ? html`<button type="button" class="btn" onClick=${bringBack}>Bring back the suggestion</button>` : null)
@@ -267,7 +274,7 @@ function Box({ state, actions, item, reply }) {
   const main = useRef(null);
   useCtrlEnter(main, editor);
   // An order's paste box: kept here, so its text outlives the Writing… a paste starts.
-  const paste = usePaste(actions.paste);
+  const paste = usePaste(actions.paste, state.key);
   // sectionBox's view (boxsections.js): the same one the run bar reads.
   const view = boxViewOf(state, Date.now());
   // Opened, the paste box is the whole box until it is used or cancelled (as on the old page), so it

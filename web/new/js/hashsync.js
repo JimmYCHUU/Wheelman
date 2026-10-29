@@ -10,6 +10,17 @@ import { followUpOf } from './store.js';
 import { sectionOff } from './sections.js';
 import { playbookRoute } from './playbookroute.js';
 
+/**
+ * How the store boots on this address: { route, wide }. On the Playbook's address it starts on the
+ * Dashboard's first list with no conversation, even on a wide window: nothing behind the Playbook is
+ * on screen, so nothing is opened or marked seen, and the address is never read as a conversation's
+ * (a fact's title is no key). Any other address boots as it says.
+ */
+export function bootFor(hash, wide) {
+  if (playbookRoute(hash)) return { route: { section: 'dashboard', chip: 'waiting', key: null }, wide: false };
+  return { route: parseRoute(hash), wide: !!wide };
+}
+
 /** In place of an address on a section the server says is switched off: the Dashboard's. null for any other. */
 export const offAddress = (route, sections) => (sectionOff(route.section, sections) ? hashFor({ section: 'dashboard', chip: 'waiting' }) : null);
 
