@@ -46,6 +46,7 @@ import { budgetStatus } from './budget.js';
 import { listRuns, readRun, vote as reviewVote, summarise } from './review.js';
 import { providers as aiProviders, usageDetail } from './llm.js';
 import { playbookApi } from './playbookapi.js';
+import { editProposals } from './editrules.js';
 
 const TYPES = { '.woff2': 'font/woff2', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(config.root, 'package.json'), 'utf8')).version || ''; } catch { return ''; } })();
@@ -646,7 +647,9 @@ async function api(req, res, url) {
     try { practice = { dashboard: recentPractice().length, days: PRACTICE_DAYS, email: config.mail.switchedOn ? recentMailPractice().length : 0, voice: loadExamples().length }; } catch { /* the counts are a courtesy */ }
     // Sharing with the team: the address colleagues open, once the tunnel has one.
     const shared = { on: config.share.on && !!config.share.password, url: share.url || '', running: share.running, error: share.error };
-    return send(res, 200, { ...worker.statusReport(), learned: learnedStats(), practice, share: shared, facts: { ...facts.counts, unanswered: facts.unanswered, toConfirm: loadBusinessFacts().filter((t) => t.status === 'working').map((t) => t.title) } });
+    // The edits proposed as lessons, waiting in the Playbook: counted for its Menu item only.
+    const playbook = { toReview: editProposals().length };
+    return send(res, 200, { ...worker.statusReport(), learned: learnedStats(), practice, share: shared, facts: { ...facts.counts, unanswered: facts.unanswered, toConfirm: loadBusinessFacts().filter((t) => t.status === 'working').map((t) => t.title) }, playbook });
   }
 
   // Is Wheelman alive and able to read its database? For a watchdog, the demo check and a person.

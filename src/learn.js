@@ -440,6 +440,7 @@ export async function distilPending(max = 2) {
  * A lesson switched off is never used. A Remember lesson is used in this conversation too: the
  * hold-out (a replay must not see its own answer) is for what a conversation taught by example.
  * A Remember lesson is never used for a Marketplace chat; a Could be better lesson is, as before.
+ * A lesson kept from an edit made again and again (src/editrules.js) is taken as a Remember one is.
  * Each lesson carries where it came from: adviceId (its advice row) and n (its place in that row).
  */
 export function ownerGuidance(q, now = Date.now()) {
@@ -448,9 +449,9 @@ export function ownerGuidance(q, now = Date.now()) {
   const approved = sinceVoice(allLearned().filter((r) => mine(r) && r.source === 'approved'))
     .map((r) => ({ r, s: score(r, q, now) })).filter((x) => x.s >= 3).sort((a, b) => b.s - a.s).slice(0, 2).map((x) => x.r);
 
-  // A Remember lesson is for texts and emails: a Marketplace request never carries one.
+  // A Remember or edit lesson is for texts and emails: a Marketplace request never carries one.
   const rememberFits = (a) => q?.channel !== 'marketplace' && taught(a);
-  const notes = allAdvice().filter((a) => !a.off && (a.kind === 'remember' ? rememberFits(a) : mine(a))); // newest first
+  const notes = allAdvice().filter((a) => !a.off && (a.kind === 'remember' || a.kind === 'edit' ? rememberFits(a) : mine(a))); // newest first
   const kinds = new Set([...(q.situations || []), q.primary].filter(Boolean));
   const lessons = [];
   for (const a of notes) {
@@ -469,6 +470,8 @@ export function ownerGuidance(q, now = Date.now()) {
 // ---- using what was learned -------------------------------------------------
 
 const STOP = new Set('a an the and or but if of to in on at for from with by is are was were be been it this that as we you your our us i my me do does did can could would will have has had not no yes so hi hello hey thanks thank please regards name'.split(' '));
+/** The small words, lower case: an edit of these alone is no lesson (src/editrules.js). */
+export { STOP as SMALL_WORDS };
 const bag = (s) => new Set(String(s || '').toLowerCase().replace(/https?:\/\/\S+/g, ' ').replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w)));
 
 function score(row, q, now) {

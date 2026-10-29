@@ -169,6 +169,16 @@ CREATE TABLE IF NOT EXISTS lesson_events (
 );
 CREATE INDEX IF NOT EXISTS lesson_events_advice ON lesson_events(advice_id);
 
+-- What the owner decided about an edit he made again and again (src/editrules.js): 'kept' as a
+-- lesson or 'rejected' (Not a rule), with the proposal as it stood then, so a rejected one can
+-- still be listed and kept after all. Undo removes the row and the edit is proposed again.
+CREATE TABLE IF NOT EXISTS edit_rules (
+  key TEXT PRIMARY KEY,
+  decision TEXT NOT NULL,
+  proposal_json TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+
 -- Facebook Marketplace chats, read from the content engine. Kept apart from the dashboard tables:
 -- nothing here is ever used for learning or for the example bank.
 CREATE TABLE IF NOT EXISTS mp_conversations (
@@ -369,6 +379,10 @@ export function openDb(file = config.dbPath) {
   ensureColumn(db, 'advice', 'off', 'INTEGER DEFAULT 0');
   ensureColumn(db, 'advice', 'used_count', 'INTEGER DEFAULT 0');
   ensureColumn(db, 'advice', 'last_used_at', 'INTEGER');
+  // An edit lesson ('edit': kept from an edit made on several suggestions): the edit it was kept
+  // from, and its examples and count as they stood then.
+  ensureColumn(db, 'advice', 'rule_key', 'TEXT');
+  ensureColumn(db, 'advice', 'evidence_json', 'TEXT');
   ensureColumn(db, 'leads', 'status_history_json', 'TEXT');
   ensureColumn(db, 'leads', 'signals_json', 'TEXT');
   ensureColumn(db, 'conversations', 'lead_platform', 'TEXT');
@@ -1318,25 +1332,30 @@ export function listLessons(limit = 300) {
 /** One advice row's (first) lesson, or null. */
 export const getLesson = (id) => lessonsOfRow(stmt('SELECT * FROM advice WHERE id = ?').get(id))[0] || null;
 
-/** Switches a lesson on or off (every lesson of its note with it). Returns the lesson, or null when there is none. */
-export function switchLesson(id, on) {
+/**
+ * Switches a lesson on or off (every lesson of its note with it). Returns the lesson, or null when
+ * there is none. `what` is the event its history records: 'on' or 'off', or 'undone' when an edit
+ * lesson's Keep is taken back.
+ */
+export function switchLesson(id, on, { what = on ? 'on' : 'off', at = Date.now() } = {}) {
   const lesson = getLesson(id);
   if (!lesson) return null;
   stmt('UPDATE advice SET off = ? WHERE id = ?').run(on ? 0 : 1, id);
-  addLessonEvent(id, on ? 'on' : 'off', Date.now());
+  addLessonEvent(id, what, at);
   return { ...lesson, off: !on };
 }
 
 /**
  * These lessons with where each came from and what happened to it: one read of lesson_events and one
- * of advice. `from` is the note and what it was about, or the Remember instruction; `history` is
- * oldest first, and starts with the making when a lesson taught before events were kept has none.
+ * of advice. `from` is the note and what it was about, the Remember instruction, or the repeated
+ * edit's examples and count; `history` is oldest first, and starts with the making when a lesson
+ * taught before events were kept has none.
  */
 export function lessonDetails(lessons) {
   const ids = [...new Set((lessons || []).map((l) => l.id))];
   if (!ids.length) return [];
   const marks = ids.map(() => '?').join(',');
-  const rows = new Map(stmt(`SELECT id, kind, note, customer_text, draft_text, at FROM advice WHERE id IN (${marks})`).all(...ids).map((r) => [Number(r.id), r]));
+  const rows = new Map(stmt(`SELECT id, kind, note, customer_text, draft_text, evidence_json, at FROM advice WHERE id IN (${marks})`).all(...ids).map((r) => [Number(r.id), r]));
   const events = new Map();
   for (const e of stmt(`SELECT advice_id, what, at FROM lesson_events WHERE advice_id IN (${marks}) ORDER BY at, id`).all(...ids)) {
     const id = Number(e.advice_id);
@@ -1347,15 +1366,90 @@ export function lessonDetails(lessons) {
     const r = rows.get(l.id);
     const history = events.get(l.id) || [];
     if (!history.some((e) => e.what === 'made') && r) history.unshift({ what: 'made', at: r.at });
-    const from = l.kind === 'remember' ? { instruction: r?.note || '' } : l.kind === 'note' ? { note: r?.note || '', customer: r?.customer_text || '', draft: r?.draft_text || '' } : {};
+    const from = l.kind === 'remember' ? { instruction: r?.note || '' }
+      : l.kind === 'note' ? { note: r?.note || '', customer: r?.customer_text || '', draft: r?.draft_text || '' }
+        : l.kind === 'edit' ? editEvidence(r) : {};
     return { ...l, from, history };
   });
+}
+
+/** What an edit lesson was kept from: its examples (newest first) and on how many suggestions the edit was made. */
+function editEvidence(r) {
+  let e = {};
+  try { e = JSON.parse(r?.evidence_json || '{}') || {}; } catch { /* an unreadable record shows no examples */ }
+  return { examples: Array.isArray(e.examples) ? e.examples : [], count: Number(e.count) || 0 };
 }
 
 /** These lessons went into the request for a suggestion that was kept: each advice row counted once. */
 export function countLessonUse(ids, at = Date.now()) {
   for (const id of new Set(ids || [])) stmt('UPDATE advice SET used_count = IFNULL(used_count, 0) + 1, last_used_at = ? WHERE id = ?').run(at, id);
 }
+
+// ---- edits made again and again (src/editrules.js) ---------------------------------------------
+
+/**
+ * What was learned from suggestions copied from Wheelman and changed first: each learned row with a
+ * change and Wheelman's own text, whose suggestion was copied, newest first. A reply typed on the
+ * dashboard or the phone has no copied suggestion, so it is not here.
+ */
+export function editRows(limit = 2000) {
+  return stmt(`SELECT l.draft_id, l.item_key, l.channel, l.situations_json, l.draft_text, l.final_text, l.at
+      FROM learned l JOIN drafts d ON d.id = l.draft_id
+     WHERE l.changed = 1 AND IFNULL(l.draft_text, '') != '' AND d.copied_at IS NOT NULL
+     ORDER BY l.at DESC, l.draft_id DESC LIMIT ?`).all(limit)
+    .map(({ situations_json: s, ...r }) => ({ ...r, situations: JSON.parse(s || '[]') }));
+}
+
+/**
+ * A stamp that moves when the rows editRows reads or the decisions change, so the proposals are
+ * worked out again only then (the page asks for the count with every status).
+ */
+export function editsStamp() {
+  return stmt(`SELECT
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(l.at), 0) || ':' || IFNULL(SUM(l.draft_id), 0) || ':' || IFNULL(SUM(LENGTH(l.final_text) + LENGTH(l.draft_text)), 0)
+         FROM learned l JOIN drafts d ON d.id = l.draft_id WHERE l.changed = 1 AND d.copied_at IS NOT NULL) || '/' ||
+      (SELECT IFNULL(group_concat(key, char(10)), '') FROM (SELECT key FROM edit_rules ORDER BY key)) AS stamp`).get().stamp;
+}
+
+/** Every decision on a repeated edit, newest first: a Map of key to { decision, proposal, at }. */
+export function editDecisions() {
+  return new Map(stmt('SELECT key, decision, proposal_json, at FROM edit_rules ORDER BY at DESC, key').all()
+    .map((r) => [r.key, { decision: r.decision, proposal: JSON.parse(r.proposal_json), at: r.at }]));
+}
+
+/** Keeps a decision ('kept' or 'rejected') on a repeated edit, with the proposal as it stood. */
+export function setEditDecision(key, decision, proposal, at = Date.now()) {
+  stmt(`INSERT INTO edit_rules(key, decision, proposal_json, at) VALUES(?, ?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET decision = excluded.decision, proposal_json = excluded.proposal_json, at = excluded.at`)
+    .run(key, decision, JSON.stringify(proposal), at);
+}
+
+/** Takes a decision back: the edit is proposed again while it is still made often enough. */
+export function clearEditDecision(key) {
+  stmt('DELETE FROM edit_rules WHERE key = ?').run(key);
+}
+
+/**
+ * An edit lesson: one advice row of kind 'edit' per repeated edit (key), for every later reply of its
+ * scope in its channel. Kept again, the same row is switched on and dated afresh, with the words,
+ * scope and examples of now. Returns its id. Only 'made' is written here; the Keep writes 'kept'.
+ */
+export function insertEditLesson({ key, itemKey, scope, text, evidence, at = Date.now() }) {
+  if (!TEACHES.test(String(itemKey || ''))) throw new Error('Refused: only dashboard conversations and import emails can be learned from.');
+  const lessons = JSON.stringify([{ scope, when: '', do: text, internal: false }]);
+  const same = editLessonOf(key);
+  if (same) {
+    stmt('UPDATE advice SET off = 0, at = ?, note = ?, lessons_json = ?, evidence_json = ? WHERE id = ?').run(at, text, lessons, JSON.stringify(evidence || {}), same.id);
+    return same.id;
+  }
+  const id = Number(stmt("INSERT INTO advice(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, note, lessons_json, at, channel, kind, rule_key, evidence_json) VALUES(NULL, ?, '[]', 0, '', '', ?, ?, ?, ?, 'edit', ?, ?)")
+    .run(itemKey, text, lessons, at, channelOfKey(itemKey), key, JSON.stringify(evidence || {})).lastInsertRowid);
+  addLessonEvent(id, 'made', at);
+  return id;
+}
+
+/** The edit lesson kept from this repeated edit, as listLessons gives it, or null. */
+export const editLessonOf = (key) => lessonsOfRow(stmt("SELECT * FROM advice WHERE kind = 'edit' AND rule_key = ? ORDER BY id DESC LIMIT 1").get(key))[0] || null;
 
 // ---- the Playbook ----------------------------------------------------------
 //

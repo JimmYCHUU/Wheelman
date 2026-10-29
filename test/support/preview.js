@@ -174,6 +174,9 @@ const { parseDashboardTime, sydneyDay } = await import('../../src/time.js');
   talk(quiet, 'OUT', 'Hello Quietly, your inspection of the Hiace is booked. See you then.', visit - 25 * HOUR);
   db.upsertConversation({ id: quiet, phone: '+61491570171', channel: 'SMS', status: 'OPEN', leadId: quiet, customerName: 'Quietly Invented', latestDirection: 'OUT', latestAt: visit - 25 * HOUR, latestBody: 'x' });
   (await import('../../src/followup.js')).refreshFollowUps();
+  // What Wheelman learned from them, for the Playbook's Lessons: two edits proposed, one not yet,
+  // and two lessons (test/support/lessons.js).
+  (await import('./lessons.js')).seedLessons(db, now);
 }
 // Hollis wrote to Gmail about importing a Hiace, posted the way the Gmail add-on posts a thread: one of
 // the three messages was folded by Gmail, so the row, the panel and the research notes can be seen.
