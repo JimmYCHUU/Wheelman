@@ -105,7 +105,7 @@ test('a lead from the Imports list teaches nothing in Imports, nor a suggestion 
   db.insertDraft({ itemKey: key, anchorKey: anchorOf(key), situation: 'import_sourcing', reply: 'Yes.', status: 'ready', checks: [], instruction: 'Be brief.', context: { section: 'importquery' } });
   assert.equal((await get(`/api/items/${key}`)).item.section, 'importquery', 'listed in Imports by its platform');
   assert.equal((await draftOf(key)).teaches, false, 'listed in Imports from the Imports list');
-  assert.equal((await post(`/api/items/${key}/move`, { section: 'dashboard' })).item.section, 'dashboard');
+  assert.equal((await post(`/api/items/${key}/move`, { section: 'dashboard', keep: true })).item.section, 'dashboard');
   assert.equal((await draftOf(key)).teaches, false, 'written in Imports, moved back to Dashboard');
 });
 
