@@ -12,6 +12,8 @@ const LONGEST = 2000;
 const versions = (title) => versionsOf({ kind: 'fact', name: FACTS_NAME, part: title });
 /** A topic of the file as a save's base keeps it, to tell later whether the file was changed by hand. */
 const asBase = (t) => JSON.stringify({ status: t.status, answer: t.answer });
+/** What the file said of a topic when a version was saved: { status, answer }, or null when it lacked the topic. */
+const fromBase = (base) => { try { const b = base ? JSON.parse(base) : null; return b && typeof b.answer === 'string' ? b : null; } catch { return null; } };
 const fileTopics = () => new Map(loadBusinessFacts(undefined, { playbook: false }).map((t) => [t.title, t]));
 
 /**
@@ -20,10 +22,11 @@ const fileTopics = () => new Map(loadBusinessFacts(undefined, { playbook: false 
  *   facts:  [{ title, status, answer, at, from, earlier, file }]
  *     from     'playbook' when an answer saved there is in use, else 'file'
  *     at       when the answer in use was saved; null for the file's own
- *     earlier  every version before the one in use, newest first, then the file's own:
+ *     earlier  every version before the one in use, newest first, then the file's own: what the
+ *              file said when the topic was first saved, else what it says now
  *              [{ answer, status, at, from }]
- *     file     the file's { status, answer } when it differs from what the file said when the answer
- *              in use was saved (it was changed by hand since), so it can be offered; otherwise null
+ *     file     the file's { status, answer } when it was changed by hand after the answer in use
+ *              was saved and now says something else, so it can be offered; otherwise null
  *   counts: { confirmed, working, needsAnswer }
  */
 export function playbookFacts() {
@@ -38,8 +41,10 @@ function listed(t, inFile) {
   const [newest, ...older] = versions(t.title);
   if (!newest) return { ...fact, at: null, from: 'file', earlier: [], file: null };
   const earlier = older.map((v) => ({ answer: v.text, status: v.status, at: v.at, from: 'playbook' }));
-  if (inFile) earlier.push({ answer: inFile.answer, status: inFile.status, at: null, from: 'file' });
-  const file = inFile && asBase(inFile) !== newest.base ? { status: inFile.status, answer: inFile.answer } : null;
+  const original = fromBase((older.at(-1) || newest).base) || inFile;
+  if (original) earlier.push({ answer: original.answer, status: original.status, at: null, from: 'file' });
+  // A hand edit to the very answer in use differs from nothing: there is nothing to offer.
+  const file = inFile && asBase(inFile) !== newest.base && asBase(inFile) !== asBase(t) ? { status: inFile.status, answer: inFile.answer } : null;
   return { ...fact, at: newest.at, from: 'playbook', earlier, file };
 }
 

@@ -64,7 +64,12 @@ const versions = (part) => db.versionsOf({ kind: 'fact', name: NAME, part });
 const factsFile = () => path.join(dir, NAME);
 const fileAnswer = (title) => INVENTED_FACTS.find((f) => f.title === title).answer;
 
-// First, while nothing is saved: every later test saves something.
+// What each test needs of the others. A saved version is never removed, so:
+//   - the first two tests run before any save, as they are written first: both check the file alone
+//     before anything is saved, and the second's counts after its save assume no other fact is saved;
+//   - every later test answers its own fact (Holding deposit, Car covers, Opening hours, Roof racks,
+//     Tinted windows) and saves what it checks, so their saves never meet;
+//   - a test that edits the scratch facts file by hand puts it back when it ends.
 test('with nothing saved in the Playbook, the facts are the file\'s, as before', () => {
   assert.equal(db.countRows('playbook_versions'), 0);
   const laid = knowledge.loadBusinessFacts();
@@ -81,9 +86,12 @@ test('with nothing saved in the Playbook, the facts are the file\'s, as before',
   assert.equal(db.versionsStamp(), 0);
 });
 
+// Runs second, before any other save (see above).
 test('the Playbook lists every business fact with its state, and an answer saved there is used in the next request', async () => {
-  const key = customer(1, 'Ava', 'Can you tint the windows on the Noah before I pick it up?');
+  const QUESTION = 'Can you tint the windows on the Noah before I pick it up?';
+  const key = customer(1, 'Ava', QUESTION);
   assert.match(section(asked(key), 'TOPICS WITH NO CONFIRMED ANSWER'), /^- Tinted windows$/m, 'before the answer, it is a topic with no answer');
+  assert.ok(!knowledge.relevantFacts(QUESTION).includes('Tinted windows'), 'nor in the compact style\'s facts');
 
   const before = await get('/api/playbook/facts');
   assert.deepEqual(before.facts.map((f) => [f.title, f.status, f.answer, f.from]), INVENTED_FACTS.map((f) => [f.title, f.status, f.answer, 'file']));
@@ -105,6 +113,8 @@ test('the Playbook lists every business fact with its state, and an answer saved
   const user = asked(key);
   assert.ok(section(user, 'BUSINESS FACTS').includes('\n- Tinted windows: Yes, we can arrange window tinting'), 'under BUSINESS FACTS');
   assert.doesNotMatch(section(user, 'TOPICS WITH NO CONFIRMED ANSWER'), /^- Tinted windows$/m);
+  // The compact style reads the saved answer too.
+  assert.ok(`\n${knowledge.relevantFacts(QUESTION)}`.includes(`\n- Tinted windows: ${TINT}`), 'in the compact style\'s facts');
 
   const status = await get('/api/status');
   assert.equal(status.facts.needsAnswer, 1);
@@ -190,46 +200,77 @@ test('a fact the file does not have is refused, and an empty or overlong answer 
 test('a file changed by hand after a Playbook answer says so, and its answer can be used', async () => {
   const key = customer(3, 'Cai', 'Can you fit roof racks to the Noah?');
   const MINE = 'Roof racks can be fitted before pickup, and a person quotes the cost.';
-  let out = await post('/api/playbook/facts', { title: 'Roof racks', answer: MINE, status: 'confirmed' });
-  assert.equal(out.status, 200, out.error);
-  assert.equal(out.fact.file, null);
-
   const HAND = 'We fit roof racks before pickup; a person quotes the cost and the day.';
+  const ORIGINAL = fileAnswer('Roof racks');
   const text = fs.readFileSync(factsFile(), 'utf8');
-  assert.ok(text.includes(fileAnswer('Roof racks')));
-  fs.writeFileSync(factsFile(), text.replace(fileAnswer('Roof racks'), HAND));
+  const topic = `## Roof racks\nStatus: WORKING\nAnswer: ${ORIGINAL}\n`;
+  assert.ok(text.includes(topic));
+  const byHand = (status, answer) => fs.writeFileSync(factsFile(), text.replace(topic, `## Roof racks\nStatus: ${status}\nAnswer: ${answer}\n`));
+  try {
+    let out = await post('/api/playbook/facts', { title: 'Roof racks', answer: MINE, status: 'confirmed' });
+    assert.equal(out.status, 200, out.error);
+    assert.equal(out.fact.file, null);
 
-  const user = asked(key);
-  assert.ok(section(user, 'BUSINESS FACTS').includes(`\n- Roof racks: ${MINE}`), 'the Playbook\'s answer is still the one used');
-  assert.ok(!user.includes(HAND));
-  const fact = await listed('Roof racks');
-  assert.deepEqual([fact.status, fact.answer, fact.from], ['confirmed', MINE, 'playbook']);
-  assert.deepEqual(fact.file, { status: 'working', answer: HAND }, 'the file now differs, and its answer is offered');
+    // Edited by hand to the answer already in use: nothing differs, so nothing is offered.
+    byHand('CONFIRMED', MINE);
+    let fact = await listed('Roof racks');
+    assert.deepEqual([fact.status, fact.answer, fact.from, fact.file], ['confirmed', MINE, 'playbook', null]);
 
-  out = await post('/api/playbook/facts', { title: 'Roof racks', answer: HAND, status: 'working' });
-  assert.equal(out.status, 200, out.error);
-  assert.deepEqual([out.fact.status, out.fact.answer, out.fact.from, out.fact.file], ['working', HAND, 'playbook', null]);
-  assert.ok(section(asked(key), 'BUSINESS FACTS').includes(`\n- Roof racks: ${HAND}`));
+    byHand('WORKING', HAND);
+    const user = asked(key);
+    assert.ok(section(user, 'BUSINESS FACTS').includes(`\n- Roof racks: ${MINE}`), 'the Playbook\'s answer is still the one used');
+    assert.ok(!user.includes(HAND));
+    fact = await listed('Roof racks');
+    assert.deepEqual([fact.status, fact.answer, fact.from], ['confirmed', MINE, 'playbook']);
+    assert.deepEqual(fact.file, { status: 'working', answer: HAND }, 'the file now differs, and its answer is offered');
+    // The file's own version is what the file said before its first save, not the hand edit.
+    assert.deepEqual(fact.earlier, [{ answer: ORIGINAL, status: 'working', at: null, from: 'file' }]);
+
+    out = await post('/api/playbook/facts', { title: 'Roof racks', answer: HAND, status: 'working' });
+    assert.equal(out.status, 200, out.error);
+    assert.deepEqual([out.fact.status, out.fact.answer, out.fact.from, out.fact.file], ['working', HAND, 'playbook', null]);
+    assert.deepEqual(out.fact.earlier.map((e) => [e.answer, e.status, e.from]), [[MINE, 'confirmed', 'playbook'], [ORIGINAL, 'working', 'file']]);
+    assert.ok(section(asked(key), 'BUSINESS FACTS').includes(`\n- Roof racks: ${HAND}`));
+  } finally {
+    fs.writeFileSync(factsFile(), text);
+  }
 });
 
 test('a topic the file no longer has keeps its saved answer, listed after the file\'s', async () => {
+  const TINT = 'Window tinting is arranged before pickup; a person quotes the cost.';
+  const saved = await post('/api/playbook/facts', { title: 'Tinted windows', answer: TINT, status: 'working' });
+  assert.equal(saved.status, 200, saved.error);
   const text = fs.readFileSync(factsFile(), 'utf8');
-  fs.writeFileSync(factsFile(), text.replace(/## Tinted windows\n[^#]*/, ''));
-  assert.ok(!knowledge.loadBusinessFacts(undefined, { playbook: false }).some((t) => t.title === 'Tinted windows'));
+  try {
+    fs.writeFileSync(factsFile(), text.replace(/## Tinted windows\n[^#]*/, ''));
+    assert.ok(!knowledge.loadBusinessFacts(undefined, { playbook: false }).some((t) => t.title === 'Tinted windows'));
 
-  const laid = knowledge.loadBusinessFacts();
-  assert.deepEqual(laid.map((t) => t.title), ['Opening hours', 'Holding deposit', 'Roof racks', 'Car covers', 'Tinted windows']);
-  assert.equal(laid.at(-1).status, 'confirmed');
-  const fact = await listed('Tinted windows');
-  assert.deepEqual([fact.status, fact.from, fact.earlier, fact.file], ['confirmed', 'playbook', [], null]);
-  const out = await post('/api/playbook/facts', { title: 'Tinted windows', answer: 'Window tinting is arranged before pickup; a person quotes the cost.', status: 'working' });
-  assert.equal(out.status, 200, out.error);
-  assert.equal(out.fact.earlier.length, 1);
+    const laid = knowledge.loadBusinessFacts();
+    assert.deepEqual(laid.map((t) => t.title), [...INVENTED_FACTS.map((f) => f.title).filter((t) => t !== 'Tinted windows'), 'Tinted windows']);
+    assert.deepEqual(laid.at(-1), { title: 'Tinted windows', status: 'working', answer: TINT, at: versions('Tinted windows')[0].at });
+    assert.ok(`\n${knowledge.businessFactsForPrompt().text}`.includes(`\n- Tinted windows: ${TINT}`), 'still in use');
+
+    const fact = await listed('Tinted windows');
+    assert.deepEqual([fact.status, fact.answer, fact.from, fact.file], ['working', TINT, 'playbook', null]);
+    // The older saves, then the file's own version from when the topic was first saved.
+    assert.equal(fact.earlier.length, versions('Tinted windows').length);
+    assert.deepEqual(fact.earlier.at(-1), { answer: '', status: 'needs_answer', at: null, from: 'file' });
+
+    // A title only the Playbook has can still be answered.
+    const out = await post('/api/playbook/facts', { title: 'Tinted windows', answer: 'Window tinting is arranged before pickup.', status: 'confirmed' });
+    assert.equal(out.status, 200, out.error);
+    assert.equal(out.fact.earlier.length, versions('Tinted windows').length);
+  } finally {
+    fs.writeFileSync(factsFile(), text);
+  }
 });
 
 test('no statement changes or removes a saved version', () => {
-  const src = fileURLToPath(new URL('../src/', import.meta.url));
-  const files = fs.readdirSync(src, { recursive: true }).map(String).filter((f) => fs.statSync(path.join(src, f)).isFile());
-  assert.ok(files.length > 10, 'the source was read');
-  for (const f of files) assert.doesNotMatch(fs.readFileSync(path.join(src, f), 'utf8'), /(UPDATE|DELETE FROM)\s+playbook_versions/i, f);
+  const CHANGES = /(UPDATE|DELETE\s+FROM|REPLACE\s+INTO|DROP\s+TABLE(\s+IF\s+EXISTS)?)\s+playbook_versions/i;
+  for (const folder of ['src', 'scripts']) {
+    const root = fileURLToPath(new URL(`../${folder}/`, import.meta.url));
+    const files = fs.readdirSync(root, { recursive: true }).map(String).filter((f) => fs.statSync(path.join(root, f)).isFile());
+    assert.ok(files.length > 5, `${folder}/ was read`);
+    for (const f of files) assert.doesNotMatch(fs.readFileSync(path.join(root, f), 'utf8'), CHANGES, `${folder}/${f}`);
+  }
 });
