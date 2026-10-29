@@ -1400,8 +1400,14 @@ function mailInfo(m, row, d) {
       r.notFound?.length ? [h('p', { class: 'fine', text: 'Could not be found (the reply has a blank for each):' }), h('ul', { class: 'facts' }, r.notFound.map((f) => h('li', { text: f })))] : null,
       r.notes?.length ? h('ul', { class: 'facts' }, r.notes.map((n) => h('li', { text: n }))) : null,
       r.sources?.length ? h('p', { class: 'fine' }, 'Read from: ', r.sources.map((s, i) => [i ? ', ' : '', h('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer', text: s.label })])) : null,
-      h('p', { class: 'fine', text: `Looked up ${r.readAt ? clock(r.readAt) : ''}${r.listReadAt ? `, from the eligible-models list read ${listTime(r.listReadAt)}` : ''}.` }),
+      lookedUp(r) ? h('p', { class: 'fine', text: lookedUp(r) }) : null,
     ]);
+}
+
+/** When the research was looked up, and when the list it was read from was read: only what is known ('' for neither). */
+function lookedUp(r) {
+  const parts = [r.readAt ? clock(r.readAt) : '', r.listReadAt ? `from the eligible-models list read ${listTime(r.listReadAt)}` : ''].filter(Boolean);
+  return parts.length ? `Looked up ${parts.join(', ')}.` : '';
 }
 
 /** The auction-order part of the details panel: the order, what they asked for, the car, and what has been charged and paid. */

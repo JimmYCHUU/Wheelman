@@ -2,6 +2,7 @@
 // store, the section registry and the list column's pure parts. Nothing here touches the DOM.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { t, listOf, COPY } from '../web/lib/copy.js';
 import { clock, dayLabel, listTime, ago, initials, hue, money, km, plural } from '../web/lib/format.js';
 import { newCount, totalNew } from '../web/lib/counts.js';
@@ -145,6 +146,14 @@ test("the old page's Import Query words hold for the Imports list's texts as wel
   const footer = t('footer.orders.title');
   assert.ok(!/every lead on its Imports list/.test(footer), footer);
   assert.match(footer, /Imports list are in Import Query/);
+});
+
+test("the old page's research line is built from what is known, never \"Looked up .\"", () => {
+  // web/app.js mailInfo: no pure function to call, so its source is read, as other tests here do.
+  const page = fs.readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
+  assert.ok(!page.includes("`Looked up ${r.readAt ? clock(r.readAt) : ''}"), 'the time is no longer an empty slot');
+  assert.ok(page.includes("lookedUp(r) ? h('p', { class: 'fine', text: lookedUp(r) }) : null"), 'no line when nothing is known');
+  assert.match(page, /function lookedUp\(r\) \{\n {2}const parts = \[.*\]\.filter\(Boolean\);\n {2}return parts\.length \? `Looked up \$\{parts\.join\(', '\)\}\.` : '';\n\}/);
 });
 
 test('a search looks at names, words and digits; in Auction it looks through every list', () => {
