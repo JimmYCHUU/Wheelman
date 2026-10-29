@@ -68,13 +68,13 @@ function factsIn(text) {
  * Our records' facts as markers. `sections` maps a section's name to its text. Names are F1, F2
  * ... in order of first appearance across the sections, and the same value always gets the same
  * name. Blanks and model years stay as they are. Returns { masked, markers }: the same sections
- * with markers, and [{ name, value }].
+ * with markers, and [{ name, value, section }]: the section each value was first found in.
  */
 export function maskTrusted(sections) {
   const markers = [];
   const byValue = new Map();
-  const nameFor = (value) => {
-    if (!byValue.has(value)) { byValue.set(value, `F${markers.length + 1}`); markers.push({ name: byValue.get(value), value }); }
+  const nameFor = (value, section) => {
+    if (!byValue.has(value)) { byValue.set(value, `F${markers.length + 1}`); markers.push({ name: byValue.get(value), value, section }); }
     return byValue.get(value);
   };
   const masked = {};
@@ -82,7 +82,7 @@ export function maskTrusted(sections) {
     masked[name] = String(text ?? '').replace(FACT, (lit) => {
       if (plain(lit)) return lit;
       const [value, tail] = split(lit);
-      return `{{${nameFor(value)}}}${tail}`;
+      return `{{${nameFor(value, name)}}}${tail}`;
     });
   }
   return { masked, markers };
@@ -93,15 +93,16 @@ export function maskTrusted(sections) {
  * value has one already is not written twice. A marker that is not one of ours, or is damaged,
  * becomes [CHECK?], a blank for a person, and then so does anything still shaped like a marker
  * (net: false leaves that last step out, to see whether it would be needed): no marker is ever
- * left in the text.
+ * left in the text. used: an array that is given each of our markers put back, in order.
  */
-export function restoreFacts(text, markers, { net = true } = {}) {
+export function restoreFacts(text, markers, { net = true, used = null } = {}) {
   const byName = new Map((markers || []).map((m) => [m.name, m.value]));
   const back = String(text ?? '').replace(MARKER_LIKE, (whole, sign = '') => {
     const marker = whole.slice(sign.length);
     const exact = marker.match(EXACT);
     if (!exact || !byName.has(exact[1])) return MADE_UP;
     const value = byName.get(exact[1]);
+    if (used) used.push(markers.find((m) => m.name === exact[1]));
     return sign && value.replace(/^AUD\s?/, '').startsWith(sign.trim()) ? value : `${sign}${value}`;
   });
   return net ? netFacts(back) : back;

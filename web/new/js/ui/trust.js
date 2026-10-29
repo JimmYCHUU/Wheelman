@@ -1,0 +1,21 @@
+// The trust line under the message box: one sentence that opens a list of the facts it counted,
+// each with where it came from. Colour never stands alone: the words say it too.
+import { html, useState } from './html.js';
+import { factLine } from '../model.js';
+
+export function Trust({ line, id }) {
+  const [open, setOpen] = useState(false);
+  const facts = line.facts || [];
+  const listId = 'trust-facts-' + id;
+  if (!facts.length) return html`<p class=${'check ' + line.tone}>${line.text}</p>`;
+  return html`<div class=${'trust ' + line.tone}>
+    <button type="button" class="trust-line" aria-expanded=${open} aria-controls=${listId} onClick=${() => setOpen(!open)}>
+      <span>${line.text}</span><span class="trust-more">${open ? 'Hide' : 'Show where from'}</span>
+    </button>
+    ${open ? html`<div id=${listId} role="region" aria-label="Where each fact came from">
+      <ul class="trust-facts">
+        ${facts.map((f, i) => html`<li key=${i} class=${f.ok === false ? 'bad' : ''}>${factLine(f)}</li>`)}
+      </ul>
+    </div>` : null}
+  </div>`;
+}

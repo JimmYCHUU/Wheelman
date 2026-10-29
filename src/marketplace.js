@@ -74,10 +74,14 @@ export async function sendReply(conversationId, text) {
       method: 'POST', redirect: 'error', credentials: 'omit',
       headers: { accept: 'application/json', 'content-type': 'application/json', 'user-agent': 'Wheelman/0.2' },
       body: JSON.stringify({ text: body, urls: [] }),
-      signal: AbortSignal.timeout(20000),
+      // 20 s, unless a test sets it shorter.
+      signal: AbortSignal.timeout(config.marketplace.sendTimeoutMs || 20000),
     });
   } catch (e) {
-    throw new MarketplaceError(`The content engine could not be reached (${e.name === 'TimeoutError' ? 'timed out' : e.message}), so the reply was not sent.`, 0);
+    // No answer in time: the engine may have taken the reply all the same, so it is never said to be
+    // not sent (mayHaveGone: the Send route answers it with a status of its own).
+    if (e.name === 'TimeoutError') throw Object.assign(new MarketplaceError('The Marketplace system did not answer in time, so the reply may have gone.', 0), { mayHaveGone: true });
+    throw new MarketplaceError(`The content engine could not be reached (${e.message}), so the reply was not sent.`, 0);
   }
   let json = {};
   try { json = await res.json(); } catch { json = {}; }

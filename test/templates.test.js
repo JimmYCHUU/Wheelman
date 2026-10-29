@@ -389,19 +389,23 @@ test("a promise that is the owner's own wording is not flagged as one nobody mad
   assert.ok(!d.checks.some((c) => /Make sure someone will do it/i.test(c.message)), JSON.stringify(d.checks));
 });
 
-// ---- enquiries in Auction have the same "Which message?" list ---------------------------------------
+// ---- enquiries in Imports keep the "Which message?" list they had in Auction -------------------------
 
-test('an enquiry in Auction has "Which message?" too: the messages that fit before an order, the best for where it has got to marked', async () => {
+test('an enquiry in Imports has "Which message?" too: the messages that fit before an order, the best for where it has got to marked', async () => {
   config.auction.fit = false;
   const HOUR = 3600e3, MIN = 60e3;
   db.upsertLead({ id: 9301, conversationId: null, firstName: 'Ana', lastName: 'Invented', phone: '0491 570 931', email: 'ana@example.com', source: 'Import', status: 'NEW', platform: 'IMPORTS', state: '',
     leadAt: now - HOUR, updatedAt: now - MIN, stocks: [], statusHistory: [],
     inquiries: [{ id: 93010, type: 'Import', subject: 'Import enquiry', text: 'Hi, could you import a Honda N-Box for me? 2019 or newer, under 40,000 km, budget about $16,000.', stockNo: '', at: now - HOUR, status: 'NEW', url: '', leadType: '', staffNotes: [] }] });
   let { item } = await get('/api/items/l:9301');
-  assert.equal(item.section, 'auction');
-  assert.deepEqual(item.templates.map((t) => t.id), ['first_estimate', 'lot_offer', 'lot_short', 'lots_coming', 'search_update', 'deposit_reminder']);
+  assert.equal(item.section, 'importquery');
+  assert.deepEqual(item.templates.map((t) => t.id).slice(0, 6), ['first_estimate', 'lot_offer', 'lot_short', 'lots_coming', 'search_update', 'deposit_reminder']);
+  const { template } = await import('../src/templates.js');
+  const imports = Object.keys(template('importquery-messages.md').sections);
+  assert.ok(item.templates.length > 6 && item.templates.slice(6).every((t) => imports.includes(t.id)), 'then the Imports templates');
   assert.deepEqual(item.templates.map((t) => t.label).slice(0, 2), ['Thanks, with estimate and deposit', 'Car found, full']);
   assert.equal(item.templates.find((t) => t.due)?.id, 'lot_offer', 'they said what they want: a car to offer');
+  assert.equal(item.templates.find((t) => t.best)?.id, 'lot_offer', 'and it is the best');
 
   // Picked: written from what the enquiry says. No order yet, so the deposit is a blank, and nothing says they have one.
   const out = await post('/api/items/l:9301/draft', { message: 'first_estimate' });

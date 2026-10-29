@@ -3,7 +3,7 @@
 
 import { config, missingSettings } from './config.js';
 import { syncAll, syncMarketplace } from './sync.js';
-import { listItems, itemFromKey, buildOrderItem, orderRows } from './items.js';
+import { listItems, itemFromKey, newestWaitingKeys, buildOrderItem, orderRows } from './items.js';
 import { prepareOrders } from './ordermessages.js';
 import { refreshFollowUps } from './followup.js';
 import { draftFor } from './drafter.js';
@@ -30,7 +30,6 @@ export const state = {
   lastDraftError: null, // { at, message }
   pausedUntil: 0,       // set when the AI daily limit is hit
   holdUntil: 0,         // set for a few minutes when every AI model was busy
-  mpHoldUntil: 0,       // Marketplace only: its own models are busy or used up; the dashboard carries on
   mpSyncing: false,
   mpSync: null,         // Marketplace: { at, ok, message, result }
   phone: null,          // the phone add-on's last report: { at, threads, stored, signedOut, found, hidden }
@@ -86,6 +85,10 @@ export function isHeld(itemKey, now = Date.now()) {
 }
 
 /** Failed tries for one customer message in the last hour. Older ones no longer count, so it is tried again later. */
+function attemptsEver(itemKey, anchorKey) {
+  return openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key = ? AND anchor_key = ? AND status = 'failed'").get(itemKey, anchorKey).n;
+}
+
 function attemptsFor(itemKey, anchorKey, now = Date.now()) {
   return openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key = ? AND anchor_key = ? AND status = 'failed' AND created_at >= ?").get(itemKey, anchorKey, now - 60 * 60 * 1000).n;
 }
@@ -121,14 +124,30 @@ export function runSync() {
   return dashboardCheck;
 }
 
+let marketplaceRead = null; // the Marketplace read that is under way, if any
+
 /**
  * Reads the Marketplace inbox from the content engine. It has its own state and its own errors,
  * so a problem here never stops the dashboard side, and it does not need the dashboard login.
+ * While a read is under way a caller is given the last result at once. With wait (before a
+ * Facebook send that follows one that failed or could not be told) the caller is given a read that
+ * began after it asked: it waits for the one under way, which may have begun before the engine
+ * recorded the reply, and then has a fresh one (or joins one another caller started after that).
  */
-export async function runMarketplaceSync() {
+export async function runMarketplaceSync({ wait = false } = {}) {
   if (!config.marketplace.enabled) return null;
-  if (state.mpSyncing) return state.mpSync;
+  if (state.mpSyncing) {
+    if (!wait || !marketplaceRead) return state.mpSync;
+    await marketplaceRead;
+    // A read under way now began after the one this caller waited for, so after it asked.
+    if (state.mpSyncing && marketplaceRead) return marketplaceRead;
+  }
   state.mpSyncing = true;
+  marketplaceRead = readMarketplace();
+  return marketplaceRead;
+}
+
+async function readMarketplace() {
   try {
     const result = await syncMarketplace();
     state.mpSync = { at: Date.now(), ok: true, message: `Checked Marketplace: ${result.chatsUpdated} chat(s) updated.`, result };
@@ -137,6 +156,7 @@ export async function runMarketplaceSync() {
     logLine('marketplace', e.message);
   } finally {
     state.mpSyncing = false;
+    marketplaceRead = null;
     setMeta('mp_sync_status', state.mpSync);
   }
   return state.mpSync;
@@ -210,24 +230,28 @@ export async function draftWaiting({ max = 25 } = {}) {
   state.draftAgain = false;
   let made = 0;
   try {
-    // Dashboard customers first. Marketplace chats follow, within their own allowance,
-    // so a busy Marketplace day cannot use up the requests the dashboard needs.
-    const queue = listItems({ states: ['awaiting'] });
-    // Then Auction: the import and auction enquiries listed there, and the orders whose customer
-    // has texted since we last wrote. (A message pasted from WhatsApp is answered as it is pasted.)
+    // Dashboard customers first. No Facebook chat is written here, wherever it is listed: a waiting
+    // buyer is written when the chat is opened, on either page (web/lib/onopen.js).
+    // The ten newest waiting conversations are written ahead however old their last message is
+    // (every other gate still applies); the usual queue follows without visiting them twice.
+    const queue = [];
+    const ahead = new Set();
+    for (const key of newestWaitingKeys(10)) {
+      const item = itemFromKey(key, { autoDraftMaxAgeHours: Infinity });
+      if (item && item.state === 'awaiting') { queue.push(item); ahead.add(key); }
+    }
+    queue.push(...listItems({ states: ['awaiting'] }).filter((i) => !ahead.has(i.itemKey)));
+    // Then Auction: the conversations listed there that are not orders, and the orders whose
+    // customer has texted since we last wrote. (A message pasted from WhatsApp is answered as it is
+    // pasted.)
     queue.push(...listItems({ source: 'auction', states: ['awaiting'] }));
     for (const r of orderRows()) if (r.dueKind === 'reply') { const order = itemFromKey(r.key); if (order?.autoDraft) queue.push(order); }
-    let marketplaceLeft = 0;
-    if (config.marketplace.enabled) {
-      marketplaceLeft = Math.max(0, config.marketplace.dailyDrafts - mpDraftsLastDay());
-      queue.push(...listItems({ source: 'marketplace', states: ['awaiting'] }));
-    }
-    // Email threads from Gmail come last; they are few, and each is researched on the website first.
-    if (config.mail.switchedOn) queue.push(...listItems({ source: 'importquery', states: ['awaiting'] }));
+    // Imports come last: the leads from the dashboard's Imports list, and the email threads from
+    // Gmail (listed only while the email intake is on; each is researched on the website first).
+    queue.push(...listItems({ source: 'importquery', states: ['awaiting'] }));
     for (const item of queue) {
       if (made >= max) break;
-      const chat = item.channel === 'marketplace';
-      if (chat && (marketplaceLeft <= 0 || Date.now() < state.mpHoldUntil)) continue;
+      if (item.channel === 'marketplace') continue; // a Facebook chat moved to another section is still written on open
       if (!item.autoDraft) continue;
       if (isHeld(item.itemKey)) continue; // the owner is typing a prompt for it: that write comes from the page
       if (isDismissed(item.itemKey, item.anchorKey)) continue;
@@ -236,6 +260,9 @@ export async function draftWaiting({ max = 25 } = {}) {
       if (existing && existing.status === 'failed') {
         if (Date.now() - existing.created_at < RETRY_FAILED_AFTER_MS) continue;
         if (attemptsFor(item.itemKey, item.anchorKey) >= MAX_ATTEMPTS) continue;
+        // Written ahead past the age gate: three failures in all, whenever they happened, end the retries.
+        // (Write it now on the page still works; it does not come through here.)
+        if (ahead.has(item.itemKey) && Date.now() - (item.lastInboundAt || 0) > config.autoDraftMaxAgeHours * 3600e3 && attemptsEver(item.itemKey, item.anchorKey) >= MAX_ATTEMPTS) continue;
       }
       if (usage().remaining <= 0) { state.pausedUntil = Date.now() + 30 * 60 * 1000; break; }
       // A failed write from the owner's prompt is tried again with the prompt, not without it.
@@ -245,19 +272,12 @@ export async function draftWaiting({ max = 25 } = {}) {
         // Only a problem that needs somebody (a rejected key, a fault) is put on the page.
         // Busy or used-up free models are tried again without bothering anyone.
         state.lastDraftError = d.temporary ? null : { at: Date.now(), message: d.error };
-        // Marketplace has its own models. When they are busy or used up, only Marketplace waits:
-        // the better models may still be answering for dashboard customers.
-        if (chat && d.temporary && providers({ marketplace: true }).length < providers().length) {
-          state.mpHoldUntil = Date.now() + (d.daily ? 60 * 60 * 1000 : HOLD_AFTER_BUSY_MS);
-          continue;
-        }
         if (d.daily) { state.pausedUntil = Date.now() + 60 * 60 * 1000; break; }
         if (d.temporary) { state.holdUntil = Date.now() + HOLD_AFTER_BUSY_MS; break; }
         if (/could not be reached|No AI key/i.test(d.error || '')) break;
       } else {
         state.lastDraftError = null;
         made++;
-        if (chat) marketplaceLeft--;
       }
     }
   } finally {
@@ -425,7 +445,8 @@ export function statusReport() {
       lastSync: config.marketplace.enabled ? state.mpSync || getMeta('mp_sync_status', null) : null,
       draftsLastDay: mpDraftsLastDay(),
       dailyDrafts: config.marketplace.dailyDrafts,
-      retryAt: Date.now() < state.mpHoldUntil ? state.mpHoldUntil : null,
+      // Nothing is written for Marketplace in the background, so nothing waits to start again.
+      retryAt: null,
     },
     phone: phoneStatus(),
     // Backups: whether they run by themselves, where they go, and the last one written.

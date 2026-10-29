@@ -97,6 +97,9 @@ export function mountTopBar(root, store, actions) {
   // The cog: which AI writes the suggestions.
   const ai = IconButton({ icon: 'settings', label: t('action.aiModel'), id: 'ai-model', onClick: () => actions.aiModel?.() });
   const find = h('div', { class: 'topbar-find' });
+  // The one way to the new page (it is at /new/; this page stays as it is).
+  const newPage = h('a', { class: 'link-btn topbar-new', href: '/new/', 'aria-label': t('top.newPage') },
+    h('span', { class: 't-long', text: t('top.newPage') }), h('span', { class: 't-short', 'aria-hidden': 'true', text: t('top.newPage.short') }));
 
   // Three parts on the page's own columns: the brand over the list, the sections over the
   // conversation, and Find a car with the buttons over the panel (views.css lays them out).
@@ -105,7 +108,7 @@ export function mountTopBar(root, store, actions) {
       h('span', { class: 'brand-mark' }, mark()),
       h('span', { class: 'brand-words' }, h('h1', { text: t('app.name') }), h('span', { class: 'brand-by', text: t('app.by') }))),
     h('nav', { class: 'topbar-nav', 'aria-label': 'Sections' }, tabs),
-    h('div', { class: 'topbar-tools' }, find, h('div', { class: 'topbar-actions' }, status, ai, sync)),
+    h('div', { class: 'topbar-tools' }, find, h('div', { class: 'topbar-actions' }, status, newPage, ai, sync)),
     panel);
   mountFindCar(find, { open: (stockNo) => actions.findCar?.(stockNo) });
 

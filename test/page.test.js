@@ -2,6 +2,7 @@
 // store, the section registry and the list column's pure parts. Nothing here touches the DOM.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { t, listOf, COPY } from '../web/lib/copy.js';
 import { clock, dayLabel, listTime, ago, initials, hue, money, km, plural } from '../web/lib/format.js';
 import { newCount, totalNew } from '../web/lib/counts.js';
@@ -127,6 +128,32 @@ test('the section registry names every section, its lists and where a key belong
     for (const tb of sec.tabs) if (tb) assert.equal(sec.empty[tb.id]?.length, 2, `${id} ${tb.id} empty state`);
     assert.ok(sec.search.placeholder.startsWith('Search '), id);
   }
+});
+
+test("the old page's Import Query words hold for the Imports list's texts as well as for emails", () => {
+  // Import Query holds the leads on the dashboard's Imports list (texts) and, while the email intake is on, the emails.
+  const iq = SECTIONS.importquery;
+  assert.ok(!/email/i.test(iq.unknown), 'a text lead with no name is not called an email: ' + iq.unknown);
+  assert.match(iq.search.placeholder, /number/);
+  assert.ok(!/email/i.test(iq.empty.all[0]), iq.empty.all[0]);
+  assert.match(iq.empty.all[1], /Imports list/);
+  assert.match(iq.empty.all[1], /while the email intake is on/i);
+  assert.ok(!/^Email/.test(iq.empty.waiting[1]), iq.empty.waiting[1]);
+  assert.match(iq.empty.search[1], /number/);
+  assert.match(iq.welcome.paste, /dashboard/);
+  assert.match(iq.welcome.paste, /Gmail/);
+  // Auction's footer no longer says the Imports list is read for it: those leads are in Import Query.
+  const footer = t('footer.orders.title');
+  assert.ok(!/every lead on its Imports list/.test(footer), footer);
+  assert.match(footer, /Imports list are in Import Query/);
+});
+
+test("the old page's research line is built from what is known, never \"Looked up .\"", () => {
+  // web/app.js mailInfo: no pure function to call, so its source is read, as other tests here do.
+  const page = fs.readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
+  assert.ok(!page.includes("`Looked up ${r.readAt ? clock(r.readAt) : ''}"), 'the time is no longer an empty slot');
+  assert.ok(page.includes("lookedUp(r) ? h('p', { class: 'fine', text: lookedUp(r) }) : null"), 'no line when nothing is known');
+  assert.match(page, /function lookedUp\(r\) \{\n {2}const parts = \[.*\]\.filter\(Boolean\);\n {2}return parts\.length \? `Looked up \$\{parts\.join\(', '\)\}\.` : '';\n\}/);
 });
 
 test('a search looks at names, words and digits; in Auction it looks through every list', () => {

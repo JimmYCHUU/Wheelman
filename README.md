@@ -157,6 +157,16 @@ can be compared on the Review page.
         └─────────────────────────────────────────────────────┘
 ```
 
+The ten newest waiting Dashboard conversations are written ahead whatever the age of the
+customer's last message, so the ones the reply run opens first are ready. Every other check still
+applies (no customer record, a photo with no words, a held Prompt, a recent failure, the daily
+and busy limits). A draft that fails is tried again, at most three times an hour; once the
+customer's message is more than a day old, three failures in all end the tries (asking for it on
+the page still works). Facebook Marketplace chats are not written in the background: each is
+written when it is opened, on both pages, however old the buyer's message. A photo with no words,
+a chat not marked as a buyer and an archived chat are not written on open. If the writing is
+refused, the box says why and offers Try again. Imports and Auction are written as before.
+
 Every suggestion is stored in SQLite with the checks it passed or failed and the model that
 wrote it. When the reply later appears in the dashboard conversation, Wheelman compares what
 was really sent with what it suggested.
@@ -701,11 +711,128 @@ What to know:
 
 ## The page
 
+### The new page
+
+A new page is being built beside this one, at http://127.0.0.1:3210/new/. The old page has a
+quiet link, **Try the new page**, next to the cog. All four sections open on the new page, each
+with its own lists: Dashboard has Needs reply, Follow-ups and All, and Auction has To do, In
+progress and Finished. Only Marketplace can be switched off, and then it has no tab. In each, the
+open conversation has the message box with its fill-in blanks, **Instead**, the "Tell Wheelman
+what to say…" line, and one main button for the channel: **Copy reply** for a text, **Copy for
+Gmail** for an email, **Copy for WhatsApp** for an auction order, and **Send on Facebook** for a
+Marketplace buyer. **Put back in Needs reply** is on Dashboard. The old page stays at the normal
+address until the switch-over. The new page is built from `prototype/`.
+
+**Imports** lists the leads on the dashboard's Imports list, and the import emails you sent from
+Gmail while the email intake is on. It is always there, even with the intake off; then it lists
+no emails. Each text enquiry has the same **Which message?** choices it had in Auction before
+the order exists, and the import ones. An email has its own three. Under the box of a ready email
+reply, **What Wheelman looked up** (closed until you open it) says what was found for the model,
+what could not be, and where it was read, and the reply is copied with **Copy for Gmail**. A
+thread with a message Gmail had folded reads **Folded in Gmail** in the list. **More messages**,
+after the **Instead** line, brings back the rest of a section's messages whenever more than three
+fit.
+
+**Enquiry type** is the first choice in a conversation's **More** menu: **Stock enquiry**,
+**Import enquiry** or **Not a customer**. A text read as an import enquiry says why in a line
+above the box, but it stays in Dashboard until you choose **Import enquiry**, which moves it to
+Imports. **Stock enquiry** moves it back (a Facebook chat goes back to Marketplace), and **Not a
+customer** dismisses it. The page follows the conversation, and for nine seconds a toast offers
+**Undo**, which puts the type and the section back. A reply you had not touched is written again
+for the new type; words you typed are kept as they are. An auction order has no type to choose,
+and nothing is moved into Marketplace or, by hand, into Auction, except an order customer's own
+texts, from the order's **Their texts**.
+
+**Auction** holds auction orders. The open order has the **Which message?** choices for its
+stage (a reply to what they wrote comes first when they have written and a reply is due), and
+**Paste what they wrote**, which opens a box with **We sent this** and **They wrote this**: a
+pasted message of theirs is answered, and **Remove** takes a pasted one out again. **Copy for
+WhatsApp** copies the message, and the toast offers **Put back in To do**. The panel's **Order**
+tab shows the stage, what they asked for, the auction car, what is charged and paid, and **Their
+texts**, with the button that answers those texts in Dashboard (and back). Nothing is learned from
+an order, so Remember is never offered there.
+
+**Send on Facebook** is the only send on the new page, and it goes only when you press it. It
+reads **Sending…**, then the box says **Sent on Facebook** at the time it went. If it fails, the
+box says why and offers **Try again**. Wheelman does not send words that are already in the chat as
+our reply since the buyer last wrote, from any page. When Marketplace does not answer in time,
+Wheelman remembers, while it is running, that the reply may have gone. Before that chat is sent to
+again, from this page after a reload, from the old page or from another computer, Wheelman reads
+Marketplace afresh and looks at the chat. If the reply is there, nothing more is sent and Wheelman
+says it has gone already. While it is running, it does not send those words to that chat again,
+even after the buyer has written back, and the box is cleared only when the words you sent are the
+ones that went. If the engine took the reply but did not deliver it, the box says it did not reach
+the buyer, shows that reply with **Copy**, and offers **Send it again**, and the row reads
+**Not delivered**. When the chat is off screen, a failure appears as a message with **Open**, and
+the row reads **Not sent** or **Not confirmed**. A sent reply cannot be taken back. Ctrl+Enter
+never sends: in a Facebook chat it does nothing while the main button is **Send on Facebook**, and
+in the other sections it copies the reply.
+
+Beside the open conversation is the **deal panel** (a column on a wide screen, a drawer on a
+medium one, a sheet from the bottom on a phone; it remembers whether you left it open). Its
+**Car** tab shows the car the customer asked about: photos, auction photos, videos and documents,
+each with **Copy link** and **Add to reply**, which puts the link into the message box where the
+cursor is. Photos and videos open large in a viewer you can move through with the arrow keys.
+A link that is for you only, such as a supplier's, can be opened but not copied or added to a
+reply. Its **Customer** tab shows **How far they have got**: five steps from enquiry to sold,
+with where the record says they are. It also shows the facts that **Shaped the reply, never
+stated**, and **What Wheelman used** lists the model, the provider and what was read to write the
+suggestion. A car found by search opens in the panel as **Another car**, with a button back to
+the customer.
+
+In the message box, the parts Wheelman's code builds are shown in the reply with a label and a
+**Remove** button: **Price reply**, **Invitation to see the car**, **First-reply details**,
+**Links you asked for**, **Sign-off** and **Auction offer**. A removed block can be brought back
+with **Put back**, and what you typed beside a block is copied as shown. Under the reply, the
+**trust line** says how many facts were checked. It is green only when nothing is wrong; if a
+figure or link cannot be traced to our records, it says so in red and names how many facts are
+not in your records. Once the text differs from what Wheelman wrote, whether you typed in it or
+removed a block, it reads **Changed since it was checked.** Open it to see each fact and where it
+came from: the stock record, our earlier messages, business facts, the website, what the
+customer said, your instruction or your wording file.
+
+After you ask Wheelman to rewrite with **Tell Wheelman what to say…**, it offers **Remember
+for** that kind of reply. Choosing it keeps your instruction as a lesson for later texts or
+emails of that kind, never for Marketplace chats, and **Undo** switches the lesson off again. If
+the same instruction was already remembered for that kind of reply, it says **Already
+remembered** and offers no Undo, so the lesson you had stays on. Remember is not offered on a
+follow-up, in the Auction section or on a lead from the dashboard's Imports list while it is in
+Imports, because those teach nothing, and it is refused for a message from the auction's wording
+file. **Just this once** keeps nothing. **What Wheelman used** now also lists the lessons it
+followed and the rules that applied. A list of all lessons comes in a later update.
+
+On **Needs reply**, the top of the list says how many are waiting, with **Start replying**. The
+**reply run** takes the ten newest waiting, the ones already written ahead, and opens the oldest
+first; one you copied already is among the ten but is not opened again. **Copy** copies the reply,
+marks the customer done and opens the next one. **Skip** moves on without marking anyone done,
+**Dismiss** moves on too, and **End run** stops. When it ends, a line says what happened. It begins
+**All answered:** only when every customer was copied or answered somewhere else, for example
+**All answered: 5 copied, 1 answered elsewhere.**, and otherwise **Run finished:**, for example
+**Run finished: 4 copied, 2 skipped, 1 dismissed.** When more are waiting beyond the run it says
+how many and offers **Start again**, which takes the ten newest still waiting, skipped ones
+included, and says so after a run that skipped anyone. While the ten newest are all ones you
+copied, the list still says how many are waiting, but **Start replying** and **Start again** wait
+until those replies show on the dashboard.
+Nothing is sent by the run.
+
+A customer who was answered somewhere else leaves **Needs reply** by itself and says who answered
+on **All**: **Answered on the phone**, **Answered by** the sender's name **on the dashboard**,
+**Answered on Facebook** for a person's reply in a Marketplace chat, **Answered by an
+auto-reply** or **Answered with Wheelman's suggestion**, with the time. If you have the
+conversation open when that happens, it says **No reply needed**, and **Write a reply anyway**
+brings the message box back. Text you were typing when someone else answered stays, with **Copy
+reply** as a plain button; in a run **Next** is the main one. A run passes over such customers
+when it reaches them; one no longer on the loaded page is opened, and says whether it still waits.
+
+The **search box** in the top bar looks across customers, cars and the words in messages, in
+every section. A result opens in its own section on the new page.
+
 ### The top bar
 
 - **The sections** are tabs in the middle of the top bar: **Dashboard** (leads and text messages),
   **Marketplace** (Facebook Marketplace chats), **Auction** (auction orders) and **Import Query**
-  (import emails). A section that is switched off has no tab. The number beside a tab counts
+  (the dashboard's Imports list and import emails; **Imports** on the new page). Only Marketplace
+  can be switched off, and then it has no tab. The number beside a tab counts
   conversations with new messages you have not looked at.
 - **Find a car** finds any car in the stock list by its stock number or by words of its name
   ("1033", "hiace", "toyota noah"). Cars on offer come first, sold ones last. Pick one with the
@@ -876,7 +1003,8 @@ The suggestion waits in the message box, marked **not sent**. The box is an edit
   the text differs from the suggestion.
 - **Copy reply** copies what is in the box. `Ctrl + Enter` also copies, and so does selecting
   the whole text and pressing `Ctrl + C`. When you had changed the text, Wheelman learns from
-  the change.
+  the change. Copied unchanged, with no blank left, it counts as **Good reply** (see
+  [How Wheelman learns](#how-wheelman-learns)).
 - **Rewrite** takes an instruction, for example `offer $27,500` or `make it shorter`. It
   changes this reply only, and replaces what is in the box. A prompt you typed while a
   suggestion landed by itself is waiting here, ready to write again.
@@ -976,9 +1104,9 @@ setting; the photo viewer is dark in both.
 
 ## The Marketplace section
 
-Wheelman reads the Facebook Marketplace chats from the content engine and suggests a reply for
-every chat where the buyer wrote last. It works like the Dashboard section, with these
-differences:
+Wheelman reads the Facebook Marketplace chats from the content engine and lists every chat where
+the buyer wrote last. A chat is written when it is opened, on either page, and never in the
+background. It works like the Dashboard section, with these differences:
 
 - **The shape the team sends.** Learned from the replies sent on Marketplace over 18 to 20 Oct
   2026: the content engine's own first reply to every buyer (written for it by an AI, with the
@@ -1042,16 +1170,18 @@ differences:
 - **The small AI model.** Marketplace chats are written by `gemini-3.5-flash-lite` and the
   models after it in the list. The three better models are never asked, so their small daily
   allowance is kept for dashboard customers. When Marketplace's models are busy or used up,
-  only Marketplace waits.
+  only Marketplace waits, and the chat says so with **Try again**. A chat written on open counts
+  as an asked-for write, like **Write it now**, and the usual budget and the Used so far panel
+  apply.
 
-Dashboard customers are drafted first, and Marketplace has its own allowance so it cannot use
-up the day's free AI requests.
+Marketplace uses only the small models, so it cannot use up the day's free AI requests that
+Dashboard customers need.
 
 | Setting in `.env` | What it does | Default |
 |---|---|---|
 | `MARKETPLACE_URL` | Where the inbox is read from | Empty: the section stays off |
 | `MARKETPLACE_ENABLED` | Set to `0` to switch the section off | `1` |
-| `MARKETPLACE_DAILY_DRAFTS` | Most Marketplace suggestions in any 24 hours | `60` |
+| `MARKETPLACE_DAILY_DRAFTS` | Kept for now; it no longer limits anything, because Marketplace chats are written when opened | `60` |
 | `MARKETPLACE_MODEL` | Marketplace chats use this model and the ones after it in the list. Leave empty to let Marketplace use every model | `gemini-3.5-flash-lite` |
 
 If the content engine cannot be reached, the Dashboard section keeps working and the
@@ -1064,25 +1194,26 @@ dashboard, which moves through stages. Most of them are written to on WhatsApp, 
 cannot read. This section lists every order, says where it has got to, and has the next
 message to that customer written and waiting.
 
-It lists the auction customers who have no order yet too: every lead on the dashboard's
-Imports list, and any conversation you moved here. Their rows say where the enquiry has got to
-(Enquiry: asking for details · ready to search · car offered · compliance only), and they are
-answered the import way: what they are looking for is asked first, then the Japan auctions are
-searched and the best car is offered. They have the same **Which message?** list as an order,
-with the messages that fit before there is one: Thanks, with estimate and deposit · Car found,
-full or short · Cars coming up · Still searching · Deposit reminder. The one that suits where the
-enquiry has got to is marked "due now"; the first choice is the reply to what they wrote. Each is
-written from your wording with what the enquiry says (the car, years, kilometres, budget), the
-deposit amount a blank since there is no order yet, and fitted to the customer as an order's is.
-**One row per customer:** once a customer has an order
-under way, the order stands for them and the conversation it reads (the one on the order's
-number, else its lead's) is no longer a row of its own. A text or website enquiry from them
-since the order opened (within the last week) puts the order in To do as a reply to what they
-wrote, written for a text and pasted into the dashboard; our text back answers it, and Dismiss
-sets aside everything that was waiting. Anything else from that customer, such as a new lead on
-the same number, is a row of its own in Auction, never lost. The order's panel has **Their
-texts**, with **Answer their texts in Dashboard** (and back) when you would rather answer that
-conversation as an ordinary one.
+A conversation you moved here from the old page's **Move** menu is listed too, as an auction
+customer who has no order yet. Its row says where the enquiry has got to (Enquiry: asking for
+details · ready to search · car offered · compliance only), and it is answered the import way:
+what they are looking for is asked first, then the Japan auctions are searched and the best car
+is offered. It has the same **Which message?** list as an order, with the messages that fit
+before there is one: Thanks, with estimate and deposit · Car found, full or short · Cars coming
+up · Still searching · Deposit reminder. The one that suits where the enquiry has got to is
+marked "due now"; the first choice is the reply to what they wrote. Each is written from your
+wording with what the enquiry says (the car, years, kilometres, budget), the deposit amount a
+blank since there is no order yet, and fitted to the customer as an order's is. The leads on the
+dashboard's Imports list are not here: they are listed in Import Query (Imports on the new page),
+with these same messages. **One row per customer:** once a customer has an order under way, the
+order stands for them and the conversation it reads (the one on the order's number, else its
+lead's) is no longer a row of its own. A text or website enquiry from them since the order
+opened (within the last week) puts the order in To do as a reply to what they wrote, written for
+a text and pasted into the dashboard; our text back answers it, and Dismiss sets aside everything
+that was waiting. Anything else from that customer, such as a new lead on the same number, is a
+row of its own in Auction, never lost. The order's panel has **Their texts**, with **Answer their
+texts in Dashboard** (and back) when you would rather answer that conversation as an ordinary
+one.
 
 ### The three lists
 
@@ -1205,9 +1336,9 @@ that knows their order. This is the one place the section asks an AI, on the bet
 Customers also ask about importing by email to the business mailbox: whether a model can be
 imported, what it would land for, how the process works. The mailbox holds much else besides, so
 Wheelman does not read it. Instead you hand each import enquiry over yourself: open the email in
-Gmail, press **Send to Wheelman**, and the whole thread appears in the Import Query section in
-the usual conversation, the customer on the left and the team's replies on the right. Nothing in
-Gmail changes.
+Gmail, press **Send to Wheelman**, and the whole thread appears in the Import Query section (it
+also lists the leads on the dashboard's Imports list) in the usual conversation, the customer on
+the left and the team's replies on the right. Nothing in Gmail changes.
 
 - **One press per thread.** The button reads the subject and every message that is open on the
   page: who sent it, when, and its text, with the quoted history under a reply left out. A
@@ -1272,7 +1403,7 @@ the small one Marketplace uses.
 
 | Setting in `.env` | What it does | Default |
 |---|---|---|
-| `MAIL_INTAKE` | Set to `0` to switch the section and the intake off | `1` |
+| `MAIL_INTAKE` | Set to `0` to switch the email intake off: Import Query then lists no emails but still lists the dashboard's Imports list | `1` |
 | `MAIL_OUR_DOMAINS` | The domains whose senders are our side of a thread, comma-separated | `carbarn.com.au` |
 | `MAIL_AUTO_DRAFT_MAX_AGE_DAYS` | An email older than this is listed but not written for unasked | `7` |
 | `SITE_API_URL` | Where the eligible-models list is read from | The website |
@@ -1410,8 +1541,12 @@ From dashboard leads and conversations, the website and the dashboard's records,
 import email threads sent from Gmail, each kind kept to itself (see the Import Query section).
 Never from Marketplace, never from the phone, and not from the Auction section: its messages
 come from a wording file, and what a customer wrote on WhatsApp is pasted in, not read from
-the dashboard. Never from a follow-up either: its wording is yours in
-`voice/dashboard-messages.md`, and copying one teaches nothing.
+the dashboard. Nor from a lead on the dashboard's Imports list while it is in Imports: those
+are answered from the same wording and teach nothing. Nor from a message of the auction's
+wording file, wherever it is used (a conversation you moved into Imports included): copied,
+marked **Good reply** or **Could be better**, it teaches nothing, and Remember is refused for it.
+Never from a follow-up either: its wording is yours in `voice/dashboard-messages.md`, and copying
+one teaches nothing.
 
 Wheelman learns two different things from two different places. **What to say** comes from
 what the team really sends. **How to say it** comes from the two voices.
@@ -1436,8 +1571,27 @@ what the team really sends. **How to say it** comes from the two voices.
   yourself counts the same way. When the reply later appears in the dashboard conversation,
   what was really sent replaces what was copied. Typing alone teaches nothing: a half-written
   change that was never copied, approved or sent is not learned from.
+- **Copying as written.** Copying a reply with no blank left and no change counts as approval,
+  the same as **Good reply**, on either page. Spacing, the sign-off and our address block at the
+  end are not counted as changes, so removing the **Sign-off** block still counts as no change,
+  and so does removing the **First-reply details** when no other block sits above them. Removing
+  any other block, such as the **Price reply**, is a change, and Wheelman learns from it as from
+  an edit. A copy is not approval when a check failed (**Copy anyway**), when the reply is your
+  template or standard wording used word for word, when it is one of the standard replies the
+  team sends to everyone, or once you marked it **Could be better**. **Could be better**, or
+  taking the rating away, takes a copy's approval back as it does a **Good reply**.
+- **Remember.** On the new page, a rewrite you ask for with **Tell Wheelman what to say…** can
+  be remembered for that kind of reply in that channel. The lesson is put into every later
+  request of that kind, the same conversation included. Remember lessons apply to texts and
+  emails, never to Marketplace chats. Each time a lesson is used it is counted, and it can be
+  switched off, after which it is never used. Remembering the same instruction again keeps the
+  one lesson. **Just this once** stores nothing. Marketplace, the phone-only list, auction
+  orders, follow-ups, the Auction section and the leads from the dashboard's Imports list teach
+  nothing, so Remember is not offered there; for a message from the auction's wording file it is
+  refused.
 - **Only what you changed.** A suggestion used word for word is Wheelman's own text, so it
-  is not kept as an example of how the team writes.
+  is not kept as an example of how the team writes. Copying it unchanged counts as approval
+  instead (see **Copying as written** above).
 - **Only the reply to that message.** A sent reply counts for a suggestion only if it directly
   follows the message the suggestion answered. If the customer wrote again first, the
   suggestion is marked as overtaken and nothing is learned. One lesson per customer message.
@@ -1500,7 +1654,7 @@ often you asked for a rewrite. Counts only; no customer text.
 | "Below" | A reply never points at the address block. It answers in the sentence itself |
 | The message box | An editor: change the text or clear it, and it is saved as you type. A changed reply teaches Wheelman when it is copied or approved |
 | AI models | The better models are kept for dashboard customers. Marketplace chats use the small one |
-| Marketplace | A suggestion for every chat where the buyer wrote last; warm and selling (up to about 90 words, opening with a thank-you, the car's strongest points and what is included, an easy next step), with the car's page link and the booking link when asked, and the invitation once in a chat |
+| Marketplace | A suggestion, written when the chat is opened, for every chat where the buyer wrote last; warm and selling (up to about 90 words, opening with a thank-you, the car's strongest points and what is included, an easy next step), with the car's page link and the booking link when asked, and the invitation once in a chat |
 | Your Prompt | Comes first in every section: it decides the length, tone, layout and greeting; only the facts still bind. No price reply or invitation is added under a prompted reply unless the Prompt asks for the booking link |
 | The deposit | Proposed only once the price is agreed: booked or seen, asked to hold it, or accepted our figure. Never while the customer is making an offer, says it is too dear, or is leaving |
 | Offers | Thanked and left to a person (`[PRICE?]`), never turned down or called too low; the price reply goes once |
@@ -1711,6 +1865,7 @@ claim outside what the records allow; and the block or the proof that was due.
 | `npm run fetch-website` | Saves the website's policy pages. `-- --all` for every guide, blog post and import page |
 | `npm run import-history` | Loads the saved history in `data/raw` into the database |
 | `npm test` | Runs the automated checks |
+| `node test/support/preview.js` | Runs Wheelman on invented data at http://127.0.0.1:3211/new/ to look at the new page. Nothing real is read or sent |
 
 ## Where your files live
 
@@ -1747,7 +1902,7 @@ computer. Git never sees any of it.
 | "A suggestion could not be written" in red at the top of the list | An AI key was rejected, or something in Wheelman failed | `npm run check-model`, and look at `data\wheelman.log` |
 | "A suggestion could not be written. No AI model could answer just now" in one conversation | Every free model was busy or used up at that moment | Nothing. It is tried again in a few minutes, or press **Try again** |
 | "Suggestions are paused" | Every free model has used up its allowance for the day | It resumes by itself at the time shown |
-| "The AI models used for Marketplace have used up their allowance for today" in a chat | The small model's day is used up | Nothing. Dashboard suggestions carry on, and Marketplace resumes at the time shown. Press **Try again** later, or set `MARKETPLACE_MODEL=` (empty) to let Marketplace use every model |
+| "The AI models used for Marketplace have used up their allowance for today" in a chat | The small model's day is used up | Nothing. Dashboard suggestions carry on, and Marketplace resumes at the time shown. Open the chat or press **Try again** later, or set `MARKETPLACE_MODEL=` (empty) to let Marketplace use every model |
 | Something went wrong and the black window has scrolled past it | | Open `data\wheelman.log`: each problem is noted there with its time |
 | "The live auction could not be read, so no car was looked for" | The website's auction feed did not answer | Press **Rewrite** to try again. The reply names no car in the meantime |
 | An import customer gets the asking reply although they told us what they want | What they want was said on the phone, not in writing | Press **Rewrite** and type it, for example "2015 or newer, under 100,000 km, budget 12k", or paste a live-auction link |
@@ -1801,7 +1956,7 @@ and how "far away" is recognised, and the Marketplace section: three GET address
 send address, which only the Send button reaches, redirects refused, identifiers and contact
 details not stored, a failed reply not counting as a reply, the auto-reply's price not
 trusted, the booking link and the car's page link in the reply itself, nothing learned from a
-copied or sent Marketplace suggestion, its own allowance, the engine being down, dismiss with
+copied or sent Marketplace suggestion, writing on open, the engine being down, dismiss with
 undo, the unread counts, and Send: the text in the box to the engine's reply address and
 nothing else, shown on its way and the chat out of Waiting, a blank refused, a refused or
 unreachable engine changing nothing, an offline phone meaning queued, and a queued auto-reply
@@ -1859,7 +2014,7 @@ forms, dates, and bodies with the quoted history cut; a thread taken only from t
 its own route, with its own header; limits, time clamps and which side a sender is on; a thread
 sent again adding only what is new, a folded message filled in, and threads without Gmail's ids
 still told apart; a thread as an item (waiting, answered, an "unsubscribe" footer not an
-opt-out); the section's lists, counts and search, and the section off with the intake;
+opt-out); the section's lists, counts and search, and the emails off with the intake;
 dismiss, seen and put back; and nothing from a thread reaching what Wheelman has learned.
 
 ## Project layout
@@ -1928,6 +2083,7 @@ wheelman/
 │   ├── log.js                         what went wrong, written to data/wheelman.log
 │   ├── checks.js · drafter.js         figures and links traced, blanks, greeting once a day
 │   ├── firstreply.js · promises.js    the standard first reply; promises, days and places
+│   ├── parts.js                       finds the blocks Wheelman's code built in a finished reply
 │   ├── worker.js                      the loop: read, note what was sent, draft what is waiting
 │   ├── server.js                      the local page's data, on 127.0.0.1 only; the team's sign-in
 │   ├── share.js                       sharing with the team: the Cloudflare tunnel, the sign-in cookie
@@ -1940,7 +2096,16 @@ wheelman/
 │   │                                  (the Car tab) · Viewer (photos and videos large) · FindCar
 │   ├── lib/                           blank.js: what a blank is, shared with the server's checks;
 │   │                                  insert.js: where Add to reply puts a link; copy.js: every word
-│   └── assets/                        brand.svg: the mark, placed with <use>
+│   ├── assets/                        brand.svg: the mark, placed with <use>
+│   └── new/                           the new page, at /new/ (Dashboard texts first)
+│       ├── index.html                 the one page
+│       ├── vendor/                    Preact and htm, one file, the only code from elsewhere
+│       ├── css/                       tokens, base, components, views, panel, viewer, search, in layers
+│       └── js/                        main · model · route · hashsync · store · panelstore · searchstore
+│                                      · listview · insertlink · autosave · api · segments (the reply as
+│                                      text and blocks) · editorpieces · lessons · remember, and ui/ (the
+│                                      pieces on screen: top bar, search, list, conversation, message box,
+│                                      trust line, panel with its tabs, viewer)
 ├── prototype/                         the redesign as a clickable demo on invented data: the design
 │                                      the new page is built from. Open prototype.cmd opens it
 ├── scripts/                           check-login · check-model · replay · report · measure
@@ -2049,6 +2214,46 @@ keeping its name and its history. The engine comes first, behind today's page. A
 follows beside the old one, section by section, and the old page goes only after Carbarn says
 yes. `prototype/` is the clickable design on invented data. `npm run measure` counts what each
 stage is judged on.
+
+26 October 2026, later: the new page for Dashboard texts is at `/new/`, built from the prototype.
+Checked on the automated tests and in a browser on invented data. Not yet used over a working day.
+
+27 October 2026: the new page gained the deal panel (the Car and Customer tabs, the viewer, What
+Wheelman used) and one search across customers, cars and message words in every section. The
+server gained a search route and a stage on each conversation; nothing else about it changed.
+Checked on the automated tests and in a browser on invented data. Marketplace, Imports and Auction
+still open on the old page.
+
+27 October 2026, later: the new page's message box shows Wheelman's blocks with Remove and Put
+back, a trust line with where each fact came from, and Remember after a rewrite. On the server,
+copying a draft unchanged counts as approval (not past a failed check, nor for your own wording
+used word for word), Remember lessons go into texts and emails but never Marketplace chats,
+lessons can be switched off and are counted when used, and a route lists them. Checked on the
+automated tests and in a browser on invented data. The page that lists all lessons is not built
+yet.
+
+27 October 2026, later still: the new page gained the reply run, answered elsewhere, and
+suggestions written ahead for the ten newest waiting Dashboard customers whatever the age of their
+message. The server gained an `answered` field on rows and conversations; nothing else about it
+changed, and Marketplace drafting is as before. Checked on the automated tests and in a browser on
+invented data. Not yet used over a working day.
+
+28 October 2026: every section opens on the new page, each with its own lists, and Facebook buyers
+are answered with Send on Facebook, which checks the chat before a reply that may have gone is sent
+again, and says plainly when a reply did not reach the buyer. Facebook chats are now written when
+they are opened, on both pages, and not in the background. The server answers success once the
+engine has the reply, treats an engine timeout as a send that may have gone, and lets a check
+cover Marketplace alone. Checked on the automated tests and in a browser on invented data. Not
+yet used over a working day.
+
+28 October 2026, later: the new page gained Imports (the dashboard's Imports list and the import
+emails, with Copy for Gmail, the research notes and More messages), the enquiry type in a
+conversation's More menu with Undo, and auction orders (the message picker, the paste box, Remove,
+Put back in To do and Copy for WhatsApp). The dashboard's Imports-list leads are now listed in
+Import Query, not Auction, on both pages, and Import Query is always there, listing emails only
+while the email intake is on. Send on Facebook refuses the same words twice, from any page, and a
+Facebook chat answered on Facebook says so. Checked on the automated tests and in a browser on
+invented data. Not yet used over a working day.
 
 ### Open questions for Carbarn
 
