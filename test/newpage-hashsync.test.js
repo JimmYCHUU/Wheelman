@@ -132,3 +132,23 @@ test('a move the store asks for becomes a new address once', () => {
   assert.deepEqual(storeStep(parseRoute('#/importquery/waiting/c%3A7'), s), { section: 'importquery', chip: 'waiting', key: 'c:7' });
   assert.equal(addressAfter(S('waiting', 'c:7'), '#/importquery/waiting/c%3A7', s), null);
 });
+
+test('on a Playbook address the store is left where it was and nothing is written over the address', async () => {
+  const { playbookRoute } = await import('../web/new/js/playbookroute.js');
+  // The store opened a conversation by itself (the boot's first row on a wide window, a poll, the
+  // first follow-up): the Playbook's address is never written over with it.
+  assert.equal(addressAfter(S('waiting', null), '#/playbook/lessons', S('waiting', 'c:1')), null);
+  assert.equal(addressAfter(null, '#/playbook/lessons', S('waiting', 'c:1')), null, 'the boot');
+  assert.equal(addressAfter(null, '#/playbook/facts', S('waiting', null)), null, 'the boot on a phone');
+  // A reply run's next step does not write over it either.
+  const run = { key: 'c:2' };
+  assert.equal(addressAfter(S('waiting', 'c:1'), '#/playbook/lessons', { ...S('waiting', 'c:2'), run }), null);
+  // The address names the Playbook's tab and the fact on it, never a conversation.
+  assert.deepEqual(playbookRoute('#/playbook/facts/Tinted%20windows'), { tab: 'facts', id: 'Tinted windows' });
+  assert.equal(playbookRoute('#/dashboard/waiting'), null);
+  assert.equal(playbookRoute('#/dashboard/waiting/c%3A1'), null);
+  assert.deepEqual(playbookRoute('#/playbook/nonsense'), { tab: 'lessons', id: null });
+  // Back from it: the conversation the store kept open is on its address already, so the store stays.
+  assert.equal(storeStep(parseRoute('#/dashboard/waiting/c%3A1'), S('waiting', 'c:1')), null);
+  assert.equal(addressAfter(S('waiting', 'c:1'), '#/dashboard/waiting/c%3A1', S('waiting', 'c:1')), null);
+});

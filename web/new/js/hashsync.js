@@ -8,6 +8,7 @@
 import { parseRoute, hashFor } from './route.js';
 import { followUpOf } from './store.js';
 import { sectionOff } from './sections.js';
+import { playbookRoute } from './playbookroute.js';
 
 /** In place of an address on a section the server says is switched off: the Dashboard's. null for any other. */
 export const offAddress = (route, sections) => (sectionOff(route.section, sections) ? hashFor({ section: 'dashboard', chip: 'waiting' }) : null);
@@ -108,8 +109,12 @@ export function sheetOnPop({ narrow, entry }) {
  * of the address on screen, even one the store already had open (on a phone showing the list), so
  * one Back leaves the run. Between steps nothing is written, so an address the person has just
  * reached stays theirs.
+ *
+ * The Playbook's address (#/playbook/…) is never written over: the conversation stays open in the
+ * store behind it, and Back returns to it.
  */
 export function addressAfter(prev, hash, s) {
+  if (playbookRoute(hash)) return null;
   const step = !!(s.run && s.key && s.key === s.run.key) && (!prev || prev.key !== s.key || prev.run !== s.run);
   if (!step && prev && s.key === prev.key) return null;
   const at = parseRoute(hash);

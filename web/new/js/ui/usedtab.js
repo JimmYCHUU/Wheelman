@@ -3,6 +3,7 @@
 import { html } from './html.js';
 import { plural } from '../../../lib/format.js';
 import { writtenBy, lessonLines, ruleWords } from '../model.js';
+import { playbookHash } from '../playbookroute.js';
 
 /** item: the open conversation. now: the time, for the day a lesson was taught. */
 export function UsedTab({ item, now = Date.now() }) {
@@ -18,6 +19,7 @@ export function UsedTab({ item, now = Date.now() }) {
     </section>
     ${lessons.length ? html`<section class="car-sec"><h4>Lessons it followed</h4>
       <ul class="included">${lessons.map((l, i) => html`<li key=${i}>${l.text}${l.from ? html` <span class="fine">${l.from}</span>` : null}</li>`)}</ul>
+      <a class="fine" href=${playbookHash('lessons')}>See every lesson in the Playbook</a>
     </section>` : null}
     ${rules.length ? html`<section class="car-sec"><h4>Rules that fired</h4>
       <ul class="included">${rules.map((r, i) => html`<li key=${i}>${r}</li>`)}</ul>

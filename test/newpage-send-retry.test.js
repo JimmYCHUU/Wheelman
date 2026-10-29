@@ -249,8 +249,9 @@ test('a failure while the phone shows the list gives the toast with Open, and th
   takes(a);
   assert.equal(await a.store.actions.send(), 'sent');
   assert.equal(rowNow().reason, '');
-  // The page says what is on screen: from 900 px the open chat is; on a phone only when the address names it.
-  assert.match(source('../web/new/js/main.js'), /shown: \(key\) => conversationOnScreen\(\{ narrow: NARROW\.matches, storeKey: key, routeKey: parseRoute\(location\.hash\)\.key \}\)/);
+  // The page says what is on screen: from 900 px the open chat is; on a phone only when the address
+  // names it; behind the Playbook, never.
+  assert.match(source('../web/new/js/main.js'), /shown: \(key\) => !playbookRoute\(location\.hash\) && conversationOnScreen\(\{ narrow: NARROW\.matches, storeKey: key, routeKey: parseRoute\(location\.hash\)\.key \}\)/);
   // On screen, a failure is said in the box only.
   const b = fb({}, () => true);
   b.data.on = { '/api/items/mp:1/send': () => { throw failure(OFFLINE, 502); } };

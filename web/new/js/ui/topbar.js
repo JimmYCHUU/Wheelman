@@ -1,9 +1,12 @@
-// The bar across the top: the mark, the four sections, what Wheelman is doing, and the menu.
+// The bar across the top: the mark, the four sections, what Wheelman is doing, and the menu (the
+// Playbook first, then the theme and the old page).
 import { html, useState, useEffect, useRef } from './html.js';
 import { statusWords, statusAnnouncement } from '../model.js';
 import { shownSections, tabInView } from '../sections.js';
 import { MenuButton } from './menu.js';
 import { Search } from './search.js';
+import { menuHint } from '../playbookview.js';
+import { playbookHash } from '../playbookroute.js';
 
 const THEME_KEY = 'wheelman.new.theme';
 const THEMES = [
@@ -58,7 +61,10 @@ function useTabInView(track, key) {
   }, [key]);
 }
 
-/** inert: the bar waits while a drawer or sheet is open over the page. A section switched off has no tab. */
+/**
+ * inert: the bar waits while a drawer or sheet is open over the page. A section switched off has no
+ * tab. tab: the section on screen, null on the Playbook (no tab is current there).
+ */
 export function TopBar({ state, tab, onTab, now, inert = false, search, onOpen, onCar }) {
   const [theme, setTheme] = useState(readTheme);
   const status = statusWords(state.status, now);
@@ -86,6 +92,8 @@ export function TopBar({ state, tab, onTab, now, inert = false, search, onOpen, 
       <span class=${'dot ' + status.tone} aria-hidden="true"></span><span class="words">${status.text}</span><${StatusLive} status=${status} />
     </div>
     <${MenuButton} label="Menu" items=${[
+      { label: 'Playbook', hint: menuHint(state.status), run: () => { location.hash = playbookHash('lessons'); } },
+      { separator: true },
       { heading: 'Theme' },
       ...THEMES.map((t) => ({ label: t.label, checked: theme === t.id, run: () => choose(t.id) })),
       { separator: true },

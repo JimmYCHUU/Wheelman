@@ -1,9 +1,12 @@
 // The new page: wires the browser's real pieces into the store, draws the app, and keeps the
-// address bar and the store in step.
+// address bar and the store in step. The Playbook (#/playbook/<tab>) has its own store; on its
+// address the main store stays where it was, with its conversation open behind it.
 import { createApi } from './api.js';
 import { createStore } from './store.js';
 import { createPanelStore } from './panelstore.js';
 import { createSearchStore } from './searchstore.js';
+import { createPlaybookStore } from './playbookstore.js';
+import { playbookRoute } from './playbookroute.js';
 import { parseRoute } from './route.js';
 import { storeStep, addressAfter, leavesRun, sheetStep, sheetFirst, sheetOnPop, isSheetEntry, withSheet, offAddress, conversationOnScreen, goToHash } from './hashsync.js';
 import { html, render } from './ui/html.js';
@@ -36,8 +39,9 @@ const store = createStore({
   now: Date.now,
   timers: { set: (fn, ms) => setTimeout(fn, ms), clear: (id) => clearTimeout(id) },
   keepalive,
-  // From 900 px the open conversation is on screen; on a phone only while the address names it (‹ List hides it).
-  shown: (key) => conversationOnScreen({ narrow: NARROW.matches, storeKey: key, routeKey: parseRoute(location.hash).key }),
+  // From 900 px the open conversation is on screen; on a phone only while the address names it (‹ List
+  // hides it). Behind the Playbook it is on no screen.
+  shown: (key) => !playbookRoute(location.hash) && conversationOnScreen({ narrow: NARROW.matches, storeKey: key, routeKey: parseRoute(location.hash).key }),
 });
 const { actions } = store;
 const panel = createPanelStore({ api, storage, now: Date.now, wide: () => WIDE.matches });
@@ -56,6 +60,9 @@ window.addEventListener('popstate', () => {
   if (open !== null && open !== panel.get().open) panel.actions.toggle(open);
 });
 const search = createSearchStore({ api, timers: { set: (fn, ms) => setTimeout(fn, ms), clear: (id) => clearTimeout(id) } });
+// The Playbook's store. Once a change there lands, the page reads the status and the conversation
+// again, so the Menu's count and the box's "has your answer now" follow it at once.
+const playbook = createPlaybookStore({ api, toast: actions.toast, changed: () => actions.refresh() });
 
 // "/" goes to the search box, unless the person is typing somewhere or a dialog is open.
 document.addEventListener('keydown', (e) => {
@@ -88,12 +95,15 @@ store.subscribe(() => {
 });
 
 applyTheme(readTheme(), storage);
-render(html`<${App} store=${store} panel=${panel} setPanel=${setPanel} search=${search} />`, document.getElementById('app'));
+render(html`<${App} store=${store} panel=${panel} setPanel=${setPanel} search=${search} playbook=${playbook} />`, document.getElementById('app'));
 
 // The store follows the address: another section, chip or conversation, from Back, forward, a
 // pasted link, a search result, or a tab, row or chip pressed (web/new/js/hashsync.js). Any address
-// but the reply run's own conversation ends the run quietly.
+// but the reply run's own conversation ends the run quietly. The Playbook's address moves nothing in
+// the main store: what was typed goes out, and the Playbook reads the tab it names.
 window.addEventListener('hashchange', () => {
+  const book = playbookRoute(location.hash);
+  if (book) { actions.flush(); playbook.actions.load(book.tab, book.id); return; }
   const route = parseRoute(location.hash);
   if (leavesRun(route, store.get())) actions.endRun();
   const step = storeStep(route, store.get());
@@ -126,10 +136,15 @@ let goneTo = 0;
 store.subscribe(() => { const to = goToHash(goneTo, store.get()); if (!to) return; goneTo = to.n; location.hash = to.hash; });
 // An address on a section the server says is switched off goes to the Dashboard, in place of the
 // entry on screen; the store follows it there (the hashchange above).
-store.subscribe(() => { const to = offAddress(parseRoute(location.hash), store.get().sections); if (to) location.replace(to); });
+store.subscribe(() => { if (playbookRoute(location.hash)) return; const to = offAddress(parseRoute(location.hash), store.get().sections); if (to) location.replace(to); });
 window.addEventListener('popstate', () => { if (sheetGoing) { sheetGoing = false; follow(); } });
 
-actions.boot(parseRoute(location.hash), { wide: innerWidth >= 1280 }).catch(() => { /* the list shows its own error state */ }).finally(() => { booted = true; follow(); });
+// A boot on the Playbook's address shows it, and the store starts on the Dashboard's first list
+// behind it: that address is never read as a conversation's (a fact's title is no key).
+const bootBook = playbookRoute(location.hash);
+if (bootBook) playbook.actions.load(bootBook.tab, bootBook.id);
+actions.boot(bootBook ? { section: 'dashboard', chip: 'waiting', key: null } : parseRoute(location.hash), { wide: innerWidth >= 1280 })
+  .catch(() => { /* the list shows its own error state */ }).finally(() => { booted = true; follow(); });
 setInterval(() => actions.refresh(), 20000);
 // The last edit goes out when the page hides (another tab, the phone locked) and when it closes.
 window.addEventListener('pagehide', () => actions.flush());
