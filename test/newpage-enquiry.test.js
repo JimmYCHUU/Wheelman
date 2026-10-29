@@ -309,6 +309,51 @@ test('a type change with typed text keeps the text and writes nothing again', as
   assert.deepEqual(b.beacons, []);
 });
 
+test('a type change with a message picked or a follow-up in hand keeps that box and its typed text, with no notice', async () => {
+  // /ruling and /move answer with the conversation as a plain open builds it: no message picked, no
+  // follow-up. A GET asked with ?message= or ?followup= gives the box in hand (data.asked).
+  const edits = (x) => [...x.calls.filter((c) => c.body !== undefined && /^\/api\/drafts\/\d+\/edit$/.test(c.path)).map((c) => c.path), ...x.beacons.map((b) => b.p)];
+  const a = await opened([text({ templates: [{ id: 'tpl', label: 'Price reply' }], template: '' })]);
+  a.data.asked = { 'c:1': (item, q) => (q.get('message') === 'tpl' ? { ...item, template: 'tpl', draft: draft(12, { reply: 'Template words' }) } : item) };
+  await a.store.actions.instead('tpl');
+  a.store.actions.type('My own words for the price');
+  serves(a, 'c:1');
+  // A key pressed the moment the route's answer is taken, before the refresh reads the box again.
+  let pressed = false;
+  const stop = a.store.subscribe(() => {
+    const s = a.store.get();
+    if (pressed || !s.item || s.item.section !== 'importquery') return;
+    pressed = true;
+    a.store.actions.type('My own words for the price, and more');
+    a.store.actions.flush();
+  });
+  await a.store.actions.setType('import');
+  await settle();
+  stop();
+  let s = a.store.get();
+  assert.ok(pressed);
+  assert.deepEqual([s.item.section, s.item.ruling, s.item.isImport, s.item.listed], ['importquery', { kind: 'import' }, true, 'moved']);
+  assert.deepEqual([s.item.draft.id, s.item.template, s.typed, s.context], [12, 'tpl', 'My own words for the price, and more', null]);
+  assert.ok(!edits(a).includes('/api/drafts/11/edit'), 'typed words saved only as the edit of the suggestion in the box: ' + edits(a).join(', '));
+  assert.deepEqual(s.goTo, { section: 'importquery', chip: 'waiting', key: 'c:1', n: 1 });
+
+  // Opened from Follow-ups: the follow-up stays in hand, its typed text too.
+  const b = setup();
+  b.data.rows = [row('c:1', { followUp: { id: 5, reason: 'Their inspection was yesterday' } })];
+  b.data.items['c:1'] = text({ isImport: true, judged: CODE });
+  b.data.asked = { 'c:1': (item, q) => (q.get('followup') === '5' ? { ...item, anchor: 'fu:5', followUp: { id: 5, reason: 'Their inspection was yesterday' }, draft: draft(30, { reply: 'Just checking in' }) } : item) };
+  await b.store.actions.setChip('followups');
+  assert.deepEqual([b.store.get().item.anchor, b.store.get().item.draft.id], ['fu:5', 30]);
+  b.store.actions.type('Hello, did the inspection go well?');
+  serves(b, 'c:1');
+  await b.store.actions.setType('stock');
+  await settle();
+  s = b.store.get();
+  assert.deepEqual([s.item.ruling, s.item.anchor, s.item.draft.id, s.typed, s.context], [{ kind: 'general' }, 'fu:5', 30, 'Hello, did the inspection go well?', null]);
+  assert.deepEqual([s.goTo, s.chip], [null, 'followups']);
+  assert.ok(!edits(b).includes('/api/drafts/11/edit'), edits(b).join(', '));
+});
+
 test('a rewrite after a type change is shown once it is written', async () => {
   const a = await opened([text()]);
   serves(a, 'c:1', { writing: true });

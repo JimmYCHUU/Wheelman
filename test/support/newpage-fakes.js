@@ -33,6 +33,9 @@ export const draft = (id, o = {}) => ({ id, status: 'ready', reply: 'Hello from 
  * A section in data.off is switched off: as the server does, its list is answered with the
  * Dashboard's, `section: 'dashboard'`, and null for it in `sections`. shown: the page's check of
  * whether the open conversation is on screen (none: always, as on a wide window).
+ * data.asked[key](item, query), where a test gives one, is the conversation as a GET asked with
+ * ?message= or ?followup= gives it (the message picked, the follow-up in hand); everything else,
+ * /ruling and /move too, answers with data.items[key] as a plain open builds it, as the server does.
  */
 export function setup(over = {}, { stored = {}, now = () => 1000, shown } = {}) {
   const calls = [];
@@ -71,8 +74,12 @@ export function setup(over = {}, { stored = {}, now = () => 1000, shown } = {}) 
       }
       const t = path.match(/^\/api\/items\/[^/]+\/thread\?shown=(\d+)&limit=(\d+)$/);
       if (t) return data.thread(Number(t[1]), Number(t[2]));
-      const m = path.match(/^\/api\/items\/([^?]+)/);
-      if (m) return { item: data.items[m[1]] };
+      const m = path.match(/^\/api\/items\/([^?]+)(?:\?(.+))?$/);
+      if (m) {
+        const item = data.items[m[1]];
+        const asked = m[2] && item && data.asked && data.asked[m[1]];
+        return { item: asked ? asked(item, new URLSearchParams(m[2])) : item };
+      }
     }
     // A test may answer a write itself (a failed suggestion, say).
     if (data.on && data.on[path]) return data.on[path](body);

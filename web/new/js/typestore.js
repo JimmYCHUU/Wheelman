@@ -8,6 +8,8 @@ import { sectionName } from './model.js';
 
 const CHECK_EVERY = 2000;
 const CHECKS = 15;
+// Where a conversation is listed and how it is answered: what a ruling or a move changes.
+const PLACEMENT = ['section', 'home', 'moved', 'listed', 'moves', 'ruling', 'isImport', 'judged', 'writing'];
 
 /**
  * flush() sends the edit waiting to be saved at once (with keepalive) and returns nothing to wait
@@ -46,16 +48,23 @@ export function createTypeChanger({ api, get, set, toast, flush, refresh, dismis
   }
 
   /**
-   * The conversation as the server answered it, taken while it is still the one open. The page
-   * follows it only when it is listed in another section now: in the same one, the chip and the
-   * open conversation stay as they are (a follow-up opened from Follow-ups stays in hand).
+   * The conversation as the server answered it, taken while it is still the one open. The route
+   * builds it as a plain open does, with no message picked and no follow-up: when the one in hand
+   * was asked for with either, or its message or suggestion is another, only where it is listed and
+   * how it is answered are taken, and the refresh brings the rest (so typed text is not told of a
+   * new message, nor saved with a suggestion that is not in the box). The page follows it only when
+   * it is listed in another section now: in the same one, the chip and the open conversation stay as
+   * they are (a follow-up opened from Follow-ups stays in hand).
    */
   function take(out, key) {
     const was = get().item;
     if (!out.item || get().key !== key) return false;
-    set({ item: out.item, itemState: 'ready' });
-    if (!was || out.item.section !== was.section) follow(out.item);
-    if (out.item.writing) watch(key);
+    const id = (it) => (it.draft ? it.draft.id : null);
+    const other = was && (get().picked !== null || out.item.anchor !== was.anchor || id(out.item) !== id(was));
+    const item = other ? { ...was, ...Object.fromEntries(PLACEMENT.filter((f) => f in out.item).map((f) => [f, out.item[f]])) } : out.item;
+    set({ item, itemState: 'ready' });
+    if (!was || item.section !== was.section) follow(item);
+    if (item.writing) watch(key);
     return true;
   }
 
