@@ -8,14 +8,13 @@
 // A reading never moves a conversation by itself (Ruling, 28 Oct 2026): the reason line says why it
 // was read as an import enquiry, and Import enquiry in More moves it. Nothing moves into
 // Marketplace but a Facebook chat going home, and nothing is moved into Auction from here.
-import { SECTIONS } from './model.js';
+import { sectionName } from './model.js';
 import { replyChannel } from './channel.js';
 
 const LABEL = { stock: 'Stock enquiry', import: 'Import enquiry', order: 'Auction order' };
 // Each section's own type: the one its head line does not need to name.
 const OWN = { dashboard: 'stock', marketplace: 'stock', importquery: 'import', auction: 'order' };
 
-const sectionName = (id) => (SECTIONS.find((s) => s.id === id) || { label: id }).label;
 const facebook = (item) => replyChannel(item) === 'facebook';
 /** A Dashboard text (a conversation or a lead): the one kind of conversation with a ruling. */
 const ruled = (item) => /^[cl]:/.test(String(item.key || ''));

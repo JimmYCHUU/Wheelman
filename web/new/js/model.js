@@ -12,6 +12,9 @@ export const SECTIONS = [
   { id: 'auction', label: 'Auction', ready: true },
 ];
 
+/** A section's name on the page (Imports for the server's importquery); an unknown id as it is. */
+export const sectionName = (id) => (SECTIONS.find((s) => s.id === id) || { label: id }).label;
+
 // These ids are the server's `tab` values.
 export const CHIPS = [
   { id: 'waiting', label: 'Needs reply' },

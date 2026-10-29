@@ -2,7 +2,7 @@
 // "Show all" is pressed. Up and Down move through the results, Enter opens one, Escape clears the box
 // and a second Escape leaves it. Under 1100 px the box is a button labelled "Search" that opens it.
 import { html, useState, useEffect, useRef } from './html.js';
-import { SECTIONS } from '../model.js';
+import { sectionName } from '../model.js';
 import { listTime, money } from '../../../lib/format.js';
 import { MIN_CHARS, enterPick } from '../searchstore.js';
 
@@ -18,7 +18,6 @@ const GROUPS = [
   { id: 'cars', label: 'Cars' },
   { id: 'messages', label: 'Messages' },
 ];
-const sectionLabel = (id) => (SECTIONS.find((s) => s.id === id) || { label: id }).label;
 
 /** The flat list the keyboard walks: every shown result, and a "Show all N" after a group cut short. */
 export function entriesOf(results, open) {
@@ -42,7 +41,7 @@ export function focusSearch() {
 
 /** The section a result outside the Dashboard is in, which is where it opens. */
 function Where({ section }) {
-  return section && section !== 'dashboard' ? html`<span class="hit-where">${sectionLabel(section)}</span>` : null;
+  return section && section !== 'dashboard' ? html`<span class="hit-where">${sectionName(section)}</span>` : null;
 }
 
 function Option({ e, active, now, onPick, stale }) {

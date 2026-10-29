@@ -4,12 +4,10 @@
 // and the request says keep. The store passes in what it holds; nothing here touches the DOM.
 import { typeRequest, typeUndo } from './enquiry.js';
 import { validChip } from './sections.js';
-import { SECTIONS } from './model.js';
+import { sectionName } from './model.js';
 
 const CHECK_EVERY = 2000;
 const CHECKS = 15;
-
-const sectionName = (id) => (SECTIONS.find((s) => s.id === id) || { label: id }).label;
 
 /**
  * flush() sends the edit waiting to be saved at once (with keepalive) and returns nothing to wait

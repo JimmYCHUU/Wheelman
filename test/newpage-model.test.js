@@ -1,8 +1,10 @@
 // The new page's model: pure functions that turn the server's data into plain words. Invented data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
-  SECTIONS, CHIPS, rowView, whoLabel, segments, joinSegments, fillBlank, boxText, checkLines,
+  SECTIONS, CHIPS, sectionName, rowView, whoLabel, segments, joinSegments, fillBlank, boxText, checkLines,
   mainAction, answeredWords, statusWords, statusAnnouncement, insteadOptions, wordCount, stageLine, leadStatusWords, sourceWords, providerWords, writtenBy, trustLine, factLine,
 } from '../web/new/js/model.js';
 
@@ -19,6 +21,15 @@ test('SECTIONS and CHIPS are the exact lists', () => {
     { id: 'auction', label: 'Auction', ready: true },
   ]);
   assert.deepEqual(CHIPS, [{ id: 'waiting', label: 'Needs reply' }, { id: 'followups', label: 'Follow-ups' }, { id: 'all', label: 'All' }]);
+});
+
+test("a section's name on the page comes from one place", () => {
+  assert.deepEqual(['dashboard', 'marketplace', 'importquery', 'auction', 'other'].map(sectionName), ['Dashboard', 'Marketplace', 'Imports', 'Auction', 'other']);
+  // No other module works it out again from SECTIONS.
+  const dir = path.join(import.meta.dirname, '..', 'web', 'new', 'js');
+  const files = fs.readdirSync(dir, { recursive: true }).filter((f) => f.endsWith('.js') && path.basename(f) !== 'model.js');
+  assert.ok(files.length > 10);
+  for (const f of files) assert.ok(!fs.readFileSync(path.join(dir, f), 'utf8').includes('SECTIONS.find((s) => s.id === id)'), f);
 });
 
 test('rowView names, car and preview', () => {
