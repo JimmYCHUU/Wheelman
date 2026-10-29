@@ -7,6 +7,7 @@ import { availability } from './normalize.js';
 import { stripEmoji } from './text.js';
 import { redact } from './redact.js';
 import { CLAIM, URGENCY } from './selling.js';
+import { latestVersions } from './db.js';
 
 // ---- business facts ------------------------------------------------------
 
@@ -21,7 +22,17 @@ export function knowledgeFile(name) {
   return fs.existsSync(real) ? real : path.join(config.knowledgeDir, `${name}.example.md`);
 }
 
-export function loadBusinessFacts(file = knowledgeFile('business-facts')) {
+/** The name the Playbook keeps the facts file's saved answers under (playbook_versions.name). */
+export const FACTS_NAME = 'business-facts.md';
+
+/**
+ * The business facts, topic by topic in the file's order: { title, status, answer }. With `playbook`
+ * (every request, the status counts and the start-up line), a topic answered in the Playbook takes
+ * its newest saved status and answer, and `at`, when that was saved. A topic saved there that the
+ * file lacks follows the file's topics. With nothing saved, the list is exactly the file's. The file
+ * itself is only ever read.
+ */
+export function loadBusinessFacts(file = knowledgeFile('business-facts'), { playbook = true } = {}) {
   const raw = fs.readFileSync(file, 'utf8').replace(/\r/g, '');
   const topics = [];
   for (const block of raw.split(/\n## /).slice(1)) {
@@ -39,7 +50,21 @@ export function loadBusinessFacts(file = knowledgeFile('business-facts')) {
     const usable = status !== 'needs_answer' && answer.length > 0;
     topics.push({ title, status: usable ? status : 'needs_answer', answer: usable ? answer : '' });
   }
-  return topics;
+  return playbook ? withPlaybook(topics) : topics;
+}
+
+/** The file's topics with the Playbook's newest saved version of each laid over it. */
+function withPlaybook(topics) {
+  const saved = latestVersions('fact', FACTS_NAME);
+  if (!saved.size) return topics;
+  const laid = (title, v) => {
+    const usable = v.status !== 'needs_answer' && v.text.length > 0;
+    return { title, status: usable ? v.status : 'needs_answer', answer: usable ? v.text : '', at: v.at };
+  };
+  const inFile = new Set(topics.map((t) => t.title));
+  const out = topics.map((t) => (saved.has(t.title) ? laid(t.title, saved.get(t.title)) : t));
+  for (const [title, v] of saved) if (!inFile.has(title)) out.push(laid(title, v));
+  return out;
 }
 
 export function businessFactsForPrompt() {

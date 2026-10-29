@@ -45,6 +45,7 @@ import { PROVIDERS, PROVIDER_ORDER, aiChoice, setAiChoice, listModels, saveKey, 
 import { budgetStatus } from './budget.js';
 import { listRuns, readRun, vote as reviewVote, summarise } from './review.js';
 import { providers as aiProviders, usageDetail } from './llm.js';
+import { playbookApi } from './playbookapi.js';
 
 const TYPES = { '.woff2': 'font/woff2', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(config.root, 'package.json'), 'utf8')).version || ''; } catch { return ''; } })();
@@ -1182,6 +1183,9 @@ async function api(req, res, url) {
     // wasOn: the lesson was already there and switched on, so this press changed nothing Undo could take back.
     return out.error ? send(res, out.status || 400, { error: out.error }) : send(res, 200, { lesson: out.lesson, wasOn: out.wasOn });
   }
+
+  // The Playbook: the business facts answered there, and what Wheelman learned (src/playbookapi.js).
+  if (p.startsWith('/api/playbook/') && await playbookApi(req, res, p, url, { send, readBody })) return;
 
   // Every lesson, newest first, each with its kind, channel, scope, date, off switch and use.
   if (req.method === 'GET' && p === '/api/lessons') return send(res, 200, { lessons: listLessons() });

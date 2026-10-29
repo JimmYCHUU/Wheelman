@@ -289,6 +289,22 @@ CREATE TABLE IF NOT EXISTS mail_messages (
 );
 CREATE INDEX IF NOT EXISTS mail_messages_thread ON mail_messages(thread_id, at);
 CREATE UNIQUE INDEX IF NOT EXISTS mail_messages_ref ON mail_messages(thread_id, ref) WHERE ref IS NOT NULL AND ref != '';
+
+-- The Playbook: every answer, template and voice rule saved there, one row per save. Rows are only
+-- ever added. The newest row for a part is laid over its file whenever the file is read; the file
+-- itself is never written, and is the first version of every part never saved.
+CREATE TABLE IF NOT EXISTS playbook_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL,   -- 'fact' | 'template' | 'voice'
+  name TEXT NOT NULL,   -- the file: 'business-facts.md', 'dashboard-messages.md', 'house-voice.md'
+  part TEXT NOT NULL,   -- a fact's title, a template's part, a voice section's heading; '' the whole file
+  text TEXT NOT NULL,
+  status TEXT,          -- a fact's: 'confirmed' | 'working' | 'needs_answer'
+  base TEXT,            -- the file's own text for that part when this was saved
+  at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS playbook_versions_part ON playbook_versions(kind, name, part, id);
+
 CREATE INDEX IF NOT EXISTS sales_phone ON sales(phone_hash);
 CREATE INDEX IF NOT EXISTS sales_email ON sales(email_hash);
 `;
@@ -405,7 +421,7 @@ function migrate(d) {
 
 export function closeDb() {
   statements.clear();
-  if (db) { db.close(); db = null; salt = null; }
+  if (db) { db.close(); db = null; salt = null; versionsTop = null; }
 }
 
 /**
@@ -1294,6 +1310,41 @@ export function switchLesson(id, on) {
 /** These lessons went into the request for a suggestion that was kept: each advice row counted once. */
 export function countLessonUse(ids, at = Date.now()) {
   for (const id of new Set(ids || [])) stmt('UPDATE advice SET used_count = IFNULL(used_count, 0) + 1, last_used_at = ? WHERE id = ?').run(at, id);
+}
+
+// ---- the Playbook ----------------------------------------------------------
+//
+// One row per save in the Playbook (playbook_versions). Rows are only ever added: nothing here, or
+// anywhere else, changes or removes one, so every version stays.
+
+// The newest version's id, held here so a cache can be keyed on it without a read. addVersion moves it.
+let versionsTop = null;
+
+/** Keeps one saved version of a part of a Playbook file. Returns its id. */
+export function addVersion({ kind, name, part, text, status = null, base = null, at = Date.now() }) {
+  const id = Number(stmt('INSERT INTO playbook_versions(kind, name, part, text, status, base, at) VALUES(?, ?, ?, ?, ?, ?, ?)')
+    .run(kind, name, part, text, status, base, at).lastInsertRowid);
+  versionsTop = id;
+  return id;
+}
+
+/** Every saved version of one part, newest first. */
+export function versionsOf({ kind, name, part }) {
+  return stmt('SELECT * FROM playbook_versions WHERE kind = ? AND name = ? AND part = ? ORDER BY id DESC').all(kind, name, part);
+}
+
+/** The newest saved version of each part of a file: a Map of part to row, in the order the parts were first saved. */
+export function latestVersions(kind, name) {
+  const rows = stmt(`SELECT v.* FROM playbook_versions v
+      JOIN (SELECT part, MAX(id) AS newest, MIN(id) AS first FROM playbook_versions WHERE kind = ? AND name = ? GROUP BY part) n ON v.id = n.newest
+     ORDER BY n.first`).all(kind, name);
+  return new Map(rows.map((r) => [r.part, r]));
+}
+
+/** The newest saved version's id, or 0 when nothing has been saved in the Playbook. */
+export function versionsStamp() {
+  if (versionsTop === null) versionsTop = Number(stmt('SELECT IFNULL(MAX(id), 0) AS n FROM playbook_versions').get().n);
+  return versionsTop;
 }
 
 // ---- AI usage counter ----------------------------------------------------
