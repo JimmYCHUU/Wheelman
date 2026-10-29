@@ -442,6 +442,18 @@ const sendingNow = new Set();
 // is answered by that reply. A later send the engine takes ends the note (kept in memory: a restart
 // forgets it).
 const mayHaveGone = new Map();
+
+/**
+ * One Marketplace chat ('mp:<id>') read again from the engine, its messages whatever its summary's
+ * fingerprint says. A Marketplace read skips a chat whose summary has not changed, so a copy kept
+ * from a read that did not list a reply yet would stay; the read before a send on a chat with a
+ * note (mayHaveGone) must see its messages as they are. Throws when the chat cannot be read.
+ */
+async function readChatAgain(key) {
+  const id = Number(String(key).split(':')[1]);
+  const detail = await fetchConversation(id);
+  if (detail?.conversation?.id === id) storeMpConversation(detail.conversation, detail.messages || []);
+}
 const ALL_STATES = ['awaiting', 'answered', 'ack', 'closed', 'optout', 'other'];
 // Conversations with activity in the last fortnight are rebuilt whenever anything is written;
 // older ones only when something a row depends on has changed (see oldRowsStamp).
@@ -733,12 +745,17 @@ async function api(req, res, url) {
   if (req.method === 'POST' && p === '/api/sync') {
     // { marketplace: true }, from the new page before a Facebook send that follows one that failed
     // or could not be told: Marketplace only, waiting for a read under way rather than taking the
-    // one before it, with no dashboard check and nothing written. A read that fails is said, so
-    // the page posts nothing. Any other body, or none, is Check now as it always was.
+    // one before it, with no dashboard check and nothing written. Each chat with a note (a send
+    // that may have gone) is read again whatever its summary says; one that cannot be is logged,
+    // and its own send reads it first. A read that fails is said, so the page posts nothing. Any
+    // other body, or none, is Check now as it always was.
     const body = await readBody(req).catch(() => ({}));
     if (body && body.marketplace === true) {
       const read = await worker.runMarketplaceSync({ wait: true });
       if (!read || !read.ok) return send(res, 502, { error: read ? read.message : 'Marketplace is switched off.' });
+      for (const key of [...mayHaveGone.keys()]) {
+        try { await readChatAgain(key); } catch (e) { logLine('marketplace', `${key}: the chat could not be read again before a send: ${e.message}`); }
+      }
       return send(res, 200, worker.statusReport());
     }
     await Promise.all([worker.runSync(), worker.runMarketplaceSync()]);
@@ -889,6 +906,7 @@ async function api(req, res, url) {
       if (unsure && !unsure.found) {
         const read = await worker.runMarketplaceSync({ wait: true });
         if (!read || !read.ok) return send(res, 502, { error: `Wheelman could not read the Marketplace chat first. ${read ? read.message : 'Marketplace is switched off.'}` });
+        try { await readChatAgain(item.itemKey); } catch (e) { return send(res, 502, { error: `Wheelman could not read the Marketplace chat first. ${e.message}` }); }
         chat = itemFromKey(m[1]) || item;
         const found = replyAfter(chat.timeline, unsure.anchor, unsure.text, tag);
         if (!found) mayHaveGone.delete(item.itemKey);

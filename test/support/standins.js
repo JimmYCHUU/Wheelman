@@ -166,8 +166,10 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
   // and fail to deliver it, once (its status "failed", counted on the chat); world.bareReplyOnce (a
   // Set of chat ids) makes it take each one's next reply and answer with no record of it, once;
   // world.detailFailOnce (a Set of chat ids) makes the next read of each one's chat answer 503, once;
-  // and world.staleReadOnce (a Set of chat ids) makes the read of each one's chat after its next
-  // reply answer the chat as it stood before that reply, once (the engine not listing it yet).
+  // world.staleReadOnce (a Set of chat ids) makes the read of each one's chat after its next reply
+  // answer the chat as it stood before that reply, once (the engine not listing it yet); and
+  // world.laggingReadOnce (a Set of chat ids) makes that read answer the chat's current summary
+  // with the messages as they stood before that reply, once (the summary moved on, the list not).
   const engine = await listen(async (req, res) => {
     const body = await readBody(req);
     const url = new URL(req.url, 'http://x');
@@ -188,6 +190,7 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
       delete world.nextReplyId;
       const undelivered = !!(world.failDeliveryOnce && world.failDeliveryOnce.delete(Number(reply[1])));
       if (world.staleReadOnce && world.staleReadOnce.delete(Number(reply[1]))) c.staleRead = JSON.parse(JSON.stringify({ row: c.row, messages: c.messages }));
+      if (world.laggingReadOnce && world.laggingReadOnce.delete(Number(reply[1]))) c.staleRead = { row: null, messages: JSON.parse(JSON.stringify(c.messages)) };
       const message = { id, direction: 'out', source: 'dashboard', text, status: undelivered ? 'failed' : 'queued', sent_via: '', error: '', artifact: '', artifact_url: '', phone_ts: null, sent_at: null, seen_at: null, created_at: at, has_media: false, mentions: [], attachments: [] };
       c.messages.push(message);
       Object.assign(c.row, { last_direction: 'out', last_message_at: at, last_outbound_at: at, unread: false },
@@ -218,7 +221,7 @@ export async function startStandins({ world, ai = aiBehaviour() } = {}) {
       const c = chats.get(Number(m[1]));
       const read = c.staleRead || c;
       delete c.staleRead;
-      return json(res, 200, { conversation: read.row, messages: read.messages, phone: '0491 570 199', will_send_via: 'device' });
+      return json(res, 200, { conversation: read.row || c.row, messages: read.messages, phone: '0491 570 199', will_send_via: 'device' });
     }
     return json(res, 404, { error: 'not found' });
   });

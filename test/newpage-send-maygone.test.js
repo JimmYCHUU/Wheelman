@@ -368,6 +368,38 @@ test("a reply the engine took that its read of the chat does not list yet is not
   assert.equal(replies(529).length, 1);
 });
 
+test("the read before a send on a chat with a note fetches that chat's messages, whatever its summary says", async () => {
+  // The read just after the send answers the chat's current summary with the messages from before
+  // the reply: Wheelman's copy has the summary that a later list shows, without the reply.
+  await buyer(531, 'Abe Invented');
+  const text = 'Yes, it is still here.';
+  standins.world.laggingReadOnce = new Set([531]);
+  assert.equal((await post('/api/items/mp:531/send', { text, draftId: null })).status, 200);
+  assert.equal((await chat('mp:531')).state, 'awaiting', 'not in Wheelman yet');
+  // The send's own read first finds the reply in the chat: the same words are refused.
+  assert.deepEqual(ok(await post('/api/items/mp:531/send', { text, draftId: null })), goneSame(true));
+  assert.equal(replies(531).length, 1);
+
+  // The page's read before a send ({ marketplace: true }) fetches it too: the chat then shows the reply.
+  await buyer(532, 'Bea Invented');
+  standins.world.laggingReadOnce = new Set([532]);
+  assert.equal((await post('/api/items/mp:532/send', { text, draftId: null })).status, 200);
+  assert.equal((await chat('mp:532')).state, 'awaiting', 'not in Wheelman yet');
+  assert.equal((await post('/api/sync', { marketplace: true })).status, 200);
+  assert.equal((await chat('mp:532')).state, 'answered');
+  assert.deepEqual(ok(await post('/api/items/mp:532/send', { text, draftId: null })), goneSame(true));
+  assert.equal(replies(532).length, 1);
+
+  // An ordinary read still skips a chat whose summary has not changed.
+  await buyer(533, 'Cai Invented');
+  standins.world.laggingReadOnce = new Set([533]);
+  assert.equal((await post('/api/items/mp:533/send', { text, draftId: null })).status, 200);
+  const reads = () => standins.engineSeen.filter((r) => r.method === 'GET' && r.path === '/inbox/conversations/533').length;
+  const was = reads();
+  await (await import('../src/sync.js')).syncMarketplace();
+  assert.equal(reads(), was);
+});
+
 test('a found note holds while its reply is in the chat, though the reply it came after did not reach the buyer', async () => {
   // Our first reply is on its way, so the chat ends with it; the second times out, and went.
   await buyer(530, 'Zola Invented');
