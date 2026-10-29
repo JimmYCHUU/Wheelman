@@ -353,3 +353,34 @@ test('a reply the engine took that Wheelman could not record is noted, so the sa
   assert.deepEqual(ok(await post('/api/items/mp:528/send', { text, draftId: null })), goneSame(true));
   assert.equal(replies(528).length, 1);
 });
+
+// ---- PR 5b, final review
+
+test("a reply the engine took that its read of the chat does not list yet is noted, so the same words are refused", async () => {
+  // The read just after the send answers the chat as it stood before the reply: Wheelman's copy
+  // loses the reply it had just put in.
+  await buyer(529, 'Yuki Invented');
+  const text = 'Yes, it is still here.';
+  standins.world.staleReadOnce = new Set([529]);
+  assert.equal((await post('/api/items/mp:529/send', { text, draftId: null })).status, 200);
+  assert.equal((await chat('mp:529')).state, 'awaiting', 'not in Wheelman yet');
+  assert.deepEqual(ok(await post('/api/items/mp:529/send', { text, draftId: null })), goneSame(true));
+  assert.equal(replies(529).length, 1);
+});
+
+test('a found note holds while its reply is in the chat, though the reply it came after did not reach the buyer', async () => {
+  // Our first reply is on its way, so the chat ends with it; the second times out, and went.
+  await buyer(530, 'Zola Invented');
+  const first = 'Yes, it is still here.';
+  const second = 'It has new tyres too.';
+  assert.equal((await post('/api/items/mp:530/send', { text: first, draftId: null })).status, 200);
+  assert.equal((await timesOut(() => post('/api/items/mp:530/send', { text: second, draftId: null }))).status, 504);
+  await until(async () => (await chat('mp:530')).thread.filter((e) => e.who === 'us').length === 2, 'both replies show');
+  await sleep(800); // the engine's late answer goes nowhere
+  assert.deepEqual(ok(await post('/api/items/mp:530/send', { text: second, draftId: null })), goneSame(true), 'found');
+  // The first fails and leaves the chat, then the buyer writes: the second is still there, and refused.
+  await failsLater(530, first);
+  await writesAgain(530, 'Great, can I see it tomorrow?');
+  assert.deepEqual(ok(await post('/api/items/mp:530/send', { text: second, draftId: null })), goneSame(true));
+  assert.equal(replies(530).length, 2);
+});

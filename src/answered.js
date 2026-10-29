@@ -69,17 +69,18 @@ const oursWith = (entries, text, tag) => entries.findIndex((e) => e.who === 'us'
 const fromCustomer = (entries) => entries.some((e) => e.who === 'customer' && !e.internal);
 
 /**
- * Whether the timeline shows a reply of ours with this text after the message `anchor` (the one a
- * send answered), whatever the customer wrote since: that reply went. With that message not in the
- * timeline, false.
+ * The first reply of ours with this text after the message `anchor` (the one a send answered),
+ * whatever the customer wrote since: that reply went. Null when there is none, or when that message
+ * is not in the timeline.
  */
-export function wentAfter(timeline, anchor, text, tag = 'marketplace') {
+export function replyAfter(timeline, anchor, text, tag = 'marketplace') {
   const at = timeline.findIndex((e) => e.key === anchor);
-  return at !== -1 && oursWith(timeline.slice(at + 1), text, tag) !== -1;
+  const after = at === -1 ? [] : timeline.slice(at + 1);
+  return after[oursWith(after, text, tag)] || null;
 }
 
 /**
- * wentAfter, with nothing from the customer after that reply: it went, and the chat is answered by
+ * replyAfter, with nothing from the customer after that reply: it went, and the chat is answered by
  * it. With that message not in the timeline, false.
  */
 export function replyShown(timeline, anchor, text, tag = 'marketplace') {
