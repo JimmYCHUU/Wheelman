@@ -2,6 +2,7 @@
 // and the email's own facts. Pure functions; invented data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { mainFor, copiedWords } from '../web/new/js/channel.js';
 import { messageOptions } from '../web/new/js/messages.js';
 import { researchView, emailRows } from '../web/new/js/emailview.js';
@@ -10,6 +11,8 @@ import { sectionRowView } from '../web/new/js/sections.js';
 import { listTime, clock } from '../web/lib/format.js';
 
 const NOW = Date.UTC(2026, 9, 28, 3, 0, 0);
+const RESEARCH = fs.readFileSync(new URL('../web/new/js/ui/research.js', import.meta.url), 'utf8');
+const CUSTOMER_TAB = fs.readFileSync(new URL('../web/new/js/ui/customertab.js', import.meta.url), 'utf8');
 const mail = (o = {}) => ({ subject: 'Importing a Toyota Hiace GDH206', customerEmail: 'hollis@example.com', car: 'Toyota Hiace GDH206', messages: 5, collapsed: 0, firstAt: NOW - 86400e3, lastAt: NOW - 3600e3, draftsOff: false, ...o });
 const email = (o = {}) => ({ key: 'em:1', channel: 'email', state: 'awaiting', anchor: 'a1', mail: mail(), draft: { id: 1, status: 'ready', reply: 'Hello', edited: null }, ...o });
 
@@ -31,6 +34,10 @@ test('research notes list what was found, what was not and where it was read', (
   // Nothing found is still told: a count of 0 and no invented model.
   assert.deepEqual(researchView({ found: [], notFound: [], notes: [], sources: [], readAt: NOW }).found, []);
   assert.equal(researchView({ readAt: NOW }).when, 'Looked up ' + clock(NOW) + '.');
+  // Built from what is known: with no time it was looked up, no stray space or comma; with nothing, no line.
+  assert.equal(researchView({ listReadAt: r.listReadAt }).when, 'Looked up from the eligible-models list read ' + listTime(r.listReadAt) + '.');
+  assert.equal(researchView({ found: [] }).when, '');
+  assert.ok(RESEARCH.includes('${v.when ? html`<p class="fine">${v.when}</p>` : null}'), 'the line is left out when there is nothing to say');
 });
 
 test('More messages lists every message past the three on the Instead line', () => {
@@ -60,6 +67,9 @@ test('a folded email says so on its row and in the panel', () => {
   assert.equal(folded, 'Part of this thread could not be read because Gmail had folded it. In Gmail, press Expand all, then Send to Wheelman again.');
   assert.equal(emailRows(mail()).folded, '');
   assert.equal(emailRows(mail()).rows.find((r) => r.label === 'Messages').value, '5');
+  // Its section in Details is "This email", apart from the Customer section's own Email row.
+  assert.match(CUSTOMER_TAB, /<h4>This email<\/h4>/);
+  assert.ok(!/<h4>Email<\/h4>/.test(CUSTOMER_TAB));
 });
 
 test('an email with suggestions switched off says so and offers nothing to copy', () => {

@@ -13,7 +13,9 @@ export function researchView(r) {
   const notFound = Array.isArray(r.notFound) ? r.notFound : [];
   const notes = Array.isArray(r.notes) ? r.notes : [];
   const sources = (Array.isArray(r.sources) ? r.sources : []).filter((s) => s && s.url).map((s) => ({ url: s.url, label: s.label || s.url }));
-  const when = 'Looked up ' + (r.readAt ? clock(r.readAt) : '') + (r.listReadAt ? ', from the eligible-models list read ' + listTime(r.listReadAt) : '') + '.';
+  // When it was looked up, and when the list it was read from was read: only what is known ('' for neither).
+  const parts = [r.readAt ? clock(r.readAt) : '', r.listReadAt ? 'from the eligible-models list read ' + listTime(r.listReadAt) : ''].filter(Boolean);
+  const when = parts.length ? 'Looked up ' + parts.join(', ') + '.' : '';
   return { count: found.length + notFound.length, found, notFound, notes, sources, when };
 }
 

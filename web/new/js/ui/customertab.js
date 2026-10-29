@@ -37,7 +37,7 @@ function Marketplace({ m }) {
 /** An email: its subject, who wrote, the model asked about, how many messages, and whether Gmail folded any. */
 function Email({ mail }) {
   const { rows, folded } = emailRows(mail);
-  return html`<section class="car-sec"><h4>Email</h4>
+  return html`<section class="car-sec"><h4>This email</h4>
     <dl class="asked">${rows.map((r) => row(r.label, r.value))}</dl>
     ${folded ? html`<p class="fine">${folded}</p>` : null}
   </section>`;

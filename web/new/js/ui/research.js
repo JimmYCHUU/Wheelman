@@ -11,6 +11,6 @@ export function Research({ research }) {
     ${v.notFound.length ? html`<p class="fine">Could not be found (the reply has a blank for each):</p>${list(v.notFound)}` : null}
     ${v.notes.length ? list(v.notes) : null}
     ${v.sources.length ? html`<p class="fine">Read from: ${v.sources.map((s, i) => html`${i ? ', ' : ''}<a key=${s.url} href=${s.url} target="_blank" rel="noopener noreferrer">${s.label}</a>`)}</p>` : null}
-    <p class="fine">${v.when}</p>
+    ${v.when ? html`<p class="fine">${v.when}</p>` : null}
   </details>`;
 }
