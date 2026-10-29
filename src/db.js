@@ -160,6 +160,15 @@ CREATE TABLE IF NOT EXISTS advice (
 );
 CREATE INDEX IF NOT EXISTS advice_at ON advice(at);
 
+-- What happened to each lesson, oldest first: made, again, on, off (and kept, undone). Rows are only added.
+CREATE TABLE IF NOT EXISTS lesson_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  advice_id INTEGER NOT NULL,
+  what TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS lesson_events_advice ON lesson_events(advice_id);
+
 -- Facebook Marketplace chats, read from the content engine. Kept apart from the dashboard tables:
 -- nothing here is ever used for learning or for the example bank.
 CREATE TABLE IF NOT EXISTS mp_conversations (
@@ -1245,8 +1254,16 @@ export function insertAdvice(a) {
   if (!TEACHES.test(String(a.itemKey || ''))) throw new Error('Refused: only dashboard conversations and import emails can be learned from.');
   // One note per suggestion: saying it again replaces what was said before.
   if (a.draftId !== null && a.draftId !== undefined) stmt('DELETE FROM advice WHERE draft_id = ?').run(a.draftId);
-  return Number(stmt('INSERT INTO advice(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, note, lessons_json, at, channel) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(a.draftId ?? null, a.itemKey, JSON.stringify(a.situations || []), a.firstReply ? 1 : 0, a.customerText || '', a.draftText || '', a.note, a.lessons ? JSON.stringify(a.lessons) : null, a.at || Date.now(), channelOfKey(a.itemKey)).lastInsertRowid);
+  const at = a.at || Date.now();
+  const id = Number(stmt('INSERT INTO advice(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, note, lessons_json, at, channel) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(a.draftId ?? null, a.itemKey, JSON.stringify(a.situations || []), a.firstReply ? 1 : 0, a.customerText || '', a.draftText || '', a.note, a.lessons ? JSON.stringify(a.lessons) : null, at, channelOfKey(a.itemKey)).lastInsertRowid);
+  addLessonEvent(id, 'made', at);
+  return id;
+}
+
+/** One thing that happened to a lesson (an advice row): 'made', 'again', 'on', 'off', 'kept' or 'undone'. */
+export function addLessonEvent(adviceId, what, at = Date.now()) {
+  stmt('INSERT INTO lesson_events(advice_id, what, at) VALUES(?, ?, ?)').run(adviceId, what, at);
 }
 
 /** The lessons taken from a note: what Wheelman actually keeps of it. */
@@ -1273,9 +1290,11 @@ export function insertRemember({ itemKey, scope, instruction, situations = [], a
   if (!TEACHES.test(String(itemKey || ''))) throw new Error('Refused: only dashboard conversations and import emails can be learned from.');
   const channel = channelOfKey(itemKey);
   const same = rememberedAlready({ itemKey, scope, instruction });
-  if (same) { stmt('UPDATE advice SET off = 0, at = ? WHERE id = ?').run(at, same.id); return same.id; }
-  return Number(stmt("INSERT INTO advice(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, note, lessons_json, at, channel, kind) VALUES(NULL, ?, ?, 0, '', '', ?, ?, ?, ?, 'remember')")
+  if (same) { stmt('UPDATE advice SET off = 0, at = ? WHERE id = ?').run(at, same.id); addLessonEvent(same.id, 'again', at); return same.id; }
+  const id = Number(stmt("INSERT INTO advice(draft_id, item_key, situations_json, first_reply, customer_text, draft_text, note, lessons_json, at, channel, kind) VALUES(NULL, ?, ?, 0, '', '', ?, ?, ?, ?, 'remember')")
     .run(itemKey, JSON.stringify(situations || []), instruction, JSON.stringify([{ scope, when: '', do: instruction, internal: false }]), at, channel).lastInsertRowid);
+  addLessonEvent(id, 'made', at);
+  return id;
 }
 
 /** The Remember lesson that already holds this instruction for this kind of reply in this channel: { id, off }, or null. */
@@ -1304,7 +1323,33 @@ export function switchLesson(id, on) {
   const lesson = getLesson(id);
   if (!lesson) return null;
   stmt('UPDATE advice SET off = ? WHERE id = ?').run(on ? 0 : 1, id);
+  addLessonEvent(id, on ? 'on' : 'off', Date.now());
   return { ...lesson, off: !on };
+}
+
+/**
+ * These lessons with where each came from and what happened to it: one read of lesson_events and one
+ * of advice. `from` is the note and what it was about, or the Remember instruction; `history` is
+ * oldest first, and starts with the making when a lesson taught before events were kept has none.
+ */
+export function lessonDetails(lessons) {
+  const ids = [...new Set((lessons || []).map((l) => l.id))];
+  if (!ids.length) return [];
+  const marks = ids.map(() => '?').join(',');
+  const rows = new Map(stmt(`SELECT id, kind, note, customer_text, draft_text, at FROM advice WHERE id IN (${marks})`).all(...ids).map((r) => [Number(r.id), r]));
+  const events = new Map();
+  for (const e of stmt(`SELECT advice_id, what, at FROM lesson_events WHERE advice_id IN (${marks}) ORDER BY at, id`).all(...ids)) {
+    const id = Number(e.advice_id);
+    if (!events.has(id)) events.set(id, []);
+    events.get(id).push({ what: e.what, at: e.at });
+  }
+  return lessons.map((l) => {
+    const r = rows.get(l.id);
+    const history = events.get(l.id) || [];
+    if (!history.some((e) => e.what === 'made') && r) history.unshift({ what: 'made', at: r.at });
+    const from = l.kind === 'remember' ? { instruction: r?.note || '' } : l.kind === 'note' ? { note: r?.note || '', customer: r?.customer_text || '', draft: r?.draft_text || '' } : {};
+    return { ...l, from, history };
+  });
 }
 
 /** These lessons went into the request for a suggestion that was kept: each advice row counted once. */

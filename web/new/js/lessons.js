@@ -39,7 +39,7 @@ export const scopeWords = (scope) => (Object.hasOwn(WORDS, scope) ? WORDS[scope]
  */
 export function rememberOffer(item, draft, remembered = []) {
   if (!item || !draft || !draft.instruction) return null;
-  if (item.teaches === false) return null;
+  if (item.teaches === false || draft.teaches === false) return null;
   if (!/^(c|l|em):/.test(String(item.key || ''))) return null;
   if (/^fu:/.test(String(item.anchor || '')) || item.section === 'auction') return null;
   if (remembered.includes(draft.id)) return null;

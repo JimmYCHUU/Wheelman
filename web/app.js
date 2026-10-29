@@ -1108,7 +1108,7 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
   put(after, h('span', { class: 'said' }, icon('check'), 'Copied'));
 
   // Two ways to teach Wheelman. Marketplace chats are never learned from, so they have neither.
-  const teach = !!item.teaches;
+  const teach = !!item.teaches && d.teaches !== false;
   const approved = d.rating === 'good';
   const approveBtn = teach ? h('button', { class: `btn ${approved ? 'is-on' : ''}`.trim(), type: 'button', 'aria-pressed': approved ? 'true' : 'false',
     title: approved ? 'You approved this reply. Click to take that back.' : 'This reply is right as it is. Wheelman will write similar replies the same way.',

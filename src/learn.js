@@ -68,6 +68,12 @@ const writtenInImports = (draft, item) => draft?.context?.section === 'importque
 const fromWordingFile = (draft) => ENQUIRY_MESSAGES.includes(draft?.context?.message);
 /** Written where nothing teaches (in Auction, or in Imports for the Imports list), or from the auction's wording file. */
 const writtenUntaught = (draft, item) => writtenInAuction(draft) || writtenInImports(draft, item) || fromWordingFile(draft);
+/**
+ * Whether learning from this suggestion would learn anything: the page offers a way to teach only then.
+ * The same rules learnFrom, approve and remember apply, read from the item and the row alone.
+ */
+export const draftTeaches = (item, draft) => !!draft && teachesHere(item) && canLearnFrom(draft.item_key) && !isFollowUp(draft)
+  && !writtenUntaught(draft, item) && !/^out:/.test(String(draft.anchor_key || ''));
 const NOT_HERE = 'not a dashboard conversation or an import email';
 const notHereWhy = (item) => (item?.section === 'auction' ? 'in the Auction section' : NOT_HERE);
 /** Which kind of reply a request wants lessons for: emails learn from emails, everything else from texts. */

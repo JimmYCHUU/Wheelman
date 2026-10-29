@@ -17,7 +17,7 @@ import { signedName } from './signature.js';
 import { rowMatches } from '../web/lib/search.js';
 import { searchAll } from './search.js';
 import { RUNG_LABELS } from './selling.js';
-import { teachesHere } from './learn.js';
+import { teachesHere, draftTeaches } from './learn.js';
 import { validateMailReport, storeMailThread } from './mail.js';
 import { recentPractice, PRACTICE_DAYS } from './practice.js';
 import { recentMailPractice } from './mailpractice.js';
@@ -134,7 +134,7 @@ const templateOf = (item) => (item.order ? item.message || '' : item.templatePic
 function draftOf(item) {
   const draft = latestDraft(item.itemKey, item.anchorKey, templateOf(item));
   return draft ? {
-    id: draft.id, status: draft.status, reply: draft.reply || '', checks: draft.checks, factsUsed: draft.factsUsed,
+    id: draft.id, teaches: draftTeaches(item, draft), status: draft.status, reply: draft.reply || '', checks: draft.checks, factsUsed: draft.factsUsed,
     // What the person has typed over the suggestion: null when untouched, '' when they cleared it.
     edited: typeof draft.edited_text === 'string' ? draft.edited_text : null, editedAt: draft.edited_at || null,
     model: draft.model, provider: draft.provider, createdAt: draft.created_at, instruction: draft.instruction || '', error: draft.error || '', rating: draft.rating || '',

@@ -3,6 +3,7 @@
 // is another thing: the sales playbook that compact requests read.)
 
 import { playbookFacts, saveFact } from './factbook.js';
+import { listLessons, lessonDetails } from './db.js';
 
 /** Answers a /api/playbook/ request. True when it answered; false leaves it to the routes after it. */
 export async function playbookApi(req, res, p, url, { send, readBody }) {
@@ -16,6 +17,11 @@ export async function playbookApi(req, res, p, url, { send, readBody }) {
       return true;
     }
     send(res, 405, { error: 'Not allowed' });
+    return true;
+  }
+  if (p === '/api/playbook/lessons') {
+    if (req.method !== 'GET') { send(res, 405, { error: 'Not allowed' }); return true; }
+    send(res, 200, { lessons: lessonDetails(listLessons()) });
     return true;
   }
   return false;

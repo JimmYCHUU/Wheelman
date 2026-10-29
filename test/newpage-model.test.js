@@ -289,6 +289,12 @@ test('trustLine: any change, however small, is changed since it was checked', ()
 import { rememberOffer, scopeWords, ruleWords, lessonLines } from '../web/new/js/model.js';
 import { SITUATIONS } from '../src/situations.js';
 
+test('rememberOffer is not offered on a suggestion that teaches nothing', () => {
+  const item = { key: 'c:1', anchor: 'm:12', section: 'dashboard', situationKey: 'price_negotiation' };
+  assert.equal(rememberOffer(item, { id: 5, instruction: 'Be brief', teaches: false }), null);
+  assert.deepEqual(rememberOffer(item, { id: 5, instruction: 'Be brief', teaches: true }), { scope: 'price_negotiation', label: 'Remember for price questions' });
+});
+
 test('rememberOffer is offered only for a Dashboard draft with an instruction', () => {
   const item = { key: 'c:1', anchor: 'm:12', section: 'dashboard', situation: 'Price, discount or offer', situationKey: 'price_negotiation' };
   const d = { id: 5, instruction: 'Do not mention finance' };
