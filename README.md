@@ -718,19 +718,20 @@ quiet link, **Try the new page**, next to the cog. All four sections open on the
 with its own lists: Dashboard has Needs reply, Follow-ups and All, and Auction has To do, In
 progress and Finished. Only Marketplace can be switched off, and then it has no tab. In each, the
 open conversation has the message box with its fill-in blanks, **Instead**, the "Tell Wheelman
-what to say…" line, and one main button for the channel: **Copy reply** for a text, **Copy for Gmail** for an email,
-**Copy for WhatsApp** for an auction order, and **Send on Facebook** for a Marketplace buyer.
-**Put back in Needs reply** is on Dashboard. The old page stays at the normal address until the
-switch-over. The new page is built from `prototype/`.
+what to say…" line, and one main button for the channel: **Copy reply** for a text, **Copy for
+Gmail** for an email, **Copy for WhatsApp** for an auction order, and **Send on Facebook** for a
+Marketplace buyer. **Put back in Needs reply** is on Dashboard. The old page stays at the normal
+address until the switch-over. The new page is built from `prototype/`.
 
 **Imports** lists the leads on the dashboard's Imports list, and the import emails you sent from
 Gmail while the email intake is on. It is always there, even with the intake off; then it lists
 no emails. Each text enquiry has the same **Which message?** choices it had in Auction before
 the order exists, and the import ones. An email has its own three. Under the box of a ready email
 reply, **What Wheelman looked up** (closed until you open it) says what was found for the model,
-what could not be, and where it was read, and the reply is copied with **Copy for Gmail**. A message Gmail had folded reads
-**Folded in Gmail** in the list. **More messages**, after the **Instead** line, brings back the
-rest of a section's messages whenever more than three fit.
+what could not be, and where it was read, and the reply is copied with **Copy for Gmail**. A
+thread with a message Gmail had folded reads **Folded in Gmail** in the list. **More messages**,
+after the **Instead** line, brings back the rest of a section's messages whenever more than three
+fit.
 
 **Enquiry type** is the first choice in a conversation's **More** menu: **Stock enquiry**,
 **Import enquiry** or **Not a customer**. A text read as an import enquiry says why in a line
@@ -744,12 +745,12 @@ texts, from the order's **Their texts**.
 
 **Auction** holds auction orders. The open order has the **Which message?** choices for its
 stage (a reply to what they wrote comes first when they have written and a reply is due), and
-**Paste what they wrote**, which opens a box with **We sent this** and **They wrote this**: a pasted message of theirs is answered, and
-**Remove** takes a pasted one out again. **Copy for WhatsApp** copies the message, and the toast
-offers **Put back in To do**. The panel's **Order** tab shows the stage, what they asked for, the
-auction car, what is charged and paid, and **Their texts**, with the button that answers those
-texts in Dashboard (and back). Nothing is learned from an order, so Remember is never offered
-there.
+**Paste what they wrote**, which opens a box with **We sent this** and **They wrote this**: a
+pasted message of theirs is answered, and **Remove** takes a pasted one out again. **Copy for
+WhatsApp** copies the message, and the toast offers **Put back in To do**. The panel's **Order**
+tab shows the stage, what they asked for, the auction car, what is charged and paid, and **Their
+texts**, with the button that answers those texts in Dashboard (and back). Nothing is learned from
+an order, so Remember is never offered there.
 
 **Send on Facebook** is the only send on the new page, and it goes only when you press it. It
 reads **Sending…**, then the box says **Sent on Facebook** at the time it went. If it fails, the
@@ -790,15 +791,15 @@ removed a block, it reads **Changed since it was checked.** Open it to see each 
 came from: the stock record, our earlier messages, business facts, the website, what the
 customer said, your instruction or your wording file.
 
-After you ask Wheelman to rewrite with **Tell Wheelman what to say…**, it offers **Remember for**
-that kind of reply. Choosing it keeps your instruction as a lesson for later texts or emails of
-that kind, never for Marketplace chats, and **Undo** switches the lesson off again. If the same
-instruction was already remembered for that kind of reply, it says **Already remembered** and
-offers no Undo, so the lesson you had stays on. Remember is not offered on a follow-up, in the
-Auction section or on a lead from the dashboard's Imports list while it is in Imports, because
-those teach nothing. **Just this once** keeps nothing. **What Wheelman
-used** now also lists the lessons it followed and the rules that applied. A list of all lessons
-comes in a later update.
+After you ask Wheelman to rewrite with **Tell Wheelman what to say…**, it offers **Remember
+for** that kind of reply. Choosing it keeps your instruction as a lesson for later texts or
+emails of that kind, never for Marketplace chats, and **Undo** switches the lesson off again. If
+the same instruction was already remembered for that kind of reply, it says **Already
+remembered** and offers no Undo, so the lesson you had stays on. Remember is not offered on a
+follow-up, in the Auction section or on a lead from the dashboard's Imports list while it is in
+Imports, because those teach nothing, and it is refused for a message from the auction's wording
+file. **Just this once** keeps nothing. **What Wheelman used** now also lists the lessons it
+followed and the rules that applied. A list of all lessons comes in a later update.
 
 On **Needs reply**, the top of the list says how many are waiting, with **Start replying**. The
 **reply run** takes the ten newest waiting, the ones already written ahead, and opens the oldest
@@ -815,7 +816,8 @@ until those replies show on the dashboard.
 Nothing is sent by the run.
 
 A customer who was answered somewhere else leaves **Needs reply** by itself and says who answered
-on **All**: **Answered on the phone**, **Answered by** the sender's name **on the dashboard**, **Answered by an
+on **All**: **Answered on the phone**, **Answered by** the sender's name **on the dashboard**,
+**Answered on Facebook** for a person's reply in a Marketplace chat, **Answered by an
 auto-reply** or **Answered with Wheelman's suggestion**, with the time. If you have the
 conversation open when that happens, it says **No reply needed**, and **Write a reply anyway**
 brings the message box back. Text you were typing when someone else answered stays, with **Copy
@@ -1203,14 +1205,15 @@ marked "due now"; the first choice is the reply to what they wrote. Each is writ
 wording with what the enquiry says (the car, years, kilometres, budget), the deposit amount a
 blank since there is no order yet, and fitted to the customer as an order's is. The leads on the
 dashboard's Imports list are not here: they are listed in Import Query (Imports on the new page),
-with these same messages. **One row per customer:** once a customer has an order under way, the order stands for them and the conversation it reads (the one on the order's
-number, else its lead's) is no longer a row of its own. A text or website enquiry from them
-since the order opened (within the last week) puts the order in To do as a reply to what they
-wrote, written for a text and pasted into the dashboard; our text back answers it, and Dismiss
-sets aside everything that was waiting. Anything else from that customer, such as a new lead on
-the same number, is a row of its own in Auction, never lost. The order's panel has **Their
-texts**, with **Answer their texts in Dashboard** (and back) when you would rather answer that
-conversation as an ordinary one.
+with these same messages. **One row per customer:** once a customer has an order under way, the
+order stands for them and the conversation it reads (the one on the order's number, else its
+lead's) is no longer a row of its own. A text or website enquiry from them since the order
+opened (within the last week) puts the order in To do as a reply to what they wrote, written for
+a text and pasted into the dashboard; our text back answers it, and Dismiss sets aside everything
+that was waiting. Anything else from that customer, such as a new lead on the same number, is a
+row of its own in Auction, never lost. The order's panel has **Their texts**, with **Answer their
+texts in Dashboard** (and back) when you would rather answer that conversation as an ordinary
+one.
 
 ### The three lists
 
@@ -1539,8 +1542,11 @@ import email threads sent from Gmail, each kind kept to itself (see the Import Q
 Never from Marketplace, never from the phone, and not from the Auction section: its messages
 come from a wording file, and what a customer wrote on WhatsApp is pasted in, not read from
 the dashboard. Nor from a lead on the dashboard's Imports list while it is in Imports: those
-are answered from the same wording and teach nothing. Never from a follow-up either: its wording is yours in
-`voice/dashboard-messages.md`, and copying one teaches nothing.
+are answered from the same wording and teach nothing. Nor from a message of the auction's
+wording file, wherever it is used (a conversation you moved into Imports included): copied,
+marked **Good reply** or **Could be better**, it teaches nothing, and Remember is refused for it.
+Never from a follow-up either: its wording is yours in `voice/dashboard-messages.md`, and copying
+one teaches nothing.
 
 Wheelman learns two different things from two different places. **What to say** comes from
 what the team really sends. **How to say it** comes from the two voices.
@@ -1574,14 +1580,15 @@ what the team really sends. **How to say it** comes from the two voices.
   template or standard wording used word for word, when it is one of the standard replies the
   team sends to everyone, or once you marked it **Could be better**. **Could be better**, or
   taking the rating away, takes a copy's approval back as it does a **Good reply**.
-- **Remember.** On the new page, a rewrite you ask for with **Tell Wheelman what to say…** can be
-  remembered for that kind of reply in that channel. The lesson is put into every later request
-  of that kind, the same conversation included. Remember lessons apply to texts and emails, never
-  to Marketplace chats. Each time a lesson is used it is counted, and it can be switched off,
-  after which it is never used. Remembering the same instruction again keeps the one lesson.
-  **Just this once** stores nothing. Marketplace, the phone-only list, auction orders, follow-ups,
-  the Auction section and the leads from the dashboard's Imports list teach nothing, so Remember
-  is not offered there.
+- **Remember.** On the new page, a rewrite you ask for with **Tell Wheelman what to say…** can
+  be remembered for that kind of reply in that channel. The lesson is put into every later
+  request of that kind, the same conversation included. Remember lessons apply to texts and
+  emails, never to Marketplace chats. Each time a lesson is used it is counted, and it can be
+  switched off, after which it is never used. Remembering the same instruction again keeps the
+  one lesson. **Just this once** stores nothing. Marketplace, the phone-only list, auction
+  orders, follow-ups, the Auction section and the leads from the dashboard's Imports list teach
+  nothing, so Remember is not offered there; for a message from the auction's wording file it is
+  refused.
 - **Only what you changed.** A suggestion used word for word is Wheelman's own text, so it
   is not kept as an example of how the team writes. Copying it unchanged counts as approval
   instead (see **Copying as written** above).
