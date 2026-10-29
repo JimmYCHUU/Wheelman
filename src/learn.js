@@ -20,6 +20,7 @@ import { similarity, wordCount, squash } from './text.js';
 import { complete } from './llm.js';
 import { SITUATIONS } from './situations.js';
 import { onImportsList } from './placement.js';
+import { ENQUIRY_MESSAGES } from './ordermessages.js';
 
 const BLANK = new RegExp(BLANK_PATTERN);
 
@@ -59,8 +60,14 @@ const FOLLOW_UP = 'a follow-up';
 const writtenInAuction = (draft) => draft?.context?.section === 'auction';
 /** Nor does one written for a conversation from the Imports list while it was in Imports. */
 const writtenInImports = (draft, item) => draft?.context?.section === 'importquery' && !!item && onImportsList(item);
-/** Written where nothing teaches: in Auction, or in Imports for the Imports list. */
-const writtenUntaught = (draft, item) => writtenInAuction(draft) || writtenInImports(draft, item);
+/**
+ * Nor one written from a message of the auction's wording file (an enquiry's Thanks, with
+ * estimate and deposit, Car found and the rest), wherever it was written: its words are the
+ * owner's own file, as an order's are.
+ */
+const fromWordingFile = (draft) => ENQUIRY_MESSAGES.includes(draft?.context?.message);
+/** Written where nothing teaches (in Auction, or in Imports for the Imports list), or from the auction's wording file. */
+const writtenUntaught = (draft, item) => writtenInAuction(draft) || writtenInImports(draft, item) || fromWordingFile(draft);
 const NOT_HERE = 'not a dashboard conversation or an import email';
 const notHereWhy = (item) => (item?.section === 'auction' ? 'in the Auction section' : NOT_HERE);
 /** Which kind of reply a request wants lessons for: emails learn from emails, everything else from texts. */
@@ -125,6 +132,7 @@ export function learnFrom(item, draft, finalText, source, { at = Date.now() } = 
   if (draft.item_key !== undefined && !canLearnFrom(draft.item_key)) return { learned: false, why: NOT_HERE };
   if (writtenInAuction(draft)) return { learned: false, why: 'written in the Auction section' };
   if (writtenInImports(draft, item)) return { learned: false, why: "written in Imports, from the dashboard's Imports list" };
+  if (fromWordingFile(draft)) return { learned: false, why: "written from the auction's wording file" };
   if (draft.rating === 'bad' && source === 'copied') return { learned: false, why: 'rated not usable' };
 
   const lead = item.lead;
@@ -373,6 +381,7 @@ export const REMEMBER_REFUSED = 'Marketplace chats, phone-only texts and auction
 export const REMEMBER_FOLLOW_UP = 'Follow-ups do not teach Wheelman.';
 export const REMEMBER_AUCTION = 'Auction conversations do not teach Wheelman.';
 export const REMEMBER_IMPORTS_LIST = "Conversations from the dashboard's Imports list do not teach Wheelman.";
+export const REMEMBER_WORDING_FILE = "Messages from the auction's wording file do not teach Wheelman.";
 export const NOTHING_TO_REMEMBER = 'There is no instruction to remember.';
 const NO_SCOPE = 'Say which kind of reply to remember it for.';
 
@@ -388,11 +397,13 @@ export function onRemember(item, draftId, scope) {
   const draft = getDraft(draftId);
   if (!draft) return { status: 404, error: 'Suggestion not found.' };
   // Marketplace, the phone-only list and auction orders (and their out: messages), then follow-ups,
-  // then anything in Auction, then the dashboard's Imports list: each refused in its own sentence.
+  // then anything in Auction, then the dashboard's Imports list, then a message from the auction's
+  // wording file: each refused in its own sentence.
   if (!canLearnFrom(draft.item_key) || /^out:/.test(String(draft.anchor_key || ''))) return { status: 400, error: REMEMBER_REFUSED };
   if (isFollowUp(draft)) return { status: 400, error: REMEMBER_FOLLOW_UP };
   if (writtenInAuction(draft) || item?.section === 'auction') return { status: 400, error: REMEMBER_AUCTION };
   if (importsListHere(item) || writtenInImports(draft, item)) return { status: 400, error: REMEMBER_IMPORTS_LIST };
+  if (fromWordingFile(draft)) return { status: 400, error: REMEMBER_WORDING_FILE };
   if (!item) return { status: 404, error: 'That conversation was not found.' };
   const instruction = squash(redact(String(draft.instruction || ''), item.lead)).slice(0, 600);
   if (!instruction) return { status: 400, error: NOTHING_TO_REMEMBER };

@@ -286,6 +286,46 @@ test('an Imports-list lead teaches nothing in Imports, and teaches again once mo
   assert.equal((await get('/api/items/c:99408')).item.teaches, false);
 });
 
+test('a message from the auction wording file teaches nothing wherever it is written, and an Imports template still teaches', async () => {
+  // A Dashboard text moved into Imports teaches there, and is offered the wording file's messages.
+  lead(9411, 'Sol', 'Hi, can you find me a Honda N-Box? 2019 or newer, under 40,000 km.', { conversationId: 99411, phone: '0491 570 152' });
+  conversation(99411, 9411, 'Sol', '0491 570 152', [['IN', 'Hi, can you find me a Honda N-Box? 2019 or newer, under 40,000 km.', 15 * MIN]]);
+  await post('/api/items/c:99411/move', { section: 'importquery' });
+  await settled('c:99411');
+  const shown = (await get('/api/items/c:99411')).item;
+  assert.deepEqual([shown.section, shown.teaches], ['importquery', true]);
+  assert.ok(ENQUIRY.every((id) => shown.templates.some((t) => t.id === id)), shown.templates.map((t) => t.id).join(', '));
+  const write = async (message, instruction = '') => (await post('/api/items/c:99411/draft', { message, instruction })).json.item.draft;
+
+  // Written from the wording file with a Prompt, its blanks filled in and copied: nothing is learned.
+  const reminder = await write('deposit_reminder', 'say we can usually find one within a month');
+  assert.deepEqual([reminder.template, reminder.instruction], ['deposit_reminder', 'say we can usually find one within a month']);
+  assert.ok(reminder.reply.includes('[DEPOSIT AMOUNT?]'), reminder.reply);
+  const filled = reminder.reply.replace(/\[[A-Z ]+\?\]/g, (b) => (b === '[DEPOSIT LINK?]' ? 'https://www.example.com/deposit' : '1,000'));
+  let out = await post(`/api/drafts/${reminder.id}/copied`, { text: filled + '\n\nWe can usually find one within a month.' });
+  assert.deepEqual([out.json.learned, db.getLearned(reminder.id)], [false, null]);
+  // Nor from Good reply or Could be better, and Remember is refused.
+  assert.equal((await post(`/api/drafts/${reminder.id}/rating`, { rating: 'good' })).json.learned, false);
+  assert.equal(db.getLearned(reminder.id), null);
+  assert.equal((await post(`/api/drafts/${reminder.id}/advice`, { note: 'Shorter, and ask when they would like the car.' })).json.learned, false);
+  const refused = await post(`/api/drafts/${reminder.id}/remember`, { scope: 'any' });
+  assert.deepEqual([refused.status, refused.json.error], [400, "Messages from the auction's wording file do not teach Wheelman."]);
+
+  // Copied as written, as the AI fitted it to the customer, with no blank left: no approval, nothing learned.
+  const plain = db.getDraft((await write('search_update')).id);
+  assert.ok(!/\[[A-Z ]+\?\]/.test(plain.reply), plain.reply);
+  const fitted = db.insertDraft({ itemKey: plain.item_key, anchorKey: plain.anchor_key, situation: plain.situation, reply: plain.reply, status: 'ready', checks: [],
+    provider: 'gemini', model: 'stand-in', context: { ...plain.context, fitted: 'stand-in' }, template: plain.template });
+  out = await post(`/api/drafts/${fitted}/copied`, { text: plain.reply });
+  assert.deepEqual([out.json.approved, out.json.learned, db.getDraft(fitted).rating || '', db.getLearned(fitted)], [undefined, false, '', null]);
+
+  // An Imports template, changed and copied, teaches as before.
+  const process = await write('process');
+  assert.equal(process.template, 'process');
+  out = await post(`/api/drafts/${process.id}/copied`, { text: process.reply + '\n\nWe can usually find one within a month.' });
+  assert.equal(out.json.learned, true, JSON.stringify(out.json));
+});
+
 // ---- written without being asked --------------------------------------------------------------------
 
 test('the background writer writes for Imports texts with the email intake off', async () => {
