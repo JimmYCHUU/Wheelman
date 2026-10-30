@@ -194,13 +194,17 @@ test('a fact saved as Working is used and listed to confirm; one put back to Nee
 
 test('a fact the file does not have is refused, and an empty or overlong answer is refused', async () => {
   const rows = db.countRows('playbook_versions');
+  /** An answer of exactly n characters, with nothing to trim. */
+  const sized = (n) => `${'Open every day of the week. '.repeat(80).slice(0, n - 1)}.`;
+  const TOO_LONG = 'That answer is too long: keep it to 2,000 characters or fewer.';
   const cases = [
     [{ title: 'Free floor mats', answer: 'Yes, with every car.' }, 404, 'That fact is not in the Playbook.'],
     [{ answer: 'Open every day.' }, 404, 'That fact is not in the Playbook.'],
     [{ title: 'Opening hours', answer: 'Open every day.', status: 'maybe' }, 400, 'Say whether the answer is Confirmed or Working.'],
     [{ title: 'Opening hours', answer: '   ', status: 'confirmed' }, 400, 'Write the answer first.'],
     [{ title: 'Opening hours', answer: '', status: 'working' }, 400, 'Write the answer first.'],
-    [{ title: 'Opening hours', answer: 'Open every day. '.repeat(130) }, 400, 'That answer is too long: keep it under 2,000 characters.'],
+    [{ title: 'Opening hours', answer: 'Open every day. '.repeat(130) }, 400, TOO_LONG],
+    [{ title: 'Opening hours', answer: sized(2001) }, 400, TOO_LONG],
   ];
   for (const [body, code, error] of cases) {
     const out = await post('/api/playbook/facts', body);
@@ -208,6 +212,13 @@ test('a fact the file does not have is refused, and an empty or overlong answer 
   }
   assert.equal(db.countRows('playbook_versions'), rows, 'nothing was saved');
   assert.equal((await listed('Opening hours')).answer, fileAnswer('Opening hours'));
+
+  // Exactly 2,000 characters is taken, as the words say; then put back to the file's own answer.
+  const longest = await post('/api/playbook/facts', { title: 'Opening hours', answer: sized(2000) });
+  assert.equal(longest.status, 200, longest.error);
+  assert.equal(longest.fact.answer.length, 2000);
+  const back = await post('/api/playbook/facts', { title: 'Opening hours', from: 'file' });
+  assert.deepEqual([back.status, back.fact.answer, back.fact.from], [200, fileAnswer('Opening hours'), 'file']);
 });
 
 test('a file changed by hand after a Playbook answer says so, and its answer can be used', async () => {
@@ -452,6 +463,24 @@ test("a reply the AI wrote to an auction order's customer cites no business fact
   } finally {
     standins.ai.behave = was;
   }
+});
+
+test('the status reads the business facts once, and lists the Working ones from that read', async () => {
+  const read = fs.readFileSync;
+  const file = path.resolve(factsFile());
+  let reads = 0;
+  fs.readFileSync = function (p, ...rest) {
+    if (typeof p === 'string' && path.resolve(p) === file) reads++;
+    return read.call(this, p, ...rest);
+  };
+  let status;
+  try {
+    status = await get('/api/status');
+  } finally {
+    fs.readFileSync = read;
+  }
+  assert.equal(reads, 1);
+  assert.deepEqual(status.facts.toConfirm, knowledge.loadBusinessFacts().filter((t) => t.status === 'working').map((t) => t.title));
 });
 
 test('no statement changes or removes a saved version', () => {

@@ -639,6 +639,7 @@ async function api(req, res, url) {
   const p = url.pathname;
 
   if (req.method === 'GET' && p === '/api/status') {
+    // The facts are read once: the counts, those with no answer and the Working ones all come from it.
     const facts = businessFactsForPrompt();
     // What Wheelman reads of the team's own replies, so the page can say it learns from them:
     // the dashboard's replies in the last year (whoever sent them), the past import emails, and
@@ -650,7 +651,7 @@ async function api(req, res, url) {
     // The edits proposed as lessons, waiting in the Playbook: counted for its Menu item only.
     const playbook = { toReview: 0 };
     try { playbook.toReview = editProposals().length; } catch { /* the count is a courtesy too */ }
-    return send(res, 200, { ...worker.statusReport(), learned: learnedStats(), practice, share: shared, facts: { ...facts.counts, unanswered: facts.unanswered, toConfirm: loadBusinessFacts().filter((t) => t.status === 'working').map((t) => t.title) }, playbook });
+    return send(res, 200, { ...worker.statusReport(), learned: learnedStats(), practice, share: shared, facts: { ...facts.counts, unanswered: facts.unanswered, toConfirm: facts.topics.filter((t) => t.status === 'working').map((t) => t.title) }, playbook });
   }
 
   // Is Wheelman alive and able to read its database? For a watchdog, the demo check and a person.

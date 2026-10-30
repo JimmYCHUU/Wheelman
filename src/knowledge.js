@@ -37,6 +37,9 @@ export const USE_FILE = 'file';
  * its newest saved status and answer, and `at`, when that was saved. A topic saved there that the
  * file lacks follows the file's topics. With nothing saved, the list is exactly the file's. The file
  * itself is only ever read.
+ *
+ * With `playbook` it opens the database too (latestVersions in src/db.js), so a script that only
+ * reads the facts opens config.dbPath. `playbook: false` reads the file alone.
  */
 export function loadBusinessFacts(file = knowledgeFile('business-facts'), { playbook = true } = {}) {
   const raw = fs.readFileSync(file, 'utf8').replace(/\r/g, '');

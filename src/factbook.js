@@ -7,7 +7,7 @@ import { loadBusinessFacts, FACTS_NAME, USE_FILE } from './knowledge.js';
 import { addVersion, versionsOf } from './db.js';
 
 export const FACT_STATES = ['confirmed', 'working', 'needs_answer'];
-const LONGEST = 2000;
+const LONGEST = 2000; // characters: an answer of exactly this many is taken, as the refusal says
 
 const versions = (title) => versionsOf({ kind: 'fact', name: FACTS_NAME, part: title });
 /** A topic of the file as a save's base keeps it, to tell later whether the file was changed by hand. */
@@ -67,7 +67,7 @@ export function saveFact({ title, answer, status = 'confirmed', from = null, now
   // A fact put back to Needs answer has no answer: nothing is stated about it until it is answered.
   const text = status === 'needs_answer' ? '' : String(answer ?? '').trim();
   if (status !== 'needs_answer' && !text) return { status: 400, error: 'Write the answer first.' };
-  if (text.length > LONGEST) return { status: 400, error: 'That answer is too long: keep it under 2,000 characters.' };
+  if (text.length > LONGEST) return { status: 400, error: 'That answer is too long: keep it to 2,000 characters or fewer.' };
   if (current.status !== status || current.answer !== text) {
     const inFile = fileTopics().get(name);
     addVersion({ kind: 'fact', name: FACTS_NAME, part: name, text, status, base: inFile ? asBase(inFile) : '', at: now });
