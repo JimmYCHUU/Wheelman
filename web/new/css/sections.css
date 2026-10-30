@@ -1,0 +1,30 @@
+/* What a section adds to the conversation: for a Facebook chat, what the engine's auto-reply is doing
+   (the pills after the messages, each a sentence in its colour), a reply the engine's phone is still
+   sending, and a listing that is not in the stock list; for an auction order, its strip, Remove on a
+   pasted message and the paste box. In the views layer, beside the pills and strips of views.css
+   that these build on. Tokens only. */
+@layer views {
+  .pill.engine { font-weight: var(--fw-semi); }
+  .pill.engine.info { background: var(--accent-soft); color: var(--ink); }
+  .pill.engine.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.engine.bad { background: var(--bad-soft); color: var(--bad); }
+  .bubble .by.sending { font-style: italic; color: var(--ink-2); }
+  .carstrip .unlisted { color: var(--ink-2); font-weight: var(--fw-semi); }
+  .carstrip .facts.finished { color: var(--ink-3); }
+  .asked dd a { overflow-wrap: anywhere; }
+
+  /* an auction order: a pasted message can be taken out again, and what they wrote is pasted in */
+  .bubble .unpaste { align-self: flex-start; margin: 0 calc(-1 * var(--s-2)) calc(-1 * var(--s-1)); }
+  .bubble.us .unpaste { align-self: flex-end; }
+  .instead .paste-open { margin-left: auto; }
+  .paste { display: flex; flex-direction: column; gap: var(--s-2); }
+  .paste textarea { width: 100%; padding: var(--s-2) var(--s-3); border: var(--edit-edge) solid var(--line-strong); border-radius: var(--r-box); background: var(--surface); color: var(--ink); line-height: var(--lh); resize: vertical; }
+  .paste textarea:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 var(--s-1) var(--accent-soft); }
+  .paste-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+  .paste-foot .fine { flex: 1 1 var(--tell-w); margin: 0; padding: 0 var(--s-1); font-size: var(--fs-12); color: var(--ink-2); }
+  .paste-foot .right { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--s-2); margin-left: auto; }
+
+  @media (max-width: 899px) {
+    .paste-foot .right { flex: 1 1 100%; }
+  }
+}

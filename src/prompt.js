@@ -9,7 +9,7 @@ import { redact } from './redact.js';
 import { maskCustomerSignOff, stripLocationBlock } from './voice.js';
 import { reservedByAnother } from './deal.js';
 import { labelFor, farAway, SITUATIONS } from './situations.js';
-import { businessFactsForPrompt, relevantFacts, relevantOperations, relevantWebsite, vehicleFacts, alternatives, operationsGuide, inspectionLinks, importPagesFor, formatMoney as money } from './knowledge.js';
+import { businessFactsForPrompt, relevantTopics, factLines, relevantOperations, relevantWebsite, vehicleFacts, alternatives, operationsGuide, inspectionLinks, importPagesFor, formatMoney as money } from './knowledge.js';
 import { availability } from './normalize.js';
 import { pickExamples } from './examples.js';
 import { learnedExamples, corrections, ownerGuidance } from './learn.js';
@@ -347,6 +347,7 @@ const ASKS_LINK = /\b(link|url)\b/i;
  * block: code adds the owner's invitation with the link under the AI's lines. prompted: the reply
  * is written from the owner's Prompt, which decides what it says: the invitation is added only
  * when the Prompt asks for the booking link, and otherwise the AI is given the link to use itself.
+ * why: the reason, as the AI is told it; its first sentence is shown on the page with the invitation.
  */
 export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction = '', prompted = false, now = Date.now() } = {}) {
   const none = { kind: null, url: '', urls: [], lines: [], must: false, block: false };
@@ -411,7 +412,7 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
       '- On Marketplace the next step is their phone number, not the booking link: ask them to send us their number and the day and time that suit them, and say we will get the inspection booked for them and confirm it by text. Give no booking link: they have not asked for one, and no invitation is added under your text.',
       '- If they named a day and a time inside our opening hours, say it suits, and still ask for their number so it can be booked.',
     ];
-    return { kind: saidFar ? 'online' : 'onsite', url: saidFar ? links.online : links.onsite, urls: [links.onsite, links.online], must: false, block: false, number: true, lines };
+    return { kind: saidFar ? 'online' : 'onsite', url: saidFar ? links.online : links.onsite, urls: [links.onsite, links.online], must: false, block: false, number: true, why: whyChat, lines };
   }
   // The invitation is always open and in the owner's words: code adds it under the AI's lines.
   // Under a Prompt that did not ask for it, the AI has the link to give itself if it invites them.
@@ -419,7 +420,7 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
     ? '- The invitation and the booking link are added under your text automatically, in our own words: do not write the link, a day, a time or a slot, and do not point to them.'
     : `- This time no invitation is added under your text. If you invite them, give the booking link yourself on its own line, under a short label such as "You can book an inspection here:": ${url}`);
   if (saidFar) {
-    return { kind: 'online', url: links.online, urls: [links.online], must, block: byCode, lines: [
+    return { kind: 'online', url: links.online, urls: [links.online], must, block: byCode, why, lines: [
       `${why} They have said they are far from Sydney, or cannot come.`,
       '- Offer an online video inspection: a live video call on WhatsApp or FaceTime where we walk around the vehicle with them.',
       added(links.online),
@@ -427,7 +428,7 @@ export function inspectionPlan(item, vehicle = item.vehicles[0], { instruction =
       '- If it helps, add that we deliver Australia-wide. A delivery price is quoted by a person.',
     ] };
   }
-  return { kind: 'onsite', url: links.onsite, urls: [links.onsite, links.online], must, block: byCode, lines: [
+  return { kind: 'onsite', url: links.onsite, urls: [links.onsite, links.online], must, block: byCode, why, lines: [
     why,
     `- Tell them they are welcome to inspect it at ${config.site.showroom}.`,
     added(links.onsite),
@@ -837,7 +838,8 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   P.push('\n=== BUSINESS FACTS ===');
   // Compact: the core topics and those this message touches, not every topic.
   const waitingText = pendingRedacted.join('\n');
-  P.push(compact ? relevantFacts(waitingText + ' ' + item.situation.all.map(labelFor).join(' ')) : facts.text);
+  const carried = compact ? relevantTopics(waitingText + ' ' + item.situation.all.map(labelFor).join(' '), { topics: facts.topics }) : null;
+  P.push(compact ? factLines(carried) : facts.text);
   if (facts.unanswered.length) {
     P.push('\n=== TOPICS WITH NO CONFIRMED ANSWER ===');
     P.push('State nothing about these. If the reply needs one, use [CHECK?] and list it under needs_human.');
@@ -1031,6 +1033,8 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     user: P.join('\n'),
     // The compact style's markers for our records' facts, [{ name: 'F1', value }]; null in the full style.
     factMarkers,
+    // The owner's lessons the request carries, each with where it came from (adviceId, n).
+    owner: { lessons: owner.lessons },
     exampleIds: examples.map((e) => e.id),
     // The past emails join the examples here so a reply lifted from one is caught as copied.
     exampleReplies: [...examples.map((e) => e.reply), ...mailSent.map((s) => s.reply)],
@@ -1040,6 +1044,11 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     sameModelUrl: sameModel?.url || '',
     importUrls: importPages.map((p) => p.url),
     businessFactsText: facts.text,
+    // What the customer is waiting on us for, with their details taken out, and the business facts the
+    // request carried: which facts the reply used is worked out from these (src/factcite.js). The
+    // compact style carries only some answered topics (relevantTopics), and every one with no answer.
+    askedText: waitingText,
+    factTopics: compact ? facts.topics.filter((t) => t.status === 'needs_answer' || carried.includes(t)) : facts.topics,
     // An import email: every figure and link the research gave, which the reply may state.
     researchText: rendered ? rendered.trustedText : '',
     researchBlanks: research?.blanks || [],

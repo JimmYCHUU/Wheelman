@@ -1,0 +1,88 @@
+/* The Playbook: a full page in place of the work grid, one column of cards to read and change. */
+@layer views {
+  .playbook { min-height: 0; overflow-y: auto; }
+  .pb-inner { max-width: var(--page-w); margin: 0 auto; padding: var(--s-4) var(--s-6) var(--s-10); display: grid; gap: var(--s-5); }
+  .pb-back { justify-self: start; display: inline-flex; align-items: center; min-height: var(--touch); padding: 0 var(--s-1); text-decoration: none; }
+  .pb-back:hover { text-decoration: underline; }
+  .pb-head { display: grid; gap: var(--s-1); }
+  .pb-head h2 { margin: 0; font-size: var(--fs-24); font-weight: var(--fw-bold); }
+  .pb-lead { margin: 0; color: var(--ink-2); }
+
+  /* the two tabs: links, so Back and forward move between them; on a phone they scroll sideways */
+  .pb-tabs { display: flex; gap: var(--s-2); overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--line); }
+  .pb-tabs::-webkit-scrollbar { display: none; }
+  .pb-tab { flex: none; display: inline-flex; align-items: center; gap: var(--s-2); min-height: var(--control); padding: 0 var(--s-3); color: var(--ink-2); font-weight: var(--fw-semi); text-decoration: none; white-space: nowrap; }
+  .pb-tab:hover { color: var(--ink); }
+  .pb-tab[aria-current="page"] { color: var(--ink); box-shadow: inset 0 calc(-1 * var(--s-hair)) 0 var(--accent); }
+  .pb-tab-note { font-size: var(--fs-12); font-weight: var(--fw-medium); color: var(--ink-2); }
+
+  .pb-body { display: grid; gap: var(--s-6); }
+  .pb-intro { margin: 0; padding: var(--s-3) var(--s-4); border-radius: var(--r-box); background: var(--surface-quiet); color: var(--ink-2); font-size: var(--fs-13); }
+  .pb-wait { margin: 0; color: var(--ink-2); }
+  .pb-problem { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); padding: var(--s-3) var(--s-4); border-radius: var(--r-box); background: var(--bad-soft); color: var(--bad); font-weight: var(--fw-semi); }
+  .pb-group { display: grid; gap: var(--s-2); }
+  .pb-group h3 { margin: 0; font-size: var(--fs-16); font-weight: var(--fw-bold); }
+  .pb-quiet { font-size: var(--fs-13); font-weight: var(--fw-medium); color: var(--ink-2); }
+  .pb-none { margin: 0; color: var(--ink-2); }
+
+  /* a card: a proposal, a lesson or a fact */
+  .pb-card { display: grid; gap: var(--s-2); padding: var(--s-3) var(--s-4); border: 1px solid var(--line); border-radius: var(--r-box); background: var(--surface); }
+  .pb-card.off { background: var(--surface-quiet); }
+  .pb-card.off .pb-words { color: var(--ink-2); }
+  .pb-card-top { display: flex; align-items: center; gap: var(--s-3); }
+  .pb-card-top .reason, .pb-card-top .btn { flex: none; }
+  .pb-words { flex: 1; min-width: 0; margin: 0; font-size: var(--fs-14); font-weight: var(--fw-semi); overflow-wrap: anywhere; }
+  .pb-meta { margin: 0; font-size: var(--fs-13); color: var(--ink-2); }
+  .pb-acts { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+  .pb-examples { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); }
+  .pb-example { display: grid; gap: var(--s-hair); padding: var(--s-2) var(--s-3); border-radius: var(--r-bubble); background: var(--surface-quiet); font-size: var(--fs-13); overflow-wrap: anywhere; }
+  .pb-label { font-size: var(--fs-12); font-weight: var(--fw-semi); color: var(--ink-3); }
+  .pb-label + del + .pb-label { margin-top: var(--s-1); }
+  .pb-example del { color: var(--ink-2); }
+  .pb-example ins { text-decoration: none; color: var(--ink); }
+
+  /* "Where it came from", "History" and "Earlier answers": closed until asked for */
+  .pb-more { font-size: var(--fs-13); color: var(--ink-2); }
+  .pb-more summary { display: flex; align-items: center; gap: var(--s-2); min-height: var(--control); cursor: pointer; list-style: none; font-weight: var(--fw-semi); }
+  .pb-more summary::-webkit-details-marker { display: none; }
+  .pb-more summary::before { content: '▸'; color: var(--ink-3); }
+  .pb-more[open] summary::before { content: '▾'; }
+  .pb-more > :not(summary) { margin-top: var(--s-1); }
+  .pb-from { display: grid; gap: var(--s-2); }
+  .pb-from p { margin: 0; overflow-wrap: anywhere; }
+  .pb-history { margin: 0; padding-left: var(--s-5); display: grid; gap: var(--s-hair); }
+
+  /* a lesson's switch: its word says On or Off as well as its colour */
+  .pb-switch { flex: none; display: inline-flex; align-items: center; gap: var(--s-2); min-height: var(--control); padding: 0 var(--s-1); border: 0; border-radius: var(--r-pill); background: transparent; color: var(--ink-2); font-size: var(--fs-13); font-weight: var(--fw-semi); }
+  .pb-knob { position: relative; flex: none; width: var(--switch-w); height: var(--switch-h); border-radius: var(--r-pill); background: var(--line-strong); transition: background var(--t-press) var(--ease); }
+  .pb-knob::after { content: ''; position: absolute; top: var(--s-hair); left: var(--s-hair); width: var(--knob); height: var(--knob); border-radius: var(--r-pill); background: var(--surface); box-shadow: var(--shadow-1); transition: transform var(--t-press) var(--ease); }
+  .pb-switch[aria-checked="true"] { color: var(--ink); }
+  .pb-switch[aria-checked="true"] .pb-knob { background: var(--accent); }
+  .pb-switch[aria-checked="true"] .pb-knob::after { transform: translateX(calc(var(--switch-w) - var(--knob) - 2 * var(--s-hair))); }
+  .pb-switch-word { min-width: 3ch; text-align: left; }
+  /* a change on its way: the change buttons wait, and say so by their look as well as to a screen reader */
+  .playbook [aria-disabled="true"] { opacity: 0.55; cursor: progress; }
+  .playbook .btn[aria-disabled="true"]:active { transform: none; }
+
+  /* a business fact: its answer, the box to answer or change it, and its earlier answers */
+  .pb-answer { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .pb-editor { display: grid; gap: var(--s-2); }
+  .pb-editor label { font-size: var(--fs-13); font-weight: var(--fw-semi); color: var(--ink-2); }
+  .pb-editor textarea { width: 100%; min-height: calc(4 * var(--s-6)); resize: vertical; padding: var(--s-2) var(--s-3); border: var(--edit-edge) solid var(--line-strong); border-radius: var(--r-bubble); background: var(--surface); color: var(--ink); line-height: var(--lh); }
+  .pb-editor textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 var(--s-1) var(--accent-soft); }
+  .pb-file { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); padding: var(--s-2) var(--s-3); border-radius: var(--r-bubble); background: var(--warn-soft); color: var(--warn); font-size: var(--fs-13); font-weight: var(--fw-semi); overflow-wrap: anywhere; }
+  .pb-earlier { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); }
+  .pb-earlier li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-3); padding: var(--s-2) var(--s-3); border-radius: var(--r-bubble); background: var(--surface-quiet); color: var(--ink); }
+  .pb-day { font-weight: var(--fw-semi); color: var(--ink-2); }
+  .pb-said { flex: 1 1 var(--tell-w); min-width: 0; overflow-wrap: anywhere; }
+
+  @media (max-width: 899px) {
+    /* one column: the tile sits on the page's 16 px edges, and every control is a 44 px target */
+    .pb-inner { padding: var(--s-3) var(--s-4) var(--s-8); gap: var(--s-4); }
+    .pb-body { gap: var(--s-5); }
+    .pb-card { padding: var(--s-3); }
+    .pb-tab, .pb-switch, .pb-more summary { min-height: var(--touch); }
+    .pb-card-top { flex-wrap: wrap; }
+    .pb-card-top .pb-words { flex-basis: 60%; }
+  }
+}

@@ -21,6 +21,7 @@ import { openViewer } from './views/Viewer.js';
 import { MoveMenu } from './views/MoveMenu.js';
 import { TemplatePicker, showsPicked, pickHolds, fillsIn } from './views/TemplatePicker.js';
 import { linkLine, placeLine } from './lib/insert.js';
+import { writesOnOpen, noSuggestionKey } from './lib/onopen.js';
 
 // ---- state -------------------------------------------------------------------
 
@@ -542,8 +543,8 @@ function blanksIn(text) {
   return found;
 }
 
-/** When the automatic writing starts again, if it is stopped for this section: busy or used-up models. */
-const retryFor = (item) => (item.channel === 'marketplace' ? state.status?.marketplace?.retryAt : state.status?.retryAt) || 0;
+/** When the automatic writing starts again, if it is stopped: busy or used-up models. Nothing retries a Facebook chat, so 0. */
+const retryFor = (item) => (item.channel === 'marketplace' ? 0 : state.status?.retryAt) || 0;
 
 function composerSignature(item) {
   const d = item.draft;
@@ -771,14 +772,15 @@ function renderComposer(item, els, { arriving = false } = {}) {
   }
   // Nothing written yet: two buttons. Prompt, to say what the reply should say first, and Write it
   // now. A failed try is tried again with the prompt it had. While the free models are busy or
-  // used up, the line says when Wheelman tries again instead of "within a few minutes".
+  // used up, the line says when Wheelman tries again instead of "within a few minutes". A Facebook
+  // chat, which nothing writes in the background, says it has no suggestion yet (web/lib/onopen.js).
   if (!d || d.status !== 'ready') {
     const failed = d && d.status === 'failed';
     const retry = retryFor(item);
     const line = failed ? `A suggestion could not be written. ${d.error}`
       : item.autoReason || (item.autoDraft && retry > Date.now()
-        ? t(item.channel === 'marketplace' ? 'composer.retry.marketplace' : state.status?.retryWhy === 'daily' ? 'composer.retry.daily' : 'composer.retry.busy', { time: clock(retry) })
-        : t('composer.waiting'));
+        ? t(state.status?.retryWhy === 'daily' ? 'composer.retry.daily' : 'composer.retry.busy', { time: clock(retry) })
+        : t(noSuggestionKey(item)));
     const prompt = promptControls(item, { instruction: failed ? d.instruction || '' : '' });
     box.append(h('div', { class: `quiet ${failed ? 'bad' : ''}`.trim() },
       h('p', { text: line }),
@@ -921,7 +923,7 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
   function paintAdvice() {
     const blanks = blanksIn(ta.value);
     const lines = [];
-    const teaches = !!item.teaches;
+    const teaches = !!item.teaches && d.teaches !== false;
     // The box was cleared: what the checks said about the suggestion no longer applies.
     if (isEmpty()) {
       advice.replaceChildren(h('div', { class: 'tip input' }, icon('pencil'),
@@ -1106,7 +1108,7 @@ function mountEditor(box, item, d, { arriving = false } = {}) {
   put(after, h('span', { class: 'said' }, icon('check'), 'Copied'));
 
   // Two ways to teach Wheelman. Marketplace chats are never learned from, so they have neither.
-  const teach = !!item.teaches;
+  const teach = !!item.teaches && d.teaches !== false;
   const approved = d.rating === 'good';
   const approveBtn = teach ? h('button', { class: `btn ${approved ? 'is-on' : ''}`.trim(), type: 'button', 'aria-pressed': approved ? 'true' : 'false',
     title: approved ? 'You approved this reply. Click to take that back.' : 'This reply is right as it is. Wheelman will write similar replies the same way.',
@@ -1398,8 +1400,14 @@ function mailInfo(m, row, d) {
       r.notFound?.length ? [h('p', { class: 'fine', text: 'Could not be found (the reply has a blank for each):' }), h('ul', { class: 'facts' }, r.notFound.map((f) => h('li', { text: f })))] : null,
       r.notes?.length ? h('ul', { class: 'facts' }, r.notes.map((n) => h('li', { text: n }))) : null,
       r.sources?.length ? h('p', { class: 'fine' }, 'Read from: ', r.sources.map((s, i) => [i ? ', ' : '', h('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer', text: s.label })])) : null,
-      h('p', { class: 'fine', text: `Looked up ${r.readAt ? clock(r.readAt) : ''}${r.listReadAt ? `, from the eligible-models list read ${listTime(r.listReadAt)}` : ''}.` }),
+      lookedUp(r) ? h('p', { class: 'fine', text: lookedUp(r) }) : null,
     ]);
+}
+
+/** When the research was looked up, and when the list it was read from was read: only what is known ('' for neither). */
+function lookedUp(r) {
+  const parts = [r.readAt ? clock(r.readAt) : '', r.listReadAt ? `from the eligible-models list read ${listTime(r.listReadAt)}` : ''].filter(Boolean);
+  return parts.length ? `Looked up ${parts.join(', ')}.` : '';
 }
 
 /** The auction-order part of the details panel: the order, what they asked for, the car, and what has been charged and paid. */
@@ -1810,8 +1818,9 @@ async function open(key, followUpId = null, { write: writeNow = true } = {}) {
     markRead(item);
     if (item.vehicle && (!state.media.has(String(item.vehicle.stockNo)) || state.media.get(String(item.vehicle.stockNo)).status === 'error')) loadMedia(item.vehicle.stockNo);
     renderChat({ toBottom: true });
-    // Opened from the Follow-ups list: the follow-up is written now, unless it already is.
-    if (writeNow && state.followUp && followUpToWrite(item)) write(item, '');
+    // Opened from the Follow-ups list: the follow-up is written now, unless it already is. A waiting
+    // Facebook buyer, never written in the background, is written now too (web/lib/onopen.js).
+    if (writeNow && (state.followUp ? followUpToWrite(item) : writesOnOpen(item))) write(item, '');
     if (narrow()) $('.thread')?.focus({ preventScroll: true });
   } catch (e) {
     toast(e.message);

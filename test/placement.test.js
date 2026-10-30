@@ -1,8 +1,8 @@
-// Where a conversation is listed, and moving it. A lead from the dashboard's Imports list is an
-// auction customer: it is listed in Auction, under its order once there is one. The owner can move
-// any conversation between Dashboard, Import Query and Auction, in every direction, and back; a
-// Facebook chat can leave Marketplace but nothing moves into it. Every name, number and car is
-// invented; stand-ins play the website, the dashboard and the AI.
+// Where a conversation is listed, and moving it. A lead from the dashboard's Imports list is
+// listed in Imports, and in Auction under its order once there is one. The owner can move any
+// conversation between Dashboard, Imports and Auction, in every direction, and back; a Facebook
+// chat can leave Marketplace but nothing moves into it. Every name, number and car is invented;
+// stand-ins play the website, the dashboard and the AI.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -55,22 +55,22 @@ const lead = (id, first, text, { platform = 'carbarnau', source = 'Contact Us Fo
   inquiries: [{ id: id * 10, type: platform === 'IMPORTS' ? 'Import' : 'Contact Us Page', subject: 'Enquiry', text, stockNo: '', at: now - HOUR, status: 'NEW', url: '', leadType: '', staffNotes: [] }],
 });
 
-// ---- Imports AU leads are auction customers -------------------------------------------------------
+// ---- Imports AU leads are import enquiries ---------------------------------------------------------
 
-test('a lead from the Imports list with no order is listed in Auction as an enquiry, and not in Dashboard', async () => {
+test('a lead from the Imports list with no order is listed in Imports as an enquiry, and not in Dashboard', async () => {
   lead(9101, 'Ari', 'Hi, could you import a Honda N-Box for me? What would it cost?', { platform: 'IMPORTS', source: 'Import' });
-  assert.ok((await keys('auction')).includes('l:9101'), 'listed in Auction');
+  assert.ok((await keys('importquery')).includes('l:9101'), 'listed in Imports');
   assert.ok(!(await keys('dashboard')).includes('l:9101'), 'not in Dashboard');
-  const row = (await get('/api/items?section=auction&tab=waiting&limit=1000')).items.find((r) => r.key === 'l:9101');
-  assert.equal(row.section, 'auction');
+  const row = (await get('/api/items?section=importquery&tab=waiting&limit=1000')).items.find((r) => r.key === 'l:9101');
+  assert.equal(row.section, 'importquery');
   assert.match(row.stage, /^Enquiry: /);
   const { item } = await get('/api/items/l:9101');
-  assert.deepEqual([item.section, item.listed, item.isImport], ['auction', 'imports', true], 'answered as an import enquiry, and the page can say why it is here');
+  assert.deepEqual([item.section, item.listed, item.isImport], ['importquery', 'imports', true], 'answered as an import enquiry, and the page can say why it is here');
 });
 
 // ---- moving ---------------------------------------------------------------------------------------
 
-test('a conversation moves between Dashboard, Auction and Import Query in every direction, and Undo takes it back', async () => {
+test('a conversation moves between Dashboard, Auction and Imports in every direction, and Undo takes it back', async () => {
   lead(9102, 'Bea', 'Hi, what are your opening hours on Sunday?');
   let { item } = await get('/api/items/l:9102');
   assert.deepEqual([item.section, item.moves], ['dashboard', ['auction', 'importquery']]);
@@ -95,13 +95,13 @@ test('a conversation moves between Dashboard, Auction and Import Query in every 
   assert.equal(db.itemMove('l:9102', 9102), null);
   assert.ok((await keys('dashboard')).includes('l:9102'));
 
-  // An Imports lead can go to Dashboard, and back to Auction.
+  // An Imports lead can go to Dashboard, and back to Imports.
   out = await post('/api/items/l:9101/move', { section: 'dashboard' });
-  assert.deepEqual([out.json.from, out.json.item.section], ['auction', 'dashboard']);
+  assert.deepEqual([out.json.from, out.json.item.section], ['importquery', 'dashboard']);
   assert.ok((await keys('dashboard')).includes('l:9101'));
-  assert.ok(!(await keys('auction')).includes('l:9101'));
-  out = await post('/api/items/l:9101/move', { section: 'auction' });
-  assert.equal(out.json.item.section, 'auction');
+  assert.ok(!(await keys('importquery')).includes('l:9101'));
+  out = await post('/api/items/l:9101/move', { section: 'importquery' });
+  assert.equal(out.json.item.section, 'importquery');
   assert.equal(db.itemMove('l:9101', 9101), null, 'back where it belongs: nothing to remember');
 
   // What is refused.
@@ -228,7 +228,7 @@ test('a Facebook chat and an email can leave their own section and come back; ea
   assert.equal((await post('/api/items/ao:601/move', { section: 'dashboard' })).status, 400);
 });
 
-test('a move follows the lead into the text conversation that starts later, and Import Query switched off sends it home', async () => {
+test('a move follows the lead into the text conversation that starts later, and it stays in Imports with the email intake off', async () => {
   lead(9106, 'Wil', 'Hi, what time do you open on Saturday?', { phone: '0491 570 916' });
   await post('/api/items/l:9106/move', { section: 'auction' });
   conversation(99106, 9106, 'Wil', [['IN', 'Hello again', 5 * MIN]]);
@@ -240,10 +240,14 @@ test('a move follows the lead into the text conversation that starts later, and 
   config.mail.switchedOn = false;
   try {
     const item = items.itemFromKey('c:99106');
-    assert.deepEqual([item.section, item.home], ['dashboard', 'dashboard'], 'a section that is off lists nothing');
-    assert.ok(!(await post('/api/items/c:99106/move', { section: 'importquery' })).json.item);
+    assert.deepEqual([item.section, item.home], ['importquery', 'dashboard'], 'Imports is on with the email intake off');
+    assert.ok((await keys('importquery')).includes('c:99106'));
+    // Moved home and into Imports again: the move is taken.
+    assert.equal((await post('/api/items/c:99106/move', { section: 'dashboard' })).json.item.section, 'dashboard');
+    const out = await post('/api/items/c:99106/move', { section: 'importquery' });
+    assert.deepEqual([out.status, out.json.item.section], [200, 'importquery']);
   } finally { config.mail.switchedOn = true; }
-  assert.equal(items.itemFromKey('c:99106').section, 'importquery', 'and is where it was once the section is on again');
+  assert.equal(items.itemFromKey('c:99106').section, 'importquery', 'and is still there with the intake on');
 });
 
 // ---- learning ------------------------------------------------------------------------------------------
@@ -272,7 +276,7 @@ test('nothing is learned while a conversation is in Auction, and it teaches agai
 
 // ---- written without being asked ---------------------------------------------------------------------
 
-test('the background writer writes for enquiries in Auction and for orders a customer has texted', async () => {
+test('the background writer writes for enquiries in Imports and for orders a customer has texted', async () => {
   const worker = await import('../src/worker.js');
   lead(9108, 'Yan', 'Auction alert for a Subaru XV Hybrid', { platform: 'IMPORTS', source: 'Auction', conversationId: 99108, phone: '0491 570 918' });
   conversation(99108, 9108, 'Yan', [['IN', 'Can you find me a Subaru XV Hybrid, 2015, under 120,000 km?', 10 * MIN]]);
@@ -283,7 +287,8 @@ test('the background writer writes for enquiries in Auction and for orders a cus
 
   await worker.draftWaiting({ max: 50 });
   const enquiry = items.itemFromKey('c:99108');
-  assert.equal(db.latestDraft(enquiry.itemKey, enquiry.anchorKey)?.status, 'ready', 'the enquiry in Auction');
+  assert.equal(enquiry.section, 'importquery');
+  assert.equal(db.latestDraft(enquiry.itemKey, enquiry.anchorKey)?.status, 'ready', 'the enquiry in Imports');
   const order = items.itemFromKey('ao:602');
   assert.match(order.anchorKey, /^m:/);
   assert.equal(db.latestDraft(order.itemKey, order.anchorKey)?.status, 'ready', 'the order, for their text');
@@ -337,7 +342,7 @@ test('an Imports lead that nobody moved is searched for only when it tells us so
   lead(9116, 'Noor', 'Hi, can you get me a Honda N-Box? 2019 or newer, under 40,000 km.', { platform: 'IMPORTS', source: 'Import', conversationId: 99116, phone: '0491 570 926' });
   conversation(99116, 9116, 'Noor', [['OUT', 'Hello Noor, thank you, we will look into it.', 30 * MIN], ['IN', 'Thanks, I will pay the deposit tomorrow.', 10 * MIN]]);
   const item = items.itemFromKey('c:99116');
-  assert.equal(item.section, 'auction');
+  assert.equal(item.section, 'importquery');
   await drafter.draftFor(item);
   assert.ok(!/We searched the live auction/.test(lastPrompt()), 'no search for a message with nothing new');
 });
