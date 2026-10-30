@@ -809,7 +809,7 @@ instruction, your note under Could be better, or your repeated edits), its histo
 has been used and a switch to turn it off or on again. A lesson's words cannot be edited: switch
 it off instead. Edits you keep making wait there as proposals (see
 [How Wheelman learns](#how-wheelman-learns)). **Business facts** lists the facts in three
-groups: Confirmed, Working and Needs answer. Write an answer and press **Save as Confirmed**; the
+groups: Needs your answer, Working and Confirmed. Write an answer and press **Save as Confirmed**; the
 fact is Confirmed with the day, the next suggestion uses it, and its trust line names it. Earlier
 answers are listed under each fact, and **Use this answer** puts one back in the box to save
 again. A fact still without an answer is a blank in the reply; the box says so above the reply
