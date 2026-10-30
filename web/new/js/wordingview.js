@@ -44,6 +44,12 @@ export function wordingGroups(files, tab = 'templates') {
     .filter((g) => g.parts.length);
 }
 
+/** The key a part is kept by, in the store and on the page: its file and part. */
+export const partKey = (name, part) => name + '\n' + part;
+
+/** Whether an editor (or a preview) is on this part, p being { name, part }. */
+export const openOn = (editing, p) => !!editing && !!p && editing.name === p.name && editing.part === p.part;
+
 /** Whether a template's Save may be pressed: only for the very words last shown on three conversations. */
 export const canSave = (previewed, text) => !!previewed && previewed.text === text;
 

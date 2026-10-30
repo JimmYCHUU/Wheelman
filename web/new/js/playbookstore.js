@@ -8,7 +8,7 @@
 // voice rule has no preview. Words typed and not saved are kept by part (unsentanswers.js), so an
 // editor opened again starts from them; the editor itself stays open across tabs, Back and the Menu.
 import { PLAYBOOK_TABS } from './playbookroute.js';
-import { canSave } from './wordingview.js';
+import { canSave, partKey, openOn } from './wordingview.js';
 import { unsentWording, keepUnsentWording } from './unsentanswers.js';
 
 const WORDING = '/api/playbook/wording';
@@ -16,11 +16,9 @@ const PATH = { lessons: '/api/playbook/lessons', facts: '/api/playbook/facts', t
 const SAVED = { confirmed: 'Saved as Confirmed. New suggestions use it.', working: 'Saved as Working.' };
 const SAVED_WORDING = 'Saved. New suggestions use it; suggestions already written keep their words.';
 const UNCHANGED = 'Nothing changed: these are the words in use already.';
+const REPLACED = 'These words replace the ones you typed.';
+const NOTHING_SHOWN = 'Nothing came back to show it on. Press Show how it reads again.';
 const BACK = 'Put back as it was.';
-
-/** The key a part's earlier versions are kept by. */
-const partKey = (name, part) => name + '\n' + part;
-const isOpen = (editing, name, part) => !!editing && editing.name === name && editing.part === part;
 
 export function createPlaybookStore({ api, toast, changed = () => {} }) {
   let state = {
@@ -166,19 +164,33 @@ export function createPlaybookStore({ api, toast, changed = () => {} }) {
   /** Keeps the words typed for a part, unless they are its wording in use. */
   const keepWords = (name, part, text) => { const p = partOf(name, part); keepUnsentWording(name, part, p && p.text === text ? null : text); };
 
+  /** Whether the editor is open on this part. */
+  const editingOn = (name, part) => openOn(state.editing, { name, part });
+
+  /** The editor on one part, with these words; another part starts with no preview. */
+  function put(name, part, text) {
+    const same = editingOn(name, part);
+    keepWords(name, part, text);
+    set({ editing: { name, part, text }, ...(same ? {} : { previewed: null }) });
+  }
+
   /**
    * Opens the editor on one part: with `words` (an earlier version, or the file's own wording), else
    * with what is in it already, else the words typed for it before, else its wording in use. Another
-   * part starts with no preview: Save waits for one of its own words.
+   * part starts with no preview: Save waits for one of its own words. Words put over words typed
+   * for the part (in its open editor, or kept from before) say so, with Undo that puts them back.
    */
   function edit(name, part, words) {
     const p = partOf(name, part);
     if (!p) return;
-    const same = isOpen(state.editing, name, part);
     const kept = unsentWording(name, part);
-    const text = words !== undefined ? String(words) : same ? state.editing.text : kept !== null ? kept : p.text;
-    keepWords(name, part, text);
-    set({ editing: { name, part, text }, ...(same ? {} : { previewed: null }) });
+    const typed = editingOn(name, part) ? state.editing.text : kept;
+    if (words === undefined) { put(name, part, typed !== null ? typed : p.text); return; }
+    const text = String(words);
+    put(name, part, text);
+    if (typed !== null && typed !== p.text && typed !== text) {
+      toast(REPLACED, { label: 'Undo', run: () => { put(name, part, typed); toast(BACK); } });
+    }
   }
 
   /** The words in the open editor, as typed. */
@@ -198,51 +210,62 @@ export function createPlaybookStore({ api, toast, changed = () => {} }) {
   /**
    * Shows a template's words on three conversations, written by the code that writes each message.
    * Its answer is kept only while the editor is still on that part: { name, part, text, previews,
-   * none }. A refusal says the server's words, and the editor keeps its own. True when shown.
+   * none }. A refusal says the server's words, and the editor keeps its own; an answer with no
+   * conversations and no sentence counts as nothing shown, and says so. True when shown.
    */
   function preview(name, part, text) {
     return hold(async () => {
       const r = await post('/api/playbook/preview', { name, part, text });
-      if (!r || !isOpen(state.editing, name, part)) return false;
-      set({ previewed: { name, part, text, previews: r.out.previews || [], none: r.out.none || '' } });
+      if (!r) return false;
+      const out = r.out && typeof r.out === 'object' ? r.out : {};
+      const none = typeof out.none === 'string' ? out.none : '';
+      if (!Array.isArray(out.previews) && !none) { toast(NOTHING_SHOWN); return false; }
+      if (!editingOn(name, part)) return false;
+      set({ previewed: { name, part, text, previews: Array.isArray(out.previews) ? out.previews : [], none } });
       return true;
     });
   }
 
   /**
-   * Saves one part's words as a new version, used from the next suggestion. A template's are saved
-   * only when they are the very words last shown on three conversations (canSave); a voice rule's
-   * are saved as they are. Undo saves the version before as a new one. Saved, the editor closes and
-   * its words are forgotten; refused, the toast says the server's words and the editor keeps them.
-   * True when the server took them.
+   * Saves one part's words as a new version, used from the next suggestion: only the very words in
+   * its open editor, and for a template only when they are the words last shown on three
+   * conversations (canSave); a voice rule's are saved as they are. Undo saves the version before as
+   * a new one. Saved, the editor closes and its words are forgotten, unless more was typed while the
+   * save was on its way: those stay, in the open editor. Refused, the toast says the server's words
+   * and the editor keeps them. True when the server took them.
    */
   function saveWording(name, part, text) {
     const f = fileOf(name);
     const p = partOf(name, part);
-    if (!f || !p) return Promise.resolve(false);
-    if (f.kind !== 'voice' && !(canSave(state.previewed, text) && isOpen(state.previewed, name, part))) return Promise.resolve(false);
+    if (!f || !p || !(editingOn(name, part) && state.editing.text === text)) return Promise.resolve(false);
+    if (f.kind !== 'voice' && !(canSave(state.previewed, text) && openOn(state.previewed, { name, part }))) return Promise.resolve(false);
     const before = p.text;
     return hold(async () => {
       const r = await post(WORDING, { name, part, text });
       if (!r) return false;
-      keepUnsentWording(name, part, null);
-      if (isOpen(state.editing, name, part)) set({ editing: null, previewed: null });
+      if (unsentWording(name, part) === text) keepUnsentWording(name, part, null);
+      if (editingOn(name, part) && state.editing.text === text) set({ editing: null, previewed: null });
       if (r.out && r.out.unchanged) toast(UNCHANGED);
       else await landed(SAVED_WORDING, { path: WORDING, body: { name, part, text: before }, words: BACK });
       return true;
     });
   }
 
-  /** Reads every saved version of a part, and the file's own wording, into earlier[name + '\n' + part]. */
+  // The newest read of each part's versions: an older answer that lands after it is not kept.
+  const asked = new Map();
+
+  /** Reads every saved version of a part, and the file's own wording, into earlier[partKey(name, part)]. */
   async function versions(name, part) {
     const k = partKey(name, part);
+    const mine = (asked.get(k) || 0) + 1;
+    asked.set(k, mine);
     const kind = (fileOf(name) || {}).kind || 'template';
-    const put = (entry) => set({ earlier: { ...state.earlier, [k]: entry } });
-    put({ state: 'loading' });
+    const keep = (entry) => { if (asked.get(k) === mine) set({ earlier: { ...state.earlier, [k]: entry } }); };
+    keep({ state: 'loading' });
     try {
-      put({ state: 'ready', out: await api('/api/playbook/versions?' + new URLSearchParams({ kind, name, part })) });
+      keep({ state: 'ready', out: await api('/api/playbook/versions?' + new URLSearchParams({ kind, name, part })) });
     } catch (e) {
-      put({ state: 'error', error: e.message });
+      keep({ state: 'error', error: e.message });
     }
   }
 

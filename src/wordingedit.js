@@ -259,10 +259,17 @@ const NO_CONVERSATION = 'There is no conversation in this section to show it on 
 const SHORT_PIECES = 'The short pieces go into other messages as Wheelman writes them, so there is no conversation to show them on by themselves.';
 const NOT_WRITTEN = 'Wheelman could not write this one from its records just now, so its facts are left as blanks.';
 // What a card says about a line chosen by circumstance that the card itself does not show, so a
-// change to that line is never saved as if it had been seen.
-const BID_LINES = "The bid line here is from @suggested. @suggested_both is used when our bid is above the website's suggested bid, and @own when the customer named the bid.";
-const VISIT_LINE = 'The first line here is from @onsite, for a visit. A customer far away gets @online, for an online video inspection.';
-const VIDEO_LINE = 'The first line here is from @online, for a customer far away. Everyone else gets @onsite, for a visit.';
+// change to that line is never saved as if it had been seen. Each line is named in words, as the
+// page shows it, never by the name the file gives it (@suggested, @onsite and the rest).
+const BID_LINES = "The bid sentence here is the line with our suggested bid. When our bid is above the website's suggested bid, the line for that is used instead, and when the customer named the bid, the line for their own bid.";
+const OFFER_BELOW = 'The offer under the opening is the Auction offer, under Blocks, shown with the line with our suggested bid. Its lines are changed there.';
+const VISIT_LINE = 'The first line here is the line for a visit to the showroom. A customer far away gets the line for a video call instead.';
+const VIDEO_LINE = 'The first line here is the line for a video call, for a customer far away. Everyone else gets the line for a visit to the showroom.';
+// Where an auction order has got to, in words, for each of the short pieces that say so.
+const STAGE = {
+  where_searching: 'still being searched for', where_secured: 'secured at auction', where_japan: 'waiting in Japan to be shipped',
+  where_transit: 'on its way to Australia', where_arrived: 'going through compliance in Australia',
+};
 const SHOWN = 3;
 const SECTION_OF = Object.fromEntries(Object.entries(SECTION_FILES).map(([section, file]) => [file, section]));
 // The messages the auction file's short pieces go into: where the order has got to (@where_…), the
@@ -272,10 +279,10 @@ const PIECES_IN = {
   progress_update: (values) => {
     const t = template(AUCTION);
     const where = Object.keys(t?.snippets || {}).find((k) => k.startsWith('where_') && t.snippets[k] === values.where);
-    return `In "${MESSAGES.progress_update}", with the line for where this order has got to${where ? `: @${where}` : ''}. Each stage has its own @where_ line.`;
+    return `In "${MESSAGES.progress_update}", with the line for where this order has got to${STAGE[where] ? `: ${STAGE[where]}` : ''}. Each stage has a line of its own.`;
   },
-  bid_lost: () => `In "${MESSAGES.bid_lost}": the result line here is @outcome_unknown. @missed is used when you type what it sold for, and @passed_in when it was passed in.`,
-  bid_lost_stock: () => `In "${MESSAGES.bid_lost_stock}": each car is written from @alternative, and @arriving says when they arrive.`,
+  bid_lost: () => `In "${MESSAGES.bid_lost}": the result line here is the one for a bid we did not win. The line for a close miss is used when you type what it sold for, and the line for a car passed in when it was passed in.`,
+  bid_lost_stock: () => `In "${MESSAGES.bid_lost_stock}": each car is written from the line for one of our cars, and the line for when they arrive says when they arrive.`,
 };
 
 /** A section's conversations, newest first: waiting on us or answered, in the last 30 days. */
@@ -303,10 +310,11 @@ function inviteCard(item) {
 /**
  * "Car found, full" (lot_offer) as a preview shows it, as it reads for a car found in the live
  * auction, which a preview never reads: its opening (offerOpening) with that car as blanks, and the
- * offer under it, auction-offer.md with blanks (blankOfferBlock).
+ * offer under it, auction-offer.md with blanks (blankOfferBlock). note: what the card says of its
+ * bid sentence; for "Car found, full" itself, that the offer is another part's words.
  */
-function offerPreview(o) {
-  return { text: [offerOpening(o), blankOfferBlock({ depositPaid: o.depositState !== 'NONE' })].filter(Boolean).join('\n\n'), note: BID_LINES };
+function offerPreview(o, note = BID_LINES) {
+  return { text: [offerOpening(o), blankOfferBlock({ depositPaid: o.depositState !== 'NONE' })].filter(Boolean).join('\n\n'), note };
 }
 
 /** The words a card is written from with every fact a blank and the @ lines left out: what it shows when it cannot be written. */
@@ -369,7 +377,7 @@ function showing(w, part, now) {
     // A car filled in by hand is how "Car found, full" is written when the live auction is not read.
     const type = part === 'lot_offer_manual' ? 'lot_offer' : part;
     if (!ENQUIRY_MESSAGES.includes(type)) return { on: newestOrders, cards: (on) => newestFitting(on, (i) => messagesFor(i.order).includes(type), (i) => messageText(i.order, type, now)) };
-    const write = part === 'lot_offer' ? (i) => offerPreview(enquiryOrder(i, { now })) : (i) => messageText(enquiryOrder(i, { now }), type, now);
+    const write = part === 'lot_offer' ? (i) => offerPreview(enquiryOrder(i, { now }), OFFER_BELOW) : (i) => messageText(enquiryOrder(i, { now }), type, now);
     return { on: importsTexts, cards: (on) => newestFitting(on, (i) => enquiryTemplates(i).some((t) => t.id === type), write) };
   }
   // The blocks code adds under a reply, as a reply about each car carries them.

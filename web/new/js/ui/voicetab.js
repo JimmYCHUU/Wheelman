@@ -2,10 +2,10 @@
 // voice and the short voice card under Voice and the sales playbook under Selling. A section saved
 // here goes into the next suggestion's request as it is, with nothing shown first: only the AI can
 // show its effect. Every version is kept, and an earlier one, or the file's own when the file was
-// changed by hand since, can be put back in the editor (the pieces are templatestab.js's).
+// changed by hand since, can be put back in the editor (the pieces are wordingeditor.js's).
 import { html } from './html.js';
-import { wordingGroups, changedLine } from '../wordingview.js';
-import { EarlierVersions, FileChanged, useEditorFocus, openOn, rowsFor } from './templatestab.js';
+import { wordingGroups, changedLine, partKey, openOn } from '../wordingview.js';
+import { LONGEST, rowsFor, useEditorFocus, FileChanged, EarlierVersions } from './wordingeditor.js';
 
 const INTRO = 'How every reply sounds and sells. A change here goes into the next suggestion; there is no preview, because only the AI can show it.';
 
@@ -26,7 +26,7 @@ function Section({ p, n, pstate, actions, now }) {
       ${open ? null : html`<button type="button" class="btn small" data-edit aria-describedby=${id + '-title'} onClick=${() => use(undefined)}>Edit</button>`}
     </div>
     ${open ? html`<div class="pb-editor">
-      <textarea id=${id} ref=${box} rows=${rowsFor(text)} maxlength="7999" value=${text} aria-labelledby=${id + '-title'}
+      <textarea id=${id} ref=${box} rows=${rowsFor(text)} maxlength=${LONGEST} value=${text} aria-labelledby=${id + '-title'}
         onInput=${(e) => actions.type(e.currentTarget.value)}></textarea>
       <div class="pb-acts">
         <button type="button" class="btn main" aria-disabled=${busy} onClick=${() => actions.saveWording(p.name, p.part, text)}>Save</button>
@@ -46,7 +46,7 @@ export function VoiceTab({ pstate, actions, now }) {
     <p class="pb-intro">${INTRO}</p>
     ${groups.map((g) => html`<section key=${g.group} class="pb-group" aria-labelledby=${'pb-voiceg-' + g.group.toLowerCase()}>
       <h3 id=${'pb-voiceg-' + g.group.toLowerCase()}>${g.group}</h3>
-      ${g.parts.map((p) => html`<${Section} key=${p.name + '\n' + p.part} p=${p} n=${n++} pstate=${pstate} actions=${actions} now=${now} />`)}
+      ${g.parts.map((p) => html`<${Section} key=${partKey(p.name, p.part)} p=${p} n=${n++} pstate=${pstate} actions=${actions} now=${now} />`)}
     </section>`)}
   </div>`;
 }

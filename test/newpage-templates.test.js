@@ -62,7 +62,7 @@ const STILL_VERSIONS = { versions: [{ id: 12, text: STILL, at: TODAY }, { id: 9,
 /** Three cards as the preview route gives them: the words written for each conversation, with its car put in. */
 const three = (text) => ['Dara', 'Ada', 'Priya'].map((name, i) => ({ key: 'c:' + (797 - i), name, section: 'dashboard', car: '2020 Toyota Voxy ZS', fits: i < 2,
   text: 'Hello ' + name + ',\n\n' + text.split('\n').filter((l) => !l.startsWith('@') && !/^\{(greeting|sign_off)\}$/.test(l)).join('\n').trim().replace('{car}', '2020 Toyota Voxy ZS'),
-  ...(i === 0 ? { note: 'The first line here is from @onsite, for a visit.' } : {}) }));
+  ...(i === 0 ? { note: 'The first line here is the line for a visit to the showroom. A customer far away gets the line for a video call instead.' } : {}) }));
 
 /** The fake server, as newpage-playbook.test.js has: refuse(path, body) gives the words of a refusal. */
 function make({ refuse = () => null } = {}) {
@@ -273,7 +273,7 @@ test('Save waits for a preview of the words in the editor', async () => {
   assert.match(words(cards[0]), /^Dara · 2020 Toyota Voxy ZS/);
   assert.doesNotMatch(words(cards[0]), /Not offered here/);
   assert.match(words(cards[2]), /Priya · 2020 Toyota Voxy ZS\s*Not offered here/);
-  assert.match(words(cards[0]), /The first line here is from @onsite, for a visit\./, 'the note is shown');
+  assert.match(words(cards[0]), /The first line here is the line for a visit to the showroom\. A customer far away gets the line for a video call instead\./, 'the note is shown');
   assert.match(words(cards[1]), /Hello Ada,\n\nYes, the 2020 Toyota Voxy ZS is still here and ready to see today\./);
   // Cards that repeat a conversation's key are each drawn.
   const twice = Previews({ previewed: { text: changed, previews: [three(changed)[0], three(changed)[0]] } });
@@ -339,7 +339,7 @@ test('an earlier version goes into the editor, and is saved only after its previ
   assert.deepEqual(down.get().earlier[name + '\n' + sp], { state: 'error', error: 'Wheelman is not responding. Check that it is running.' });
 
   // The editor's Earlier versions: a closed details with the count, each with Use this version.
-  const tab = src('ui/templatestab.js');
+  const tab = src('ui/wordingeditor.js');
   assert.match(tab, /<details class="pb-more"[^>]*><summary>Earlier versions \(\$\{p\.versions\}\)<\/summary>/);
   assert.match(tab, /Use this version<\/button>/);
   assert.match(tab, /versionLines\(entry\.out, now\)\.filter\(\(l\) => !l\.inUse\)/);
@@ -369,6 +369,7 @@ test('the Voice tab saves a rule with no preview and says new suggestions follow
   const same = make();
   await same.store.actions.load('voice', null);
   same.store.actions.edit('house-voice.md', 'Length');
+  same.store.actions.type(LENGTH + '\n');
   assert.equal(await same.store.actions.saveWording('house-voice.md', 'Length', LENGTH + '\n'), true);
   assert.equal(lastToast(same.toasts).message, 'Nothing changed: these are the words in use already.');
   assert.equal(lastToast(same.toasts).action, null);
@@ -466,4 +467,159 @@ test('a preview that comes back after the editor moved on is dropped, and one ch
   assert.equal(store.get().busy, false);
   assert.equal(calls.filter((c) => c.path === '/api/playbook/preview').length, 1);
   store.actions.cancel();
+});
+
+/** A fake server whose answers to the paths `held` names wait until released, newest call last. */
+function slow(held) {
+  const calls = [];
+  const toasts = [];
+  const waiting = [];
+  const answer = (path, body) => {
+    if (path === '/api/playbook/wording') return body === undefined ? { files: files() } : { part: {}, unchanged: false };
+    if (path === '/api/playbook/preview') return { previews: three(body.text) };
+    if (path.startsWith('/api/playbook/versions?')) return { versions: [{ id: calls.length, text: 'v' + calls.length, at: TODAY }], file: STILL_FILE };
+    throw new Error('unexpected ' + path);
+  };
+  const api = (path, body) => {
+    calls.push(body === undefined ? { path } : { path, body });
+    const out = answer(path, body);
+    if (!held(path, body)) return Promise.resolve(out);
+    return new Promise((r) => waiting.push(() => r(out)));
+  };
+  const store = createPlaybookStore({ api, toast: (message, action = null) => toasts.push({ message, action }) });
+  return { store, calls, toasts, release: (i = 0) => waiting.splice(i, 1)[0]() };
+}
+
+test('words typed while a save is on its way stay in the editor, and only the very words in the editor are saved', async () => {
+  const name = 'dashboard-messages.md';
+  const sp = 'still_available';
+  const changed = STILL.replace('ready to see', 'ready to see today');
+  const later = changed + '\n\nSee you soon.';
+  const s = slow((path, body) => path === '/api/playbook/wording' && body !== undefined);
+  await s.store.actions.load('templates', null);
+  s.store.actions.edit(name, sp);
+  s.store.actions.type(changed);
+  await s.store.actions.preview(name, sp, changed);
+  const saving = s.store.actions.saveWording(name, sp, changed);
+  await settle();
+  // Typed after Save was pressed, before the save landed.
+  s.store.actions.type(later);
+  s.release();
+  assert.equal(await saving, true);
+  assert.equal(lastToast(s.toasts).message, SAVED);
+  assert.deepEqual(s.store.get().editing, { name, part: sp, text: later }, 'the editor stays open with the newer words');
+  assert.equal(unsentWording(name, sp), later, 'and they are still kept');
+  assert.equal(canSave(s.store.get().previewed, later), false, 'which wait for their own preview');
+  s.store.actions.cancel();
+
+  // Previewed words are posted only while the editor holds exactly them, on that file and part.
+  const { store, calls } = make();
+  await store.actions.load('templates', null);
+  store.actions.edit(name, sp);
+  store.actions.type(changed);
+  await store.actions.preview(name, sp, changed);
+  store.actions.type(later);
+  calls.length = 0;
+  assert.equal(await store.actions.saveWording(name, sp, changed), false, 'the editor holds other words now');
+  store.actions.type(changed);
+  store.actions.edit(name, 'trade_in');
+  assert.equal(await store.actions.saveWording(name, sp, changed), false, 'the editor is on another part');
+  assert.deepEqual(calls, []);
+  store.actions.cancel();
+  store.actions.edit(name, sp);
+  store.actions.cancel();
+  // A voice rule too: only the words in its open editor.
+  await store.actions.load('voice', null);
+  assert.equal(await store.actions.saveWording('house-voice.md', 'Length', LENGTH + ' More.'), false, 'no editor open');
+  store.actions.edit('house-voice.md', 'Length');
+  assert.equal(await store.actions.saveWording('house-voice.md', 'Length', LENGTH + ' More.'), false, 'not the words in it');
+  assert.deepEqual(calls.filter((c) => c.body !== undefined), []);
+  store.actions.cancel();
+});
+
+test('an earlier version or the file\'s wording put over typed words can be undone', async () => {
+  const name = 'dashboard-messages.md';
+  const { store, toasts } = make();
+  await store.actions.load('templates', null);
+  const typed = STILL + '\n\nMy own words.';
+  // Nothing typed: the version goes in with no toast.
+  store.actions.edit(name, 'still_available');
+  const shown = toasts.length;
+  store.actions.edit(name, 'still_available', STILL_FILE);
+  assert.equal(toasts.length, shown, 'nothing typed, nothing to undo');
+  // Typed words in the open editor: replaced, with Undo that puts them back.
+  store.actions.type(typed);
+  store.actions.edit(name, 'still_available', STILL_FILE);
+  assert.equal(store.get().editing.text, STILL_FILE);
+  let t = lastToast(toasts);
+  assert.equal(t.message, 'These words replace the ones you typed.');
+  assert.equal(t.action.label, 'Undo');
+  t.action.run();
+  assert.equal(store.get().editing.text, typed);
+  assert.equal(lastToast(toasts).message, 'Put back as it was.');
+  assert.equal(lastToast(toasts).action, null);
+  assert.equal(unsentWording(name, 'still_available'), typed);
+  // From a closed card: typed words kept for a part whose editor was left for another one.
+  store.actions.edit(name, 'trade_in');
+  const fileWords = files()[0].parts[2].fileText;
+  store.actions.type(fileWords + '\nTyped for trade-in.');
+  store.actions.edit(name, 'still_available');
+  assert.equal(store.get().editing.text, typed, "Still available's own words");
+  store.actions.edit(name, 'trade_in', fileWords);
+  t = lastToast(toasts);
+  assert.equal(t.message, 'These words replace the ones you typed.');
+  t.action.run();
+  assert.deepEqual(store.get().editing, { name, part: 'trade_in', text: fileWords + '\nTyped for trade-in.' });
+  store.actions.cancel();
+  store.actions.edit(name, 'still_available');
+  store.actions.cancel();
+});
+
+test('an old answer for the earlier versions, or an answer that is not a preview, is not kept', async () => {
+  const name = 'dashboard-messages.md';
+  const sp = 'still_available';
+  const s = slow((path) => path.startsWith('/api/playbook/versions?'));
+  await s.store.actions.load('templates', null);
+  const first = s.store.actions.versions(name, sp);
+  const second = s.store.actions.versions(name, sp);
+  s.release(1); // the newer answer lands first
+  await second;
+  const newest = s.store.get().earlier[name + '\n' + sp].out;
+  s.release(0);
+  await first;
+  assert.deepEqual(s.store.get().earlier[name + '\n' + sp], { state: 'ready', out: newest }, 'the older answer is dropped');
+  assert.equal(newest.versions[0].text, 'v3', 'the second read (the third call)');
+
+  // A preview answered with nothing: nothing counts as shown, and it says so.
+  const toasts = [];
+  const odd = createPlaybookStore({ api: async (path) => (path === '/api/playbook/preview' ? null : { files: files() }), toast: (m) => toasts.push(m) });
+  await odd.actions.load('templates', null);
+  odd.actions.edit(name, sp);
+  assert.equal(await odd.actions.preview(name, sp, STILL), false);
+  assert.equal(odd.get().previewed, null);
+  assert.equal(toasts.at(-1), 'Nothing came back to show it on. Press Show how it reads again.');
+  odd.actions.cancel();
+});
+
+test('the store and the tabs share one part key, one open test, and one editor file with the length limit', async () => {
+  const { partKey, openOn } = await import('../web/new/js/wordingview.js');
+  assert.equal(partKey('house-voice.md', 'Length'), 'house-voice.md\nLength');
+  assert.equal(openOn({ name: 'a.md', part: 'x', text: '' }, { name: 'a.md', part: 'x' }), true);
+  assert.equal(openOn({ name: 'a.md', part: 'x', text: '' }, { name: 'a.md', part: 'y' }), false);
+  assert.equal(openOn(null, { name: 'a.md', part: 'x' }), false);
+  const store = src('playbookstore.js');
+  assert.match(store, /import \{ canSave, partKey, openOn \} from '\.\/wordingview\.js';/);
+  assert.doesNotMatch(store, /const (partKey|isOpen) =/);
+  const editor = src('ui/wordingeditor.js');
+  for (const name of ['useEditorFocus', 'FileChanged', 'EarlierVersions', 'rowsFor', 'LONGEST']) assert.match(editor, new RegExp('export (const|function) ' + name + '\\b'), name);
+  for (const f of ['ui/templatestab.js', 'ui/voicetab.js']) {
+    const tab = src(f);
+    assert.match(tab, /from '\.\/wordingeditor\.js';/, f);
+    assert.match(tab, /maxlength=\$\{LONGEST\}/, f);
+    assert.doesNotMatch(tab, /7999|const keyOf|export const openOn|function useEditorFocus|function EarlierVersions|function FileChanged/, f);
+  }
+  assert.doesNotMatch(src('ui/voicetab.js'), /from '\.\/templatestab\.js'/);
+  // One place holds the limit.
+  const all = ['playbookstore.js', 'wordingview.js', 'ui/templatestab.js', 'ui/voicetab.js', 'ui/wordingeditor.js'].map(src).join('\n');
+  assert.equal((all.match(/7999/g) || []).length, 1);
 });

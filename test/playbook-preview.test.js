@@ -278,15 +278,12 @@ test("the auction file's short pieces are previewed in the messages that use the
     assert.ok(!/\{[a-z_]+\}/.test(p.text), p.text);
   }
   assert.ok(update.text.includes(', as of today.'), update.text);
-  assert.match(update.note, /Progress update/);
-  assert.match(update.note, /@where_[a-z]+/);
+  // Each note names the lines in words: which message, and which line for this order's stage.
+  assert.match(update.note, /^In "Progress update", with the line for where this order has got to: (still being searched for|secured at auction|waiting in Japan to be shipped|on its way to Australia|going through compliance in Australia)\. Each stage has a line of its own\.$/, update.note);
   assert.ok(lost.text.includes('we did not win it this time.'), lost.text);
-  assert.match(lost.note, /@outcome_unknown/);
-  assert.match(lost.note, /@missed/);
-  assert.match(lost.note, /@passed_in/);
+  assert.equal(lost.note, 'In "Bid lost, still searching": the result line here is the one for a bid we did not win. The line for a close miss is used when you type what it sold for, and the line for a car passed in when it was passed in.');
   assert.ok(stock.text.includes('Car 1:') && stock.text.includes('due to arrive by'), stock.text);
-  assert.match(stock.note, /@alternative/);
-  assert.match(stock.note, /@arriving/);
+  assert.equal(stock.note, 'In "Bid lost, with cars from our stock": each car is written from the line for one of our cars, and the line for when they arrive says when they arrive.');
 });
 
 test('a block is previewed on three conversations with a car', async () => {
@@ -320,12 +317,10 @@ test('a block is previewed on three conversations with a car', async () => {
   const [arlo, bryn, cato] = invite.previews;
   for (const p of [arlo, bryn]) {
     assert.match(p.text, /^You can book an inspection here:\n\S+#inspection=onsite\nOr let us know your preferred date and time, and we will set it up for you\.\nPlease call or text before visiting\.$/, p.text);
-    assert.match(p.note, /@onsite/);
-    assert.match(p.note, /@online/);
+    assert.equal(p.note, 'The first line here is the line for a visit to the showroom. A customer far away gets the line for a video call instead.');
   }
   assert.match(cato.text, /^You can book an online video inspection \(a live video call on WhatsApp or FaceTime\) here:\n\S+#inspection=online\nOr let us know your preferred date and time, and we will set it up for you\.\nPlease call or text before visiting\.$/, cato.text);
-  assert.match(cato.note, /@online/);
-  assert.match(cato.note, /@onsite/);
+  assert.equal(cato.note, 'The first line here is the line for a video call, for a customer far away. Everyone else gets the line for a visit to the showroom.');
 
   // The two blocks the enquiry messages hold, on the Imports texts. The first reply to an import
   // enquiry, offered where they have not yet said what they want.
@@ -349,9 +344,7 @@ test('a block is previewed on three conversations with a car', async () => {
     for (const blank of ['[BID?]', '[LANDED TOTAL?]', '[LINK?]', '[DEPOSIT LINK?]']) assert.ok(p.text.includes(blank), `${blank}: ${p.text}`);
     assert.ok(p.text.includes('approximately AUD [LANDED TOTAL?].\nIt has [KM?] and auction grade [GRADE?].'), p.text);
     assert.ok(!/\{[a-z_]+\}|¥\d|NaN/.test(p.text), p.text);
-    assert.match(p.note, /@suggested\b/);
-    assert.match(p.note, /@suggested_both/);
-    assert.match(p.note, /@own/);
+    assert.equal(p.note, "The bid sentence here is the line with our suggested bid. When our bid is above the website's suggested bid, the line for that is used instead, and when the customer named the bid, the line for their own bid.");
   }
   const signed = `${own(AUCTION, 'lot_offer')}\n\n{lot_title}, {lot_km}: {lot_url}\n\nRegards,\n{sender}`;
   const found = await preview(AUCTION, 'lot_offer', signed);
@@ -361,6 +354,25 @@ test('a block is previewed on three conversations with a car', async () => {
     assert.ok(!/\{[a-z_]+\}/.test(p.text), p.text);
     assert.ok(p.text.includes(`[WHICH CAR?], [KM?]: [LINK?]\n\nRegards,\n${config.firstReplySender}\n\n`), p.text);
     assert.ok(p.text.includes('It has [KM?] and auction grade [GRADE?].'), p.text);
+    // The offer under it is another box's words: the note says where they are changed.
+    assert.equal(p.note, 'The offer under the opening is the Auction offer, under Blocks, shown with the line with our suggested bid. Its lines are changed there.');
+  }
+});
+
+test('no preview note names a line by its id: no @, no underscore and no file name', async () => {
+  // Every part of the files whose cards carry notes, shown with its own words, and a few others.
+  const notes = [];
+  for (const name of [AUCTION, 'inspection-invite.md', 'auction-offer.md', 'price-reply.md', 'first-reply.md', 'import-ask.md', DASHBOARD]) {
+    for (const { part, text } of wording.fileParts(name)) {
+      const out = await preview(name, part, text);
+      assert.equal(out.status, 200, `${name} "${part}": ${out.error}`);
+      for (const p of out.previews) if (p.note !== undefined) notes.push([`${name} "${part}"`, p.note]);
+    }
+  }
+  assert.ok(notes.length >= 10, `notes were seen (${notes.length})`);
+  for (const [where, note] of notes) {
+    assert.ok(note.trim(), where);
+    assert.doesNotMatch(note, /@|_|\.md\b/, `${where}: ${note}`);
   }
 });
 
