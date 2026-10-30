@@ -1,16 +1,29 @@
 // What the Playbook's routes call for templates and voice rules (src/playbookapi.js): each file's
-// parts with the wording in use, every saved version of a part, and a save. A save is a new row of
-// playbook_versions, laid over its part of the file whenever the file is read (src/wording.js); the
-// file is never written, and no saved version is ever changed or removed. A save that would break
-// its file, or let go of a rule the wording keeps, is refused in words.
+// parts with the wording in use, every saved version of a part, a save, and a preview. A save is a
+// new row of playbook_versions, laid over its part of the file whenever the file is read
+// (src/wording.js); the file is never written, and no saved version is ever changed or removed. A
+// save that would break its file, or let go of a rule the wording keeps, is refused in words. A
+// preview shows changed words on three conversations, written by the code that writes each message,
+// with no AI, and saves nothing.
 //
 // src/wording.js never imports this module, so the overlay has no cycle through the modules here.
 
+import { config } from './config.js';
 import { WORDING, PART_HEADER, fileParts, withPreview } from './wording.js';
 import { addVersion, versionsOf } from './db.js';
-import { SECTION_FILES, checkTemplates } from './sectiontemplates.js';
-import { ENQUIRY_MESSAGES } from './ordermessages.js';
-import { MESSAGES } from './orders.js';
+import { template, fill, fillParts } from './templates.js';
+import { SECTION_FILES, checkTemplates, templatesFor, composeSectionTemplate } from './sectiontemplates.js';
+import { ENQUIRY_MESSAGES, composeMessage, enquiryOrder, enquiryTemplates } from './ordermessages.js';
+import { MESSAGES, messagesFor, wantedCar } from './orders.js';
+import { listItems, orderRows, itemFromKey } from './items.js';
+import { priceBlock } from './pricereply.js';
+import { standardBlock, inviteBlock } from './firstreply.js';
+import { askParts, wantedFrom, enquiryStage } from './imports.js';
+import { inspectionLinks } from './knowledge.js';
+import { availability } from './normalize.js';
+import { reservedByAnother } from './deal.js';
+import { restore, isPlaceholderName } from './redact.js';
+import { signedName } from './signature.js';
 
 const LONGEST = 7999; // characters: "keep it under 8,000" is what the refusal says, so 8,000 is refused
 const AUCTION = 'auction-messages.md';
@@ -171,4 +184,124 @@ export function saveWording({ name, part, text, now = Date.now() } = {}) {
   const unchanged = listed(c.w, c.own, c.headed).text === c.words;
   if (!unchanged) addVersion({ kind: c.w.kind, name: c.w.name, part: c.own.part, text: c.words, base: c.own.text, at: now });
   return { part: listed(c.w, c.own, c.headed), unchanged };
+}
+
+// ---- a preview: changed words on three conversations, before they are saved ----------------------
+
+const VOICE_HAS_NONE = { status: 400, error: 'Voice rules have no preview: only the AI can show their effect.' };
+const NO_CONVERSATION = 'There is no conversation in this section to show it on yet.';
+const SHORT_PIECES = 'The short pieces go into other messages as Wheelman writes them, so there is no conversation to show them on by themselves.';
+const SHOWN = 3;
+const SECTION_OF = Object.fromEntries(Object.entries(SECTION_FILES).map(([section, file]) => [file, section]));
+
+/** A section's conversations, newest first: waiting on us or answered, in the last 30 days. */
+const recent = (source) => listItems({ source, states: ['awaiting', 'answered'], maxAgeHours: 24 * 30, limit: 60 });
+/** Imports conversations that are not emails: where the enquiry messages are offered. */
+const importsTexts = () => recent('importquery').filter((i) => i.channel !== 'email');
+/** Dashboard conversations about a car of ours: where the blocks are added under a reply. */
+const withCar = () => recent('dashboard').filter((i) => carIn(i));
+/** The orders listed in Auction, newest first, each as the page opens it. */
+const newestOrders = () => [...orderRows()].sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0)).slice(0, 60).map((r) => itemFromKey(r.key)).filter(Boolean);
+
+const carIn = (item) => item.vehicles?.[0] || null;
+/** The car can no longer be sold to this customer: sold, or held for someone else. */
+const gone = (item) => { const v = carIn(item); return !v || availability(v).code === 'sold' || reservedByAnother(v, item.deal); };
+/** The car's in-person booking link; '' when it has no page. */
+const onsiteLink = (item) => (carIn(item)?.url ? inspectionLinks(carIn(item)).onsite : '');
+/** The booking link a reply about the car carries: only while it is at the showroom for them. */
+const bookingLink = (item) => (!gone(item) && availability(carIn(item)).code === 'available' ? onsiteLink(item) : '');
+const messageText = async (o, type, now) => (await composeMessage(o, type, { now })).text;
+
+/** The customer's name as the list shows it: from the record, else as they signed, else their number. */
+function nameOf(item) {
+  if (item.orderRow) return item.orderRow.name;
+  const l = item.lead;
+  const full = [l?.first_name, l?.last_name].filter(Boolean).join(' ').trim() || item.conversation?.customer_name || '';
+  return (full && !isPlaceholderName(full) ? full : signedName(item.timeline)) || item.phone || '';
+}
+
+/** The car a conversation is about, as its row in the list names it. */
+const carLine = (item) => (item.order ? item.orderRow?.car : item.mail ? item.mail.car || item.mail.subject
+  : carIn(item)?.title || item.marketplace?.listingTitle || (item.imports ? wantedFrom(item).car : '')) || '';
+
+/**
+ * "Car found, full" (lot_offer) as a preview shows it: its opening lines and the offer under them
+ * (auction-offer.md), as they read for a car found in the live auction. A preview never reads the
+ * auction, so that car and its figures are blanks, and the deposit link stays one.
+ */
+function offerWithBlanks(o) {
+  const opening = fillParts(template(AUCTION)?.sections?.lot_offer || '', { lot_name: wantedCar(o.wanted) || 'vehicle', auction_when: 'in [WHICH AUCTION?]' });
+  const offer = template('auction-offer.md');
+  const block = offer ? fillParts(offer.text, {
+    vehicle_lines: '[WHICH CAR?]\n[KM?]\nAuction Grade [GRADE?]', lot_url: '[LINK?]', bid: '[BID?]', total: '[LANDED TOTAL?]', decides: null,
+    bid_sentence: fill(offer.snippets.suggested || '', { bid: '[BID?]' }), if_deposit: o.depositState === 'NONE', sender: config.firstReplySender,
+  }) : '';
+  return [opening, block].filter(Boolean).join('\n\n');
+}
+
+/**
+ * How a part is shown: `on`, the conversations to show it on, newest first (read outside the
+ * preview); `fits`, whether it is offered on one; `write`, what it reads there (both inside the
+ * preview, so a changed @fits line counts). null for the short pieces, which go into other
+ * messages and have no conversation of their own.
+ */
+function showing(w, part, now) {
+  const section = SECTION_OF[w.name];
+  if (section) return part ? { on: () => recent(section), fits: (i) => templatesFor(i).some((t) => t.id === part), write: async (i) => (await composeSectionTemplate(i, part, { now })).text } : null;
+  if (w.name === AUCTION) {
+    if (!part) return null;
+    // A car filled in by hand is how "Car found, full" is written when the live auction is not read.
+    const type = part === 'lot_offer_manual' ? 'lot_offer' : part;
+    if (!ENQUIRY_MESSAGES.includes(type)) return { on: newestOrders, fits: (i) => messagesFor(i.order).includes(type), write: (i) => messageText(i.order, type, now) };
+    const write = part === 'lot_offer' ? (i) => offerWithBlanks(enquiryOrder(i, { now })) : (i) => messageText(enquiryOrder(i, { now }), type, now);
+    return { on: importsTexts, fits: (i) => enquiryTemplates(i).some((t) => t.id === type), write };
+  }
+  if (w.name === 'price-reply.md') return { on: withCar, fits: (i) => !gone(i), write: (i) => priceBlock({ vehicle: carIn(i), inspectionUrl: bookingLink(i) }) };
+  if (w.name === 'first-reply.md') return { on: withCar, fits: () => true, write: (i) => standardBlock({ vehicleUrl: gone(i) ? '' : carIn(i).url || '' }) };
+  if (w.name === 'inspection-invite.md') return { on: withCar, fits: (i) => !!bookingLink(i), write: (i) => inviteBlock(onsiteLink(i)) };
+  // The two blocks the enquiry messages hold: the offer of a car found in the live auction, and the
+  // first reply to an import enquiry, written where they have not yet said what they want.
+  if (w.name === 'auction-offer.md') return { on: importsTexts, fits: (i) => enquiryTemplates(i).some((t) => t.id === 'lot_offer'), write: (i) => offerWithBlanks(enquiryOrder(i, { now })) };
+  if (w.name === 'import-ask.md') {
+    return { on: importsTexts, fits: (i) => enquiryStage(i).code === 'enquiry_ask', write: (i) => { const { message, closing } = askParts(wantedFrom(i)); return [message, closing].filter(Boolean).join('\n\n'); } };
+  }
+  return null;
+}
+
+/** Up to three conversations: the newest where the part is offered, then the newest others, marked as not offered there. */
+async function shownOn({ on, fits, write }) {
+  const offered = [];
+  const others = [];
+  for (const item of on) {
+    if (offered.length >= SHOWN) break;
+    if (fits(item)) offered.push(item);
+    else if (others.length < SHOWN) others.push(item);
+  }
+  const picked = [...offered.map((item) => [item, true]), ...others.slice(0, SHOWN - offered.length).map((item) => [item, false])];
+  const out = [];
+  for (const [item, offeredHere] of picked) {
+    out.push({ key: item.itemKey, name: nameOf(item), section: item.section, car: carLine(item), text: restore(await write(item), item.lead), fits: offeredHere });
+  }
+  return out;
+}
+
+/**
+ * Shows changed words for one part on three conversations, before they are saved: { previews:
+ * [{ key, name, section, car, text, fits }] }, with `none` saying why when there is nothing to show
+ * them on; or { status, error } with the words to show. The words are checked as a save checks
+ * them, and nothing is saved. Each message is written by its own code with the conversation's
+ * facts, word for word, with no AI, inside a preview (withPreview in src/wording.js): only that
+ * call chain reads the changed words, and the auction feed and the website's list answer as
+ * unreachable, so their figures are the blanks the message would have. A voice rule has no preview.
+ */
+export async function previewWording({ name, part, text, now = Date.now() } = {}) {
+  if (fileOf(String(name ?? ''))?.kind === 'voice') return VOICE_HAS_NONE;
+  const c = checked({ name, part, text });
+  if (c.error) return c;
+  const plan = showing(c.w, c.own.part, now);
+  if (!plan) return { previews: [], none: SHORT_PIECES };
+  const on = plan.on();
+  if (!on.length) return { previews: [], none: NO_CONVERSATION };
+  const previews = await withPreview({ name: c.w.name, part: c.own.part, text: c.words }, () => shownOn({ ...plan, on }));
+  return { previews };
 }

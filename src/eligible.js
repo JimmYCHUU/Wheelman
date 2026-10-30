@@ -6,12 +6,17 @@
 //   2. one model's headline figures
 // No login, no cookies, and no customer detail ever goes to the website. The list is kept in a
 // file beside the database and read again once a day, so a question costs no request at all.
+// Inside a preview of a template change (withPreview in src/wording.js) the website is not asked:
+// it answers as unreachable, and the list kept on this computer is used as it is.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 import { setMeta } from './db.js';
 import { logLine } from './log.js';
+import { inPreview } from './wording.js';
+
+const NOT_IN_PREVIEW = 'Not read for a preview.';
 
 const LIST = '/api/import-eligible-cars';
 const ONE = '/api/import-eligible-vehicle';
@@ -37,6 +42,7 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** GET one of the two addresses. Anything else is refused before a request is made. */
 async function ask(pathname, params = {}) {
+  if (inPreview()) throw new SiteError(NOT_IN_PREVIEW);
   if (pathname !== LIST && pathname !== ONE) throw new SiteError(`Blocked: ${pathname} is not on the website's read-only list`);
   const url = new URL(baseUrl() + pathname);
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));
@@ -158,8 +164,10 @@ export function loadEligibleModels(now = Date.now()) {
 /**
  * Reads the whole list from the website and keeps it in the models file. Never throws: a failure
  * keeps the old file, is noted, and is not tried again for half an hour. One read at a time.
+ * Inside a preview nothing is read, noted or held back: the list kept on this computer is used.
  */
 export async function refreshEligibleModels({ force = false, now = Date.now() } = {}) {
+  if (inPreview()) return { ok: false, error: NOT_IN_PREVIEW, requests: 0 };
   if (inflight) return inflight;
   if (!force && now - failedAt < COOLDOWN_MS) return { ok: false, error: 'tried a short while ago', requests: 0 };
   inflight = (async () => {
