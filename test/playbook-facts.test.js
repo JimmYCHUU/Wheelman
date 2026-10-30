@@ -432,6 +432,28 @@ test('a template, an auction message or code\'s own wording cites no business fa
   assert.deepEqual([order.draft.topics, order.draft.openTopics], [[], []]);
 });
 
+// Runs after the test above, which stores the auction order 502; Tinted windows is answered.
+test("a reply the AI wrote to an auction order's customer cites no business fact: an order's reply is never one written from the whole request", async () => {
+  const asks = standins.ai.seen.length;
+  const was = standins.ai.behave;
+  standins.ai.behave = () => answer(TINT_USED);
+  try {
+    // What the customer wrote on WhatsApp, pasted in: the AI writes the reply, with no template.
+    const out = await post('/api/items/ao:502/paste', { direction: 'in', text: TINT_ASKED });
+    assert.equal(out.status, 200, out.error);
+    const d = out.item.draft;
+    assert.equal(d.status, 'ready', d.error);
+    assert.ok(standins.ai.seen.length > asks, 'the AI was asked');
+    assert.notEqual(d.provider, 'none');
+    assert.equal(d.template || null, null, 'no template');
+    assert.ok(d.reply.includes(TINT_USED), d.reply);
+    // The words would be named in a reply to a dashboard text (the journey test); here, none.
+    assert.deepEqual([d.topics, d.openTopics], [[], []]);
+  } finally {
+    standins.ai.behave = was;
+  }
+});
+
 test('no statement changes or removes a saved version', () => {
   const CHANGES = /(UPDATE|DELETE\s+FROM|REPLACE\s+INTO|DROP\s+TABLE(\s+IF\s+EXISTS)?)\s+playbook_versions/i;
   for (const folder of ['src', 'scripts']) {

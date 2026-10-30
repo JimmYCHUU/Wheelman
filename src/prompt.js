@@ -9,7 +9,7 @@ import { redact } from './redact.js';
 import { maskCustomerSignOff, stripLocationBlock } from './voice.js';
 import { reservedByAnother } from './deal.js';
 import { labelFor, farAway, SITUATIONS } from './situations.js';
-import { businessFactsForPrompt, relevantFacts, relevantOperations, relevantWebsite, vehicleFacts, alternatives, operationsGuide, inspectionLinks, importPagesFor, formatMoney as money } from './knowledge.js';
+import { businessFactsForPrompt, relevantTopics, factLines, relevantOperations, relevantWebsite, vehicleFacts, alternatives, operationsGuide, inspectionLinks, importPagesFor, formatMoney as money } from './knowledge.js';
 import { availability } from './normalize.js';
 import { pickExamples } from './examples.js';
 import { learnedExamples, corrections, ownerGuidance } from './learn.js';
@@ -838,7 +838,8 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
   P.push('\n=== BUSINESS FACTS ===');
   // Compact: the core topics and those this message touches, not every topic.
   const waitingText = pendingRedacted.join('\n');
-  P.push(compact ? relevantFacts(waitingText + ' ' + item.situation.all.map(labelFor).join(' ')) : facts.text);
+  const carried = compact ? relevantTopics(waitingText + ' ' + item.situation.all.map(labelFor).join(' '), { topics: facts.topics }) : null;
+  P.push(compact ? factLines(carried) : facts.text);
   if (facts.unanswered.length) {
     P.push('\n=== TOPICS WITH NO CONFIRMED ANSWER ===');
     P.push('State nothing about these. If the reply needs one, use [CHECK?] and list it under needs_human.');
@@ -1044,9 +1045,10 @@ export function buildPrompt(item, { instruction = '', coaching = null, importPla
     importUrls: importPages.map((p) => p.url),
     businessFactsText: facts.text,
     // What the customer is waiting on us for, with their details taken out, and the business facts the
-    // request was built from: which facts the reply used is worked out from these (src/factcite.js).
+    // request carried: which facts the reply used is worked out from these (src/factcite.js). The
+    // compact style carries only some answered topics (relevantTopics), and every one with no answer.
     askedText: waitingText,
-    factTopics: facts.topics,
+    factTopics: compact ? facts.topics.filter((t) => t.status === 'needs_answer' || carried.includes(t)) : facts.topics,
     // An import email: every figure and link the research gave, which the reply may state.
     researchText: rendered ? rendered.trustedText : '',
     researchBlanks: research?.blanks || [],

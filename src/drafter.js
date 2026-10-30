@@ -657,7 +657,8 @@ async function writeDraft(item, { instruction = '', coaching = null, template: t
     context.lessons = answered ? (prompt.owner?.lessons || []).map((l) => ({ adviceId: l.adviceId, n: l.n, do: l.do, scope: l.scope, at: l.at })) : [];
     // The business facts the AI's words used, for the trust line, and those with no answer the reply
     // left a blank for, for the line above the box (src/factcite.js). Only for a reply the AI wrote
-    // from the whole request: a template, an auction or import message, or code's own wording, none.
+    // from the whole request: a template, an auction order's or the Imports list's message, or code's
+    // own wording, none.
     const plain = answered && !fit && !plan;
     context.topics = plain ? citedTopics({ asked: prompt.askedText, reply: aiPart, topics: prompt.factTopics }) : [];
     context.openTopics = plain ? openTopics({ asked: prompt.askedText, reply, topics: prompt.factTopics }) : [];

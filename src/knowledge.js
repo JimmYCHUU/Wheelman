@@ -77,13 +77,16 @@ function withPlaybook(topics) {
   return out;
 }
 
+/** Business facts as a request writes them: one line each, "- Title: answer". */
+export const factLines = (topics) => topics.map((t) => `- ${t.title}: ${t.answer.replace(/\n+/g, ' ')}`).join('\n');
+
 /** The business facts as a request carries them, and `topics`, the list they were read from. */
 export function businessFactsForPrompt() {
   const topics = loadBusinessFacts();
   const usable = topics.filter((t) => t.status !== 'needs_answer');
   const open = topics.filter((t) => t.status === 'needs_answer');
   return {
-    text: usable.map((t) => `- ${t.title}: ${t.answer.replace(/\n+/g, ' ')}`).join('\n'),
+    text: factLines(usable),
     unanswered: open.map((t) => t.title),
     counts: { confirmed: topics.filter((t) => t.status === 'confirmed').length, working: topics.filter((t) => t.status === 'working').length, needsAnswer: open.length },
     topics,
@@ -120,12 +123,11 @@ export function operationsGuide(file = knowledgeFile('how-carbarn-works')) {
 
 /**
  * The compact style's business facts: the core topics always, then the few topics whose words
- * match the message (a title word counts double). Same lines as businessFactsForPrompt writes.
- * A topic with no confirmed answer is never included.
+ * match the message (a title word counts double), in the file's order. A topic with no confirmed
+ * answer is never included. These are the topics a compact request carries.
  */
-export function relevantFacts(query, { max = 5, core = ['address', 'opening hours', 'holding deposit'], topics = loadBusinessFacts() } = {}) {
+export function relevantTopics(query, { max = 5, core = ['address', 'opening hours', 'holding deposit'], topics = loadBusinessFacts() } = {}) {
   const usable = topics.filter((t) => t.status !== 'needs_answer');
-  const line = (t) => `- ${t.title}: ${t.answer.replace(/\n+/g, ' ')}`;
   const isCore = (t) => core.some((c) => t.title.toLowerCase().includes(c.toLowerCase()));
   const ranked = [];
   usable.forEach((t, order) => {
@@ -135,7 +137,12 @@ export function relevantFacts(query, { max = 5, core = ['address', 'opening hour
   });
   ranked.sort((a, b) => b.score - a.score || a.order - b.order);
   const picked = new Set([...usable.filter(isCore), ...ranked.slice(0, max).map((r) => r.t)]);
-  return usable.filter((t) => picked.has(t)).map(line).join('\n');
+  return usable.filter((t) => picked.has(t));
+}
+
+/** relevantTopics as the request writes them: the same lines as businessFactsForPrompt writes. */
+export function relevantFacts(query, options = {}) {
+  return factLines(relevantTopics(query, options));
 }
 
 /** The compact style's paragraphs of the operations guide that share two or more words with the message. */
