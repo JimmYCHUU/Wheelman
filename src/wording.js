@@ -6,7 +6,8 @@
 // file reads exactly as it did.
 //
 // A preview (withPreview) lays changed words over one part for one call chain only, held in an
-// AsyncLocalStorage store: any other caller, at the same moment, reads as before.
+// AsyncLocalStorage store: any other caller, at the same moment, reads as before. Only Wheelman's
+// own voice folder is read this way; a folder a script gives as its own is read as written.
 //
 // This module imports only node:fs, node:path, node:async_hooks, config.js and db.js, because
 // templates.js, auction.js and eligible.js import it. Listing and saving are in src/wordingedit.js.
@@ -127,13 +128,22 @@ export function fileParts(name) {
   return lines ? parts(templateSegments(lines).map((s) => ({ part: s.part, text: s.lines.join('\n').trim() }))) : [];
 }
 
+/** True when two folders are the same one (Windows paths are compared without regard to case). */
+function sameFolder(a, b) {
+  const [x, y] = [path.resolve(a), path.resolve(b)];
+  return process.platform === 'win32' ? x.toLowerCase() === y.toLowerCase() : x === y;
+}
+
 /**
  * The words laid over each part of a file: its newest saved version, then the preview's words for
  * its part when inside one. A newest version with a status of its own (such as 'file', which puts
- * the file's own words back in use) lays nothing: that part is the file's.
+ * the file's own words back in use) lays nothing: that part is the file's. Nothing is laid over a
+ * folder other than the Playbook's own (config.playbookVoiceDir): a folder a script gives as its
+ * own, such as the review's --b-voice, is read as written.
  */
 function laidOver(w) {
   const out = new Map();
+  if (!sameFolder(config.voiceDir, config.playbookVoiceDir)) return out;
   for (const [part, v] of latestVersions(w.kind, w.name)) if (!v.status) out.set(part, v.text);
   const p = preview.getStore();
   if (p && p.name === w.name) out.set(p.part, p.text);

@@ -23,6 +23,10 @@ export const config = {
   // The website's "import this model" pages, saved by fetch-website. One file per model.
   importPagesDir: path.join(root, 'knowledge', 'website', 'importing'),
   voiceDir: path.join(root, 'voice'),
+  // The voice folder the Playbook's saved wording belongs to: read from there, each file has it
+  // laid over (src/wording.js). A script that points voiceDir at a folder of its own (the review's
+  // --b-voice) reads that folder as written.
+  playbookVoiceDir: path.join(root, 'voice'),
   webDir: path.join(root, 'web'),
   // The .env file itself: where a key pasted on the page is written. Tests point this at a scratch file.
   envPath: env.ENV_PATH || path.join(root, '.env'),

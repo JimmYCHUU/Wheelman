@@ -330,13 +330,54 @@ test('a voice rule saved in the Playbook goes into the next request, and the com
   assertVoiceUntouched();
 });
 
-test('a wording file changed by hand after a Playbook save says so', async () => {
-  const NAME = 'marketplace-messages.md';
-  // A copy of the wording files, changed by hand there: no file under voice/ is ever written.
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wheelman-wording-'));
+/** A scratch copy of the wording files: no file under voice/ is ever written. */
+function copyOfWording(prefix) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   fs.mkdirSync(path.join(dir, 'compact'));
   for (const w of wording.WORDING) fs.copyFileSync(path.join(voiceDir, w.name), path.join(dir, w.name));
+  return dir;
+}
+
+// Runs after the test above: the Playbook holds saved versions of Length, the voice card, The price
+// question, Still available and the first-reply details.
+test("a voice folder a script gives as its own is read as written: the Playbook's wording is laid over Wheelman's own folder only", async () => {
+  const SAVED = 'A test rule: three short lines at most.';
+  assert.ok((await partOf('house-voice.md', 'Length')).text.includes(SAVED), 'a saved version is in use');
+  // As scripts/review.js does with --b-voice: config.voiceDir points at another folder for one side,
+  // here a copy with side B's own Length rule.
+  const dir = copyOfWording('wheelman-voice-b-');
+  const B_RULE = 'If it can be said in fewer words, use fewer. Side B: two short lines at most.';
+  const own = path.join(dir, 'house-voice.md');
+  fs.writeFileSync(own, fs.readFileSync(own, 'utf8').replace('If it can be said in fewer words, use fewer.', B_RULE));
+  const written = (name) => fs.readFileSync(path.join(dir, name), 'utf8').replace(/\r/g, '').trim();
+  const { standardBlock } = await import('../src/firstreply.js');
   config.voiceDir = dir;
+  try {
+    assert.equal(wording.voiceText('house-voice.md'), written('house-voice.md'));
+    const rules = promptModule.systemPrompt('sms');
+    assert.ok(rules.includes(`\n=== VOICE ===\n${written('house-voice.md')}\n\n=== SELLING ===\n${written('sales-playbook.md')}\n`), 'both files as written');
+    assert.ok(rules.includes(B_RULE) && !rules.includes(SAVED) && !rules.includes(', as it is written.'));
+    assert.equal(promptModule.voiceCard(), written('compact/voice-card.md').replace(COMMENT, '').trim());
+    assert.ok(!playbook.playbookFor({ situation: 'price' }).includes(', as it is written.'));
+    for (const w of wording.WORDING.filter((x) => x.kind === 'template')) assert.deepEqual(templates.template(w.name), templates.template(w.name, { playbook: false }), w.name);
+    assert.match(templates.template(DASHBOARD).sections.still_available, /is still available\./);
+    assert.ok(standardBlock({}).includes('Please call or text before visiting.'));
+  } finally {
+    config.voiceDir = voiceDir;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  // Back in Wheelman's own folder, the Playbook's wording is in use again.
+  assert.ok(promptModule.systemPrompt('sms').includes(SAVED));
+  assert.match(templates.template(DASHBOARD).sections.still_available, /is available today/);
+});
+
+test('a wording file changed by hand after a Playbook save says so', async () => {
+  const NAME = 'marketplace-messages.md';
+  // A copy of the wording files standing in for Wheelman's own voice folder, changed by hand there.
+  const dir = copyOfWording('wheelman-wording-');
+  const ownFolder = config.playbookVoiceDir;
+  config.voiceDir = dir;
+  config.playbookVoiceDir = dir;
   try {
     const original = (await partOf(NAME, 'polite_close')).fileText;
     const mine = original.replace('All the best with your search', 'Good luck with your search');
@@ -364,6 +405,7 @@ test('a wording file changed by hand after a Playbook save says so', async () =>
     assert.deepEqual([versions.versions.map((v) => v.text), versions.file, versions.saidFirst], [[hand, mine], original, true]);
   } finally {
     config.voiceDir = voiceDir;
+    config.playbookVoiceDir = ownFolder;
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });

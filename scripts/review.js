@@ -46,6 +46,8 @@ const parsePin = (s) => {
   if (i <= 0 || i === s.length - 1) fail(`--a-model and --b-model take provider/model, for example openai/gpt-5.6. Got "${s}".`);
   return { provider: s.slice(0, i), model: s.slice(i + 1) };
 };
+// A side given its own voice folder reads it as written; a side without one reads Wheelman's own,
+// with the wording saved in the Playbook laid over it (src/wording.js).
 const sideOf = (letter) => {
   const voice = flag(`--${letter}-voice`);
   const pin = parsePin(flag(`--${letter}-model`));
