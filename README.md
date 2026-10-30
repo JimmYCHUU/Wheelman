@@ -823,12 +823,18 @@ saved there.
 Auction and Blocks (the standard pieces added under a reply), each named in words with its first
 line. **Edit** opens the whole message in a box. **Show how it reads** then fills the words
 into three conversations, word for word, with no AI and nothing read from outside this computer
-(a live auction car, or the website's list, shows as the blank it would be), and says which lines
-a card does not show. A conversation the message is not offered to is marked **Not offered
+(a live auction car, the website's list or a car's photos count as out of reach, so a figure
+shows as the blank it would be). A follow-up's message is shown on conversations with that
+follow-up open. A card names the lines chosen for that customer that it does not show, a card
+that reads the same as before says the conversation does not use the lines you changed, and
+when none of the cards shows the change the preview says so; **Save this version** can still
+be pressed then. A conversation the message is not offered to is marked **Not offered
 here**. **Save this version** waits for a preview of exactly the words in the box; change a word
 and it waits again. A save is refused, with the reason in plain words, when it takes out the
-deposit link's blank, uses a `{word}` that message is never filled with, loses a short piece or
-the line of dashes that a message is read by, or would be sent with a `{word}` still in it.
+deposit link's blank, uses a `{word}` that message is never filled with, has a word in braces
+that Wheelman never fills (such as `{Car}`, `{car link}` or `{{Name}}`), leaves a message with
+only its `@` lines, empties or loses a short piece or the line of dashes that a message is read
+by, or would be sent with a `{word}` still in it.
 **Voice** holds the voice files: the voice, how it sells and the short voice card. A rule is
 saved with no preview, because only the AI can show what it does; the next suggestion shows it.
 
@@ -2105,7 +2111,8 @@ wheelman/
 │   ├── house-voice.md                 the Carbarn voice: the register every reply is written in (first version; the Playbook's Voice tab is laid over it)
 │   ├── sales-playbook.md              how it sells: the ladder, the moves, the price reply, a question only when needed (the same)
 │   ├── previous/                      the voice and the playbook before 12 Oct 2026, for a side-by-side review
-│   │                                  (the message files below are read as the first version of the Playbook's Templates, and never written)
+│   │
+│   │   the message files, each read as the first version of the Playbook's Templates and never written:
 │   ├── first-reply.md                 the standard block under a first reply; edit freely
 │   ├── import-ask.md                  the first reply to an import or auction enquiry; edit freely
 │   ├── auction-offer.md               the layout of an auction offer; edit freely
