@@ -34,13 +34,20 @@ const NOT_LISTED = { status: 404, error: 'That wording is not in the Playbook.' 
 
 const fileOf = (name) => WORDING.find((w) => w.name === name) || null;
 
-/** A part's label: its @label, else the auction message's name, else the heading, the file's label, or "The short pieces". */
-function labelOf(w, part, text, headed) {
+// The auction file's messages the order's "Which message?" list never names (MESSAGES), each with
+// its name in words: "Car found, full" as written when no car from the live auction is read.
+const NAMED = { lot_offer_manual: 'Car found, with no live auction car' };
+const labelLine = (text) => (String(text || '').match(/^@label:\s*(.+)$/m) || [])[1]?.trim() || '';
+
+/**
+ * A part's label, always in words, never its id: its @label (in the wording in use, else in the
+ * file), else the auction message's name, else the heading, the file's label, or "The short
+ * pieces"; a message with none of these is named by a sentence.
+ */
+function labelOf(w, part, text, headed, fileText = text) {
   if (!part) return w.kind === 'template' && headed ? 'The short pieces' : w.label;
   if (w.kind === 'voice') return part;
-  const own = text.match(/^@label:\s*(.+)$/m);
-  if (own) return own[1].trim();
-  return (w.name === AUCTION && MESSAGES[part]) || part;
+  return labelLine(text) || labelLine(fileText) || (w.name === AUCTION && (MESSAGES[part] || NAMED[part])) || `A message with no name yet, in ${w.label}`;
 }
 
 /** Where the Playbook lists a part: the auction file's enquiry messages under Imports, where they are offered; the rest with their file. */
@@ -60,7 +67,7 @@ function listed(w, { part, text: fileText }, headed) {
   const inUse = all[0] && !all[0].status ? all[0] : null;
   const text = inUse ? inUse.text : fileText;
   return {
-    part, label: labelOf(w, part, text, headed), group: groupOf(w, part), text, fileText,
+    part, label: labelOf(w, part, text, headed, fileText), group: groupOf(w, part), text, fileText,
     at: inUse ? inUse.at : null, versions: all.filter((v) => !v.status).length, fileChanged: !!inUse && inUse.base !== fileText,
   };
 }

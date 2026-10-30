@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { createPlaybookStore } from '../web/new/js/playbookstore.js';
-import { wordingGroups, canSave, versionLines, changedLine, nextVersionLine, previewLabel, previewHead } from '../web/new/js/wordingview.js';
+import { wordingGroups, canSave, versionLines, changedLine, nextVersionLine, previewLabel, previewHead, firstLine } from '../web/new/js/wordingview.js';
 import { PLAYBOOK_TABS, playbookRoute } from '../web/new/js/playbookroute.js';
 import { menuHint } from '../web/new/js/playbookview.js';
 import { unsentWording, keepUnsentWording } from '../web/new/js/unsentanswers.js';
@@ -153,6 +153,40 @@ test('the Templates tab groups the messages by section, with the blocks last', a
   assert.match(page, /\{ id: 'templates', label: 'Templates' \}, \{ id: 'voice', label: 'Voice' \}/);
   assert.match(page, /<\$\{TemplatesTab\} pstate=\$\{pstate\} actions=\$\{actions\} now=\$\{now\} \/>/);
   assert.match(page, /<\$\{VoiceTab\} pstate=\$\{pstate\} actions=\$\{actions\} now=\$\{now\} \/>/);
+});
+
+test('the Templates list gives each part its label and first line, and Edit shows all of it', async () => {
+  const g = wordingGroups(files());
+  for (const p of g.flatMap((x) => x.parts)) {
+    assert.ok(p.label, `${p.name} "${p.part}" has a label`);
+    assert.ok(p.first, `${p.name} "${p.part}" has a first line`);
+    assert.doesNotMatch(p.first, /\n/, 'one line');
+  }
+  // A message's first line is the first one a customer reads: its @ lines and a line that is only a {word} are passed over.
+  assert.equal(g[0].parts[1].first, 'Yes, the {car} is still here and ready to see.');
+  assert.equal(g[0].parts[2].first, 'We can look at your car when you come in.');
+  // The short pieces, which are all @ lines: the first piece's words, without its name.
+  assert.equal(g[0].parts[0].first, 'A refundable holding deposit takes it off the market.');
+  assert.equal(g[4].parts[1].first, 'Vehicle details:');
+  assert.equal(firstLine('@label: X\n@fits: y\n{greeting}\n\n   Hello there.  \nMore.'), 'Hello there.');
+  // A line that is only a greeting is passed over too: the auction file's messages all open with one.
+  assert.equal(firstLine('Hello {{NAME}},\n\nThe car you wanted has closed at auction.'), 'The car you wanted has closed at auction.');
+  assert.equal(firstLine('Good morning {{NAME}},\nYour car is on the water.'), 'Your car is on the water.');
+  assert.equal(firstLine('Hello {{NAME}}, thank you for your {car} enquiry.\nMore.'), 'Hello {{NAME}}, thank you for your {car} enquiry.', 'a greeting with words after it is a line to read');
+  assert.equal(firstLine('{greeting}\n{sign_off}'), '{greeting}', 'only words in braces: the first of them');
+  assert.equal(firstLine(''), '');
+  assert.equal(firstLine(undefined), '');
+
+  // The tab: closed, a part is its label and first line, with Edit; open, its box holds all of it.
+  const tab = src('ui/templatestab.js');
+  assert.match(tab, /\$\{open \? null : html`<p class="pb-first">\$\{p\.first\}<\/p>`\}/);
+  assert.doesNotMatch(tab, /<p class="pb-wording-text">\$\{p\.text\}<\/p>/, 'not the whole part');
+  assert.match(tab, /value=\$\{text\}/);
+  const { store } = make();
+  await store.actions.load('templates', null);
+  store.actions.edit('dashboard-messages.md', 'still_available');
+  assert.equal(store.get().editing.text, STILL, 'Edit puts all of it in the box');
+  store.actions.cancel();
 });
 
 test('Save waits for a preview of the words in the editor', async () => {

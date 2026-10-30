@@ -455,6 +455,41 @@ test('a voice file that starts with a byte-order mark reads without it, and its 
   }
 });
 
+test('every part the Playbook lists is named in words: no id and no file name, and a message with no name of its own gets a sentence', async () => {
+  const files = await listedFiles();
+  let n = 0;
+  for (const f of files) {
+    for (const p of f.parts) {
+      n += 1;
+      const where = `${f.name} "${p.part}" is labelled "${p.label}"`;
+      assert.ok(String(p.label || '').trim(), where);
+      assert.doesNotMatch(p.label, /_/, where);
+      assert.doesNotMatch(p.label, /\.md\b|\/|voice-card/, where);
+      // A template's part is named by an id ("ready"); a voice section by its heading, which is words.
+      if (f.kind === 'template' && p.part) assert.notEqual(p.label, p.part, where + ', its id');
+    }
+  }
+  assert.ok(n > 60, 'every file and part was looked at');
+  assert.equal((await partOf('auction-messages.md', 'lot_offer_manual')).label, 'Car found, with no live auction car');
+
+  // A message added to the auction file by hand, in a copy standing in for Wheelman's own folder:
+  // with an @label line it is named by it; with none, and no name Wheelman knows, by a sentence.
+  const dir = copyOfWording('wheelman-wording-names-');
+  const ownFolder = config.playbookVoiceDir;
+  const file = path.join(dir, 'auction-messages.md');
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace(/\s*$/, '\n\n===== new_thing =====\nA new message.\n\n===== named_thing =====\n@label: A named thing\nMore words.\n'));
+  config.voiceDir = dir;
+  config.playbookVoiceDir = dir;
+  try {
+    assert.equal((await partOf('auction-messages.md', 'new_thing')).label, 'A message with no name yet, in Auction messages');
+    assert.equal((await partOf('auction-messages.md', 'named_thing')).label, 'A named thing');
+  } finally {
+    config.voiceDir = voiceDir;
+    config.playbookVoiceDir = ownFolder;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('no wording file under voice/ was written by any test here', () => {
   assertVoiceUntouched();
 });

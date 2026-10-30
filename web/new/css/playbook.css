@@ -79,6 +79,8 @@
   /* a template or voice rule: its wording in the quiet tone, its editor, and the three conversations it is shown on */
   .pb-card-top .pb-meta { flex: none; }
   .pb-wording-text { margin: 0; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-13); color: var(--ink-2); }
+  /* a template in the list: its first line only, cut at two lines, so the list can be scanned */
+  .pb-first { margin: 0; min-width: 0; font-size: var(--fs-13); color: var(--ink-2); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
   .pb-editor .pb-meta { margin: 0; }
   .pb-versions li { display: grid; justify-items: start; gap: var(--s-1); }
   .pb-save { align-items: center; }

@@ -1,5 +1,6 @@
 // The Playbook's Templates tab: every message Wheelman writes from, by section, then the blocks code
-// puts into a reply, each with its wording in use. A change is shown on three conversations, written
+// puts into a reply, each listed by its label and first line, so the list can be scanned; Edit
+// shows all of its wording in use, in the box. A change is shown on three conversations, written
 // word for word by the code that writes each message, before it can be saved: Save waits for a
 // preview of the very words in the editor. Every version is kept: an earlier one, or the file's own
 // wording when the file was changed by hand since, goes into the editor, to be shown and saved in its
@@ -93,7 +94,7 @@ export function SaveRow({ p, text, previewed, busy, save, cancel }) {
   </div>`;
 }
 
-/** One part: its label, its wording in the quiet tone and the day it was changed, with Edit; or its editor. */
+/** One part: its label, its first line in the quiet tone and the day it was changed, with Edit; or its editor, with all of it. */
 function Wording({ p, n, pstate, actions, now }) {
   const open = openOn(pstate.editing, p);
   const { card, box, toBox } = useEditorFocus(open);
@@ -110,7 +111,7 @@ function Wording({ p, n, pstate, actions, now }) {
       ${changed ? html`<span class="pb-meta">${changed}</span>` : null}
       ${open ? null : html`<button type="button" class="btn small" data-edit aria-describedby=${id + '-title'} onClick=${() => use(undefined)}>Edit</button>`}
     </div>
-    ${open ? null : html`<p class="pb-wording-text">${p.text}</p>`}
+    ${open ? null : html`<p class="pb-first">${p.first}</p>`}
     ${p.fileChanged ? html`<${FileChanged} p=${p} use=${use} />` : null}
     ${open ? html`<div class="pb-editor">
         <textarea id=${id} ref=${box} rows=${rowsFor(text)} maxlength="7999" value=${text} aria-labelledby=${id + '-title'} aria-describedby=${id + '-hint'}
