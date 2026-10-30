@@ -804,7 +804,7 @@ followed and the rules that applied, with **See every lesson in the Playbook**.
 
 The **Playbook** is in the **Menu**, and has its own address (`#/playbook/lessons` or
 `#/playbook/facts`). **Back** returns to the conversation as you left it, with what you had
-typed in the box. It has two tabs. **Lessons** lists every lesson with where it came from (your
+typed in the reply box. It has two tabs. **Lessons** lists every lesson with where it came from (your
 instruction, your note under Could be better, or your repeated edits), its history, how often it
 has been used and a switch to turn it off or on again. A lesson's words cannot be edited: switch
 it off instead. Edits you keep making wait there as proposals (see
@@ -1542,7 +1542,7 @@ Wheelman only states facts it has been given.
 In `knowledge/business-facts.md` each topic is marked `CONFIRMED` (stated freely), `WORKING`
 (in use, please check) or `NEEDS ANSWER` (Wheelman says nothing and leaves a blank). That file
 is the first version of every fact. You answer in the new page's Playbook (Menu, Business
-facts). Wheelman never writes the file. Each answer you save is a new row in `datapp.db`, and
+facts). Wheelman never writes the file. Each answer you save is a new row in `data\app.db`, and
 every version is kept, so an earlier one can be used again. A saved answer replaces that topic
 of the file in every request, on both pages; a topic you never answered is read from the file as
 before. If you edit the file by hand after saving an answer, the saved answer stays in use, and
@@ -2107,6 +2107,9 @@ wheelman/
 │   ├── people.js                      who the two voices are, read from voice/people.json
 │   ├── voice.js · voicebank.js        genuine replies only; the example bank
 │   ├── examples.js · learn.js         which examples fit; what was copied, sent and changed
+│   ├── factbook.js · factcite.js      the Playbook's saved answers laid over the facts file; which facts a reply used
+│   ├── editrules.js                   edits made again and again, proposed as lessons
+│   ├── playbookapi.js                 the Playbook's addresses: facts, lessons and proposals
 │   ├── practice.js                    what the team really sent for similar messages
 │   ├── prompt.js                      the request: facts, rules for the channel, inspection plan
 │   ├── selling.js                     where the customer is on the way to a sale, the one move and the one question
