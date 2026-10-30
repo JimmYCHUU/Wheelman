@@ -30,11 +30,11 @@ const MIN = 60e3;
 const DAY = 24 * 3600e3;
 const invented = world(now);
 // Five texts about a car we have at the showroom, the newest a minute ago: newer than anyone else
-// in the fixtures' Dashboard. Each asks whether it is still there.
+// in the fixtures' Dashboard. Each asks whether it is still there; Cato is in Brisbane.
 const ASKS = [
   [601, ['Arlo', 'Invented', '0491 570 160'], '1159', 'Is the Noah still available?', 1],
   [602, ['Bryn', 'Invented', '0491 570 161'], '1201', 'Is the Hiace still available?', 2],
-  [603, ['Cato', 'Invented', '0491 570 162'], '1700', 'Is the Serena still available?', 3],
+  [603, ['Cato', 'Invented', '0491 570 162'], '1700', 'Is the Serena still available? I am in Brisbane so I cannot get down to Sydney.', 3],
   [604, ['Dace', 'Invented', '0491 570 163'], '1159', 'Is the Noah still for sale?', 4],
   [605, ['Ezra', 'Invented', '0491 570 164'], '1201', 'Is the Hiace still for sale?', 5],
 ];
@@ -113,6 +113,12 @@ test('a preview shows the changed wording on three conversations where it is off
     assert.match(p.text, new RegExp(`^Good (morning|afternoon|evening) ${p.name.split(' ')[0]},`), p.text);
     assert.ok(!/\{\{NAME\}\}|\{[a-z_]+\}/.test(p.text), p.text);
   }
+  // Each card names the customer and the car as the conversation's row in the list does.
+  const listed = (await get('/api/items?section=dashboard&tab=all&limit=1000')).items;
+  for (const p of out.previews) {
+    const row = listed.find((r) => r.key === p.key);
+    assert.deepEqual([p.name, p.car], [row.name, row.car], p.key);
+  }
   // Nothing was saved, and the wording in use is the file's.
   assert.equal(rows(), count);
   assert.match((await sectiontemplates.composeSectionTemplate(items.itemFromKey('c:601'), 'still_available')).text, /is still available\./);
@@ -168,7 +174,9 @@ test("a preview reads nothing from outside: the auction and the website's list a
   const auction = () => standins.calls.filter((c) => c.path.startsWith('/auc/')).length;
   const site = () => standins.calls.filter((c) => c.path.startsWith('/api/import-eligible')).length;
   const allowance = () => Number(db.getMeta(`import_research:${sydneyDay(Date.now())}`, 0)) || 0;
-  const [a0, s0, r0] = [auction(), site(), allowance()];
+  // Every request to any stand-in: the dashboard, its media, the website, the auction, the AI and the content engine.
+  const anything = () => standins.calls.length + standins.engineSeen.length;
+  const [a0, s0, r0, n0] = [auction(), site(), allowance(), anything()];
 
   // An enquiry message that works out a landed total from the auction at Gus's target bid.
   const estimate = await preview(AUCTION, 'first_estimate', own(AUCTION, 'first_estimate').replace('Thank you for your {car_wanted} enquiry.', 'Thank you for asking us about the {car_wanted}.'));
@@ -198,6 +206,7 @@ test("a preview reads nothing from outside: the auction and the website's list a
   assert.equal(auction(), a0, 'the auction feed was not asked');
   assert.equal(site(), s0, "the website's list was not asked");
   assert.equal(allowance(), r0, "a preview does not use the day's allowance of live website requests");
+  assert.equal(anything(), n0, 'nothing was asked of any stand-in: no AI, no dashboard, no media');
 
   // Outside a preview both are read as before: the list again, as it is old, and the auction for Gus's total.
   const fresh = await eligible.refreshEligibleModelsIfStale({ now: Date.now() });
@@ -225,6 +234,11 @@ test('an auction message is previewed on three orders, and an enquiry message on
     assert.ok(p.text.includes('[NEXT STEP?]'), p.text);
   }
   assert.deepEqual(orders.previews.map((p) => p.name).sort(), ['Pia Lindqvist', 'Quin Marsh', 'Rhea Castellano']);
+  const orderRowsListed = (await get('/api/items?section=auction&tab=all&limit=1000')).everything;
+  for (const p of orders.previews) {
+    const row = orderRowsListed.find((r) => r.key === p.key);
+    assert.deepEqual([p.name, p.car], [row.name, row.car], p.key);
+  }
 
   // An enquiry message: on the three newest Imports texts, never an email.
   const search = own(AUCTION, 'search_update').replace("We'll keep searching", 'We will keep looking');
@@ -235,10 +249,44 @@ test('an auction message is previewed on three orders, and an enquiry message on
     ['l:612', 'Hal Invented', 'importquery', 'Honda N-Box', true],
     ['l:613', 'Ivo Invented', 'importquery', 'Daihatsu Copen', true],
   ]);
+  const importsListed = (await get('/api/items?section=importquery&tab=all&limit=1000')).items;
   for (const p of asks.previews) {
     assert.ok(p.text.includes(`Just an update on your ${p.car}.`), p.text);
     assert.ok(p.text.includes('We will keep looking'), p.text);
+    const row = importsListed.find((r) => r.key === p.key);
+    assert.deepEqual([p.name, p.car], [row.name, row.car], p.key);
   }
+});
+
+test("the auction file's short pieces are previewed in the messages that use them, each on the newest order it is offered to", async () => {
+  // Every "where" line, the result line, a car of ours and when it arrives: each changed a little.
+  const pieces = own(AUCTION, '')
+    .replace(/^(@where_[a-z]+: .*)$/gm, '$1, as of today')
+    .replace('@outcome_unknown: we did not win it.', '@outcome_unknown: we did not win it this time.')
+    .replace('@alternative: {n}. {title}', '@alternative: Car {n}: {title}')
+    .replace('expected to arrive by', 'due to arrive by');
+  const out = await preview(AUCTION, '', pieces);
+  assert.equal(out.status, 200, out.error);
+  assert.equal(out.none, undefined);
+  assert.equal(out.previews.length, 3);
+  const [update, lost, stock] = out.previews;
+  assert.equal(new Set(out.previews.map((p) => p.key)).size, 3, 'three different orders');
+  for (const [p, type] of [[update, 'progress_update'], [lost, 'bid_lost'], [stock, 'bid_lost_stock']]) {
+    assert.equal(p.section, 'auction');
+    assert.equal(p.fits, true, type);
+    assert.ok(items.itemFromKey(p.key).order && (await import('../src/orders.js')).messagesFor(items.itemFromKey(p.key).order).includes(type), `${p.key} is offered ${type}`);
+    assert.ok(!/\{[a-z_]+\}/.test(p.text), p.text);
+  }
+  assert.ok(update.text.includes(', as of today.'), update.text);
+  assert.match(update.note, /Progress update/);
+  assert.match(update.note, /@where_[a-z]+/);
+  assert.ok(lost.text.includes('we did not win it this time.'), lost.text);
+  assert.match(lost.note, /@outcome_unknown/);
+  assert.match(lost.note, /@missed/);
+  assert.match(lost.note, /@passed_in/);
+  assert.ok(stock.text.includes('Car 1:') && stock.text.includes('due to arrive by'), stock.text);
+  assert.match(stock.note, /@alternative/);
+  assert.match(stock.note, /@arriving/);
 });
 
 test('a block is previewed on three conversations with a car', async () => {
@@ -252,9 +300,10 @@ test('a block is previewed on three conversations with a car', async () => {
     ['c:603', '2016 Nissan Serena Highway Star', true],
   ]);
   const included = ['6 months NSW registration, a 5-year extended warranty and 1 year roadside assistance', '6 months NSW registration', '6 months NSW registration'];
+  const where = ['onsite', 'onsite', 'online'];
   out.previews.forEach((p, i) => {
     assert.ok(p.text.startsWith(`Included in the price: ${included[i]}. Government charges are extra.`), p.text);
-    assert.ok(p.text.includes('#inspection=onsite'), p.text);
+    assert.ok(p.text.includes(`#inspection=${where[i]}`), p.text);
   });
 
   // The other blocks: the first-reply details and the invitation, with each car's own links.
@@ -268,7 +317,15 @@ test('a block is previewed on three conversations with a car', async () => {
   const invite = await preview('inspection-invite.md', '', own('inspection-invite.md', '').replace("we'll arrange it for you.", 'we will set it up for you.'));
   assert.equal(invite.status, 200, invite.error);
   assert.deepEqual(invite.previews.map((p) => [p.key, p.fits]), [['c:601', true], ['c:602', true], ['c:603', true]]);
-  for (const p of invite.previews) assert.match(p.text, /^You can book an inspection here:\n\S+#inspection=onsite\nOr let us know your preferred date and time, and we will set it up for you\.\nPlease call or text before visiting\.$/, p.text);
+  const [arlo, bryn, cato] = invite.previews;
+  for (const p of [arlo, bryn]) {
+    assert.match(p.text, /^You can book an inspection here:\n\S+#inspection=onsite\nOr let us know your preferred date and time, and we will set it up for you\.\nPlease call or text before visiting\.$/, p.text);
+    assert.match(p.note, /@onsite/);
+    assert.match(p.note, /@online/);
+  }
+  assert.match(cato.text, /^You can book an online video inspection \(a live video call on WhatsApp or FaceTime\) here:\n\S+#inspection=online\nOr let us know your preferred date and time, and we will set it up for you\.\nPlease call or text before visiting\.$/, cato.text);
+  assert.match(cato.note, /@online/);
+  assert.match(cato.note, /@onsite/);
 
   // The two blocks the enquiry messages hold, on the Imports texts. The first reply to an import
   // enquiry, offered where they have not yet said what they want.
@@ -290,7 +347,44 @@ test('a block is previewed on three conversations with a car', async () => {
     assert.ok(p.text.startsWith(`Hello ${p.name.split(' ')[0]},\n\nWe found this ${p.car} in [WHICH AUCTION?].`), p.text);
     assert.ok(p.text.includes('We never bid blindly.'), p.text);
     for (const blank of ['[BID?]', '[LANDED TOTAL?]', '[LINK?]', '[DEPOSIT LINK?]']) assert.ok(p.text.includes(blank), `${blank}: ${p.text}`);
+    assert.ok(p.text.includes('approximately AUD [LANDED TOTAL?].\nIt has [KM?] and auction grade [GRADE?].'), p.text);
     assert.ok(!/\{[a-z_]+\}|¥\d|NaN/.test(p.text), p.text);
+    assert.match(p.note, /@suggested\b/);
+    assert.match(p.note, /@suggested_both/);
+    assert.match(p.note, /@own/);
+  }
+  const signed = `${own(AUCTION, 'lot_offer')}\n\n{lot_title}, {lot_km}: {lot_url}\n\nRegards,\n{sender}`;
+  const found = await preview(AUCTION, 'lot_offer', signed);
+  assert.equal(found.status, 200, found.error);
+  assert.deepEqual(found.previews.map((p) => p.key), ['l:611', 'l:612', 'l:613']);
+  for (const p of found.previews) {
+    assert.ok(!/\{[a-z_]+\}/.test(p.text), p.text);
+    assert.ok(p.text.includes(`[WHICH CAR?], [KM?]: [LINK?]\n\nRegards,\n${config.firstReplySender}\n\n`), p.text);
+    assert.ok(p.text.includes('It has [KM?] and auction grade [GRADE?].'), p.text);
+  }
+});
+
+test('a conversation that cannot be written shows its blanks, and the others are written', async () => {
+  // Cato's Serena comes back from the dashboard with its Included list in a shape the price reply
+  // cannot read, so writing his price reply fails. Its record is put back afterwards.
+  const database = db.openDb();
+  const stored = database.prepare("SELECT id, data_json FROM vehicles WHERE stock_no = '1700'").get();
+  database.prepare('UPDATE vehicles SET data_json = ? WHERE id = ?').run(JSON.stringify({ ...JSON.parse(stored.data_json), outline: '6 Months NSW Registration' }), stored.id);
+  try {
+    const out = await preview('price-reply.md', '', own('price-reply.md', '').replace('The price includes {inclusions}.', 'Included in the price: {inclusions}.'));
+    assert.equal(out.status, 200, out.error);
+    assert.deepEqual(out.previews.map((p) => p.key), ['c:601', 'c:602', 'c:603']);
+    const [arlo, bryn, cato] = out.previews;
+    for (const p of [arlo, bryn]) {
+      assert.ok(p.text.startsWith('Included in the price: 6 months NSW registration'), p.text);
+      assert.equal(p.note, undefined);
+    }
+    assert.ok(cato.text.startsWith('Included in the price: [INCLUSIONS?]. Government charges are extra.'), cato.text);
+    assert.ok(cato.text.includes('[INSPECTION INVITE?]') && !/\{|@no_inclusions/.test(cato.text), cato.text);
+    assert.equal(cato.note, 'Wheelman could not write this one from its records just now, so its facts are left as blanks.');
+    assert.equal(cato.name, 'Cato Invented');
+  } finally {
+    database.prepare('UPDATE vehicles SET data_json = ? WHERE id = ?').run(stored.data_json, stored.id);
   }
 });
 

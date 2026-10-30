@@ -4,7 +4,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
-import { listItems, itemFromKey, orderRows } from './items.js';
+import { listItems, itemFromKey, orderRows, displayName, rowCar } from './items.js';
 import { latestDraft, getDraft, dismiss, undismiss, isDismissed, setDraftRating, markSeen, isSeen, dataStamp, uncopy, addOrderMessage, removeOrderMessage, setItemRuling, clearItemRuling, setItemMove, clearItemMove, openFollowUps, getFollowUp, closeFollowUp, reopenFollowUp } from './db.js';
 import { stillDue, refreshFollowUps } from './followup.js';
 import { MESSAGES, messagesFor, wantedText, carTitle, lotName, lotPageUrl, cleanPaste } from './orders.js';
@@ -12,8 +12,7 @@ import { draftOrderMessage, enquiryTemplates, enquiryOrder } from './ordermessag
 import { templatesFor, hasSectionTemplate, draftSectionTemplate, sectionTemplateLabel } from './sectiontemplates.js';
 import { draftFor, writingNow } from './drafter.js';
 import { availability } from './normalize.js';
-import { firstNameOf, isPlaceholderName } from './redact.js';
-import { signedName } from './signature.js';
+import { firstNameOf } from './redact.js';
 import { rowMatches } from '../web/lib/search.js';
 import { searchAll } from './search.js';
 import { RUNG_LABELS } from './selling.js';
@@ -109,18 +108,6 @@ function allowed(req, pathname = '') {
     if (!json) return false;
   }
   return true;
-}
-
-/**
- * The name the page shows for a conversation: the record's name, else the name the customer
- * signed in a text (a label for the reader only; the AI never sees it), else nothing, and the
- * row shows the number.
- */
-function displayName(item) {
-  const l = item.lead;
-  const full = [l?.first_name, l?.last_name].filter(Boolean).join(' ').trim() || item.conversation?.customer_name || '';
-  if (full && !isPlaceholderName(full)) return full;
-  return signedName(item.timeline);
 }
 
 // The newest messages a conversation opens with; "Load older messages" brings the rest, this many at a time.
@@ -235,7 +222,7 @@ function summary(item) {
     unread: item.state === 'awaiting' && !isSeen(item.itemKey, item.anchorKey) && (item.lastInboundAt || 0) >= Date.now() - RECENT_HOURS * 3600e3 ? item.pending.length : 0,
     preview: { who: lastShown.who, text: lastShown.text || lastShown.event || (lastShown.media ? 'Photo' : ''), media: lastShown.media || null },
     flag: flagLevel(draft),
-    car: item.mail ? (item.mail.car || item.mail.subject) : item.vehicles[0]?.title || item.marketplace?.listingTitle || (item.imports ? wantedFrom(item).car : ''),
+    car: rowCar(item),
     // An import enquiry in Imports that is not an email: where it has got to, as its row in Auction said.
     ...(item.section === 'importquery' && item.channel !== 'email' && item.imports ? { stage: enquiryStage(item).label } : {}),
   };

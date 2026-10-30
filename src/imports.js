@@ -266,18 +266,38 @@ export const costLines = (estimate) => estimate.lines.map((l) => `- ${l.label}: 
 export function offerBlock(lot, estimate, bidBy = 'suggested', { websiteBidYen = 0, depositPaid = false } = {}) {
   const t = template('auction-offer.md');
   if (!t) return '';
-  const bid = yen(estimate.bidYen);
   // "own" only when the customer named the bid. A bid our staff chose is still our suggestion.
   // Ours above the website's: both are named. (Ours is never suggested below it; a bid typed in
   // by the owner that is lower is given without the comparison.)
   const which = bidBy === 'customer' ? 'own' : websiteBidYen > 0 && estimate.bidYen > websiteBidYen && t.snippets.suggested_both ? 'suggested_both' : 'suggested';
+  return fillOffer(t, {
+    vehicleLines: vehicleLines(lot).join('\n'), lotUrl: lot.url, bid: yen(estimate.bidYen), websiteBid: yen(websiteBidYen),
+    total: money(estimate.totalAud), decides: decidesLine(lot), which, depositPaid,
+  });
+}
+
+/**
+ * The offer block as a preview of its wording shows it (src/wordingedit.js): a preview never reads
+ * the live auction, so the car and its figures are blanks, and the bid sentence is our suggestion's.
+ */
+export function blankOfferBlock({ depositPaid = false } = {}) {
+  const t = template('auction-offer.md');
+  if (!t) return '';
+  return fillOffer(t, {
+    vehicleLines: '[WHICH CAR?]\n[KM?]\nAuction Grade [GRADE?]', lotUrl: '[LINK?]', bid: '[BID?]', websiteBid: '[WEBSITE BID?]',
+    total: '[LANDED TOTAL?]', decides: 'It has [KM?] and auction grade [GRADE?].', which: 'suggested', depositPaid,
+  });
+}
+
+/** auction-offer.md filled in: the one list of what it is filled with, for a car found (offerBlock) or blanks (blankOfferBlock). */
+function fillOffer(t, { vehicleLines: lines, lotUrl, bid, websiteBid, total, decides, which, depositPaid }) {
   return fillParts(t.text, {
-    vehicle_lines: vehicleLines(lot).join('\n'),
-    lot_url: lot.url,
-    bid_sentence: fill(t.snippets[which] || '', { bid, website_bid: yen(websiteBidYen) }),
+    vehicle_lines: lines,
+    lot_url: lotUrl,
+    bid_sentence: fill(t.snippets[which] || '', { bid, website_bid: websiteBid }),
     bid,
-    total: money(estimate.totalAud),
-    decides: decidesLine(lot),
+    total,
+    decides,
     if_deposit: !depositPaid,
     sender: config.firstReplySender,
   });
