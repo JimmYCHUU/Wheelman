@@ -4,18 +4,18 @@
 // (src/wording.js); the file is never written, and no saved version is ever changed or removed. A
 // save that would break its file, or let go of a rule the wording keeps, is refused in words. A
 // preview shows changed words on three conversations, written by the code that writes each message,
-// with no AI, and saves nothing.
+// with no AI, says when a card or none of them shows the change, and saves nothing.
 //
 // src/wording.js never imports this module, so the overlay has no cycle through the modules here.
 
 import { WORDING, PART_HEADER, fileParts, withPreview } from './wording.js';
-import { addVersion, versionsOf } from './db.js';
+import { addVersion, versionsOf, openFollowUps } from './db.js';
 import { template, fillParts, unfilled } from './templates.js';
-import { SECTION_FILES, checkTemplates, templatesFor, composeSectionTemplate, carInHand } from './sectiontemplates.js';
+import { SECTION_FILES, FACTS, checkTemplates, templatesFor, composeSectionTemplate, carInHand } from './sectiontemplates.js';
 import { ENQUIRY_MESSAGES, composeMessage, enquiryOrder, enquiryTemplates, orderValues, kmLimit, LOT_BLANKS } from './ordermessages.js';
 import { MESSAGES, messagesFor } from './orders.js';
 import { listItems, orderRows, itemFromKey, displayName, rowCar } from './items.js';
-import { priceBlock } from './pricereply.js';
+import { priceBlock, inclusionsSentence } from './pricereply.js';
 import { standardBlock, inviteBlock } from './firstreply.js';
 import { askParts, wantedFrom, enquiryStage, offerBlock, blankOfferBlock } from './imports.js';
 import { restore } from './redact.js';
@@ -26,9 +26,15 @@ const AUCTION = 'auction-messages.md';
 const SECTIONS = new Set(Object.values(SECTION_FILES));
 const DEPOSIT = '[DEPOSIT LINK?]';
 const FACT = /\{[a-z0-9_]+\}/g;
-// A short piece, as template() reads one ("@own: This is based on …"), and the line of dashes that
-// parts a message from the lines always added under it (import-ask.md, read by askParts in src/imports.js).
-const SHORT_PIECE = /^@([a-z0-9_]+):\s*(.+)$/;
+// Any word in braces, single or double: Wheelman fills only {word} in small letters and {{NAME}},
+// the customer's first name; {Car}, {car link} or {{Name}} would reach the customer as typed.
+const BRACED = /\{\{[^{}\n]*\}\}|\{[^{}\n]*\}/g;
+const NAME = '{{NAME}}';
+// A short piece, as template() reads one ("@own: This is based on …"), with words after its name;
+// any @ line; and the line of dashes that parts a message from the lines always added under it
+// (import-ask.md, read by askParts in src/imports.js).
+const SHORT_PIECE = /^@([a-z0-9_]+):\s*(\S.*)$/;
+const AT_LINE = /^@[a-z0-9_]+:/;
 const DIVIDER = /^\s*-{3,}\s*$/;
 const NOT_LISTED = { status: 404, error: 'That wording is not in the Playbook.' };
 
@@ -122,28 +128,60 @@ const pieceNames = (text) => pieces(text).map(([k]) => k);
 /** "a", "a and b", "a, b and c". */
 const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
+/** A {word} in the words that the file uses nowhere, or '': the file-wide check on its facts. */
+function strayFact(w, words) {
+  const used = new Set(fileParts(w.name).flatMap((p) => p.text.match(FACT) || []));
+  return (words.match(FACT) || []).find((f) => !used.has(f)) || '';
+}
+
+/**
+ * A word in braces that Wheelman never fills, in the words to show; '' when there is none. It is
+ * written as one it fills, when that is plain: {{NAME}} for a name, else the fact the file is filled
+ * with that it would be in small letters with underscores ({Car} is {car}, {car link} is {car_link}).
+ */
+function oddBrace(w, words) {
+  const odd = (words.match(BRACED) || []).find((b) => b !== NAME && !/^\{[a-z0-9_]+\}$/.test(b));
+  if (!odd) return '';
+  const inner = odd.replace(/^\{+|\}+$/g, '').trim();
+  const fact = `{${inner.toLowerCase().replace(/[\s-]+/g, '_')}}`;
+  const facts = new Set([...fileParts(w.name).flatMap((p) => p.text.match(FACT) || []), ...(FACTS[w.name] || []).map((k) => `{${k}}`)]);
+  const fix = inner.toUpperCase() === 'NAME' ? NAME : facts.has(fact) ? fact : '';
+  return fix ? `${odd} is not a word Wheelman fills. Write it as ${fix}.` : `${odd} is not a word Wheelman fills, so the customer would see it as written.`;
+}
+
+/** A line with words on it that is not a line of dashes. */
+const wordsOn = (l) => !!l.trim() && !DIVIDER.test(l);
+
 /**
  * Why words would break their part, in the words to show; '' when they would not. Every line is
- * the file's own kind of line; the three section files' own checks (checkTemplates) name no new
- * problem with the words laid over; any other template part uses only the facts its file uses; the
- * short pieces code reads by name, and the line of dashes, stay; each short piece uses only the
- * facts its code fills it with; and the deposit link stays a blank where the file has it. (A {word}
- * a message's own code would leave as written is found by leftAsWritten, which writes it.)
+ * the file's own kind of line; a message has words to send besides its @ lines; every word in
+ * braces is one Wheelman fills; the three section files' own checks (checkTemplates) name no new
+ * problem with the words laid over; any other template part uses only the facts its file uses;
+ * the short pieces code reads by name stay, each with words after its name, and each uses only the
+ * facts its code fills it with; the line of dashes stays, once, with words above it and below it;
+ * and the deposit link stays a blank where the file has it. (A {word} a message's own code
+ * would leave as written is found by leftAsWritten, which writes it.) `headed`: the file has
+ * messages, so its part '' is the short pieces, which are all @ lines.
  */
-function refusal(w, own, words) {
+function refusal(w, own, words, headed) {
   if (!words) return 'Write the wording first.';
   if (words.length > LONGEST) return 'That is too long: keep it under 8,000 characters.';
   const lines = words.split('\n');
   if (w.kind === 'template') {
     if (lines.some((l) => PART_HEADER.test(l))) return 'A line like ===== name ===== starts a new message. Add a new message in the file itself.';
     if (lines.some((l) => l.startsWith('#'))) return 'A line starting with # is a note and is never sent. Take the # off, or remove the line.';
+    if ((own.part || !headed) && !lines.some((l) => l.trim() && !AT_LINE.test(l))) {
+      return 'Write the words to send under the lines that start with @: with only those lines, nothing would be sent.';
+    }
+    // Before the facts are checked: {{Name}} holds {name}, which is not the slip to name.
+    const brace = oddBrace(w, words);
+    if (brace) return brace;
     if (SECTIONS.has(w.name) && own.part) {
       const now = checkTemplates();
       const laid = withPreview({ name: w.name, part: own.part, text: words }, () => checkTemplates()).filter((p) => !now.includes(p));
       if (laid.length) return [...new Set(laid.map(plainProblem))].join(' ');
     } else {
-      const used = new Set(fileParts(w.name).flatMap((p) => p.text.match(FACT) || []));
-      const stray = (words.match(FACT) || []).find((f) => !used.has(f));
+      const stray = strayFact(w, words);
       if (stray) return `${stray} is not a fact Wheelman fills in here.`;
     }
     // The short pieces (part '', before any message) are read by their names; a message's own @
@@ -163,8 +201,13 @@ function refusal(w, own, words) {
         }
       }
     }
-    if (own.text.split('\n').some((l) => DIVIDER.test(l)) && !lines.some((l) => DIVIDER.test(l))) {
-      return 'Keep the line of dashes (---): Wheelman writes the message above it, and always ends with the lines below it.';
+    // askParts splits the message from the lines under it at the one line of dashes between words.
+    if (own.text.split('\n').some((l) => DIVIDER.test(l))) {
+      const at = lines.flatMap((l, i) => (DIVIDER.test(l) ? [i] : []));
+      if (!at.length) return 'Keep the line of dashes (---): Wheelman writes the message above it, and always ends with the lines below it.';
+      if (at.length > 1 || !lines.slice(0, at[0]).some(wordsOn) || !lines.slice(at[0] + 1).some(wordsOn)) {
+        return 'Keep one line of dashes (---), with words above it and below it: Wheelman writes the message above it, and always ends with the lines below it.';
+      }
     }
   } else if (lines.some((l) => l.startsWith('## '))) {
     return 'A line starting with ## starts a new section. Add a new section in the file itself.';
@@ -211,13 +254,19 @@ async function writtenByCode(w, part) {
  * '': each way the part's own code writes it is tried, with each wording laid over it inside a
  * preview, so nothing outside this computer is read. For the auction file's messages and the
  * blocks; the section files' messages are filled from their whole list of facts (checkTemplates),
- * and each short piece is checked against its own facts (refusal).
+ * and each short piece is checked against its own facts (refusal). When the code cannot write it
+ * just now, the file-wide check on its facts is what holds, and the save is still answered in words.
  */
 async function leftAsWritten(w, own, words) {
   if (!((w.name === AUCTION && own.part) || BLOCKS.has(w.name))) return '';
   const raw = (text) => withPreview({ name: w.name, part: own.part, text }, async () => unfilled((await writtenByCode(w, own.part)).join('\n')));
-  const before = await raw(listed(w, own, true).text);
-  return (await raw(words)).find((x) => !before.includes(x)) || '';
+  try {
+    const before = await raw(listed(w, own, true).text);
+    return (await raw(words)).find((x) => !before.includes(x)) || '';
+  } catch (e) {
+    logLine('playbook', `Which facts ${w.label} would leave as written could not be worked out (${e.message}); its file's own facts were checked instead.`);
+    return strayFact(w, words);
+  }
 }
 
 /**
@@ -231,12 +280,13 @@ async function checked({ name, part, text }) {
   const own = parts.find((p) => p.part === String(part ?? ''));
   if (!own) return NOT_LISTED;
   const words = String(text ?? '').replace(/\r/g, '').trim();
-  let why = refusal(w, own, words);
+  const headed = parts.some((p) => p.part);
+  let why = refusal(w, own, words, headed);
   if (!why && w.kind === 'template') {
     const stray = await leftAsWritten(w, own, words);
     if (stray) why = `${stray} is not filled in this message, so the customer would see it as written.`;
   }
-  return why ? { status: 400, error: why } : { w, own, words, headed: parts.some((p) => p.part) };
+  return why ? { status: 400, error: why } : { w, own, words, headed };
 }
 
 /**
@@ -265,6 +315,14 @@ const BID_LINES = "The bid sentence here is the line with our suggested bid. Whe
 const OFFER_BELOW = 'The offer under the opening is the Auction offer, under Blocks, shown with the line with our suggested bid. Its lines are changed there.';
 const VISIT_LINE = 'The first line here is the line for a visit to the showroom. A customer far away gets the line for a video call instead.';
 const VIDEO_LINE = 'The first line here is the line for a video call, for a customer far away. Everyone else gets the line for a visit to the showroom.';
+const TEXT_TAIL = 'The last line here is the one for a text message. A buyer on Facebook Marketplace gets the line for a chat instead.';
+const INCLUDED_LINE = 'The first line here is the one that says what the price includes. A car with nothing on its Included list gets the line for that instead.';
+const NOTHING_INCLUDED_LINE = 'The first line here is the line for a car with nothing on its Included list. Every other car gets the line that says what the price includes.';
+// What a preview says when a card, or every card, reads the same with the changed words as with
+// the wording in use; and when no conversation could be read to show it on.
+const UNUSED = 'This conversation does not use the lines you changed.';
+const NONE_USES = 'None of these conversations uses the lines you changed.';
+const PASSED_OVER = 'Wheelman could not read where this message is offered just now, so there is no conversation to show it on.';
 // Where an auction order has got to, in words, for each of the short pieces that say so.
 const STAGE = {
   where_searching: 'still being searched for', where_secured: 'secured at auction', where_japan: 'waiting in Japan to be shipped',
@@ -287,6 +345,17 @@ const PIECES_IN = {
 
 /** A section's conversations, newest first: waiting on us or answered, in the last 30 days. */
 const recent = (source) => listItems({ source, states: ['awaiting', 'answered'], maxAgeHours: 24 * 30, limit: 60 });
+/**
+ * Where one of a section's messages is shown: first the conversations with an open follow-up
+ * whose message it is, each with the follow-up in hand as the Follow-ups list opens it (the newest
+ * due first), then the section's newest conversations.
+ */
+function forMessage(section, part) {
+  const due = openFollowUps().filter((r) => r.template === part).slice(0, 60)
+    .map((r) => itemFromKey(r.item_key, { followUp: r.id })).filter((i) => i?.followUp && i.section === section);
+  const keys = new Set(due.map((i) => i.itemKey));
+  return [...due, ...recent(section).filter((i) => !keys.has(i.itemKey))];
+}
 /** Imports conversations that are not emails: where the enquiry messages are offered. */
 const importsTexts = () => recent('importquery').filter((i) => i.channel !== 'email');
 /** Dashboard conversations about a car of ours: where the blocks are added under a reply. */
@@ -301,10 +370,17 @@ const carOf = (item) => (item.order ? item.orderRow.car : rowCar(item));
 /** The first reply to an import enquiry: the message, and the lines always added under it. */
 const askText = (item) => { const { message, closing } = askParts(wantedFrom(item)); return [message, closing].filter(Boolean).join('\n\n'); };
 
-/** The invitation for one customer, with the link their reply carries, and which first line it shows. */
+/** The invitation for one customer, with the link their reply carries, and which first and last lines it shows. */
 function inviteCard(item) {
   const { far, link } = carInHand(item);
-  return { text: inviteBlock(link, { online: far }), note: far ? VIDEO_LINE : VISIT_LINE };
+  return { text: inviteBlock(link, { online: far }), note: `${far ? VIDEO_LINE : VISIT_LINE} ${TEXT_TAIL}` };
+}
+
+/** The price reply for one customer's car, and which first line it shows. */
+function priceCard(item) {
+  const c = carInHand(item);
+  const text = priceBlock({ vehicle: c.v, inspectionUrl: c.booking, online: c.far });
+  return { text, note: inclusionsSentence(c.v) ? INCLUDED_LINE : NOTHING_INCLUDED_LINE };
 }
 
 /**
@@ -370,7 +446,7 @@ function pieceCards(orders, now) {
 function showing(w, part, now) {
   const section = SECTION_OF[w.name];
   if (section) {
-    return part ? { on: () => recent(section), cards: (on) => newestFitting(on, (i) => templatesFor(i).some((t) => t.id === part), async (i) => (await composeSectionTemplate(i, part, { now })).text) } : null;
+    return part ? { on: () => forMessage(section, part), cards: (on) => newestFitting(on, (i) => templatesFor(i).some((t) => t.id === part), async (i) => (await composeSectionTemplate(i, part, { now })).text) } : null;
   }
   if (w.name === AUCTION) {
     if (!part) return { on: newestOrders, cards: (on) => pieceCards(on, now) };
@@ -382,7 +458,7 @@ function showing(w, part, now) {
   }
   // The blocks code adds under a reply, as a reply about each car carries them.
   if (w.name === 'price-reply.md') {
-    return { on: withCar, cards: (on) => newestFitting(on, (i) => !carInHand(i).gone, (i) => { const c = carInHand(i); return priceBlock({ vehicle: c.v, inspectionUrl: c.booking, online: c.far }); }) };
+    return { on: withCar, cards: (on) => newestFitting(on, (i) => !carInHand(i).gone, priceCard) };
   }
   if (w.name === 'first-reply.md') {
     return { on: withCar, cards: (on) => newestFitting(on, () => true, (i) => { const c = carInHand(i); return standardBlock({ vehicleUrl: c.v.url && !c.gone ? c.v.url : '' }); }) };
@@ -397,35 +473,53 @@ function showing(w, part, now) {
   return null;
 }
 
+const textOf = (made) => (typeof made === 'string' ? made : made.text);
+
 /**
- * Each card written, one at a time: { key, name, section, car, text, fits, note? }, named as the
- * conversation's row in the list names it. A card that cannot be written shows its words with
- * every fact a blank, and says so: one conversation never stops the others.
+ * The cards written, one at a time, and what the preview says of them: { previews: [{ key, name,
+ * section, car, text, fits, note? }], none? }, each card named as the conversation's row in the
+ * list names it. A card that cannot be written shows its words with every fact a blank, and says
+ * so: one conversation never stops the others. `inUse(write)` writes a card with the wording in
+ * use instead (null when the words are the wording in use): a card that reads the same with both
+ * says it does not use the lines changed, and when every card does, `none` says so. With no card
+ * at all (every conversation was passed over), `none` says why.
  */
-async function written(cards, words) {
-  const out = [];
+export async function previewCards(cards, words, inUse = null) {
+  const previews = [];
+  let unused = 0;
   for (const card of cards) {
     let made;
-    try { made = await card.write(); } catch (e) {
+    let same = false;
+    try {
+      made = await card.write();
+      if (inUse) {
+        try { same = textOf(await inUse(card.write)) === textOf(made); } catch { /* not written with the wording in use just now: not compared */ }
+      }
+    } catch (e) {
       logLine('playbook', `A preview could not be written for ${card.item.itemKey}: ${e.message}`);
       made = { text: asBlanks(card.words ?? words), note: NOT_WRITTEN };
     }
     const { text, note } = typeof made === 'string' ? { text: made } : made;
-    out.push({ key: card.item.itemKey, name: nameOf(card.item), section: card.item.section, car: carOf(card.item), text: restore(text, card.item.lead), fits: card.fits, ...(note ? { note } : {}) });
+    const said = [same ? UNUSED : '', note || ''].filter(Boolean).join(' ');
+    if (same) unused++;
+    previews.push({ key: card.item.itemKey, name: nameOf(card.item), section: card.item.section, car: carOf(card.item), text: restore(text, card.item.lead), fits: card.fits, ...(said ? { note: said } : {}) });
   }
-  return out;
+  if (!previews.length) return { previews, none: PASSED_OVER };
+  return unused === previews.length ? { previews, none: NONE_USES } : { previews };
 }
 
 /**
  * Shows changed words for one part on three conversations, before they are saved: { previews:
  * [{ key, name, section, car, text, fits, note? }] }, with `none` saying why when there is nothing
- * to show them on; or { status, error } with the words to show. The words are checked as a save
- * checks them, and nothing is saved. Each message is written by its own code with the
- * conversation's facts, word for word, with no AI, inside a preview (withPreview in
- * src/wording.js): only that call chain reads the changed words, and the auction feed and the
- * website's list answer as unreachable, so their figures are the blanks the message would have.
- * `note` says which of a part's lines chosen by circumstance the card shows. A voice rule has no
- * preview.
+ * to show them on, or that none of the cards shows the change; or { status, error } with the words
+ * to show. The words are checked as a save checks them, and nothing is saved. Each message is
+ * written by its own code with the conversation's facts, word for word, with no AI, inside a
+ * preview (withPreview in src/wording.js): only that call chain reads the changed words, and the
+ * auction feed, the website's list and a car's photos answer as unreachable, so their figures are
+ * the blanks the message would have. Each card is written with the wording in use too, in a
+ * preview of its own, to tell whether it shows the change. `note` says which of a part's lines
+ * chosen by circumstance the card shows, and when it does not use the lines changed. A voice rule
+ * has no preview.
  */
 export async function previewWording({ name, part, text, now = Date.now() } = {}) {
   if (fileOf(String(name ?? ''))?.kind === 'voice') return VOICE_HAS_NONE;
@@ -435,6 +529,7 @@ export async function previewWording({ name, part, text, now = Date.now() } = {}
   if (!plan) return { previews: [], none: SHORT_PIECES };
   const on = plan.on();
   if (!on.length) return { previews: [], none: NO_CONVERSATION };
-  const previews = await withPreview({ name: c.w.name, part: c.own.part, text: c.words }, () => written(plan.cards(on), c.words));
-  return { previews };
+  const used = listed(c.w, c.own, c.headed).text;
+  const inUse = c.words === used ? null : (write) => withPreview({ name: c.w.name, part: c.own.part, text: used }, write);
+  return withPreview({ name: c.w.name, part: c.own.part, text: c.words }, () => previewCards(plan.cards(on), c.words, inUse));
 }

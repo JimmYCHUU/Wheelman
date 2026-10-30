@@ -317,10 +317,10 @@ test('a block is previewed on three conversations with a car', async () => {
   const [arlo, bryn, cato] = invite.previews;
   for (const p of [arlo, bryn]) {
     assert.match(p.text, /^You can book an inspection here:\n\S+#inspection=onsite\nOr let us know your preferred date and time, and we will set it up for you\.\nPlease call or text before visiting\.$/, p.text);
-    assert.equal(p.note, 'The first line here is the line for a visit to the showroom. A customer far away gets the line for a video call instead.');
+    assert.equal(p.note, 'The first line here is the line for a visit to the showroom. A customer far away gets the line for a video call instead. The last line here is the one for a text message. A buyer on Facebook Marketplace gets the line for a chat instead.');
   }
   assert.match(cato.text, /^You can book an online video inspection \(a live video call on WhatsApp or FaceTime\) here:\n\S+#inspection=online\nOr let us know your preferred date and time, and we will set it up for you\.\nPlease call or text before visiting\.$/, cato.text);
-  assert.equal(cato.note, 'The first line here is the line for a video call, for a customer far away. Everyone else gets the line for a visit to the showroom.');
+  assert.equal(cato.note, 'The first line here is the line for a video call, for a customer far away. Everyone else gets the line for a visit to the showroom. The last line here is the one for a text message. A buyer on Facebook Marketplace gets the line for a chat instead.');
 
   // The two blocks the enquiry messages hold, on the Imports texts. The first reply to an import
   // enquiry, offered where they have not yet said what they want.
@@ -452,7 +452,7 @@ test('a conversation that cannot be written shows its blanks, and the others are
     const [arlo, bryn, cato] = out.previews;
     for (const p of [arlo, bryn]) {
       assert.ok(p.text.startsWith('Included in the price: 6 months NSW registration'), p.text);
-      assert.equal(p.note, undefined);
+      assert.equal(p.note, 'The first line here is the one that says what the price includes. A car with nothing on its Included list gets the line for that instead.');
     }
     assert.ok(cato.text.startsWith('Included in the price: [INCLUSIONS?]. Government charges are extra.'), cato.text);
     assert.ok(cato.text.includes('[INSPECTION INVITE?]') && !/\{|@no_inclusions/.test(cato.text), cato.text);

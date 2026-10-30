@@ -93,5 +93,9 @@ export function fillParts(text, values) {
   return out.join('\n\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-/** {word} places that were never filled: a typing slip in the file, or a fact the code does not supply. */
-export const unfilled = (text) => [...new Set(String(text || '').match(/\{[a-z0-9_]+\}/g) || [])];
+/**
+ * Words in braces that were never filled, in the order they first come: a {word} that is a typing
+ * slip in the file or a fact the code does not supply, and any other word in braces, which code never
+ * fills ({Car}, {car link}, {{Name}}). {{NAME}}, the customer's first name, is put in last, so it is not one.
+ */
+export const unfilled = (text) => [...new Set((String(text || '').match(/\{\{[^{}\n]*\}\}|\{[^{}\n]*\}/g) || []).filter((b) => b !== '{{NAME}}'))];

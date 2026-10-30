@@ -54,7 +54,8 @@ export async function playbookApi(req, res, p, url, { send, readBody }) {
     return true;
   }
   // A template change shown on three conversations before it is saved: { name, part, text }, answered
-  // with { previews } (and `none` when there is nothing to show it on), or the refusal in words.
+  // with { previews } (and `none` when there is nothing to show it on, or when none of them shows the
+  // change), or the refusal in words.
   // Nothing is saved, and nothing outside this computer is read.
   if (p === '/api/playbook/preview') {
     if (req.method !== 'POST') { send(res, 405, { error: 'Not allowed' }); return true; }
