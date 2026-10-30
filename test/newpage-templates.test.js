@@ -601,6 +601,66 @@ test('an old answer for the earlier versions, or an answer that is not a preview
   odd.actions.cancel();
 });
 
+test('a preview with no card and no sentence holds Save; cards that do not show the change say so, and Save may be pressed', async () => {
+  const name = 'dashboard-messages.md';
+  const sp = 'still_available';
+  const changed = STILL.replace('ready to see', 'ready to see today');
+  // An empty list with no sentence: nothing counts as shown, and Save is held.
+  const toasts = [];
+  const calls = [];
+  const empty = createPlaybookStore({ api: async (path, body) => { calls.push({ path, body }); return path === '/api/playbook/preview' ? { previews: [] } : { files: files() }; }, toast: (m) => toasts.push(m) });
+  await empty.actions.load('templates', null);
+  empty.actions.edit(name, sp);
+  empty.actions.type(changed);
+  assert.equal(await empty.actions.preview(name, sp, changed), false);
+  assert.equal(empty.get().previewed, null);
+  assert.equal(toasts.at(-1), 'Nothing came back to show it on. Press Show how it reads again.');
+  assert.equal(await empty.actions.saveWording(name, sp, changed), false);
+  assert.ok(!calls.some((c) => c.path === '/api/playbook/wording' && c.body !== undefined), 'nothing was saved');
+  empty.actions.cancel();
+
+  // Cards that do not show the change, with the sentence that says so: shown, and Save may be pressed.
+  const NONE_USES = 'None of these conversations uses the lines you changed.';
+  const UNUSED = 'This conversation does not use the lines you changed.';
+  const unused = three(STILL).map((c) => ({ ...c, note: UNUSED }));
+  const saved = [];
+  const told = createPlaybookStore({ api: async (path, body) => {
+    if (path === '/api/playbook/preview') return { previews: unused, none: NONE_USES };
+    if (path === '/api/playbook/wording' && body !== undefined) { saved.push(body); return { part: {}, unchanged: false }; }
+    return { files: files() };
+  }, toast: () => {} });
+  await told.actions.load('templates', null);
+  told.actions.edit(name, sp);
+  told.actions.type(changed);
+  assert.equal(await told.actions.preview(name, sp, changed), true);
+  assert.deepEqual(told.get().previewed, { name, part: sp, text: changed, previews: unused, none: NONE_USES });
+  assert.equal(await told.actions.saveWording(name, sp, changed), true);
+  assert.deepEqual(saved, [{ name, part: sp, text: changed }]);
+  // On the page: the sentence first, then each card with its note.
+  const { Previews } = await ui();
+  const drawn = Previews({ previewed: { text: changed, previews: unused, none: NONE_USES } });
+  assert.match(words(drawn), /^None of these conversations uses the lines you changed\./);
+  const cards = nodes(drawn).filter((n) => n.props && /(^|\s)pb-preview(\s|$)/.test(n.props.class || ''));
+  assert.equal(cards.length, 3);
+  for (const c of cards) assert.match(words(c), /This conversation does not use the lines you changed\./);
+});
+
+test('a read of the tab drops an answer for the earlier versions asked for before it', async () => {
+  const name = 'dashboard-messages.md';
+  const sp = 'still_available';
+  const s = slow((path) => path.startsWith('/api/playbook/versions?'));
+  await s.store.actions.load('templates', null);
+  const asked = s.store.actions.versions(name, sp);
+  assert.deepEqual(s.store.get().earlier[name + '\n' + sp], { state: 'loading' });
+  // The tab read again, as after a change: the versions are read again when they are next opened.
+  await s.store.actions.load('templates', null);
+  assert.deepEqual(s.store.get().earlier, {});
+  s.release(0);
+  await asked;
+  assert.deepEqual(s.store.get().earlier, {}, 'the answer asked for before the read is not kept');
+  assert.doesNotMatch(src('playbookstore.js'), /const keep = \(entry\)/, "the versions' own name does not hide the store's keep");
+});
+
 test('the store and the tabs share one part key, one open test, and one editor file with the length limit', async () => {
   const { partKey, openOn } = await import('../web/new/js/wordingview.js');
   assert.equal(partKey('house-voice.md', 'Length'), 'house-voice.md\nLength');

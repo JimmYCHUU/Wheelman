@@ -12,10 +12,15 @@ import { LONGEST, rowsFor, useEditorFocus, FileChanged, EarlierVersions } from '
 
 const BRACES = 'Words in braces, such as {car_link}, are filled in by code from the records. Keep them, and the facts stay exact.';
 
-/** The words shown on three conversations, each headed by the customer's name and car, with its note; or why there is none. */
+/**
+ * The words shown on three conversations, each headed by the customer's name and car, with its
+ * note; the server's sentence about them first (none of them shows the change), or alone (why
+ * there is none).
+ */
 export function Previews({ previewed }) {
-  if (previewed.none) return html`<p class="pb-none">${previewed.none}</p>`;
-  return html`<div class="pb-previews" role="group" aria-label="How it reads">
+  const said = previewed.none ? html`<p class="pb-none">${previewed.none}</p>` : null;
+  if (!previewed.previews.length) return said;
+  return html`${said}<div class="pb-previews" role="group" aria-label="How it reads">
     ${previewed.previews.map((c, i) => html`<article key=${i + '-' + c.key} class="pb-preview">
       <div class="pb-preview-head"><span>${previewHead(c)}</span>${c.fits ? null : html`<span class="reason">Not offered here</span>`}</div>
       <p class="pb-preview-text">${c.text}</p>

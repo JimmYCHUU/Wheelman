@@ -40,6 +40,9 @@ export function createPlaybookStore({ api, toast, changed = () => {} }) {
 
   // Only the newest read is taken: one for another tab, asked for since, is the one on screen.
   let seq = 0;
+  // The newest read of each part's versions: an older answer that lands after it is not kept, nor
+  // one asked for before the tab was read again.
+  const asked = new Map();
 
   /**
    * Reads a tab (an unknown one is Lessons). focus: the fact to scroll to and focus, or null.
@@ -64,6 +67,7 @@ export function createPlaybookStore({ api, toast, changed = () => {} }) {
         set({ state: 'ready', error: '', facts, counts: { ...state.counts, needsAnswer: needs } });
       } else {
         // The versions read before may have moved on: each is read again when it is next opened.
+        asked.clear();
         set({ state: 'ready', error: '', wording: out.files || [], earlier: {} });
       }
     } catch (e) {
@@ -210,8 +214,10 @@ export function createPlaybookStore({ api, toast, changed = () => {} }) {
   /**
    * Shows a template's words on three conversations, written by the code that writes each message.
    * Its answer is kept only while the editor is still on that part: { name, part, text, previews,
-   * none }. A refusal says the server's words, and the editor keeps its own; an answer with no
-   * conversations and no sentence counts as nothing shown, and says so. True when shown.
+   * none }, `none` being the server's sentence about them (why there is nothing to show it on, or
+   * that none of the cards shows the change). A refusal says the server's words, and the editor
+   * keeps its own; an answer with no cards and no sentence counts as nothing shown, holds Save, and
+   * says so. True when shown.
    */
   function preview(name, part, text) {
     return hold(async () => {
@@ -219,9 +225,10 @@ export function createPlaybookStore({ api, toast, changed = () => {} }) {
       if (!r) return false;
       const out = r.out && typeof r.out === 'object' ? r.out : {};
       const none = typeof out.none === 'string' ? out.none : '';
-      if (!Array.isArray(out.previews) && !none) { toast(NOTHING_SHOWN); return false; }
+      const previews = Array.isArray(out.previews) ? out.previews : [];
+      if (!previews.length && !none) { toast(NOTHING_SHOWN); return false; }
       if (!editingOn(name, part)) return false;
-      set({ previewed: { name, part, text, previews: Array.isArray(out.previews) ? out.previews : [], none } });
+      set({ previewed: { name, part, text, previews, none } });
       return true;
     });
   }
@@ -251,21 +258,18 @@ export function createPlaybookStore({ api, toast, changed = () => {} }) {
     });
   }
 
-  // The newest read of each part's versions: an older answer that lands after it is not kept.
-  const asked = new Map();
-
   /** Reads every saved version of a part, and the file's own wording, into earlier[partKey(name, part)]. */
   async function versions(name, part) {
     const k = partKey(name, part);
     const mine = (asked.get(k) || 0) + 1;
     asked.set(k, mine);
     const kind = (fileOf(name) || {}).kind || 'template';
-    const keep = (entry) => { if (asked.get(k) === mine) set({ earlier: { ...state.earlier, [k]: entry } }); };
-    keep({ state: 'loading' });
+    const land = (entry) => { if (asked.get(k) === mine) set({ earlier: { ...state.earlier, [k]: entry } }); };
+    land({ state: 'loading' });
     try {
-      keep({ state: 'ready', out: await api('/api/playbook/versions?' + new URLSearchParams({ kind, name, part })) });
+      land({ state: 'ready', out: await api('/api/playbook/versions?' + new URLSearchParams({ kind, name, part })) });
     } catch (e) {
-      keep({ state: 'error', error: e.message });
+      land({ state: 'error', error: e.message });
     }
   }
 
