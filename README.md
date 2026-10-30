@@ -205,7 +205,7 @@ inspect with the booking link when the customer asked to see the car, the addres
 Street, Lidcombe), the opening hours and the phone number. No map link is sent in any message.
 The AI writes only the opening lines. The block is added by code from `voice/first-reply.md`, so
 its wording and symbols are always exact, and it takes the place of the sign-off on that message.
-Edit that file to change the block.
+Change the block in the Playbook (Templates, then Blocks); the file is its first version.
 
 - No car matched, or the car is sold or reserved: the "Vehicle details" lines are left out.
 - The customer asks to see the car: the block carries the invitation (below). Otherwise those
@@ -829,7 +829,7 @@ here**. **Save this version** waits for a preview of exactly the words in the bo
 and it waits again. A save is refused, with the reason in plain words, when it takes out the
 deposit link's blank, uses a `{word}` that message is never filled with, loses a short piece or
 the line of dashes that a message is read by, or would be sent with a `{word}` still in it.
-**Voice** holds the two voice files, the voice and how it sells. A rule is saved with no preview,
+**Voice** holds the voice files: the voice, how it sells and the short voice card. A rule is saved with no preview,
 because only the AI can show what it does; the next suggestion shows it.
 
 Every save is a new version, none is ever removed, and no `voice/` file is written. **Earlier
@@ -839,8 +839,9 @@ suggestion, on both pages, without a restart; suggestions already written keep t
 **Undo** on the save puts the version before back. What you typed in a box is kept if you leave
 the tab and come back. If you edit the file by hand after saving in the Playbook, the saved
 wording stays in use, and the Playbook says the file now differs and offers the file's wording
-as a new version. The `replay` and `review` scripts use the Playbook's wording too, except for a
-voice folder you name for `review` with `--a-voice` or `--b-voice`, which is read as written.
+as a new version. The `replay` and `review` scripts use the Playbook's wording too, as saved in
+the copy of the database they run on, except for a voice folder other than Wheelman's own `voice`
+that you name for `review` with `--a-voice` or `--b-voice`, which is read as written.
 
 On **Needs reply**, the top of the list says how many are waiting, with **Start replying**. The
 **reply run** takes the ten newest waiting, the ones already written ahead, and opens the oldest
@@ -1841,7 +1842,9 @@ npm.cmd run review -- --a-voice voice\previous --b-voice voice --n 40 --confirm
 
 Side A is the current voice on the dashboard's model unless `--a-voice` or `--a-model` says
 otherwise; side B must differ in its voice files (a folder holding `house-voice.md` and
-`sales-playbook.md`; it is read as written, with no Playbook wording laid over it), its model (`provider/model`, as the cog panel lists them), or both. The
+`sales-playbook.md`; a folder other than Wheelman's own `voice` is read as written, with no
+Playbook wording laid over it, while naming `voice` itself still gets the Playbook's wording), its
+model (`provider/model`, as the cog panel lists them), or both. The
 script takes the last past exchanges that one of our people answered (`--n`, 20 unless set;
 `--first`, `--buyers`, `--since 60` and `--situation price_negotiation` narrow them), writes each
 one both ways as if the real answer had not been sent, and saves the run under `data\review\`.
