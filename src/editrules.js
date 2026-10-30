@@ -272,14 +272,16 @@ export function decideProposal(key, decision, { now = Date.now() } = {}) {
 
 /**
  * An edit lesson switched on from the Lessons list (POST /api/lessons/:id/switch) while its edit
- * waits for review again, after an Undo: that is a Keep, so the edit is recorded as kept, with its
- * event, and is no longer to review. Returns the lesson as it is now; any other lesson is returned
- * as it was given.
+ * waits for review again, after an Undo, or is marked not a rule: that is a Keep (Keep it after all,
+ * for one marked not a rule), so the edit is recorded as kept, with its event, and is no longer to
+ * review or marked not a rule. Returns the lesson as it is now; any other lesson is returned as it
+ * was given.
  */
 export function keptBySwitch(lesson, { now = Date.now() } = {}) {
   if (!lesson || lesson.kind !== 'edit' || lesson.off) return lesson;
   const key = editRuleOf(lesson.id);
-  if (!key || !editProposals().some((p) => p.key === key)) return lesson;
+  const notKept = (k) => editProposals().some((p) => p.key === k) || editDecisions().get(k)?.decision === 'rejected';
+  if (!key || !notKept(key)) return lesson;
   decideProposal(key, 'keep', { now });
   return getLesson(lesson.id);
 }

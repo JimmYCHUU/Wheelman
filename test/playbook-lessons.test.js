@@ -215,6 +215,24 @@ test('an edit lesson switched on again from the Lessons list is kept, and is no 
   forget(made);
 });
 
+test('an edit lesson switched on again from the Lessons list while its edit is marked not a rule is kept after all', async () => {
+  const key = customer(59, 'Ida', 'Is the Noah still for sale?');
+  const made = ['We honestly can.', 'It is honestly ready.', 'We honestly hope so.'].map((w) => copiedEdit(key, w, w.replace('honestly ', '')));
+  const K = 'sms|remove|honestly|';
+  const { lesson } = await decide(K, 'keep');
+  // Not a rule after it was kept: the lesson is switched off and the edit is listed as not a rule.
+  await decide(K, 'reject');
+  assert.ok((await playbook()).notRules.some((x) => x.key === K));
+  // Switched on from the Lessons list: that is Keep it after all, so it is no longer marked not a rule.
+  const out = await post(`/api/lessons/${lesson.id}/switch`, { on: true });
+  assert.deepEqual([out.status, out.lesson.id, out.lesson.off], [200, lesson.id, false]);
+  const listed = await playbook();
+  assert.ok(!listed.notRules.some((x) => x.key === K) && !listed.proposals.some((x) => x.key === K));
+  assert.equal(db.editDecisions().get(K).decision, 'kept');
+  assert.deepEqual(listed.lessons.find((l) => l.id === lesson.id).history.map((e) => e.what), ['made', 'kept', 'off', 'on', 'kept']);
+  forget(made);
+});
+
 test("a learned row saved again with other situations changes the proposal's scope", async () => {
   const key = customer(58, 'Hal', 'Is the Noah still for sale?');
   const at = now - 2 * HOUR;
