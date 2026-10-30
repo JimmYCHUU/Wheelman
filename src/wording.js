@@ -61,15 +61,19 @@ export function withPreview({ name, part, text }, fn) {
 /** True inside withPreview: a cache must neither be read nor be written there. */
 export const inPreview = () => !!preview.getStore();
 
-/** A file under voice/ with its line ends made plain, or null when it is missing. */
+/**
+ * A file under voice/ with its line ends made plain and any byte-order mark an editor saved at its
+ * start taken out (so a first line that is a heading or a header is read as one), or null when it
+ * is missing.
+ */
 function read(name) {
-  try { return fs.readFileSync(path.join(config.voiceDir, name), 'utf8').replace(/\r/g, ''); } catch { return null; }
+  try { return fs.readFileSync(path.join(config.voiceDir, name), 'utf8').replace(/^﻿/, '').replace(/\r/g, ''); } catch { return null; }
 }
 
 /** A template file's lines with its notes (lines starting with #) taken out, as template() reads them. */
 function ownLines(name) {
   const text = read(name);
-  return text === null ? null : text.replace(/^﻿/, '').split('\n').filter((l) => !l.startsWith('#'));
+  return text === null ? null : text.split('\n').filter((l) => !l.startsWith('#'));
 }
 
 /** A template file's lines in parts: [{ part, header, lines }], part '' (header null) first, holding the lines before the first header. */

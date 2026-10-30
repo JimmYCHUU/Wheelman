@@ -17,6 +17,10 @@ const AUCTION = 'auction-messages.md';
 const SECTIONS = new Set(Object.values(SECTION_FILES));
 const DEPOSIT = '[DEPOSIT LINK?]';
 const FACT = /\{[a-z0-9_]+\}/g;
+// A short piece, as template() reads one ("@own: This is based on …"), and the line of dashes that
+// parts a message from the lines always added under it (import-ask.md, read by askParts in src/imports.js).
+const SHORT_PIECE = /^@([a-z0-9_]+):\s*(.+)$/;
+const DIVIDER = /^\s*-{3,}\s*$/;
 const NOT_LISTED = { status: 404, error: 'That wording is not in the Playbook.' };
 
 const fileOf = (name) => WORDING.find((w) => w.name === name) || null;
@@ -81,10 +85,31 @@ export function wordingVersions({ kind, name, part } = {}) {
 }
 
 /**
+ * A problem checkTemplates names, in plain words: what to change, in a sentence, with no file name
+ * and no message name (the problem is always the part being saved).
+ */
+function plainProblem(problem) {
+  const what = problem.replace(/^\S+\.md \S+: /, '');
+  if (what === 'no @label') return 'Keep the line that starts @label: — it is the name the "Which message?" list shows.';
+  if (what === 'no @fits') return 'Keep the line that starts @fits: — it says when the message is offered.';
+  let m = what.match(/^@([a-z]+) names "(.*)", which no conversation shows$/);
+  if (m) return `A conversation never shows "${m[2]}": on the @${m[1]}: line, use the words the other messages use.`;
+  m = what.match(/^(\{[a-z0-9_]+\}) is not a fact Wheelman fills in$/);
+  if (m) return `${m[1]} is not a fact Wheelman fills in here.`;
+  return `${what.charAt(0).toUpperCase()}${what.slice(1)}.`;
+}
+
+/** The names of the short pieces in a part ("@own: …"), as template() reads them: a name with words after it. */
+const pieceNames = (text) => text.split('\n').map((l) => (l.match(SHORT_PIECE) || [])[1]).filter(Boolean);
+/** "a", "a and b", "a, b and c". */
+const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+
+/**
  * Why words would break their part, in the words to show; '' when they would not. Every line is
  * the file's own kind of line; the three section files' own checks (checkTemplates) name no new
- * problem with the words laid over; any other template part uses only the facts its file uses;
- * and the deposit link stays a blank where the file has it.
+ * problem with the words laid over; any other template part uses only the facts its file uses; the
+ * short pieces code reads by name, and the line of dashes, stay; and the deposit link stays a blank
+ * where the file has it.
  */
 function refusal(w, own, words) {
   if (!words) return 'Write the wording first.';
@@ -96,11 +121,22 @@ function refusal(w, own, words) {
     if (SECTIONS.has(w.name) && own.part) {
       const now = checkTemplates();
       const laid = withPreview({ name: w.name, part: own.part, text: words }, () => checkTemplates()).filter((p) => !now.includes(p));
-      if (laid.length) return laid.join('; ');
+      if (laid.length) return [...new Set(laid.map(plainProblem))].join(' ');
     } else {
       const used = new Set(fileParts(w.name).flatMap((p) => p.text.match(FACT) || []));
       const stray = (words.match(FACT) || []).find((f) => !used.has(f));
       if (stray) return `${stray} is not a fact Wheelman fills in here.`;
+    }
+    // The short pieces (part '', before any message) are read by their names; a message's own @
+    // lines are its details, which its file's checks govern.
+    if (!own.part) {
+      const kept = new Set(pieceNames(words));
+      const lost = [...new Set(pieceNames(own.text))].filter((k) => !kept.has(k)).map((k) => `@${k}:`);
+      if (lost.length === 1) return `Keep the line that starts ${lost[0]} — Wheelman reads it by that name when it writes the message.`;
+      if (lost.length) return `Keep the lines that start ${andList(lost)} — Wheelman reads them by those names when it writes the message.`;
+    }
+    if (own.text.split('\n').some((l) => DIVIDER.test(l)) && !lines.some((l) => DIVIDER.test(l))) {
+      return 'Keep the line of dashes (---): Wheelman writes the message above it, and always ends with the lines below it.';
     }
   } else if (lines.some((l) => l.startsWith('## '))) {
     return 'A line starting with ## starts a new section. Add a new section in the file itself.';

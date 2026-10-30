@@ -218,24 +218,40 @@ test("every version of a template is kept, and the file's own wording is the fir
   }
 });
 
-test('a save that would break the file is refused: a new part, a note line, an unknown fact, a signal no conversation shows, or a lost @label or @fits', async () => {
+test('a save that would break the file is refused: a new part, a note line, an unknown fact, a signal no conversation shows, a lost @label or @fits, a lost short piece or the line of dashes', async () => {
   const count = rows();
   const trade = (await partOf(DASHBOARD, 'trade_in')).fileText;
   const short = (await partOf(DASHBOARD, '')).fileText;
   const price = (await partOf('price-reply.md', '')).fileText;
   const grammar = (await partOf('house-voice.md', 'Grammar')).fileText;
+  const offer = (await partOf('auction-offer.md', '')).fileText;
+  const invite = (await partOf('inspection-invite.md', '')).fileText;
+  const ask = (await partOf('import-ask.md', '')).fileText;
+  const LABEL = 'Keep the line that starts @label: — it is the name the "Which message?" list shows.';
+  const FITS = 'Keep the line that starts @fits: — it says when the message is offered.';
   /** Words of exactly n characters, with nothing to trim, no brace and no heading. */
   const sized = (n) => `${'Plain words for a test. '.repeat(400).slice(0, n - 1)}.`;
   const cases = [
     [[DASHBOARD, 'trade_in', `${trade}\n\n===== trade_in_two =====\n@label: Trade-in again\n@fits: trade_in\nThank you.`], 400, 'A line like ===== name ===== starts a new message. Add a new message in the file itself.'],
     [[DASHBOARD, 'trade_in', `# a note for the team\n${trade}`], 400, 'A line starting with # is a note and is never sent. Take the # off, or remove the line.'],
-    [[DASHBOARD, 'trade_in', trade.replace('{sign_off}', '{colour}\n\n{sign_off}')], 400, 'dashboard-messages.md trade_in: {colour} is not a fact Wheelman fills in'],
-    [[DASHBOARD, 'trade_in', trade.replace('@fits: trade_in', '@fits: trade_in, sunny days')], 400, 'dashboard-messages.md trade_in: @fits names "sunny days", which no conversation shows'],
-    [[DASHBOARD, 'trade_in', trade.replace('@label: Trade-in\n', '')], 400, 'dashboard-messages.md trade_in: no @label'],
-    [[DASHBOARD, 'trade_in', trade.replace('@fits: trade_in\n', '')], 400, 'dashboard-messages.md trade_in: no @fits'],
+    // The three section files' own checks, in plain words: no file name, no message name, and a
+    // problem named twice is said once.
+    [[DASHBOARD, 'trade_in', trade.replace('{sign_off}', '{colour}\n\n{sign_off}')], 400, '{colour} is not a fact Wheelman fills in here.'],
+    [[DASHBOARD, 'trade_in', trade.replace('{sign_off}', 'In {colour}, or {colour} again.\n\n{sign_off}')], 400, '{colour} is not a fact Wheelman fills in here.'],
+    [[DASHBOARD, 'trade_in', trade.replace('@fits: trade_in', '@fits: trade_in, sunny days')], 400, 'A conversation never shows "sunny days": on the @fits: line, use the words the other messages use.'],
+    [[DASHBOARD, 'trade_in', trade.replace('@label: Trade-in\n', '')], 400, LABEL],
+    [[DASHBOARD, 'trade_in', trade.replace('@fits: trade_in\n', '')], 400, FITS],
+    [[DASHBOARD, 'trade_in', trade.replace('@label: Trade-in\n@fits: trade_in\n', '')], 400, `${LABEL} ${FITS}`],
     // Outside the three section files' messages: only the facts the file already uses.
     [['price-reply.md', '', `${price}\n\nIt comes in {colour}.`], 400, '{colour} is not a fact Wheelman fills in here.'],
     [[DASHBOARD, '', `${short}\n@new_colour: It comes in {colour}.`], 400, '{colour} is not a fact Wheelman fills in here.'],
+    // A short piece Wheelman reads by its name, lost or renamed, and the line of dashes.
+    [['auction-offer.md', '', offer.replace(/^@own:.*\n/m, '')], 400, 'Keep the line that starts @own: — Wheelman reads it by that name when it writes the message.'],
+    [['auction-offer.md', '', offer.replace(/^@suggested:.*\n/m, '').replace(/^@own:.*\n/m, '')], 400, 'Keep the lines that start @suggested: and @own: — Wheelman reads them by those names when it writes the message.'],
+    [['inspection-invite.md', '', invite.replace('@onsite:', '@in_person:')], 400, 'Keep the line that starts @onsite: — Wheelman reads it by that name when it writes the message.'],
+    [['inspection-invite.md', '', invite.replace(/^@tail:.*$/m, '@tail:')], 400, 'Keep the line that starts @tail: — Wheelman reads it by that name when it writes the message.'],
+    [[DASHBOARD, '', short.replace(/^@deposit_offer:.*\n/m, '')], 400, 'Keep the line that starts @deposit_offer: — Wheelman reads it by that name when it writes the message.'],
+    [['import-ask.md', '', ask.replace(/\n---\n/, '\n')], 400, 'Keep the line of dashes (---): Wheelman writes the message above it, and always ends with the lines below it.'],
     [['house-voice.md', 'Grammar', `${grammar}\n\n## A new section\nWords.`], 400, 'A line starting with ## starts a new section. Add a new section in the file itself.'],
     [['people.json', '', 'Words.'], 404, 'That wording is not in the Playbook.'],
     [[DASHBOARD, 'no_such_message', 'Words.'], 404, 'That wording is not in the Playbook.'],
@@ -245,10 +261,17 @@ test('a save that would break the file is refused: a new part, a note line, an u
   ];
   for (const [[name, part, text], code, error] of cases) {
     const out = await save(name, part, text);
+    if (code === 400) assert.notEqual(text, (await partOf(name, part)).fileText, `${name} "${part}": the case changes something`);
     assert.deepEqual([out.status, out.error], [code, error], `${name} "${part}": ${text.slice(0, 60)}`);
+    assert.doesNotMatch(out.error, /\.md\b|trade_in|; /, 'no file name, no message name, said once');
   }
   assert.equal(rows(), count, 'nothing was saved');
   assert.equal((await partOf(DASHBOARD, 'trade_in')).text, trade);
+
+  // A message's own optional details (@needs, @not, @fit) may go: only its @label and @fits are kept by its checks.
+  const optional = await save(DASHBOARD, 'trade_in', trade.replace('@not: buyer\n', ''));
+  assert.equal(optional.status, 200, optional.error);
+  assert.equal((await save(DASHBOARD, 'trade_in', trade)).status, 200);
 
   // Under 8,000 characters is taken, as the words say; then the file's own words are put back.
   const safety = (await partOf('sales-playbook.md', 'Safety')).fileText;
@@ -403,6 +426,28 @@ test('a wording file changed by hand after a Playbook save says so', async () =>
     assert.match(templates.template(NAME).sections.polite_close, /whenever you need us/);
     versions = await versionsAsked('template', NAME, 'polite_close');
     assert.deepEqual([versions.versions.map((v) => v.text), versions.file, versions.saidFirst], [[hand, mine], original, true]);
+  } finally {
+    config.voiceDir = voiceDir;
+    config.playbookVoiceDir = ownFolder;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a voice file that starts with a byte-order mark reads without it, and its first heading is a section', async () => {
+  // An invented voice file in a copy standing in for Wheelman's own folder, saved with a byte-order
+  // mark as some editors do. Its sections are its own, so nothing saved earlier is laid over them.
+  const dir = copyOfWording('wheelman-voice-bom-');
+  const ownFolder = config.playbookVoiceDir;
+  fs.writeFileSync(path.join(dir, 'house-voice.md'), '﻿## Opening\nFirst words.\n\n## Closing\nLast words.\n');
+  config.voiceDir = dir;
+  config.playbookVoiceDir = dir;
+  try {
+    assert.deepEqual(wording.fileParts('house-voice.md'), [{ part: 'Opening', text: 'First words.' }, { part: 'Closing', text: 'Last words.' }]);
+    assert.equal(wording.voiceText('house-voice.md'), '## Opening\nFirst words.\n\n## Closing\nLast words.');
+    assert.ok(!promptModule.systemPrompt('sms').includes('﻿'));
+    const out = await save('house-voice.md', 'Opening', 'Saved words.');
+    assert.equal(out.status, 200, out.error);
+    assert.equal(wording.voiceText('house-voice.md'), '## Opening\nSaved words.\n\n## Closing\nLast words.');
   } finally {
     config.voiceDir = voiceDir;
     config.playbookVoiceDir = ownFolder;
