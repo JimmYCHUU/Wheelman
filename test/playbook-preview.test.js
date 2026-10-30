@@ -344,7 +344,7 @@ test('a block is previewed on three conversations with a car', async () => {
   assert.equal(offer.status, 200, offer.error);
   assert.deepEqual(offer.previews.map((p) => p.key), ['l:611', 'l:612', 'l:613']);
   for (const p of offer.previews) {
-    assert.ok(p.text.startsWith(`Hello ${p.name.split(' ')[0]},\n\nWe found this ${p.car} in [WHICH AUCTION?].`), p.text);
+    assert.ok(p.text.startsWith(`Hello ${p.name.split(' ')[0]},\n\nWe found this [WHICH CAR?] in [WHICH AUCTION?].`), p.text);
     assert.ok(p.text.includes('We never bid blindly.'), p.text);
     for (const blank of ['[BID?]', '[LANDED TOTAL?]', '[LINK?]', '[DEPOSIT LINK?]']) assert.ok(p.text.includes(blank), `${blank}: ${p.text}`);
     assert.ok(p.text.includes('approximately AUD [LANDED TOTAL?].\nIt has [KM?] and auction grade [GRADE?].'), p.text);
@@ -362,6 +362,69 @@ test('a block is previewed on three conversations with a car', async () => {
     assert.ok(p.text.includes(`[WHICH CAR?], [KM?]: [LINK?]\n\nRegards,\n${config.firstReplySender}\n\n`), p.text);
     assert.ok(p.text.includes('It has [KM?] and auction grade [GRADE?].'), p.text);
   }
+});
+
+test('an opened auction order answers its name and car as it did before the Playbook previews', async () => {
+  // As GET /api/items/ao:N answered at 0c7d084, measured on the same invented orders.
+  const BEFORE = {
+    'ao:501': ['Nina Halvorsen', 'Subaru XV Hybrid, 2014 to 2015', null],
+    'ao:502': ['Remy Okafor', 'Honda N-Box, 2019 to 2021', null],
+    'ao:503': ['Omar Haddad', '2015 Subaru XV Hybrid', null],
+    'ao:504': ['Pia Lindqvist', '2021 Toyota Hiace DX', '2021 Toyota Hiace DX'],
+    'ao:505': ['Quin Marsh', '2021 Toyota Hiace DX', '2021 Toyota Hiace DX'],
+    'ao:506': ['Rhea Castellano', '2021 Toyota Hiace DX', '2021 Toyota Hiace DX'],
+    'ao:507': ['Sol Perera', 'Subaru XV Hybrid, 2014 to 2015', null],
+    'ao:508': ['Tess Whitlock', 'Subaru XV Hybrid, 2014 to 2015', null],
+  };
+  for (const [key, want] of Object.entries(BEFORE)) {
+    const { item } = await get(`/api/items/${key}`);
+    assert.deepEqual([item.name, item.car, item.order.car?.title ?? null], want, key);
+  }
+});
+
+test('a conversation whose fit cannot be read is passed over, and the others are shown', () => {
+  const on = ['c:1', 'c:2', 'c:3', 'c:4', 'c:5'].map((itemKey) => ({ itemKey }));
+  const fits = (i) => { if (i.itemKey === 'c:2') throw new Error('an unreadable record'); return i.itemKey !== 'c:4'; };
+  const cards = wordingedit.newestFitting(on, fits, (i) => i.itemKey);
+  assert.deepEqual(cards.map((c) => [c.item.itemKey, c.fits]), [['c:1', true], ['c:3', true], ['c:5', true]]);
+  assert.equal(cards[1].write(), 'c:3');
+  // With too few that fit, the others fill up, still passing over the one that cannot be read.
+  const few = wordingedit.newestFitting(on, (i) => { if (i.itemKey === 'c:2') throw new Error('an unreadable record'); return i.itemKey === 'c:5'; }, (i) => i.itemKey);
+  assert.deepEqual(few.map((c) => [c.item.itemKey, c.fits]), [['c:5', true], ['c:1', false], ['c:3', false]]);
+});
+
+test('a save or a preview that would leave a {word} as written in a real message is refused', async () => {
+  const count = rows();
+  const save = (name, part, text) => post('/api/playbook/wording', { name, part, text });
+  const refused = (word, where = 'this message') => `${word} is not filled in ${where}, so the customer would see it as written.`;
+  // "Car found, full" with a car from the live auction fills no bid and no grade: those are the hand-filled message's.
+  const offer = own(AUCTION, 'lot_offer');
+  for (const [word, text] of [
+    ['{bid}', offer.replace('We found this {lot_name} {auction_when}.', 'We found this {lot_name} {auction_when}, with a bid of {bid}.')],
+    ['{grade}', offer.replace('We found this {lot_name} {auction_when}.', 'We found this {lot_name} {auction_when}, grade {grade}.')],
+  ]) {
+    for (const out of [await save(AUCTION, 'lot_offer', text), await preview(AUCTION, 'lot_offer', text)]) {
+      assert.deepEqual([out.status, out.error], [400, refused(word)], word);
+    }
+  }
+  // What that message does fill is taken.
+  const taken = await preview(AUCTION, 'lot_offer', `${offer}\n\n{lot_title}, {lot_km}: {lot_url}\n\nRegards,\n{sender}`);
+  assert.equal(taken.status, 200, taken.error);
+  // A block filled by its own code: the offer's {website_bid} goes only into its bid lines, and an
+  // invitation's first line is put in whole, so a {word} in it is never filled.
+  const block = own('auction-offer.md', '');
+  const website = await save('auction-offer.md', '', block.replace('We do not bid blindly.', 'The website suggests {website_bid}. We do not bid blindly.'));
+  assert.deepEqual([website.status, website.error], [400, refused('{website_bid}')]);
+  const invite = own('inspection-invite.md', '');
+  const lead = await save('inspection-invite.md', '', invite.replace('@onsite: You can book an inspection here:', '@onsite: You can book an inspection at {inspection_url} here:'));
+  assert.deepEqual([lead.status, lead.error], [400, refused('{inspection_url}')]);
+  // A short piece is filled with its own facts only.
+  const pieces = own(DASHBOARD, '');
+  const video = await save(DASHBOARD, '', pieces.replace('@new_video: There is a walkaround video of it here:', '@new_video: There is a walkaround video of the {car} here:'));
+  assert.deepEqual([video.status, video.error], [400, refused('{car}', 'that short piece')]);
+  const sold = await save(AUCTION, '', own(AUCTION, '').replace('@passed_in: it was passed in', '@passed_in: it was passed in at {sold_for}'));
+  assert.deepEqual([sold.status, sold.error], [400, refused('{sold_for}', 'that short piece')]);
+  assert.equal(rows(), count, 'nothing was saved');
 });
 
 test('a conversation that cannot be written shows its blanks, and the others are written', async () => {

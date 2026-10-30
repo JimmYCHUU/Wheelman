@@ -45,7 +45,7 @@ export async function playbookApi(req, res, p, url, { send, readBody }) {
     if (req.method === 'GET') { send(res, 200, { files: wordingFiles() }); return true; }
     if (req.method === 'POST') {
       const body = (await readBody(req)) || {};
-      const out = saveWording({ name: body.name, part: body.part, text: body.text });
+      const out = await saveWording({ name: body.name, part: body.part, text: body.text });
       if (out.error) send(res, out.status, { error: out.error });
       else send(res, 200, { part: out.part });
       return true;

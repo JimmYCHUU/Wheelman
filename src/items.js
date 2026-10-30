@@ -974,18 +974,16 @@ newestWaitingKeys.stats = { built: 0, hits: 0, misses: 0 };
 /**
  * The name the page shows for a conversation: the record's name, else the name the customer
  * signed in a text (a label for the reader only; the AI never sees it), else nothing, and the
- * row shows the number. An auction order: the name on its row.
+ * row shows the number. (An auction order's row carries its own name: orderRow in src/orders.js.)
  */
 export function displayName(item) {
-  if (item.order) return item.orderRow?.name || '';
   const l = item.lead;
   const full = [l?.first_name, l?.last_name].filter(Boolean).join(' ').trim() || item.conversation?.customer_name || '';
   if (full && !isPlaceholderName(full)) return full;
   return signedName(item.timeline);
 }
 
-/** The car a conversation's row names: an email's model or subject, the car of ours, the listing, or what an import customer wants. An auction order: the car on its row. */
+/** The car a conversation's row names: an email's model or subject, the car of ours, the listing, or what an import customer wants. (An auction order's row carries its own.) */
 export function rowCar(item) {
-  if (item.order) return item.orderRow?.car || '';
   return item.mail ? (item.mail.car || item.mail.subject) : item.vehicles[0]?.title || item.marketplace?.listingTitle || (item.imports ? wantedFrom(item).car : '');
 }

@@ -10,14 +10,14 @@
 
 import { WORDING, PART_HEADER, fileParts, withPreview } from './wording.js';
 import { addVersion, versionsOf } from './db.js';
-import { template, fillParts } from './templates.js';
+import { template, fillParts, unfilled } from './templates.js';
 import { SECTION_FILES, checkTemplates, templatesFor, composeSectionTemplate, carInHand } from './sectiontemplates.js';
-import { ENQUIRY_MESSAGES, composeMessage, enquiryOrder, enquiryTemplates } from './ordermessages.js';
+import { ENQUIRY_MESSAGES, composeMessage, enquiryOrder, enquiryTemplates, orderValues, kmLimit, LOT_BLANKS } from './ordermessages.js';
 import { MESSAGES, messagesFor } from './orders.js';
 import { listItems, orderRows, itemFromKey, displayName, rowCar } from './items.js';
 import { priceBlock } from './pricereply.js';
 import { standardBlock, inviteBlock } from './firstreply.js';
-import { askParts, wantedFrom, enquiryStage, blankOfferBlock } from './imports.js';
+import { askParts, wantedFrom, enquiryStage, offerBlock, blankOfferBlock } from './imports.js';
 import { restore } from './redact.js';
 import { logLine } from './log.js';
 
@@ -108,8 +108,10 @@ function plainProblem(problem) {
   return `${what.charAt(0).toUpperCase()}${what.slice(1)}.`;
 }
 
-/** The names of the short pieces in a part ("@own: …"), as template() reads them: a name with words after it. */
-const pieceNames = (text) => text.split('\n').map((l) => (l.match(SHORT_PIECE) || [])[1]).filter(Boolean);
+/** The short pieces in a part ("@own: …"), as template() reads them, a name with words after it: [[name, words]]. */
+const pieces = (text) => text.split('\n').map((l) => l.match(SHORT_PIECE)).filter(Boolean).map((m) => [m[1], m[2]]);
+/** The names of the short pieces in a part. */
+const pieceNames = (text) => pieces(text).map(([k]) => k);
 /** "a", "a and b", "a, b and c". */
 const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
@@ -117,8 +119,9 @@ const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join('
  * Why words would break their part, in the words to show; '' when they would not. Every line is
  * the file's own kind of line; the three section files' own checks (checkTemplates) name no new
  * problem with the words laid over; any other template part uses only the facts its file uses; the
- * short pieces code reads by name, and the line of dashes, stay; and the deposit link stays a blank
- * where the file has it.
+ * short pieces code reads by name, and the line of dashes, stay; each short piece uses only the
+ * facts its code fills it with; and the deposit link stays a blank where the file has it. (A {word}
+ * a message's own code would leave as written is found by leftAsWritten, which writes it.)
  */
 function refusal(w, own, words) {
   if (!words) return 'Write the wording first.';
@@ -143,6 +146,15 @@ function refusal(w, own, words) {
       const lost = [...new Set(pieceNames(own.text))].filter((k) => !kept.has(k)).map((k) => `@${k}:`);
       if (lost.length === 1) return `Keep the line that starts ${lost[0]} — Wheelman reads it by that name when it writes the message.`;
       if (lost.length) return `Keep the lines that start ${andList(lost)} — Wheelman reads them by those names when it writes the message.`;
+      // In a file of messages, each piece is filled with its own facts only (a link, a price, a date),
+      // the ones it has in the file; any other {word} in it would be sent as written.
+      if (SECTIONS.has(w.name) || w.name === AUCTION) {
+        const facts = new Map(pieces(own.text).map(([k, t]) => [k, new Set(t.match(FACT) || [])]));
+        for (const [k, t] of pieces(words)) {
+          const stray = facts.has(k) && (t.match(FACT) || []).find((f) => !facts.get(k).has(f));
+          if (stray) return `${stray} is not filled in that short piece, so the customer would see it as written.`;
+        }
+      }
     }
     if (own.text.split('\n').some((l) => DIVIDER.test(l)) && !lines.some((l) => DIVIDER.test(l))) {
       return 'Keep the line of dashes (---): Wheelman writes the message above it, and always ends with the lines below it.';
@@ -154,18 +166,69 @@ function refusal(w, own, words) {
   return '';
 }
 
+// ---- a {word} a message's own code would leave as written --------------------------------------
+
+// The block files: each is put under a reply by its own code, filled with its own few facts.
+const BLOCKS = new Set(['price-reply.md', 'first-reply.md', 'inspection-invite.md', 'auction-offer.md', 'import-ask.md']);
+// Stand-ins for what a block's code is given, only to see which {words} it leaves unfilled: never shown.
+const STAND_IN_LINK = '[LINK?]';
+const STAND_IN_LOT = { title: 'A car', km: 1000, grade: '4', url: STAND_IN_LINK, benchmarkYen: 1 };
+const STAND_IN_ESTIMATE = { bidYen: 2, totalAud: 3 };
+
+/**
+ * "Car found, full" (lot_offer)'s opening, as it reads for a car found in the live auction: the
+ * order's own facts and its kilometre limit, and that car's facts as blanks, which is everything
+ * composeMessage fills it with (orderValues, kmLimit and lotValues in src/ordermessages.js).
+ */
+const offerOpening = (o) => fillParts(template(AUCTION)?.sections?.lot_offer || '', { ...orderValues(o), km_limit: kmLimit(o), ...LOT_BLANKS });
+
+/** Each way a part's own code writes it, with stand-in facts: the texts to look in for a {word} left as written. Run inside a preview. */
+async function writtenByCode(w, part) {
+  if (w.name === AUCTION) {
+    // An order before anything is known of it; in a preview, a message that needs the live auction takes the way it is written without it.
+    const o = enquiryOrder({ timeline: [] });
+    return [part === 'lot_offer' ? offerOpening(o) : await messageText(o, part === 'lot_offer_manual' ? 'lot_offer' : part, Date.now())];
+  }
+  if (w.name === 'price-reply.md') return [priceBlock({ vehicle: { outline: ['6 Months NSW Registration'] }, inspectionUrl: STAND_IN_LINK }), priceBlock({ vehicle: { outline: [] } })];
+  if (w.name === 'first-reply.md') return [standardBlock({ vehicleUrl: STAND_IN_LINK, inspectionUrl: STAND_IN_LINK })];
+  if (w.name === 'inspection-invite.md') return [inviteBlock(STAND_IN_LINK), inviteBlock(STAND_IN_LINK, { online: true }), inviteBlock(STAND_IN_LINK, { chat: true })];
+  if (w.name === 'auction-offer.md') {
+    return [offerBlock(STAND_IN_LOT, STAND_IN_ESTIMATE, 'customer'), offerBlock(STAND_IN_LOT, STAND_IN_ESTIMATE), offerBlock(STAND_IN_LOT, STAND_IN_ESTIMATE, 'suggested', { websiteBidYen: 1 })];
+  }
+  if (w.name === 'import-ask.md') { const { message, closing } = askParts({ car: 'A car', missing: [] }); return [message, closing]; }
+  return [];
+}
+
+/**
+ * A {word} the words would leave as written in a real message and the wording in use does not, or
+ * '': each way the part's own code writes it is tried, with each wording laid over it inside a
+ * preview, so nothing outside this computer is read. For the auction file's messages and the
+ * blocks; the section files' messages are filled from their whole list of facts (checkTemplates),
+ * and each short piece is checked against its own facts (refusal).
+ */
+async function leftAsWritten(w, own, words) {
+  if (!((w.name === AUCTION && own.part) || BLOCKS.has(w.name))) return '';
+  const raw = (text) => withPreview({ name: w.name, part: own.part, text }, async () => unfilled((await writtenByCode(w, own.part)).join('\n')));
+  const before = await raw(listed(w, own, true).text);
+  return (await raw(words)).find((x) => !before.includes(x)) || '';
+}
+
 /**
  * The file and part words are for, with the words trimmed at their ends: { w, own, words, headed },
  * or { status, error } when the Playbook does not list them or they would break the file. Nothing
  * is saved here (a preview checks words the same way).
  */
-function checked({ name, part, text }) {
+async function checked({ name, part, text }) {
   const w = fileOf(String(name ?? ''));
   const parts = w ? fileParts(w.name) : [];
   const own = parts.find((p) => p.part === String(part ?? ''));
   if (!own) return NOT_LISTED;
   const words = String(text ?? '').replace(/\r/g, '').trim();
-  const why = refusal(w, own, words);
+  let why = refusal(w, own, words);
+  if (!why && w.kind === 'template') {
+    const stray = await leftAsWritten(w, own, words);
+    if (stray) why = `${stray} is not filled in this message, so the customer would see it as written.`;
+  }
   return why ? { status: 400, error: why } : { w, own, words, headed: parts.some((p) => p.part) };
 }
 
@@ -174,8 +237,8 @@ function checked({ name, part, text }) {
  * suggestion. The same words as those in use add nothing. Returns { part, unchanged }, the part as
  * wordingParts lists it, or { status, error } with the words to show.
  */
-export function saveWording({ name, part, text, now = Date.now() } = {}) {
-  const c = checked({ name, part, text });
+export async function saveWording({ name, part, text, now = Date.now() } = {}) {
+  const c = await checked({ name, part, text });
   if (c.error) return c;
   const unchanged = listed(c.w, c.own, c.headed).text === c.words;
   if (!unchanged) addVersion({ kind: c.w.kind, name: c.w.name, part: c.own.part, text: c.words, base: c.own.text, at: now });
@@ -218,6 +281,9 @@ const withCar = () => recent('dashboard').filter((i) => carInHand(i).v);
 const newestOrders = () => [...orderRows()].sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0)).slice(0, 60).map((r) => itemFromKey(r.key)).filter(Boolean);
 
 const messageText = async (o, type, now) => (await composeMessage(o, type, { now })).text;
+/** A card's name and car, as the conversation's row in the list gives them: an auction order's row carries its own. */
+const nameOf = (item) => (item.order ? item.orderRow.name : displayName(item));
+const carOf = (item) => (item.order ? item.orderRow.car : rowCar(item));
 /** The first reply to an import enquiry: the message, and the lines always added under it. */
 const askText = (item) => { const { message, closing } = askParts(wantedFrom(item)); return [message, closing].filter(Boolean).join('\n\n'); };
 
@@ -228,15 +294,12 @@ function inviteCard(item) {
 }
 
 /**
- * "Car found, full" (lot_offer) as a preview shows it. A preview never reads the live auction, so
- * composeMessage writes it as a car filled in by hand: its facts (the car wanted, when, the
- * kilometres, the deposit, the sender) fill lot_offer's own opening, with blanks for the auction
- * car's name and link, and the offer under it is auction-offer.md with blanks (blankOfferBlock).
+ * "Car found, full" (lot_offer) as a preview shows it, as it reads for a car found in the live
+ * auction, which a preview never reads: its opening (offerOpening) with that car as blanks, and the
+ * offer under it, auction-offer.md with blanks (blankOfferBlock).
  */
-async function offerPreview(o, now) {
-  const { values } = await composeMessage(o, 'lot_offer', { now });
-  const opening = fillParts(template(AUCTION)?.sections?.lot_offer || '', { ...values, lot_title: '[WHICH CAR?]', lot_url: '[LINK?]' });
-  return { text: [opening, blankOfferBlock({ depositPaid: o.depositState !== 'NONE' })].filter(Boolean).join('\n\n'), note: BID_LINES };
+function offerPreview(o) {
+  return { text: [offerOpening(o), blankOfferBlock({ depositPaid: o.depositState !== 'NONE' })].filter(Boolean).join('\n\n'), note: BID_LINES };
 }
 
 /** The words a card is written from with every fact a blank and the @ lines left out: what it shows when it cannot be written. */
@@ -244,13 +307,26 @@ const asBlanks = (words) => String(words || '').split('\n').filter((l) => !/^@[a
   .replace(/\{if_[a-z0-9_]+\}/g, '').replace(/\{([a-z0-9_]+)\}/g, (m, k) => `[${k.replace(/_/g, ' ').toUpperCase()}?]`)
   .replace(/\n{3,}/g, '\n\n').trim();
 
-/** Up to three cards: the newest conversations where the part is offered, then the newest others, marked as not offered there. */
-function newestFitting(on, fits, write) {
+/** Whether the part is offered on a conversation; null when that cannot be read, and the conversation is then passed over (and logged). */
+function fitOf(fits, item) {
+  try { return !!fits(item); } catch (e) {
+    logLine('playbook', `A preview passed over ${item.itemKey}: whether its message is offered there could not be read (${e.message}).`);
+    return null;
+  }
+}
+
+/**
+ * Up to three cards: the newest conversations where the part is offered, then the newest others,
+ * marked as not offered there. A conversation whose fit cannot be read is passed over.
+ */
+export function newestFitting(on, fits, write) {
   const offered = [];
   const others = [];
   for (const item of on) {
     if (offered.length >= SHOWN) break;
-    if (fits(item)) offered.push(item);
+    const fit = fitOf(fits, item);
+    if (fit === null) continue;
+    if (fit) offered.push(item);
     else if (others.length < SHOWN) others.push(item);
   }
   return [...offered.map((item) => ({ item, fits: true })), ...others.slice(0, SHOWN - offered.length).map((item) => ({ item, fits: false }))]
@@ -261,7 +337,7 @@ function newestFitting(on, fits, write) {
 function pieceCards(orders, now) {
   const used = new Set();
   return Object.entries(PIECES_IN).map(([type, note]) => {
-    const offered = orders.find((i) => !used.has(i) && messagesFor(i.order).includes(type));
+    const offered = orders.find((i) => !used.has(i) && fitOf((x) => messagesFor(x.order).includes(type), i));
     const item = offered || orders.find((i) => !used.has(i)) || orders[0];
     used.add(item);
     const write = async () => { const m = await composeMessage(item.order, type, { now }); return { text: m.text, note: note(m.values) }; };
@@ -286,7 +362,7 @@ function showing(w, part, now) {
     // A car filled in by hand is how "Car found, full" is written when the live auction is not read.
     const type = part === 'lot_offer_manual' ? 'lot_offer' : part;
     if (!ENQUIRY_MESSAGES.includes(type)) return { on: newestOrders, cards: (on) => newestFitting(on, (i) => messagesFor(i.order).includes(type), (i) => messageText(i.order, type, now)) };
-    const write = part === 'lot_offer' ? (i) => offerPreview(enquiryOrder(i, { now }), now) : (i) => messageText(enquiryOrder(i, { now }), type, now);
+    const write = part === 'lot_offer' ? (i) => offerPreview(enquiryOrder(i, { now })) : (i) => messageText(enquiryOrder(i, { now }), type, now);
     return { on: importsTexts, cards: (on) => newestFitting(on, (i) => enquiryTemplates(i).some((t) => t.id === type), write) };
   }
   // The blocks code adds under a reply, as a reply about each car carries them.
@@ -300,7 +376,7 @@ function showing(w, part, now) {
   // The two blocks the enquiry messages hold: the offer of a car found in the live auction, and the
   // first reply to an import enquiry, written where they have not yet said what they want.
   if (w.name === 'auction-offer.md') {
-    return { on: importsTexts, cards: (on) => newestFitting(on, (i) => enquiryTemplates(i).some((t) => t.id === 'lot_offer'), (i) => offerPreview(enquiryOrder(i, { now }), now)) };
+    return { on: importsTexts, cards: (on) => newestFitting(on, (i) => enquiryTemplates(i).some((t) => t.id === 'lot_offer'), (i) => offerPreview(enquiryOrder(i, { now }))) };
   }
   if (w.name === 'import-ask.md') return { on: importsTexts, cards: (on) => newestFitting(on, (i) => enquiryStage(i).code === 'enquiry_ask', askText) };
   return null;
@@ -320,7 +396,7 @@ async function written(cards, words) {
       made = { text: asBlanks(card.words ?? words), note: NOT_WRITTEN };
     }
     const { text, note } = typeof made === 'string' ? { text: made } : made;
-    out.push({ key: card.item.itemKey, name: displayName(card.item), section: card.item.section, car: rowCar(card.item), text: restore(text, card.item.lead), fits: card.fits, ...(note ? { note } : {}) });
+    out.push({ key: card.item.itemKey, name: nameOf(card.item), section: card.item.section, car: carOf(card.item), text: restore(text, card.item.lead), fits: card.fits, ...(note ? { note } : {}) });
   }
   return out;
 }
@@ -338,7 +414,7 @@ async function written(cards, words) {
  */
 export async function previewWording({ name, part, text, now = Date.now() } = {}) {
   if (fileOf(String(name ?? ''))?.kind === 'voice') return VOICE_HAS_NONE;
-  const c = checked({ name, part, text });
+  const c = await checked({ name, part, text });
   if (c.error) return c;
   const plan = showing(c.w, c.own.part, now);
   if (!plan) return { previews: [], none: SHORT_PIECES };
