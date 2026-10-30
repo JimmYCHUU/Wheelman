@@ -494,29 +494,31 @@ test('once a reply appears in the chat, it is no longer waiting', async () => {
   assert.equal(item.timeline.at(-1).by, 'Typed by a person');
 });
 
-test('Marketplace has its own allowance, and dashboard customers are drafted first', async () => {
-  const { worker, db } = await load();
+test('no Facebook chat is written in the background, wherever it is listed', async () => {
+  const { worker, db, items } = await load();
   const t = Date.now();
   db.upsertLead({ id: 801, conversationId: 901, firstName: 'Priya', lastName: 'Raman', phone: '0400111222', email: 'someone@example.com', source: 'carsales', status: 'FOLLOW_UP', platform: 'CARSALES', state: 'NSW', leadAt: t - 3600e3, updatedAt: t - 3600e3, stocks: ['1159'], inquiries: [] });
   db.upsertConversation({ id: 901, phone: '+61400111222', channel: 'SMS', status: 'OPEN', leadId: 801, customerName: 'Priya Raman', latestDirection: 'IN', latestAt: t - 600e3, latestBody: 'x' });
   db.upsertMessage({ id: 7001, conversationId: 901, direction: 'IN', body: 'Is the Noah still available?', sentBy: null, status: 'SENT', mediaType: null, at: t - 600e3, importedAt: t - 600e3 });
 
-  // With the Marketplace allowance used up, only the dashboard customer gets a suggestion.
-  config.marketplace.dailyDrafts = db.mpDraftsLastDay();
-  aiSeen.length = 0; ai.script = [];
-  assert.equal(await worker.draftWaiting(), 1);
-  assert.ok(db.openDb().prepare("SELECT 1 FROM drafts WHERE item_key = 'c:901' AND status = 'ready'").get());
-  assert.equal(db.openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key = 'mp:503'").get().n, 0);
-  assert.deepEqual([...new Set(aiSeen.map((b) => b.model))], ['gemini-3.8-flash'], 'a dashboard customer gets the best model');
-
-  // With allowance, the waiting Marketplace chats are drafted too, by the small model only.
-  config.marketplace.dailyDrafts = 60;
-  aiSeen.length = 0;
-  const made = await worker.draftWaiting();
-  assert.equal(made, 2, 'mp:503 and mp:504');
-  assert.deepEqual([...new Set(aiSeen.map((b) => b.model))], ['gemini-3.5-flash-lite'], 'the better models are kept for dashboard customers');
-  assert.equal(db.openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key = 'mp:503' AND status = 'ready'").get().n, 1);
-  assert.equal(await worker.draftWaiting(), 0);
+  // Two buyers waiting: mp:504 in Marketplace, and mp:503 moved by the owner to the Dashboard,
+  // where it is listed with the dashboard customers.
+  db.setItemMove('mp:503', null, 'dashboard');
+  try {
+    assert.equal(items.itemFromKey('mp:503').section, 'dashboard');
+    assert.ok(items.listItems({ states: ['awaiting'] }).some((i) => i.itemKey === 'mp:503'), 'listed on the Dashboard');
+    assert.ok(items.listItems({ source: 'marketplace', states: ['awaiting'] }).some((i) => i.itemKey === 'mp:504'), 'listed in Marketplace');
+    // Marketplace's own daily allowance was for the background, and allows nothing now.
+    config.marketplace.dailyDrafts = 60;
+    aiSeen.length = 0; ai.script = [];
+    assert.equal(await worker.draftWaiting(), 1, 'the dashboard customer only');
+    assert.ok(db.openDb().prepare("SELECT 1 FROM drafts WHERE item_key = 'c:901' AND status = 'ready'").get());
+    assert.equal(db.openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key LIKE 'mp:%' AND created_at >= ?").get(t).n, 0, 'no chat was written');
+    assert.deepEqual([...new Set(aiSeen.map((b) => b.model))], ['gemini-3.8-flash'], 'a dashboard customer gets the best model');
+    aiSeen.length = 0;
+    assert.equal(await worker.draftWaiting(), 0);
+    assert.equal(aiSeen.length, 0, 'nothing was asked for the chats');
+  } finally { db.clearItemMove('mp:503'); }
 });
 
 test('when the engine cannot be reached, the dashboard side carries on and the status says so', async () => {
@@ -544,41 +546,44 @@ test('when the engine cannot be reached, the dashboard side carries on and the s
   assert.ok(status.missing.some((m) => /dashboard/.test(m)));
 });
 
-test('when the small model has used up its day, only Marketplace waits: dashboard customers are still written for', async () => {
-  const { worker, db, sync } = await load();
+test('a chat written from the page uses the Marketplace model and says when its allowance is used up', async () => {
+  const { worker, sync } = await load();
   const llm = await import('../src/llm.js');
-  const t = Date.now();
   config.marketplace.url = `${standins.engineBase}/inbox`;
   chats.set(506, { row: row(506, 'Zoe Hart', 3), messages: [message(60, 'in', 'phone', 'Is the Noah still for sale?', 3)] });
   await sync.syncMarketplace();
-  db.upsertLead({ id: 802, conversationId: 902, firstName: 'Omar', lastName: 'Haddad', phone: '0400111333', email: '', source: 'carsales', status: 'NEW', platform: 'CARSALES', state: 'NSW', leadAt: t - 3600e3, updatedAt: t - 300e3, stocks: ['1159'], inquiries: [] });
-  db.upsertConversation({ id: 902, phone: '+61400111333', channel: 'SMS', status: 'OPEN', leadId: 802, customerName: 'Omar Haddad', latestDirection: 'IN', latestAt: t - 300e3, latestBody: 'x' });
-  db.upsertMessage({ id: 7010, conversationId: 902, direction: 'IN', body: 'How many seats does the Noah have?', sentBy: null, status: 'SENT', mediaType: null, at: t - 300e3, importedAt: t - 300e3 });
+  const base = `http://127.0.0.1:${appServer.address().port}`;
+  // Opened on either page: the page asks for it, as Write it now does.
+  const write = async () => (await fetch(`${base}/api/items/mp:506/draft`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).json();
 
+  // Marketplace's own daily allowance was for the background: at nothing left, a write the page asks for still writes.
+  const allowance = config.marketplace.dailyDrafts;
+  config.marketplace.dailyDrafts = 0;
   llm.resetModelState();
-  usedUpModels.add('gemini-3.5-flash-lite');
   aiSeen.length = 0; ai.script = [];
+  let out = await write();
+  assert.equal(out.ok, true);
+  assert.equal(out.item.draft.status, 'ready');
+  assert.deepEqual([...new Set(aiSeen.map((b) => b.model))], ['gemini-3.5-flash-lite'], 'the better models are kept for dashboard customers');
+
+  usedUpModels.add('gemini-3.5-flash-lite');
+  aiSeen.length = 0;
   const real = globalThis.setTimeout;
   globalThis.setTimeout = (f, ms, ...a) => real(f, Math.min(ms, 5), ...a); // no real waiting between tries
   try {
-    assert.equal(await worker.draftWaiting(), 1, 'the dashboard customer');
-    assert.ok(db.openDb().prepare("SELECT 1 FROM drafts WHERE item_key = 'c:902' AND status = 'ready' AND model = 'gemini-3.8-flash'").get());
-    const chat = db.openDb().prepare("SELECT status, error FROM drafts WHERE item_key = 'mp:506' ORDER BY id DESC").get();
-    assert.equal(chat.status, 'failed');
-    assert.match(chat.error, /^The AI models used for Marketplace have used up their allowance for today\. Marketplace suggestions start again by themselves around /);
-    assert.deepEqual([...new Set(aiSeen.map((b) => b.model))], ['gemini-3.8-flash', 'gemini-3.5-flash-lite'], 'no better model was asked for the chat');
-    assert.ok(worker.state.mpHoldUntil > Date.now() + 50 * 60e3, 'Marketplace waits about an hour');
+    out = await write();
+    assert.equal(out.ok, false);
+    assert.equal(out.item.draft.status, 'failed');
+    // Nothing starts again by itself: the box says when to try again, with Try again.
+    assert.match(out.error, /^The AI models used for Marketplace have used up their allowance for today\. Try again after \S.*\.$/);
+    assert.doesNotMatch(out.error, /by themselves/);
+    assert.equal(out.item.draft.error, out.error, 'the suggestion that could not be written carries the words');
+    assert.deepEqual([...new Set(aiSeen.map((b) => b.model))], ['gemini-3.5-flash-lite'], 'no better model was asked for the chat');
+    // A write from the page holds nothing up: the dashboard is not paused, nothing red on the page.
     assert.ok(worker.state.pausedUntil < Date.now(), 'the dashboard is not paused');
-    assert.equal(worker.state.lastDraftError, null, 'nothing red on the page');
-
-    // While Marketplace waits, nothing is asked for it, and a new dashboard message is still answered.
-    db.upsertMessage({ id: 7011, conversationId: 902, direction: 'OUT', body: 'It has 8 seats.', sentBy: 'Dana', status: 'SENT', mediaType: null, at: t - 200e3, importedAt: t - 200e3 });
-    db.upsertMessage({ id: 7012, conversationId: 902, direction: 'IN', body: 'Thanks. Is it petrol or hybrid?', sentBy: null, status: 'SENT', mediaType: null, at: t - 100e3, importedAt: t - 100e3 });
-    db.upsertConversation({ id: 902, phone: '+61400111333', channel: 'SMS', status: 'OPEN', leadId: 802, customerName: 'Omar Haddad', latestDirection: 'IN', latestAt: t - 100e3, latestBody: 'x' });
-    aiSeen.length = 0;
-    assert.equal(await worker.draftWaiting(), 1);
-    assert.ok(aiSeen.every((b) => b.model === 'gemini-3.8-flash'));
-  } finally { globalThis.setTimeout = real; usedUpModels.clear(); llm.resetModelState(); worker.state.mpHoldUntil = 0; }
+    assert.equal(worker.state.lastDraftError, null);
+    assert.equal(worker.statusReport().marketplace.retryAt, null, 'the status keeps its field, with nothing to wait for');
+  } finally { globalThis.setTimeout = real; usedUpModels.clear(); llm.resetModelState(); config.marketplace.dailyDrafts = allowance; }
 });
 
 // ---- sending ---------------------------------------------------------------------------

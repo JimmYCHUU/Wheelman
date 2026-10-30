@@ -38,7 +38,7 @@ if (missing.length) {
   else if (missing.some((m) => /dashboard/.test(m))) console.log('New messages will not be fetched until the dashboard login is filled in.\nSuggestions are still written for the conversations already stored on this computer.');
 }
 const openFacts = businessFactsForPrompt().unanswered;
-if (openFacts.length) console.log(`\nBusiness facts still without an answer (knowledge/business-facts.md): ${openFacts.join(', ')}`);
+if (openFacts.length) console.log(`\nBusiness facts still without an answer (answer them in the Playbook, in the new page's Menu): ${openFacts.join(', ')}`);
 if (providers().length) console.log(`AI models, tried in order: ${providers().map((p) => p.model).join(', ')}`);
 
 try {

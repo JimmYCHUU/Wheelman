@@ -7,6 +7,7 @@ import { availability } from './normalize.js';
 import { stripEmoji } from './text.js';
 import { redact } from './redact.js';
 import { CLAIM, URGENCY } from './selling.js';
+import { latestVersions } from './db.js';
 
 // ---- business facts ------------------------------------------------------
 
@@ -21,7 +22,26 @@ export function knowledgeFile(name) {
   return fs.existsSync(real) ? real : path.join(config.knowledgeDir, `${name}.example.md`);
 }
 
-export function loadBusinessFacts(file = knowledgeFile('business-facts')) {
+/** The name the Playbook keeps the facts file's saved answers under (playbook_versions.name). */
+export const FACTS_NAME = 'business-facts.md';
+
+/**
+ * The status of a saved version that puts the file's own answer back in use (an Undo of a save on
+ * a fact that was the file's). It has no answer of its own: the fact is read from the file again.
+ */
+export const USE_FILE = 'file';
+
+/**
+ * The business facts, topic by topic in the file's order: { title, status, answer }. With `playbook`
+ * (every request, the status counts and the start-up line), a topic answered in the Playbook takes
+ * its newest saved status and answer, and `at`, when that was saved. A topic saved there that the
+ * file lacks follows the file's topics. With nothing saved, the list is exactly the file's. The file
+ * itself is only ever read.
+ *
+ * With `playbook` it opens the database too (latestVersions in src/db.js), so a script that only
+ * reads the facts opens config.dbPath. `playbook: false` reads the file alone.
+ */
+export function loadBusinessFacts(file = knowledgeFile('business-facts'), { playbook = true } = {}) {
   const raw = fs.readFileSync(file, 'utf8').replace(/\r/g, '');
   const topics = [];
   for (const block of raw.split(/\n## /).slice(1)) {
@@ -39,18 +59,59 @@ export function loadBusinessFacts(file = knowledgeFile('business-facts')) {
     const usable = status !== 'needs_answer' && answer.length > 0;
     topics.push({ title, status: usable ? status : 'needs_answer', answer: usable ? answer : '' });
   }
-  return topics;
+  return playbook ? withPlaybook(topics) : topics;
 }
 
+/**
+ * The file's topics with the Playbook's newest saved version of each laid over it. A newest version
+ * that puts the file's own answer back in use (USE_FILE) lays nothing: the topic is the file's, as
+ * if never saved, later hand edits included.
+ */
+function withPlaybook(topics) {
+  const saved = new Map([...latestVersions('fact', FACTS_NAME)].filter(([, v]) => v.status !== USE_FILE));
+  if (!saved.size) return topics;
+  const laid = (title, v) => {
+    const usable = v.status !== 'needs_answer' && v.text.length > 0;
+    return { title, status: usable ? v.status : 'needs_answer', answer: usable ? v.text : '', at: v.at };
+  };
+  const inFile = new Set(topics.map((t) => t.title));
+  const out = topics.map((t) => (saved.has(t.title) ? laid(t.title, saved.get(t.title)) : t));
+  for (const [title, v] of saved) if (!inFile.has(title)) out.push(laid(title, v));
+  return out;
+}
+
+/** Business facts as a request writes them: one line each, "- Title: answer". */
+export const factLines = (topics) => topics.map((t) => `- ${t.title}: ${t.answer.replace(/\n+/g, ' ')}`).join('\n');
+
+/** The business facts as a request carries them, and `topics`, the list they were read from. */
 export function businessFactsForPrompt() {
   const topics = loadBusinessFacts();
   const usable = topics.filter((t) => t.status !== 'needs_answer');
   const open = topics.filter((t) => t.status === 'needs_answer');
   return {
-    text: usable.map((t) => `- ${t.title}: ${t.answer.replace(/\n+/g, ' ')}`).join('\n'),
+    text: factLines(usable),
     unanswered: open.map((t) => t.title),
     counts: { confirmed: topics.filter((t) => t.status === 'confirmed').length, working: topics.filter((t) => t.status === 'working').length, needsAnswer: open.length },
+    topics,
   };
+}
+
+/** The words of a text that count when it is matched to a topic: lower case, with the small words left out. */
+export function factWords(text) {
+  return words(text);
+}
+
+/**
+ * How much a message is about one business fact: each of its words counts 2 when it is in the
+ * topic's title and 1 when it is only in its answer. 2 or more is asked about (relevantFacts).
+ * `titleOnly` counts the title alone, for a topic with no answer.
+ */
+export function topicScore(topic, query, { titleOnly = false } = {}) {
+  const head = new Set(words(topic.title));
+  const body = new Set(titleOnly ? [] : words(topic.answer));
+  let score = 0;
+  for (const w of new Set(words(query))) { if (head.has(w)) score += 2; else if (body.has(w)) score += 1; }
+  return score;
 }
 
 // ---- how Carbarn works ----------------------------------------------------
@@ -65,26 +126,26 @@ export function operationsGuide(file = knowledgeFile('how-carbarn-works')) {
 
 /**
  * The compact style's business facts: the core topics always, then the few topics whose words
- * match the message (a title word counts double). Same lines as businessFactsForPrompt writes.
- * A topic with no confirmed answer is never included.
+ * match the message (a title word counts double), in the file's order. A topic with no confirmed
+ * answer is never included. These are the topics a compact request carries.
  */
-export function relevantFacts(query, { max = 5, core = ['address', 'opening hours', 'holding deposit'], topics = loadBusinessFacts() } = {}) {
+export function relevantTopics(query, { max = 5, core = ['address', 'opening hours', 'holding deposit'], topics = loadBusinessFacts() } = {}) {
   const usable = topics.filter((t) => t.status !== 'needs_answer');
-  const line = (t) => `- ${t.title}: ${t.answer.replace(/\n+/g, ' ')}`;
   const isCore = (t) => core.some((c) => t.title.toLowerCase().includes(c.toLowerCase()));
-  const q = new Set(words(query));
   const ranked = [];
   usable.forEach((t, order) => {
     if (isCore(t)) return;
-    const head = new Set(words(t.title));
-    const body = new Set(words(t.answer));
-    let score = 0;
-    for (const w of q) { if (head.has(w)) score += 2; else if (body.has(w)) score += 1; }
+    const score = topicScore(t, query);
     if (score >= 2) ranked.push({ t, score, order });
   });
   ranked.sort((a, b) => b.score - a.score || a.order - b.order);
   const picked = new Set([...usable.filter(isCore), ...ranked.slice(0, max).map((r) => r.t)]);
-  return usable.filter((t) => picked.has(t)).map(line).join('\n');
+  return usable.filter((t) => picked.has(t));
+}
+
+/** relevantTopics as the request writes them: the same lines as businessFactsForPrompt writes. */
+export function relevantFacts(query, options = {}) {
+  return factLines(relevantTopics(query, options));
 }
 
 /** The compact style's paragraphs of the operations guide that share two or more words with the message. */

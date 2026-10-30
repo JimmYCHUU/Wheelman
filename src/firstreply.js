@@ -7,20 +7,27 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 import { template, fill } from './templates.js';
+import { versionsStamp } from './db.js';
+import { templateLines, inPreview } from './wording.js';
 
-let cache = { file: '', mtime: 0, parts: [] };
+let cache = { file: '', mtime: 0, stamp: -1, parts: [] };
 
-/** The parts of the block, from the file. Read again whenever the file changes. */
+/**
+ * The parts of the block, from the file, with its wording saved in the Playbook laid over it
+ * (templateLines in src/wording.js). Read again whenever the file changes or the Playbook saves;
+ * inside a preview, read afresh and not kept.
+ */
 function parts() {
   const file = path.join(config.voiceDir, 'first-reply.md');
   let stat;
   try { stat = fs.statSync(file); } catch { return []; }
-  if (file !== cache.file || stat.mtimeMs !== cache.mtime) {
-    const text = fs.readFileSync(file, 'utf8').replace(/^﻿/, '').replace(/\r/g, '');
-    const body = text.split('\n').filter((line) => !line.startsWith('#')).join('\n');
-    cache = { file, mtime: stat.mtimeMs, parts: body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean) };
-  }
-  return cache.parts;
+  const cached = !inPreview();
+  const stamp = versionsStamp();
+  if (cached && file === cache.file && stat.mtimeMs === cache.mtime && stamp === cache.stamp) return cache.parts;
+  const lines = templateLines('first-reply.md');
+  const out = lines ? lines.join('\n').split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean) : [];
+  if (cached) cache = { file, mtime: stat.mtimeMs, stamp, parts: out };
+  return out;
 }
 
 /**

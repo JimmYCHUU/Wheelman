@@ -1,18 +1,25 @@
 // The sales playbook (voice/sales-playbook.md), split into its sections, and the few that fit one
 // message. The compact prompt style sends those few instead of the whole playbook.
 
-import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
+import { versionsStamp } from './db.js';
+import { voiceText, inPreview } from './wording.js';
 
 const CACHE_MS = 60 * 1000;
-let cache = { at: 0, file: '', sections: null };
+let cache = { at: 0, file: '', stamp: -1, sections: null };
 
-/** The playbook's sections, one per line starting with "## ". Read again after a minute. */
+/**
+ * The playbook's sections, one per line starting with "## ", with the sections saved in the
+ * Playbook laid over the file (voiceText in src/wording.js). Read again after a minute, or at once
+ * after a save; inside a preview, read afresh and not kept.
+ */
 export function playbookSections() {
   const file = path.join(config.voiceDir, 'sales-playbook.md');
-  if (cache.sections && cache.file === file && Date.now() - cache.at < CACHE_MS) return cache.sections;
-  const raw = fs.existsSync(file) ? fs.readFileSync(file, 'utf8').replace(/\r/g, '') : '';
+  const cached = !inPreview();
+  const stamp = versionsStamp();
+  if (cached && cache.sections && cache.file === file && cache.stamp === stamp && Date.now() - cache.at < CACHE_MS) return cache.sections;
+  const raw = voiceText('sales-playbook.md') ?? '';
   const sections = [];
   let current = null;
   for (const line of raw.split('\n')) {
@@ -21,8 +28,9 @@ export function playbookSections() {
       sections.push(current);
     } else if (current) current.lines.push(line);
   }
-  cache = { at: Date.now(), file, sections: sections.map((s) => ({ heading: s.heading, body: s.lines.join('\n').trim() })) };
-  return cache.sections;
+  const out = sections.map((s) => ({ heading: s.heading, body: s.lines.join('\n').trim() }));
+  if (cached) cache = { at: Date.now(), file, stamp, sections: out };
+  return out;
 }
 
 /** The section for each situation; buildPrompt works out which situation a message is in. */

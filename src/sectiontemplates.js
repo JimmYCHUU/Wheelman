@@ -243,6 +243,24 @@ async function mediaFor(v, { waitMs = 5000 } = {}) {
 }
 
 /**
+ * The car a reply is about, and how it stands for this customer: { v, code, gone, far, link,
+ * booking }. `code` is its availability; `gone`: sold, or held for another customer; `far`: they
+ * are too far away to come in; `link`: the car's booking link for them (the online video
+ * inspection when they are far away), '' when it has no page; `booking`: that link while the car
+ * is at the showroom for them, the one a reply carries, else ''.
+ */
+export function carInHand(item) {
+  const v = item.vehicles?.[0] || null;
+  const code = v ? availability(v).code : '';
+  const gone = !!v && (code === 'sold' || reservedByAnother(v, item.deal));
+  const far = farAway(customerWords(item), item.lead?.state, item.lead?.signals?.postcode).far;
+  const links = v?.url ? inspectionLinks(v) : null;
+  const link = links ? (far ? links.online : links.onsite) : '';
+  const booking = v && !gone && code === 'available' ? link : '';
+  return { v, code, gone, far, link, booking };
+}
+
+/**
  * One template filled in with this conversation's facts: { text, part, values, tail, facts }.
  * A fact that does not apply is null, so its paragraph is left out (see fillParts).
  */
@@ -271,12 +289,7 @@ export async function composeSectionTemplate(item, id, { now = Date.now() } = {}
   const facts = [];
 
   if (file !== IMPORT_FILE) {
-    const v = item.vehicles?.[0] || null;
-    const code = v ? availability(v).code : '';
-    const gone = !!v && (code === 'sold' || reservedByAnother(v, item.deal));
-    const far = farAway(customerWords(item), item.lead?.state, item.lead?.signals?.postcode).far;
-    const links = v?.url ? inspectionLinks(v) : null;
-    const booking = v && !gone && code === 'available' && links ? (far ? links.online : links.onsite) : '';
+    const { v, code, gone, far, booking } = carInHand(item);
     const b = bookingInHand(item);
     const like = fu?.kind === 'stock_sold' ? similarCarsText(v) : null;
     const inclusions = v ? inclusionsSentence(v) : '';

@@ -270,6 +270,99 @@ function figureProblems(replyBody, trustedText, customerText = '', policyText = 
   return { unknown: [...new Set(problems)], customerOnly: [...new Set(customerOnly)] };
 }
 
+// ---- where each fact came from ----------------------------------------------
+
+export const NOT_FOUND = 'not found in the records';
+const WORDING = 'your wording file';
+const STOCK = 'the stock record';
+// The compact style's sections of the request, and the source each one stands for.
+const SECTION_SOURCE = {
+  'vehicle facts': STOCK, 'similar vehicles available now': STOCK, inspection: STOCK, 'price reply': STOCK, 'standard first reply': STOCK, 'links they asked for': STOCK,
+  'business facts': 'business facts', 'how carbarn works': 'business facts',
+  'website extracts': 'the website', 'research for this import question': 'the website', 'importing pages on our website': 'the website',
+};
+const sectionSource = (section) => SECTION_SOURCE[String(section || '').replace(/ \(\d+\)$/, '').toLowerCase()] || '';
+const linkKey = (u) => untagged(u).toLowerCase().replace(/#.*$/, '').replace(/\/$/, '');
+
+/**
+ * Every money figure, kilometre figure and link in a text, in order, each value once:
+ * [{ key, value, n, link }]. n: the figure in comparable form (as numbersIn writes it).
+ */
+function factsOf(text) {
+  const out = [];
+  const seen = new Set();
+  const add = (index, fact) => { if (!seen.has(fact.key)) { seen.add(fact.key); out.push({ index, ...fact }); } };
+  const source = String(text || '');
+  for (const m of source.matchAll(/https?:\/\/[^\s<>()"']+/gi)) {
+    const u = m[0].replace(/[.,;:!?]+$/, '');
+    add(m.index, { key: `link:${linkKey(u)}`, value: u, link: true });
+  }
+  // The same text with each link blanked, so a number inside a link is not a figure.
+  const body = plainTimes(source.replace(/https?:\/\/[^\s<>()"']+/gi, (u) => ' '.repeat(u.length)));
+  for (const m of body.matchAll(NUMBER)) {
+    const raw = m[0].trim();
+    let n = normNum(raw);
+    if (/k$/.test(n)) n = String(Math.round(parseFloat(n) * 1000));
+    n = n.replace(/^0+(?=\d)/, '');
+    if (!n) continue;
+    const end = m.index + m[0].length;
+    const tail = body.slice(end, end + 12);
+    const km = tail.match(/^\s?(kms?|kilomet(?:re|er)s?)\b/i);
+    const money = raw.startsWith('$') || /k$/i.test(raw) || /^\s?(dollars|aud|bucks)\b/i.test(tail);
+    if (money) add(m.index, { key: `n:${n}`, value: raw, n });
+    else if (km) add(m.index, { key: `km:${n}`, value: `${raw}${km[0]}`, n, km: true });
+  }
+  return out.sort((a, b) => a.index - b.index);
+}
+
+/** The line prefix ("Price" in "Price: $28,900", "Warranty" in "- Warranty: ...") of the first line of a text that holds the fact. */
+function labelIn(text, fact) {
+  for (const line of String(text || '').split('\n')) {
+    if (!factsOf(line).some((f) => f.key === fact.key)) continue;
+    const label = line.match(/^-?\s*([^:\n]{1,40}):/);
+    return label ? label[1].trim() : '';
+  }
+  return '';
+}
+
+/**
+ * Each money figure, kilometre figure and link in a reply's own words, traced to where it came from:
+ * [{ label, value, source, ok }], in reply order, each value once.
+ * pieces: [{ source, text }] in the order they are looked in; the first that holds the fact is its source.
+ * failTokens: the tokens of the figure, customer-figure, price-floor, link and figure-raw checks:
+ *   a fact among them is not ok and its source is 'not found in the records'.
+ * blocks: the parts code added ([{ kind: 'block', text }]); their figures and links are listed
+ *   after the reply's own, from 'your wording file', or from the stock record when the link is one of stockLinks.
+ * marked: the compact style's markers the reply used ([{ value, section }]); the marker's section is the source.
+ */
+export function traceFacts(body, pieces, failTokens = [], { blocks = [], stockLinks = [], marked = [] } = {}) {
+  const failed = new Set();
+  for (const token of failTokens) for (const f of factsOf(token)) failed.add(f.key);
+  // A figure token without its unit ("62,733" for "62,733 km") still names that figure.
+  const failedN = new Set([...numbersIn(failTokens.filter((t) => !/^https?:/i.test(t)).join(' '))]);
+  const stock = new Set(stockLinks.map(linkKey));
+  const own = factsOf(body);
+  const facts = own.map((f) => {
+    const bad = failed.has(f.key) || (!f.link && failedN.has(f.n));
+    if (bad) return { label: '', value: f.value, source: NOT_FOUND, ok: false };
+    const mark = marked.find((m) => m && factsOf(m.value).some((x) => x.key === f.key));
+    const wanted = mark ? sectionSource(mark.section) : '';
+    const holds = (p) => factsOf(p.text).some((x) => x.key === f.key);
+    const piece = (wanted && pieces.find((p) => p.source === wanted && holds(p))) || pieces.find(holds);
+    if (piece) return { label: labelIn(piece.text, f), value: f.value, source: piece.source, ok: true };
+    return wanted ? { label: '', value: f.value, source: wanted, ok: true } : null;
+  }).filter(Boolean);
+  const listed = new Set(own.map((f) => f.key));
+  for (const part of blocks) {
+    for (const f of factsOf(part.text)) {
+      if (listed.has(f.key)) continue;
+      listed.add(f.key);
+      facts.push({ label: '', value: f.value, source: f.link && stock.has(linkKey(f.value)) ? STOCK : WORDING, ok: true });
+    }
+  }
+  return facts;
+}
+
 // ---- main ------------------------------------------------------------------
 
 // "We will check and get back to you", in its many forms.

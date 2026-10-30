@@ -211,26 +211,17 @@ class NotNow extends Error {}
 /** Text for the charges of one stage: "- Car price in Japan: $8,400 AUD", one per line. */
 const stageLines = (o, stage) => o.money.lines.filter((l) => l.stage === stage && l.amount > 0).map((l) => `- ${l.description}: ${money(l.amount)} AUD`).join('\n');
 
-/**
- * Fills in one message for an order. Returns { text, facts, notes, review } where `facts` is what
- * it relied on and `notes` are things the owner should know before sending.
- */
-export async function composeMessage(o, type, { told = factsIn(''), now = Date.now() } = {}) {
-  const t = template(FILE);
-  let part = t?.sections?.[type];
-  if (!part) throw new NotNow(`The wording for "${MESSAGES[type] || type}" is missing from the file voice/${FILE}.`);
+/** The deposit asked for: typed in, quoted on the order, or charged at its first stage; 0 when none. */
+const depositAsked = (o, told) => told.depositAud || o.money.quotedDeposit || o.money.lines.find((l) => l.stage === 'INITIAL_DEPOSIT')?.amount || 0;
+
+/** The facts every order message is filled with, from the order and what the owner typed. */
+export function orderValues(o, told = factsIn('')) {
   const w = o.wanted || {};
   const carWanted = wantedCar(w) || 'vehicle';
-  const stage = o.stage === 'INITIAL_DEPOSIT' ? 'INITIAL_DEPOSIT' : o.stage;
-  const asked = told.depositAud || o.money.quotedDeposit || o.money.lines.find((l) => l.stage === 'INITIAL_DEPOSIT')?.amount || 0;
+  const asked = depositAsked(o, told);
   const paid = o.money.depositPaid || 0;
-  const lines = stageLines(o, stage);
-  const facts = [];
-  const notes = [];
-  let review = false;
-  let tail = '';
-  let byHand = ''; // why a car could not be looked up, when the message was written for the owner to fill in
-  const v = {
+  const lines = stageLines(o, o.stage);
+  return {
     sender: config.firstReplySender,
     car_wanted: carWanted,
     model: w.model || carWanted,
@@ -244,6 +235,34 @@ export async function composeMessage(o, type, { told = factsIn(''), now = Date.n
     stage_lines: lines || null,
     if_stage_lines: !!lines,
   };
+}
+
+/** " under 80,000 km" when the customer gave a kilometre limit, else '': for the messages that offer a car. */
+export const kmLimit = (o) => { const { maxKm } = wantedOf(o); return maxKm ? ` under ${km(maxKm)}` : ''; };
+
+/** What a car found in the live auction puts into "Car found" (lot_offer and lot_short). */
+export const lotValues = (lot, now = Date.now()) => ({ lot_name: [lot.year || '', lot.make, lot.model].filter(Boolean).join(' '), lot_title: lot.title, lot_km: km(lot.km), lot_url: lot.url, auction_when: auctionWhen(lot.auctionDate, now) });
+/** The same facts as blanks, for a preview of the wording (src/wordingedit.js), which never reads the live auction. */
+export const LOT_BLANKS = Object.freeze({ lot_name: '[WHICH CAR?]', lot_title: '[WHICH CAR?]', lot_km: '[KM?]', lot_url: '[LINK?]', auction_when: 'in [WHICH AUCTION?]' });
+
+/**
+ * Fills in one message for an order. Returns { text, facts, notes, review } where `facts` is what
+ * it relied on and `notes` are things the owner should know before sending.
+ */
+export async function composeMessage(o, type, { told = factsIn(''), now = Date.now() } = {}) {
+  const t = template(FILE);
+  let part = t?.sections?.[type];
+  if (!part) throw new NotNow(`The wording for "${MESSAGES[type] || type}" is missing from the file voice/${FILE}.`);
+  const w = o.wanted || {};
+  const asked = depositAsked(o, told);
+  const paid = o.money.depositPaid || 0;
+  const facts = [];
+  const notes = [];
+  let review = false;
+  let tail = '';
+  let byHand = ''; // why a car could not be looked up, when the message was written for the owner to fill in
+  const v = orderValues(o, told);
+  const carWanted = v.car_wanted;
   if (told.said.length) facts.push(`From what you typed: ${told.said.join('; ')}`);
 
   if (type === 'first_estimate') {
@@ -294,8 +313,7 @@ export async function composeMessage(o, type, { told = factsIn(''), now = Date.n
     // written, with blanks for the owner to fill in: the team also offers cars found elsewhere.
     let lot = null, searched = null, unread = false;
     try { ({ lot, searched } = await lotFor(o, told, now)); } catch { unread = true; }
-    const wanted = wantedOf(o);
-    v.km_limit = wanted.maxKm ? ` under ${km(wanted.maxKm)}` : '';
+    v.km_limit = kmLimit(o);
     let estimate = null, pick = null, bidYen = told.ourBidYen || 0;
     if (lot) {
       facts.push(`Auction car ${lot.id}: ${lot.title}, ${km(lot.km)}, grade ${lot.grade || 'not given'}${lot.auctionDate ? `, auction on ${lot.auctionDate.slice(0, 10)}` : ''}`);
@@ -309,7 +327,7 @@ export async function composeMessage(o, type, { told = factsIn(''), now = Date.n
       }
     }
     if (lot && (type === 'lot_short' || estimate)) {
-      Object.assign(v, { lot_name: [lot.year || '', lot.make, lot.model].filter(Boolean).join(' '), lot_title: lot.title, lot_km: km(lot.km), lot_url: lot.url, auction_when: auctionWhen(lot.auctionDate, now) });
+      Object.assign(v, lotValues(lot, now));
       if (type === 'lot_offer') {
         tail = offerBlock(lot, estimate, 'suggested', { websiteBidYen: lot.benchmarkYen, depositPaid: o.depositState !== 'NONE' });
         review = review || estimate.needsReview;
@@ -424,21 +442,24 @@ export async function composeMessage(o, type, { told = factsIn(''), now = Date.n
   return { text, facts, notes, review, part, values: v, tail };
 }
 
-// ---- enquiries in Auction ----------------------------------------------------------------------
+// ---- enquiries in Auction and Imports -----------------------------------------------------------
 
-/** The messages that fit an auction customer before there is an order: the "Which message?" list of an enquiry in Auction. */
+/** The messages that fit an auction customer before there is an order: the "Which message?" list of an enquiry in Auction or Imports. */
 export const ENQUIRY_MESSAGES = ['first_estimate', 'lot_offer', 'lot_short', 'lots_coming', 'search_update', 'deposit_reminder'];
 
 /**
- * The "Which message?" list of a conversation in Auction that has no order yet: an import enquiry
- * answered by text. [{ id, label, due }]: the one that suits where it has got to is marked due
- * (a car to offer once they said what they want; still searching once one was offered). Empty for
- * anything else: an order has its own list, and the other sections get theirs with their templates.
+ * The "Which message?" list of an import enquiry that has no order yet, in Auction or in Imports.
+ * [{ id, label, due }]: the one that suits where it has got to is marked due (a car to offer once
+ * they said what they want; still searching once one was offered). Empty for anything else: an
+ * order has its own list, an email in Imports its own three, and the other sections get theirs
+ * with their templates.
  */
 export function enquiryTemplates(item) {
-  // Any conversation listed in Auction with no order yet: a text, an email or a Facebook chat moved
-  // there. Nothing for a customer who asked not to be contacted.
-  if (item.order || item.section !== 'auction' || item.state === 'optout') return [];
+  // Any conversation listed in Auction with no order yet (a text, an email or a Facebook chat moved
+  // there), and any in Imports that is not an email. Nothing for a customer who asked not to be
+  // contacted.
+  const here = item.section === 'auction' || (item.section === 'importquery' && item.channel !== 'email');
+  if (item.order || !here || item.state === 'optout') return [];
   const due = { enquiry_ready: 'lot_offer', enquiry_offered: 'search_update' }[enquiryStage(item).code] || '';
   return ENQUIRY_MESSAGES.map((id) => ({ id, label: MESSAGES[id], due: id === due }));
 }
@@ -476,7 +497,7 @@ export const blanksIn = (text) => [...new Set(String(text || '').match(/\[[A-Z][
  * fitting is used again with no request. Without it, no AI request is made.
  */
 export async function draftOrderMessage(item, { type, facts = '', instruction = facts, now = Date.now(), save = true, fitWith = null, fitLater = false, order = null } = {}) {
-  // `order`: for an enquiry in Auction with no order yet, the stand-in built from what it says (enquiryOrder).
+  // `order`: for an enquiry in Auction or Imports with no order yet, the stand-in built from what it says (enquiryOrder).
   const o = order || item.order;
   // `fitLater`: written word for word only because the AI is paused just now; a later check fits it.
   const context = { message: type, stage: stageOf(o).code };

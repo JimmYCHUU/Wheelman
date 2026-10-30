@@ -12,6 +12,7 @@ import { loadEligibleModels, refreshEligibleModelsIfStale, modelCodesIn, modelsI
 import { specificsIn } from './imports.js';
 import { searchLots } from './auction.js';
 import { getMeta, setMeta } from './db.js';
+import { inPreview } from './wording.js';
 import { sydneyDay, formatSydney } from './time.js';
 import { logLine } from './log.js';
 
@@ -89,6 +90,8 @@ export function topicsIn(text) {
 // ---- the daily cap on live requests --------------------------------------------------------------
 
 function underDailyCap(now) {
+  // A preview of a template change asks the website nothing (src/eligible.js), so it uses none of the day's allowance.
+  if (inPreview()) return true;
   const key = `import_research:${sydneyDay(now)}`;
   const n = Number(getMeta(key, 0)) || 0;
   if (n >= config.importQuery.researchDaily) return false;

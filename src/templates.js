@@ -13,6 +13,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
+import { versionsStamp } from './db.js';
+import { templateLines, inPreview, PART_HEADER } from './wording.js';
 
 const cache = new Map();
 
@@ -20,14 +22,21 @@ const cache = new Map();
  * Reads voice/<name>. Returns { text, snippets, sections, meta }, or null when the file is missing.
  * `meta[part]` holds the @ lines written inside that part (its label, when it fits); @ lines before
  * the first part are the file's short pieces (`snippets`). Edits take effect at once.
+ *
+ * A part saved in the Playbook is read in place of the file's (templateLines in src/wording.js),
+ * so a save takes effect at once too; `playbook: false` reads the file alone. Inside a preview the
+ * preview's part is read, and nothing is taken from the cache or kept in it.
  */
-export function template(name) {
+export function template(name, { playbook = true } = {}) {
   const file = path.join(config.voiceDir, name);
   let stat;
   try { stat = fs.statSync(file); } catch { return null; }
-  const hit = cache.get(file);
-  if (hit && hit.mtime === stat.mtimeMs) return hit.value;
-  const lines = fs.readFileSync(file, 'utf8').replace(/^﻿/, '').replace(/\r/g, '').split('\n').filter((l) => !l.startsWith('#'));
+  const cached = playbook && !inPreview();
+  const stamp = cached ? versionsStamp() : 0;
+  const hit = cached ? cache.get(file) : null;
+  if (hit && hit.mtime === stat.mtimeMs && hit.stamp === stamp) return hit.value;
+  const lines = templateLines(name, { playbook });
+  if (!lines) return null;
   const snippets = {};
   const sections = {};
   const meta = {};
@@ -35,7 +44,7 @@ export function template(name) {
   let part = null;
   const tidy = (rows) => rows.join('\n').replace(/\n{3,}/g, '\n\n').trim();
   for (const l of lines) {
-    const head = l.match(/^={3,}\s*([a-z0-9_]+)\s*={3,}\s*$/i);
+    const head = l.match(PART_HEADER);
     if (head) { part = head[1].toLowerCase(); sections[part] = []; meta[part] = {}; continue; }
     const m = l.match(/^@([a-z0-9_]+):\s*(.+)$/);
     // "\n" typed in a snippet is a line break, so one line of the file can hold a short list.
@@ -45,7 +54,7 @@ export function template(name) {
   }
   for (const k of Object.keys(sections)) sections[k] = tidy(sections[k]);
   const value = { text: tidy(body), snippets, sections, meta };
-  cache.set(file, { mtime: stat.mtimeMs, value });
+  if (cached) cache.set(file, { mtime: stat.mtimeMs, stamp, value });
   return value;
 }
 
@@ -84,5 +93,9 @@ export function fillParts(text, values) {
   return out.join('\n\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-/** {word} places that were never filled: a typing slip in the file, or a fact the code does not supply. */
-export const unfilled = (text) => [...new Set(String(text || '').match(/\{[a-z0-9_]+\}/g) || [])];
+/**
+ * Words in braces that were never filled, in the order they first come: a {word} that is a typing
+ * slip in the file or a fact the code does not supply, and any other word in braces, which code never
+ * fills ({Car}, {car link}, {{Name}}). {{NAME}}, the customer's first name, is put in last, so it is not one.
+ */
+export const unfilled = (text) => [...new Set((String(text || '').match(/\{\{[^{}\n]*\}\}|\{[^{}\n]*\}/g) || []).filter((b) => b !== '{{NAME}}'))];

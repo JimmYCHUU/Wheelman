@@ -88,7 +88,7 @@ export const COPY = {
   'list.loading': 'Loading conversations',
 
   'footer.orders': '{orders} read from the dashboard: {waiting} to do, {quiet} in progress, {other} finished.',
-  'footer.orders.title': "Every order on the dashboard's auction page, and every lead on its Imports list, is read on each check. A customer with an order is listed once, under the order. To do: a message is due, or the customer wrote. In progress: under way, nothing due. Finished: completed, cancelled or refunded (kept for 60 days). Search looks through all of them.",
+  'footer.orders.title': "Every order on the dashboard's auction page is read on each check, with the conversations you moved here and those of a customer whose order is under way. The conversation an order reads is listed under the order, even when it is a lead on the dashboard's Imports list; the other leads on the Imports list are in Import Query. To do: a message is due, or the customer wrote. In progress: under way, nothing due. Finished: completed, cancelled or refunded (kept for 60 days). Search looks through all of them.",
 
   'welcome.waiting': '{n} {noun} waiting for a reply',
   'welcome.todo': '{n} {noun} with something to do',
@@ -154,7 +154,7 @@ export const COPY = {
   'move.foot': 'It keeps its messages, and the reply still goes out the way it came in.',
   'move.info.title': 'Where it is listed',
   'move.info.moved': 'You moved this conversation to {section}. It came in as {home}, and the reply still goes out the way it came in.',
-  'move.info.imports': "Listed in Auction: it came from the dashboard's Imports list.",
+  'move.info.imports': "Listed in Import Query: it came from the dashboard's Imports list.",
   'move.info.order': 'Listed in Auction: this customer has an auction order under way, and the order stands for them in the list.',
   'toast.movedTo': 'Moved to {section}.',
   'toast.ruledGeneral': 'Treated as an ordinary enquiry.',
@@ -272,9 +272,10 @@ export const COPY = {
   'composer.sending': 'Your reply is on its way. The Marketplace system is typing it into the chat from the phone.',
   'composer.replied': 'We have replied. Nothing is waiting here.',
   'composer.waiting': 'A suggestion will be written within a few minutes.',
+  // A Facebook chat is written when it is opened, never in the background.
+  'composer.none': 'No suggestion yet.',
   'composer.retry.busy': 'The free AI models are busy. Wheelman tries again at {time}, or you can write it now.',
   'composer.retry.daily': "The free AI models have used up today's allowance. Wheelman tries again at {time}.",
-  'composer.retry.marketplace': 'The AI model for Marketplace is busy. Wheelman tries again at {time}, or you can write it now.',
   'composer.prompt': 'Prompt',
   'composer.prompt.title': 'Say what this reply should say before Wheelman writes it. Use it when you want something particular said; otherwise Wheelman writes by itself.',
   'composer.prompt.placeholder': 'What should the reply say? For example: we have none of that model, we can source one',
@@ -373,6 +374,10 @@ export const COPY = {
   'find.none': 'No car matches "{q}". Try a stock number or a make and model.',
   'find.results': '{n, one: car, other: cars} found',
   'find.open': 'Find a car',
+
+  // The link to the new page, in the top bar.
+  'top.newPage': 'Try the new page',
+  'top.newPage.short': 'New page',
 };
 
 const PLURAL = /\{(\w+), one: ([^,}]*), other: ([^}]*)\}/g;

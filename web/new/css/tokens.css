@@ -1,0 +1,202 @@
+/* The design tokens: every colour, size, space, corner and speed the page uses. Nothing else in
+   web/new/css types such a value; it uses var(--token). Dark follows the computer unless the person
+   chose Light or Dark in the menu (data-theme on <html>). */
+@layer tokens, base, components, views, utilities;
+
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('../../fonts/manrope-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../../fonts/montserrat-latin.woff2') format('woff2');
+}
+
+@layer tokens {
+  :root {
+    --tray: #e8edf3;
+    --surface: #ffffff;
+    --surface-quiet: #f4f7fa;
+    --surface-sunk: #eef2f6;
+    --ink: #0b1b2b;
+    --ink-2: #46586b;
+    --ink-3: #5d6f82;
+    --line: #dce3eb;
+    --line-strong: #c3cdd8;
+    --accent: #0073ea;
+    --accent-soft: #e7f0fd;
+    --on-accent: #ffffff;
+    --good: #0f7b4b;
+    --good-soft: #e3f4ec;
+    --warn: #8a5a00;
+    --warn-soft: #fff2d3;
+    --bad: #b42318;
+    --bad-soft: #fdecea;
+    --block: #f2f6fb;
+    --block-line: #d5e0ec;
+    --shadow-1: 0 1px 2px rgba(11, 27, 43, 0.06), 0 0 0 1px rgba(11, 27, 43, 0.03);
+    --shadow-2: 0 10px 30px rgba(11, 27, 43, 0.16), 0 2px 6px rgba(11, 27, 43, 0.08);
+    --focus: #0073ea;
+    --scrim: rgba(11, 27, 43, 0.32);
+    --on-scrim: #ffffff;
+    --av-0: #dbeafe;
+    --av-1: #dcfce7;
+    --av-2: #fef3c7;
+    --av-3: #fce7f3;
+    --av-4: #ede9fe;
+    --av-5: #ccfbf1;
+    --av-6: #ffedd5;
+    --av-7: #e0e7ff;
+    color-scheme: light;
+
+    --font-ui: "Manrope", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --font-mark: "Montserrat", "Manrope", "Segoe UI", sans-serif;
+    --fs-12: 0.75rem;
+    --fs-13: 0.8125rem;
+    --fs-14: 0.875rem;
+    --fs-16: 1rem;
+    --fs-18: 1.125rem;
+    --fs-24: 1.5rem;
+    --fw-medium: 500;
+    --fw-semi: 600;
+    --fw-bold: 700;
+    --lh: 1.45;
+
+    --s-1: 4px;
+    --s-2: 8px;
+    --s-3: 12px;
+    --s-4: 16px;
+    --s-5: 20px;
+    --s-6: 24px;
+    --s-8: 32px;
+    --s-10: 40px;
+    --tile-gap: 6px;
+    --s-hair: 2px;
+    --s-badge: 6px;
+
+    --r-tag: 6px;
+    --r-bubble: 10px;
+    --r-box: 14px;
+    --r-tile: 18px;
+    --r-pill: 999px;
+
+    --t-press: 120ms;
+    --t-panel: 180ms;
+    --t-sheet: 240ms;
+    --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+    --control: 36px;
+    --touch: 36px;
+    --row: 64px;
+    --bar: 56px;
+    --list-w: 340px;
+    --panel-w: 360px;
+    --sheet-h: 85dvh;
+    --poster-w: 96px;
+    --page-edge: 16px;
+    --edit-edge: 1.5px;
+    --tell-w: 240px;
+    --search-w: 280px;
+    --hits-w: 440px;
+    --hits-h: 70dvh;
+    --page-w: 760px; /* a full page of reading (the Playbook) */
+    --switch-w: 40px;
+    --switch-h: 24px;
+    --knob: 20px;
+    /* the viewer: photos and videos are judged on a dark ground in both themes, as in any photo app */
+    --viewer-bg: #030f1c;
+    --viewer-bar: #071a2d;
+    --viewer-ink: #eef4fa;
+    --viewer-muted: #a9bccf;
+    --viewer-line: #1b3550;
+    --viewer-btn: #0f2840;
+    --viewer-btn-hover: #173654;
+    --viewer-nav: 48px;
+    --strip-thumb-w: 80px;
+    --strip-thumb-h: 56px;
+  }
+
+  @media (max-width: 899px) {
+    :root { --tile-gap: 4px; --touch: 44px; }
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --tray: #0a121c;
+      --surface: #111b27;
+      --surface-quiet: #172331;
+      --surface-sunk: #0e1722;
+      --ink: #e7eef6;
+      --ink-2: #a9b7c6;
+      --ink-3: #8797a8;
+      --line: #24324a;
+      --line-strong: #34455f;
+      --accent: #5b9bff;
+      --accent-soft: #15294a;
+      --on-accent: #071019;
+      --good: #57c892;
+      --good-soft: #11301f;
+      --warn: #f0b44c;
+      --warn-soft: #33270c;
+      --bad: #ff8a7e;
+      --bad-soft: #3a1512;
+      --block: #152131;
+      --block-line: #26384f;
+      --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.03);
+      --shadow-2: 0 12px 34px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.35);
+      --focus: #5b9bff;
+      --scrim: rgba(0, 0, 0, 0.55);
+      --av-0: #17325a;
+      --av-1: #14392a;
+      --av-2: #3d2f0c;
+      --av-3: #42182f;
+      --av-4: #2c2257;
+      --av-5: #103a38;
+      --av-6: #472a12;
+      --av-7: #262d5c;
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --tray: #0a121c;
+    --surface: #111b27;
+    --surface-quiet: #172331;
+    --surface-sunk: #0e1722;
+    --ink: #e7eef6;
+    --ink-2: #a9b7c6;
+    --ink-3: #8797a8;
+    --line: #24324a;
+    --line-strong: #34455f;
+    --accent: #5b9bff;
+    --accent-soft: #15294a;
+    --on-accent: #071019;
+    --good: #57c892;
+    --good-soft: #11301f;
+    --warn: #f0b44c;
+    --warn-soft: #33270c;
+    --bad: #ff8a7e;
+    --bad-soft: #3a1512;
+    --block: #152131;
+    --block-line: #26384f;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.03);
+    --shadow-2: 0 12px 34px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.35);
+    --focus: #5b9bff;
+    --scrim: rgba(0, 0, 0, 0.55);
+    --av-0: #17325a;
+    --av-1: #14392a;
+    --av-2: #3d2f0c;
+    --av-3: #42182f;
+    --av-4: #2c2257;
+    --av-5: #103a38;
+    --av-6: #472a12;
+    --av-7: #262d5c;
+    color-scheme: dark;
+  }
+}

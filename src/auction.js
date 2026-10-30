@@ -8,8 +8,12 @@
 // The calculator is asked with a POST because that is how the website asks it. It only works
 // out a figure: it places no bid, makes no enquiry and changes nothing. Only the bid amount is
 // sent. No login, no cookies and no customer detail ever goes to this feed.
+//
+// Inside a preview of a template change (withPreview in src/wording.js) nothing is asked: the feed
+// answers as unreachable, so a message that needs it is written with its blanks.
 
 import { config } from './config.js';
+import { inPreview } from './wording.js';
 
 const LIST = '/auc/api/public/auction-vehicles';
 const ONE = /^\/auc\/api\/public\/auction-vehicles\/\d{1,12}$/;
@@ -32,6 +36,7 @@ function baseUrl() {
 const HEADERS = { accept: 'application/json', origin: config.site.baseUrl, referer: config.site.baseUrl + '/', 'user-agent': 'Wheelman/0.2 (read-only)' };
 
 async function ask(pathname, { params = null, bidYen = null } = {}) {
+  if (inPreview()) throw new AuctionError('Not read for a preview.');
   const calculator = bidYen !== null;
   if (calculator ? !ESTIMATE.test(pathname) : !(pathname === LIST || ONE.test(pathname) || SOLD.test(pathname))) throw new AuctionError(`Blocked: ${pathname} is not on the auction feed's read-only list`);
   const url = new URL(baseUrl() + pathname);

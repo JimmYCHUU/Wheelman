@@ -82,7 +82,7 @@ export const SECTIONS = {
     placeShort: 'Dashboard',
     phone: false,
     empty: {
-      waiting: ['Nothing to do', 'Auction orders that need a message, and import enquiries from the Imports list waiting on us, appear here with the message ready to check.'],
+      waiting: ['Nothing to do', 'Auction orders that need a message, and the other conversations listed in Auction that are waiting on us, appear here with the message ready to check.'],
       quiet: ['Nothing here', 'Orders that are under way with no message due.'],
       other: ['Nothing here', 'Orders that are completed, cancelled or refunded.'],
       search: ['No order matches', 'Every order on the dashboard was searched: To do, In progress and Finished. Try a name, a car or an order number.'],
@@ -93,32 +93,33 @@ export const SECTIONS = {
     dismiss: 'Dismiss this message',
     copyTarget: 'WhatsApp',
   },
-  // Import enquiries that came by email, each thread sent from Gmail with the add-on's Send to
-  // Wheelman button. Replies are copied and pasted into Gmail.
+  // Import enquiries: the leads on the dashboard's Imports list (texts, whose replies are sent from
+  // the dashboard) and, while the email intake is on, the email threads sent from Gmail with the
+  // add-on's Send to Wheelman button (whose replies are pasted into Gmail).
   importquery: {
     id: 'importquery',
     label: 'Import Query',
     prefixes: ['em:'],
     noun: ['enquiry', 'enquiries'],
     person: 'Customer',
-    unknown: 'Email enquiry',
+    unknown: 'Import enquiry',
     tabs: [
       { id: 'all', label: 'All' },
       { id: 'waiting', label: 'Waiting', counted: true },
       null,
     ],
-    search: { placeholder: 'Search name, email, subject or message', phone: false },
+    search: { placeholder: 'Search name, number, email or message', phone: false },
     place: 'the dashboard',
     placeShort: 'Dashboard',
     phone: false,
     empty: {
-      all: ['No email enquiries yet', 'Open an import enquiry in Gmail and press Send to Wheelman. The whole thread appears here.'],
-      waiting: ['Nobody is waiting', 'Email enquiries where the customer wrote last appear here.'],
+      all: ['No import enquiries yet', "The leads on the dashboard's Imports list appear here. While the email intake is on, so does each import email you open in Gmail and send with Send to Wheelman, the whole thread."],
+      waiting: ['Nobody is waiting', 'Enquiries where the customer wrote last appear here.'],
       quiet: ['Nothing here', 'Enquiries you dismissed, and customers who only said thanks.'],
       other: ['Nothing here', ''],
-      search: ['Nothing matches', 'Try a name, an email address, a word from the subject or from the message.'],
+      search: ['Nothing matches', 'Try a name, a number, an email address, a word from the subject or from the message.'],
     },
-    welcome: { pick: 'Pick an enquiry', check: 'Check the reply', paste: 'and paste it into your reply in Gmail.' },
+    welcome: { pick: 'Pick an enquiry', check: 'Check the reply', paste: 'and send it from the dashboard, or for an email, paste it into your reply in Gmail.' },
     more: 'Load older enquiries',
     backTo: 'Waiting',
     dismiss: 'Dismiss this enquiry',

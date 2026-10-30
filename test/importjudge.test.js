@@ -168,3 +168,52 @@ test("the AI's own reading is offered on the page and changes nothing by itself"
     assert.equal(items.itemFromKey('l:907').imports, null, 'nothing changes until the owner chooses');
   } finally { aiImport = false; }
 });
+
+// ---- the enquiry type on the new page ---------------------------------------------------------
+
+test('the words that made it an import enquiry are quoted', async () => {
+  // The customer's own sentence that holds the words, as they wrote it, for the page's reason line.
+  lead(908, 'Tia', 'Hello there. Can you import a Toyota Hiace from Japan for me? Under 80,000 km please.');
+  const item = items.itemFromKey('l:908');
+  assert.equal(item.judged.sign, 'words');
+  assert.equal(item.judged.quote, 'Can you import a Toyota Hiace from Japan for me?');
+  const { item: shown } = await get('/api/items/l:908');
+  assert.deepEqual([shown.judged.sign, shown.judged.quote], ['words', 'Can you import a Toyota Hiace from Japan for me?']);
+  // A long sentence is cut around the words, at most 60 characters, with "…" where it was cut.
+  const long = judge.judgeImport(['We have been looking for a small convertible for our daughter for a long while and wondered whether you could help by importing one before her birthday in March']);
+  assert.equal(long.sign, 'words');
+  assert.ok(long.quote.length <= 60, long.quote);
+  assert.match(long.quote, /^…\S.*importing one.*\S…$/);
+  assert.ok(!long.quote.startsWith('… ') && !long.quote.endsWith(' …'), 'cut between words');
+  // A sentence with its words at the very start is cut only at its end.
+  const start = judge.judgeImport(['Can you import a car like the one my neighbour has, a lovely little blue convertible with a hard top']).quote;
+  assert.ok(start.startsWith('Can you import') && start.endsWith('…') && start.length <= 60, start);
+  // A model code or a model with its make is a reason of its own, with no words to quote.
+  assert.equal(judge.judgeImport(['Interested in a Daihatsu Copen LA400']).quote, undefined);
+  assert.equal(judge.judgeImport(['Looking for a Honda N-Box, 2019 onwards.']).quote, undefined);
+  assert.equal((await get('/api/items/l:905')).item.judged.quote, '');
+});
+
+test('a ruling or a move with keep writes nothing again', async () => {
+  // Jim has typed in the box, and the edit may not have landed yet: with keep, the suggestion is left as it is.
+  lead(909, 'Uma', 'Could you find me a Toyota Hiace from Japan?');
+  const item = items.itemFromKey('l:909');
+  assert.equal((await drafter.draftFor(item)).status, 'ready');
+  const stored = () => db.openDb().prepare("SELECT COUNT(*) AS n FROM drafts WHERE item_key = 'l:909'").get().n;
+  const before = stored();
+  let out = await post('/api/items/l:909/ruling', { kind: 'import', section: 'importquery', keep: true });
+  assert.deepEqual([out.status, out.json.writing, out.json.item.section, out.json.item.ruling], [200, false, 'importquery', { kind: 'import' }]);
+  out = await post('/api/items/l:909/ruling', { kind: '', section: 'dashboard', keep: true });
+  assert.deepEqual([out.status, out.json.writing, out.json.item.section, out.json.item.ruling], [200, false, 'dashboard', null]);
+  out = await post('/api/items/l:909/move', { section: 'importquery', keep: true });
+  assert.deepEqual([out.status, out.json.writing, out.json.item.section], [200, false, 'importquery']);
+  out = await post('/api/items/l:909/move', { section: 'dashboard', keep: true });
+  assert.deepEqual([out.status, out.json.writing, out.json.item.section], [200, false, 'dashboard']);
+  await settled(items.itemFromKey('l:909'));
+  assert.equal(stored(), before, 'no new suggestion is stored');
+  // Only keep: true keeps it. Without it, the untouched suggestion is written again, as before.
+  out = await post('/api/items/l:909/move', { section: 'importquery', keep: 'yes' });
+  assert.equal(out.json.writing, true);
+  await settled(items.itemFromKey('l:909'));
+  assert.equal(stored(), before + 1);
+});

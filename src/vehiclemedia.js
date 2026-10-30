@@ -9,6 +9,9 @@
 // The page never loads a picture from elsewhere: each picture has a number here, and Wheelman
 // fetches it, keeps a copy and serves that (src/media.js). Nothing the page sends is used as an
 // address. Videos play from Carbarn's own storage, the one other place the page may load from.
+//
+// Inside a preview of a template change (withPreview in src/wording.js) nothing is asked: a car's
+// media answers as unreachable, so a follow-up previewed there offers what it has without it.
 
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -19,6 +22,7 @@ import { availability } from './normalize.js';
 import { reservedByAnother } from './deal.js';
 import { fetchPicture } from './media.js';
 import { logLine } from './log.js';
+import { inPreview } from './wording.js';
 
 /** Where a car's pictures are kept: Carbarn's storage, the website's, and the Japanese supplier's auction photos. */
 export const PICTURE_HOSTS = [
@@ -181,9 +185,11 @@ export function carSummary(v) {
 /**
  * A car's media for the page: { stockNo, title, readAt, photos, videos, documents, stale, error }.
  * Read again after half an hour, or at once with fresh. When a read fails, the last good answer is
- * given with `error` saying so; with none, a MediaError.
+ * given with `error` saying so; with none, a MediaError. Inside a preview, a MediaError at once:
+ * nothing is read, and nothing read before is used.
  */
 export async function vehicleMedia(stockNo, { fresh = false, now = Date.now() } = {}) {
+  if (inPreview()) throw new MediaError('Not read for a preview.');
   const v = getVehicleByStock(stockNo);
   if (!v) throw new MediaError('That stock number is not in the stock list.', 404);
   const key = String(v.stockNo);
