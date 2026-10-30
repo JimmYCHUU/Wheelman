@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createPlaybookStore } from '../web/new/js/playbookstore.js';
-import { lessonGroups, lessonLine, historyLines, proposalWords, factGroups, factTag, menuHint, backHref } from '../web/new/js/playbookview.js';
+import { lessonGroups, lessonLine, historyLines, proposalWords, factGroups, factTag, earlierDay, menuHint, backHref } from '../web/new/js/playbookview.js';
 import { settle } from './support/newpage-fakes.js';
 
 const NOW = Date.parse('2026-11-02T02:00:00Z'); // Monday 2 November, 1 pm in Sydney
@@ -279,6 +279,18 @@ test("factGroups lists Needs your answer, Working and Confirmed, each in the fil
   assert.deepEqual(factTag({ status: 'confirmed', at: YESTERDAY }, NOW), { text: 'Confirmed yesterday', tone: 'good' });
   assert.deepEqual(factTag({ status: 'confirmed', at: THURSDAY }, NOW), { text: 'Confirmed Thursday 29 October', tone: 'good' });
   assert.deepEqual(factTag({ status: 'confirmed', at: null }, NOW), { text: 'Confirmed in your file', tone: 'good' });
+});
+
+test("an earlier answer says its day, or that it is in your file, or what your file said first when the file says something else now", () => {
+  assert.equal(earlierDay({ answer: 'Open every day.', status: 'confirmed', at: TODAY, from: 'playbook' }, NOW), 'Today, Confirmed');
+  assert.equal(earlierDay({ answer: 'Open every day.', status: 'working', at: THURSDAY, from: 'playbook' }, NOW), 'Thursday 29 October, Working');
+  assert.equal(earlierDay({ answer: 'Open every day.', status: 'confirmed', at: null, from: 'file' }, NOW), 'In your file, Confirmed');
+  assert.equal(earlierDay({ answer: '', status: 'needs_answer', at: null, from: 'file' }, NOW), 'In your file, Needs answer');
+  assert.equal(earlierDay({ answer: 'Open every day.', status: 'working', at: null, from: 'file', saidFirst: true }, NOW), 'What your file said first, Working');
+  // The Facts tab shows these words.
+  const tab = fs.readFileSync(new URL('../web/new/js/ui/factstab.js', import.meta.url), 'utf8');
+  assert.match(tab, /earlierDay\(e, now\)/);
+  assert.doesNotMatch(tab, /'In your file'/, 'the tab has no words of its own for it');
 });
 
 test("the Menu's Playbook hint counts what waits for Jim, and says nothing when nothing waits", () => {

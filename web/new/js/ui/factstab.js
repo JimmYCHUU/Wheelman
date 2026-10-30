@@ -5,15 +5,10 @@
 // An answer typed but not saved comes back when its card is drawn again (web/new/js/unsentanswers.js).
 // The fact the address names (Answer it, above the message box) is scrolled to and focused.
 import { html, useState, useEffect, useRef } from './html.js';
-import { dayLabel } from '../../../lib/format.js';
-import { factGroups, factTag } from '../playbookview.js';
+import { factGroups, factTag, earlierDay } from '../playbookview.js';
 import { keepUnsentAnswer, answerBox } from '../unsentanswers.js';
 
 const INTRO = 'Every fact a reply states comes from here or from the stock records. A fact that needs your answer is a blank in replies until you answer it.';
-
-const STATE = { confirmed: 'Confirmed', working: 'Working', needs_answer: 'Needs answer' };
-/** An earlier version's day (or "In your file" for the file's own), and its state then: "Today, Confirmed". */
-const earlierDay = (e, now) => (e.from === 'file' || !e.at ? 'In your file' : dayLabel(e.at, now)) + (STATE[e.status] ? ', ' + STATE[e.status] : '');
 
 /** busy: a change on its way, so Save and Confirm wait (a press is not posted twice). */
 function Fact({ f, n, actions, now, busy }) {

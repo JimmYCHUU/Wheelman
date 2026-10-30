@@ -14,7 +14,7 @@ import { orders } from './support/fixtures.js';
 import { trustLine } from '../web/new/js/trustview.js';
 import { createPlaybookStore } from '../web/new/js/playbookstore.js';
 import { createApi } from '../web/new/js/api.js';
-import { factTag } from '../web/new/js/playbookview.js';
+import { factTag, earlierDay } from '../web/new/js/playbookview.js';
 
 applyTestEnv({ DAILY_DRAFT_LIMIT: '200' });
 delete process.env.PROMPT_STYLE;
@@ -247,13 +247,15 @@ test('a file changed by hand after a Playbook answer says so, and its answer can
     fact = await listed('Roof racks');
     assert.deepEqual([fact.status, fact.answer, fact.from], ['confirmed', MINE, 'playbook']);
     assert.deepEqual(fact.file, { status: 'working', answer: HAND }, 'the file now differs, and its answer is offered');
-    // The file's own version is what the file said before its first save, not the hand edit.
-    assert.deepEqual(fact.earlier, [{ answer: ORIGINAL, status: 'working', at: null, from: 'file' }]);
+    // The file's own version is what the file said before its first save, not the hand edit, and
+    // says so: the page labels it "What your file said first", not "In your file".
+    assert.deepEqual(fact.earlier, [{ answer: ORIGINAL, status: 'working', at: null, from: 'file', saidFirst: true }]);
 
     out = await post('/api/playbook/facts', { title: 'Roof racks', answer: HAND, status: 'working' });
     assert.equal(out.status, 200, out.error);
     assert.deepEqual([out.fact.status, out.fact.answer, out.fact.from, out.fact.file], ['working', HAND, 'playbook', null]);
-    assert.deepEqual(out.fact.earlier.map((e) => [e.answer, e.status, e.from]), [[MINE, 'confirmed', 'playbook'], [ORIGINAL, 'working', 'file']]);
+    assert.deepEqual(out.fact.earlier.map((e) => [e.answer, e.status, e.from, e.saidFirst]), [[MINE, 'confirmed', 'playbook', undefined], [ORIGINAL, 'working', 'file', true]]);
+    assert.equal(earlierDay(out.fact.earlier[1], Date.now()), 'What your file said first, Working');
     assert.ok(section(asked(key), 'BUSINESS FACTS').includes(`\n- Roof racks: ${HAND}`));
   } finally {
     fs.writeFileSync(factsFile(), text);
@@ -276,9 +278,10 @@ test('a topic the file no longer has keeps its saved answer, listed after the fi
 
     const fact = await listed('Tinted windows');
     assert.deepEqual([fact.status, fact.answer, fact.from, fact.file], ['working', TINT, 'playbook', null]);
-    // The older saves, then the file's own version from when the topic was first saved.
+    // The older saves, then the file's own version from when the topic was first saved: the file
+    // no longer has the topic, so it is what the file said first.
     assert.equal(fact.earlier.length, versions('Tinted windows').length);
-    assert.deepEqual(fact.earlier.at(-1), { answer: '', status: 'needs_answer', at: null, from: 'file' });
+    assert.deepEqual(fact.earlier.at(-1), { answer: '', status: 'needs_answer', at: null, from: 'file', saidFirst: true });
 
     // A title only the Playbook has can still be answered.
     const out = await post('/api/playbook/facts', { title: 'Tinted windows', answer: 'Window tinting is arranged before pickup.', status: 'confirmed' });

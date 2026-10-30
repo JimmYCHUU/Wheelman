@@ -1,6 +1,5 @@
 // Assembles the request sent to the AI model. Customer details are removed before this point.
 
-import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 import { formatSydney, sydneyWeekday, sydneyHour, sydneyDay, formatDay } from './time.js';
@@ -16,7 +15,7 @@ import { learnedExamples, corrections, ownerGuidance } from './learn.js';
 import { practiceFor, labelled } from './practice.js';
 import { blockCarries } from './firstreply.js';
 import { labelAddress } from './address.js';
-import { allVehicles } from './db.js';
+import { allVehicles, versionsStamp } from './db.js';
 import { saleStage, stageLines, QUIET_MOVES } from './selling.js';
 import { insiderFacts } from './insider.js';
 import { renderResearch } from './importquery.js';
@@ -26,17 +25,27 @@ import { listOf } from '../web/lib/copy.js';
 import { looksLikeNonCustomer } from './items.js';
 import { playbookFor } from './playbook.js';
 import { maskTrusted } from './factmarkers.js';
+import { voiceText, inPreview } from './wording.js';
 
-const read = (name) => fs.readFileSync(path.join(config.voiceDir, name), 'utf8').replace(/\r/g, '').trim();
+/** A voice file as a request carries it, with the sections saved in the Playbook laid over it (voiceText in src/wording.js). */
+const read = (name) => {
+  const text = voiceText(name);
+  if (text === null) throw new Error(`The wording file voice/${name} is missing.`);
+  return text;
+};
 
 // The voice card (voice/compact/voice-card.md): house-voice.md in short, for the compact style.
-// Read again after a minute. Its opening comment is for whoever edits the file, not for the AI.
-let card = { at: 0, file: '', text: '' };
+// Read again after a minute, or at once after a save in the Playbook. Its opening comment is for
+// whoever edits the file, not for the AI. Inside a preview it is read afresh and not kept.
+let card = { at: 0, file: '', stamp: -1, text: '' };
 export function voiceCard() {
   const file = path.join(config.voiceDir, 'compact', 'voice-card.md');
-  if (card.text && card.file === file && Date.now() - card.at < 60 * 1000) return card.text;
-  card = { at: Date.now(), file, text: fs.readFileSync(file, 'utf8').replace(/\r/g, '').replace(/<!--[\s\S]*?-->/g, '').trim() };
-  return card.text;
+  const cached = !inPreview();
+  const stamp = versionsStamp();
+  if (cached && card.text && card.file === file && card.stamp === stamp && Date.now() - card.at < 60 * 1000) return card.text;
+  const text = read('compact/voice-card.md').replace(/<!--[\s\S]*?-->/g, '').trim();
+  if (cached) card = { at: Date.now(), file, stamp, text };
+  return text;
 }
 
 // The shape of a Marketplace reply, learned from what our team sends there (the two days to

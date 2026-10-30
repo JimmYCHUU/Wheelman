@@ -1,6 +1,6 @@
 // The Playbook page's words: its lessons in groups, each lesson's line and history, a proposed
-// lesson's headline, the business facts in groups with their tags, the Menu's hint, and the way back
-// to the conversation. Pure functions (no DOM, no globals); the tests import them in Node.
+// lesson's headline, the business facts in groups with their tags and their earlier answers' days,
+// the Menu's hint, and the way back to the conversation. Pure functions (no DOM, no globals); the tests import them in Node.
 import { dayLabel, plural } from '../../lib/format.js';
 import { scopeWords } from './lessons.js';
 import { hashFor } from './route.js';
@@ -81,6 +81,17 @@ export function factTag(f, now = Date.now()) {
   if (f.status === 'needs_answer') return { text: 'Needs answer', tone: 'warn' };
   if (f.status === 'working') return { text: 'Working', tone: 'info' };
   return { text: f.at ? 'Confirmed ' + dayInLine(f.at, now) : 'Confirmed in your file', tone: 'good' };
+}
+
+const STATE = { confirmed: 'Confirmed', working: 'Working', needs_answer: 'Needs answer' };
+
+/**
+ * An earlier answer's day, and its state then: "Today, Confirmed". The file's own is "In your
+ * file", or "What your file said first" when the file says something else now (saidFirst).
+ */
+export function earlierDay(e, now = Date.now()) {
+  const when = e.from === 'file' || !e.at ? (e.saidFirst ? 'What your file said first' : 'In your file') : dayLabel(e.at, now);
+  return when + (STATE[e.status] ? ', ' + STATE[e.status] : '');
 }
 
 /** "needs an answer" for one fact, "need an answer" for more. */

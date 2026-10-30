@@ -25,7 +25,9 @@ const fileTopics = () => new Map(loadBusinessFacts(undefined, { playbook: false 
  *     at       when the answer in use was saved; null for the file's own
  *     earlier  every answer saved before the one in use, newest first, then the file's own when a
  *              saved answer is in use: what the file said when the topic was first saved, else what
- *              it says now  [{ answer, status, at, from }]
+ *              it says now  [{ answer, status, at, from }]. The file's own has `saidFirst: true`
+ *              when the file says something else now (changed by hand, or the topic taken out), so
+ *              the page names it "What your file said first", not "In your file"
  *     file     the file's { status, answer } when it was changed by hand after the answer in use
  *              was saved and now says something else, so it can be offered; otherwise null
  *   counts: { confirmed, working, needsAnswer }
@@ -46,7 +48,11 @@ function listed(t, inFile) {
   if (!newest || newest.status === USE_FILE) return { ...fact, at: null, from: 'file', earlier: saves, file: null };
   const earlier = saves.slice(1);
   const original = fromBase(all.at(-1).base) || inFile;
-  if (original) earlier.push({ answer: original.answer, status: original.status, at: null, from: 'file' });
+  if (original) {
+    // The file says something else now (changed by hand, or the topic taken out): what it said first.
+    const saidFirst = !inFile || asBase(inFile) !== asBase(original);
+    earlier.push({ answer: original.answer, status: original.status, at: null, from: 'file', ...(saidFirst ? { saidFirst } : {}) });
+  }
   // A hand edit to the very answer in use differs from nothing: there is nothing to offer.
   const file = inFile && asBase(inFile) !== newest.base && asBase(inFile) !== asBase(t) ? { status: inFile.status, answer: inFile.answer } : null;
   return { ...fact, at: newest.at, from: 'playbook', earlier, file };

@@ -136,6 +136,26 @@ config.knowledgeDir = factsDir;
 
 const worker = await import('../../src/worker.js');
 const app = await (await import('../../src/server.js')).startServer();
+// Wording saved in the Playbook, as small invented changes, so its Earlier versions can be seen: two
+// versions of the Dashboard's Still available (Wynn's More messages writes the second) and one of the
+// house voice's Length. They are kept in the preview's own database; no wording file is written.
+{
+  const at = `http://127.0.0.1:${PORT}/api/playbook/wording`;
+  try {
+    const files = (await (await fetch(at)).json()).files;
+    const own = (name, part) => files.find((f) => f.name === name).parts.find((p) => p.part === part).fileText;
+    const SAID = 'Yes, the {car} is still available.';
+    const LENGTH = 'If it can be said in fewer words, use fewer.';
+    for (const [name, part, text] of [
+      ['dashboard-messages.md', 'still_available', own('dashboard-messages.md', 'still_available').replace(SAID, 'Yes, the {car} is still available, and ready to see.')],
+      ['dashboard-messages.md', 'still_available', own('dashboard-messages.md', 'still_available').replace(SAID, 'Yes, the {car} is still available, and ready to see today.')],
+      ['house-voice.md', 'Length', own('house-voice.md', 'Length').replace(LENGTH, `${LENGTH} A short reply respects the customer's time.`)],
+    ]) {
+      const res = await fetch(at, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, part, text }) });
+      if (!res.ok) console.log(`Preview: the Playbook did not take ${name} "${part}": ${(await res.json()).error}`);
+    }
+  } catch (e) { console.log('Preview: the Playbook wording was not saved: ' + e.message); }
+}
 await worker.runSync();
 await worker.runMarketplaceSync();
 await worker.draftWaiting();

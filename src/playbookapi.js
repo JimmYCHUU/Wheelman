@@ -1,12 +1,14 @@
 // The Playbook's routes, under /api/playbook/: the business facts with their state, and an answer
 // saved there; the lessons with where each came from, the edits proposed as lessons and those marked
-// not a rule, and the owner's decision on a proposal. src/server.js's api() hands every
+// not a rule, and the owner's decision on a proposal; the templates and voice rules with the wording
+// in use, every saved version of a part, and wording saved there. src/server.js's api() hands every
 // /api/playbook/ request here first. (src/playbook.js is another thing: the sales playbook that
 // compact requests read.)
 
 import { playbookFacts, saveFact } from './factbook.js';
 import { listLessons, lessonDetails, editDecisions } from './db.js';
 import { editProposals, decideProposal } from './editrules.js';
+import { wordingFiles, wordingVersions, saveWording } from './wordingedit.js';
 
 /** Answers a /api/playbook/ request. True when it answered; false leaves it to the routes after it. */
 export async function playbookApi(req, res, p, url, { send, readBody }) {
@@ -35,6 +37,29 @@ export async function playbookApi(req, res, p, url, { send, readBody }) {
     const out = decideProposal(String(body.key || ''), body.decision);
     if (out.error) send(res, out.status, { error: out.error });
     else send(res, 200, out.lesson ? { lesson: out.lesson } : {});
+    return true;
+  }
+  // Templates and voice rules: { files } to read; { name, part, text } to save, answered with the
+  // part as listed, or the refusal in words.
+  if (p === '/api/playbook/wording') {
+    if (req.method === 'GET') { send(res, 200, { files: wordingFiles() }); return true; }
+    if (req.method === 'POST') {
+      const body = (await readBody(req)) || {};
+      const out = saveWording({ name: body.name, part: body.part, text: body.text });
+      if (out.error) send(res, out.status, { error: out.error });
+      else send(res, 200, { part: out.part });
+      return true;
+    }
+    send(res, 405, { error: 'Not allowed' });
+    return true;
+  }
+  // Every saved version of one part, newest first, and the file's own wording: ?kind=&name=&part=.
+  if (p === '/api/playbook/versions') {
+    if (req.method !== 'GET') { send(res, 405, { error: 'Not allowed' }); return true; }
+    const q = url.searchParams;
+    const out = wordingVersions({ kind: q.get('kind'), name: q.get('name'), part: q.get('part') ?? '' });
+    if (out.error) send(res, out.status, { error: out.error });
+    else send(res, 200, out);
     return true;
   }
   return false;
