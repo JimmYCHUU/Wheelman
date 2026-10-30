@@ -4,6 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import vm from 'node:vm';
 import { trustLine, factLine, topicLine, factAsk } from '../web/new/js/trustview.js';
 import * as model from '../web/new/js/model.js';
 import { PLAYBOOK_TABS, playbookRoute, playbookHash } from '../web/new/js/playbookroute.js';
@@ -87,7 +88,29 @@ test('the Needs-answer line links to the fact, and offers Write it again only wh
   const trust = src('ui/trust.js');
   assert.match(trust, /factAsk\(item, typed\)/);
   assert.match(trust, /href=\$\{ask\.href\}>Answer it<\/a>/);
-  assert.match(trust, /onClick=\$\{\(\) => actions\.write\(\{\}\)\}>Write it again<\/button>/);
+  assert.match(trust, /onClick=\$\{\(\) => actions\.write\(\{ instruction: \(item\.draft && item\.draft\.instruction\) \|\| undefined \}\)\}>Write it again<\/button>/);
+});
+
+test("Write it again writes the reply again with the Prompt it was written with, as Try again does", async () => {
+  // The page's own Preact and htm, as index.html loads them, so the box's line can be drawn in Node:
+  // what it draws is plain objects, and its button's press is called as a click would.
+  vm.runInThisContext(fs.readFileSync(new URL('../web/new/vendor/htm-preact.umd.js', import.meta.url), 'utf8'));
+  const { FactAsk } = await import('../web/new/js/ui/trust.js');
+  const nodes = (n) => (Array.isArray(n) ? n.flatMap(nodes) : n && typeof n === 'object' ? [n, ...nodes(n.props && n.props.children)] : []);
+  const words = (n) => (Array.isArray(n) ? n.map(words).join('') : n && typeof n === 'object' ? words(n.props && n.props.children) : n == null ? '' : String(n));
+  const asked = [];
+  const press = (draft) => {
+    const item = { key: 'c:1', draft: ready({ openTopics: [{ title: 'Tinted windows', answered: true }], edited: null, ...draft }) };
+    const button = nodes(FactAsk({ item, typed: null, actions: { write: (o) => asked.push(o) } })).find((n) => n.type === 'button');
+    assert.equal(words(button), 'Write it again');
+    button.props.onClick();
+  };
+  press({ instruction: 'Keep it short and friendly.' });
+  press({ instruction: '' });
+  press({});
+  assert.deepEqual(asked, [{ instruction: 'Keep it short and friendly.' }, { instruction: undefined }, { instruction: undefined }]);
+  // The same call as the failure line's Try again in the box.
+  assert.match(src('ui/messagebox.js'), /onClick=\$\{\(\) => actions\.write\(\{ instruction: \(item\.draft && item\.draft\.instruction\) \|\| undefined \}\)\}/);
 });
 
 test("the Playbook's address", () => {

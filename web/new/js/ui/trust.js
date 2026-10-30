@@ -25,13 +25,14 @@ export function Trust({ line, id }) {
 /**
  * A business fact with no answer that the reply left a blank for: Answer it opens it in the
  * Playbook. Once it is answered the line says so, and Write it again writes the reply with the
- * answer, offered only while nothing is typed in the box. Nothing is written again by itself.
+ * answer, offered only while nothing is typed in the box. It writes with the Prompt the reply was
+ * written with, if any, as Try again does. Nothing is written again by itself.
  */
 export function FactAsk({ item, typed, actions, locked = false }) {
   const ask = factAsk(item, typed);
   if (!ask) return null;
   return html`<div class=${'context' + (ask.answered ? ' info' : '')} role="status"><span>${ask.words}</span>
     ${!ask.answered ? html`<a class="btn small" href=${ask.href}>Answer it</a>`
-      : ask.rewrite ? html`<button type="button" class="btn small" disabled=${locked} onClick=${() => actions.write({})}>Write it again</button>` : null}
+      : ask.rewrite ? html`<button type="button" class="btn small" disabled=${locked} onClick=${() => actions.write({ instruction: (item.draft && item.draft.instruction) || undefined })}>Write it again</button>` : null}
   </div>`;
 }

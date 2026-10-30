@@ -2,10 +2,12 @@
 // Working, Confirmed). An answer saved here is a new version, used from the next suggestion; every
 // earlier one is kept and can be put back in the box, as can the file's own answer when the file was
 // changed by hand since. Putting an answer in the box saves nothing: saving is always Jim's press.
+// An answer typed but not saved comes back when its card is drawn again (web/new/js/unsentanswers.js).
 // The fact the address names (Answer it, above the message box) is scrolled to and focused.
 import { html, useState, useEffect, useRef } from './html.js';
 import { dayLabel } from '../../../lib/format.js';
 import { factGroups, factTag } from '../playbookview.js';
+import { keepUnsentAnswer, answerBox } from '../unsentanswers.js';
 
 const INTRO = 'Every fact a reply states comes from here or from the stock records. A fact that needs your answer is a blank in replies until you answer it.';
 
@@ -16,8 +18,11 @@ const earlierDay = (e, now) => (e.from === 'file' || !e.at ? 'In your file' : da
 /** busy: a change on its way, so Save and Confirm wait (a press is not posted twice). */
 function Fact({ f, n, actions, now, busy }) {
   const needs = f.status === 'needs_answer';
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState('');
+  // The box as it was left: another tab, Back or the Menu draws the card afresh.
+  const [start] = useState(() => answerBox(f.title, f.answer));
+  const [editing, setEditing] = useState(start.editing);
+  const [text, setRaw] = useState(start.text);
+  const setText = (v) => { setRaw(v); keepUnsentAnswer(f.title, v); };
   const box = useRef(null);
   const toBox = useRef(false); // the caret goes into the box once it is on screen
   useEffect(() => {
@@ -30,7 +35,7 @@ function Fact({ f, n, actions, now, busy }) {
   const open = needs || editing;
   /** An answer in the box, to change or save. */
   const use = (answer) => { setText(answer); setEditing(true); toBox.current = true; };
-  const close = () => { setEditing(false); setText(''); };
+  const close = () => { setEditing(false); setRaw(''); keepUnsentAnswer(f.title, null); };
   const save = async () => { if (await actions.saveFact(f.title, text, 'confirmed')) close(); };
 
   return html`<article class="pb-card" data-fact=${f.title} aria-labelledby=${id + '-title'}>

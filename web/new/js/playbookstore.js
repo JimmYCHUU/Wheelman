@@ -26,13 +26,16 @@ export function createPlaybookStore({ api, toast, changed = () => {} }) {
   // Only the newest read is taken: one for another tab, asked for since, is the one on screen.
   let seq = 0;
 
-  /** Reads a tab (an unknown one is Lessons). focus: the fact to scroll to and focus, or null. */
-  async function load(tab, focus = null) {
+  /**
+   * Reads a tab (an unknown one is Lessons). focus: the fact to scroll to and focus, or null.
+   * again: the tab on screen read again after a change (reload), which stays on screen meanwhile, so
+   * nothing typed goes. Any other read, a return visit to the tab last shown included, starts afresh.
+   */
+  async function read(tab, focus, again) {
     const t = PLAYBOOK_TABS.includes(tab) ? tab : 'lessons';
     const mine = ++seq;
-    // The tab on screen read again (after a change) stays on screen meanwhile, so nothing typed goes.
-    const again = t === state.tab && state.state === 'ready';
-    set({ tab: t, focus: focus || null, ...(again ? {} : { state: 'loading', error: '' }) });
+    const keep = again && t === state.tab && state.state === 'ready';
+    set({ tab: t, focus: focus || null, ...(keep ? {} : { state: 'loading', error: '' }) });
     try {
       const out = await api(PATH[t]);
       if (mine !== seq) return;
@@ -46,15 +49,18 @@ export function createPlaybookStore({ api, toast, changed = () => {} }) {
       }
     } catch (e) {
       if (mine !== seq) return;
-      // Read again with the tab on screen: what is there stays (and anything typed in it), and the
-      // toast says why. A first read says so on the page, with Try again.
-      if (again) toast(e.message);
+      // Read again after a change: what is there stays (and anything typed in it), and the toast says
+      // why. Any other read says so on the page, with Try again.
+      if (keep) toast(e.message);
       else set({ state: 'error', error: e.message });
     }
   }
 
+  /** Reads a tab for the address, or for Try again. */
+  const load = (tab, focus = null) => read(tab, focus, false);
+
   /** The tab on screen, read again once a change has landed (or was refused: it may have moved on). */
-  const reload = () => load(state.tab, state.focus);
+  const reload = () => read(state.tab, state.focus, true);
 
   /**
    * Posts a change; on its answer the toast says what happened, with Undo when there is one, and the
