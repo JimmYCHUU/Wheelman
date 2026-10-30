@@ -14,7 +14,7 @@ export async function playbookApi(req, res, p, url, { send, readBody }) {
     if (req.method === 'GET') { send(res, 200, playbookFacts()); return true; }
     if (req.method === 'POST') {
       const body = (await readBody(req)) || {};
-      const out = saveFact({ title: body.title, answer: body.answer, status: body.status });
+      const out = saveFact({ title: body.title, answer: body.answer, status: body.status, from: body.from });
       if (out.error) send(res, out.status, { error: out.error });
       else send(res, 200, { fact: out.fact });
       return true;

@@ -129,7 +129,8 @@ test('the Playbook store loads lessons and facts, and Keep, Not a rule, a switch
   assert.equal(store.get().counts.needsAnswer, 1);
   assert.equal(store.get().counts.toReview, 1, 'the Lessons count is kept for its tab');
 
-  // A saved answer: posted, true, Undo posts the answer and status it had before.
+  // A saved answer: posted, true, and Undo puts back what was in use. The fact was the file's, so
+  // Undo puts the file's own answer back in use (a version of its own), not a copy of its words.
   calls.length = 0;
   assert.equal(await store.actions.saveFact('Tinted windows', 'Yes, through a partner, quoted per car.', 'confirmed'), true);
   assert.deepEqual(calls, [{ path: '/api/playbook/facts', body: { title: 'Tinted windows', answer: 'Yes, through a partner, quoted per car.', status: 'confirmed' } }, { path: '/api/playbook/facts' }]);
@@ -139,15 +140,24 @@ test('the Playbook store loads lessons and facts, and Keep, Not a rule, a switch
   calls.length = 0;
   await t.action.run();
   await settle();
-  assert.deepEqual(posts(calls), [{ path: '/api/playbook/facts', body: { title: 'Tinted windows', answer: '', status: 'needs_answer' } }]);
+  assert.deepEqual(posts(calls), [{ path: '/api/playbook/facts', body: { title: 'Tinted windows', from: 'file' } }]);
   assert.equal(lastToast(toasts).message, 'Put back as it was.');
-  // Saved as Working: its own words; Undo puts back the working answer.
+  // Saved as Working: its own words; Undo puts the file's working answer back in use.
   calls.length = 0;
   assert.equal(await store.actions.saveFact('Roof racks', 'We fit roof racks; quoted per car.', 'working'), true);
   assert.equal(lastToast(toasts).message, 'Saved as Working.');
   await lastToast(toasts).action.run();
   await settle();
-  assert.deepEqual(posts(calls).at(-1), { path: '/api/playbook/facts', body: { title: 'Roof racks', answer: 'We can fit roof racks before pickup; a person quotes the cost.', status: 'working' } });
+  assert.deepEqual(posts(calls).at(-1), { path: '/api/playbook/facts', body: { title: 'Roof racks', from: 'file' } });
+  // A fact whose answer in use was saved in the Playbook: Undo saves that answer and status again.
+  const saved = { title: 'Holding deposit', status: 'confirmed', answer: 'A refundable holding deposit holds the car.', at: TODAY, from: 'playbook', earlier: [], file: null };
+  data.facts = { facts: [...facts, saved], counts: { confirmed: 2, working: 1, needsAnswer: 1 } };
+  await store.actions.load('facts', null);
+  calls.length = 0;
+  assert.equal(await store.actions.saveFact('Holding deposit', 'A refundable holding deposit takes the car off the market.', 'working'), true);
+  await lastToast(toasts).action.run();
+  await settle();
+  assert.deepEqual(posts(calls).at(-1), { path: '/api/playbook/facts', body: { title: 'Holding deposit', answer: saved.answer, status: 'confirmed' } });
 });
 
 test('a refused answer keeps the words and says why', async () => {

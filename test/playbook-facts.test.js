@@ -12,6 +12,9 @@ import { startStandins, aiBehaviour } from './support/standins.js';
 import { inventedFacts, INVENTED_FACTS } from './support/facts.js';
 import { orders } from './support/fixtures.js';
 import { trustLine } from '../web/new/js/trustview.js';
+import { createPlaybookStore } from '../web/new/js/playbookstore.js';
+import { createApi } from '../web/new/js/api.js';
+import { factTag } from '../web/new/js/playbookview.js';
 
 applyTestEnv({ DAILY_DRAFT_LIMIT: '200' });
 delete process.env.PROMPT_STYLE;
@@ -65,6 +68,8 @@ const section = (user, heading) => `\n${(user.match(new RegExp(`\\n=== ${heading
 const versions = (part) => db.versionsOf({ kind: 'fact', name: NAME, part });
 const factsFile = () => path.join(dir, NAME);
 const fileAnswer = (title) => INVENTED_FACTS.find((f) => f.title === title).answer;
+/** The page's own Playbook store, talking to this server as the page does. */
+const pageStore = (toasts) => createPlaybookStore({ api: createApi({ fetch: (p, init) => fetch(base + p, init), go: () => {} }), toast: (message, action = null) => toasts.push({ message, action }) });
 
 // What each test needs of the others. A saved version is never removed, so:
 //   - the first two tests run before any save, as they are written first: both check the file alone
@@ -74,6 +79,9 @@ const fileAnswer = (title) => INVENTED_FACTS.find((f) => f.title === title).answ
 //     by the second test too, and the journey test puts it back to Needs answer before it starts;
 //   - the test after the journey test needs Tinted windows answered (by the journey test) and Car
 //     covers with no answer (put back by the fourth test);
+//   - the Undo test adds a topic of its own (Spare keys) to the file, and ends with it read from
+//     the file again, so it is not listed once the file is put back; it needs Tinted windows
+//     answered in the Playbook (by the test before it);
 //   - a test that edits the scratch facts file by hand puts it back when it ends.
 test('with nothing saved in the Playbook, the facts are the file\'s, as before', () => {
   assert.equal(db.countRows('playbook_versions'), 0);
@@ -265,6 +273,70 @@ test('a topic the file no longer has keeps its saved answer, listed after the fi
     const out = await post('/api/playbook/facts', { title: 'Tinted windows', answer: 'Window tinting is arranged before pickup.', status: 'confirmed' });
     assert.equal(out.status, 200, out.error);
     assert.equal(out.fact.earlier.length, versions('Tinted windows').length);
+  } finally {
+    fs.writeFileSync(factsFile(), text);
+  }
+});
+
+test("Undo of a first save on a fact from the file puts the file's own answer back in use, so a later hand edit is used", async () => {
+  const key = customer(6, 'Fin', 'Can you cut a spare key for the Noah?');
+  const FILE = 'A spare key can be cut before pickup; a person quotes the cost.';
+  const MINE = 'We cut a spare key before pickup, and a person quotes the cost.';
+  const HAND = 'A spare key is cut before pickup; a person quotes the cost and the day.';
+  const text = fs.readFileSync(factsFile(), 'utf8');
+  // A topic only this test adds to the file, so it has never been saved.
+  const withKeys = (answer) => fs.writeFileSync(factsFile(), `${text}\n## Spare keys\nStatus: CONFIRMED\nAnswer: ${answer}\n`);
+  const toasts = [];
+  try {
+    withKeys(FILE);
+    const store = pageStore(toasts);
+    await store.actions.load('facts', null);
+    let fact = store.get().facts.find((f) => f.title === 'Spare keys');
+    assert.deepEqual([fact.status, fact.answer, fact.from, fact.at], ['confirmed', FILE, 'file', null], 'from the file, never saved');
+    const tag = factTag(fact, Date.now());
+    assert.equal(tag.text, 'Confirmed in your file');
+
+    // Saved in the Playbook: Confirmed today.
+    assert.equal(await store.actions.saveFact('Spare keys', MINE, 'confirmed'), true);
+    fact = await listed('Spare keys');
+    assert.deepEqual([fact.answer, fact.from], [MINE, 'playbook']);
+    assert.equal(factTag(fact, Date.now()).text, 'Confirmed today');
+
+    // Undo: the file's own answer is in use again, as before the save, with no day of its own.
+    assert.equal(toasts.at(-1).action.label, 'Undo');
+    await toasts.at(-1).action.run();
+    assert.equal(toasts.at(-1).message, 'Put back as it was.');
+    fact = await listed('Spare keys');
+    assert.deepEqual([fact.status, fact.answer, fact.from, fact.at, fact.file], ['confirmed', FILE, 'file', null, null]);
+    assert.deepEqual(factTag(fact, Date.now()), tag, 'no "Confirmed today"');
+    assert.deepEqual(knowledge.loadBusinessFacts().find((t) => t.title === 'Spare keys'), { title: 'Spare keys', status: 'confirmed', answer: FILE }, "every request reads the file's own topic");
+    // Every version kept: the save is still listed to put back, and the Undo is one more row.
+    const rows = versions('Spare keys');
+    assert.equal(rows.length, 2);
+    assert.deepEqual(fact.earlier, [{ answer: MINE, status: 'confirmed', at: rows[1].at, from: 'playbook' }]);
+
+    // A later hand edit to the file is used, as for a fact never saved.
+    withKeys(HAND);
+    assert.ok(section(asked(key), 'BUSINESS FACTS').includes(`\n- Spare keys: ${HAND}`), 'the hand edit is in the request');
+    fact = await listed('Spare keys');
+    assert.deepEqual([fact.status, fact.answer, fact.from, fact.file], ['confirmed', HAND, 'file', null]);
+
+    // Put back to the file again: nothing to add.
+    const again = await post('/api/playbook/facts', { title: 'Spare keys', from: 'file' });
+    assert.equal(again.status, 200, again.error);
+    assert.deepEqual([again.fact.answer, again.fact.from], [HAND, 'file']);
+    assert.equal(versions('Spare keys').length, 2);
+
+    // A fact the file no longer has keeps its saved answer: it cannot be put back to the file.
+    const tinted = await listed('Tinted windows');
+    assert.equal(tinted.from, 'playbook');
+    fs.writeFileSync(factsFile(), text.replace(/## Tinted windows\n[^#]*/, ''));
+    const count = db.countRows('playbook_versions');
+    const refused = await post('/api/playbook/facts', { title: 'Tinted windows', from: 'file' });
+    assert.deepEqual([refused.status, refused.error], [404, 'That fact is no longer in your facts file.']);
+    assert.equal(db.countRows('playbook_versions'), count);
+    const still = await listed('Tinted windows');
+    assert.deepEqual([still.status, still.answer, still.from, still.at], [tinted.status, tinted.answer, 'playbook', tinted.at], 'still in use, as it was');
   } finally {
     fs.writeFileSync(factsFile(), text);
   }

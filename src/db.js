@@ -318,7 +318,7 @@ CREATE TABLE IF NOT EXISTS playbook_versions (
   name TEXT NOT NULL,   -- the file: 'business-facts.md', 'dashboard-messages.md', 'house-voice.md'
   part TEXT NOT NULL,   -- a fact's title, a template's part, a voice section's heading; '' the whole file
   text TEXT NOT NULL,
-  status TEXT,          -- a fact's: 'confirmed' | 'working' | 'needs_answer'
+  status TEXT,          -- a fact's: 'confirmed' | 'working' | 'needs_answer', or 'file': its file's own answer in use again
   base TEXT,            -- the file's own text for that part when this was saved
   at INTEGER NOT NULL
 );

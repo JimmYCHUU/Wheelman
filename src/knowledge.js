@@ -26,6 +26,12 @@ export function knowledgeFile(name) {
 export const FACTS_NAME = 'business-facts.md';
 
 /**
+ * The status of a saved version that puts the file's own answer back in use (an Undo of a save on
+ * a fact that was the file's). It has no answer of its own: the fact is read from the file again.
+ */
+export const USE_FILE = 'file';
+
+/**
  * The business facts, topic by topic in the file's order: { title, status, answer }. With `playbook`
  * (every request, the status counts and the start-up line), a topic answered in the Playbook takes
  * its newest saved status and answer, and `at`, when that was saved. A topic saved there that the
@@ -53,9 +59,13 @@ export function loadBusinessFacts(file = knowledgeFile('business-facts'), { play
   return playbook ? withPlaybook(topics) : topics;
 }
 
-/** The file's topics with the Playbook's newest saved version of each laid over it. */
+/**
+ * The file's topics with the Playbook's newest saved version of each laid over it. A newest version
+ * that puts the file's own answer back in use (USE_FILE) lays nothing: the topic is the file's, as
+ * if never saved, later hand edits included.
+ */
 function withPlaybook(topics) {
-  const saved = latestVersions('fact', FACTS_NAME);
+  const saved = new Map([...latestVersions('fact', FACTS_NAME)].filter(([, v]) => v.status !== USE_FILE));
   if (!saved.size) return topics;
   const laid = (title, v) => {
     const usable = v.status !== 'needs_answer' && v.text.length > 0;

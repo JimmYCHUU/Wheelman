@@ -110,13 +110,15 @@ export function createPlaybookStore({ api, toast, changed = () => {} }) {
   }
 
   /**
-   * An answer to a business fact, saved as Confirmed or Working. Undo saves the answer and status it
-   * had before. True when it was saved; false on a refusal (the toast says the server's words), so
-   * the editor keeps its text.
+   * An answer to a business fact, saved as Confirmed or Working. Undo puts back what was in use: the
+   * answer and status saved before, or, for a fact that was the file's, the file's own answer (so a
+   * later hand edit to the file is used, as before the save). True when it was saved; false on a
+   * refusal (the toast says the server's words), so the editor keeps its text.
    */
   function saveFact(title, answer, status) {
     const was = state.facts.find((f) => f.title === title);
-    const undo = was ? { path: PATH.facts, body: { title, answer: was.answer || '', status: was.status }, words: BACK } : null;
+    const before = !was ? null : was.from === 'file' ? { title, from: 'file' } : { title, answer: was.answer || '', status: was.status };
+    const undo = before ? { path: PATH.facts, body: before, words: BACK } : null;
     return once(PATH.facts, { title, answer, status }, status === 'working' ? SAVED.working : SAVED.confirmed, undo);
   }
 
