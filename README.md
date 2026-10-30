@@ -111,7 +111,7 @@ every suggestion, for their content: what they chose to say, offer and leave out
 is not borrowed; the register is this voice. Lessons learned before the voice changed are read the
 same way, and those about price questions, written under the old policy, are no longer shown. The
 names of the salespeople are not in this repository (`voice/people.json`, local only). The voice is
-`voice/house-voice.md`; the version before 12 October 2026 is kept in `voice/previous/` so the two
+`voice/house-voice.md`, with anything saved in the Playbook's Voice tab laid over it; the version before 12 October 2026 is kept in `voice/previous/` so the two
 can be compared on the Review page.
 
 ## How a suggestion is written
@@ -721,7 +721,8 @@ open conversation has the message box with its fill-in blanks, **Instead**, the 
 what to say…" line, and one main button for the channel: **Copy reply** for a text, **Copy for
 Gmail** for an email, **Copy for WhatsApp** for an auction order, and **Send on Facebook** for a
 Marketplace buyer. **Put back in Needs reply** is on Dashboard. The old page stays at the normal
-address until the switch-over. The new page is built from `prototype/`.
+address until the switch-over. The new page is built from `prototype/`. Its Playbook also holds
+the templates and voice rules, previewed before they are saved (see below).
 
 **Imports** lists the leads on the dashboard's Imports list, and the import emails you sent from
 Gmail while the email intake is on. It is always there, even with the intake off; then it lists
@@ -802,9 +803,10 @@ Imports, because those teach nothing, and it is refused for a message from the a
 file. **Just this once** keeps nothing. **What Wheelman used** now also lists the lessons it
 followed and the rules that applied, with **See every lesson in the Playbook**.
 
-The **Playbook** is in the **Menu**, and has its own address (`#/playbook/lessons` or
-`#/playbook/facts`). **Back** returns to the conversation as you left it, with what you had
-typed in the reply box. It has two tabs. **Lessons** lists every lesson with where it came from (your
+The **Playbook** is in the **Menu**, and has its own address (`#/playbook/lessons`,
+`#/playbook/facts`, `#/playbook/templates` or `#/playbook/voice`). **Back** returns to the
+conversation as you left it, with what you had typed in the reply box. It has four tabs.
+**Lessons** lists every lesson with where it came from (your
 instruction, your note under Could be better, or your repeated edits), its history, how often it
 has been used and a switch to turn it off or on again. A lesson's words cannot be edited: switch
 it off instead. Edits you keep making wait there as proposals (see
@@ -816,6 +818,29 @@ again. A fact still without an answer is a blank in the reply; the box says so a
 with **Answer it**, which opens the fact in the Playbook. Once it is answered, the box says so
 and offers **Write it again**. Nothing is written again by itself. Both pages use the answers
 saved there.
+
+**Templates** lists every message Wheelman writes from, under Dashboard, Marketplace, Imports,
+Auction and Blocks (the standard pieces added under a reply), each named in words with its first
+line. **Edit** opens the whole message in a box. **Show how it reads** then fills the words
+into three conversations, word for word, with no AI and nothing read from outside this computer
+(a live auction car, or the website's list, shows as the blank it would be), and says which lines
+a card does not show. A conversation the message is not offered to is marked **Not offered
+here**. **Save this version** waits for a preview of exactly the words in the box; change a word
+and it waits again. A save is refused, with the reason in plain words, when it takes out the
+deposit link's blank, uses a `{word}` that message is never filled with, loses a short piece or
+the line of dashes that a message is read by, or would be sent with a `{word}` still in it.
+**Voice** holds the two voice files, the voice and how it sells. A rule is saved with no preview,
+because only the AI can show what it does; the next suggestion shows it.
+
+Every save is a new version, none is ever removed, and no `voice/` file is written. **Earlier
+versions** under a message or rule lists them, and **Use this version** puts one in the box to
+preview and save again. The Playbook's version is laid over its part of the file in every
+suggestion, on both pages, without a restart; suggestions already written keep their words, and
+**Undo** on the save puts the version before back. What you typed in a box is kept if you leave
+the tab and come back. If you edit the file by hand after saving in the Playbook, the saved
+wording stays in use, and the Playbook says the file now differs and offers the file's wording
+as a new version. The `replay` and `review` scripts use the Playbook's wording too, except for a
+voice folder you name for `review` with `--a-voice` or `--b-voice`, which is read as written.
 
 On **Needs reply**, the top of the list says how many are waiting, with **Start replying**. The
 **reply run** takes the ten newest waiting, the ones already written ahead, and opens the oldest
@@ -989,7 +1014,9 @@ The suggestion waits in the message box, marked **not sent**. The box is an edit
   Wheelman's own reply again, not the message picked. The messages are in `voice/dashboard-messages.md`,
   `voice/marketplace-messages.md` and `voice/importquery-messages.md`; Auction's are in
   `voice/auction-messages.md`. Each one says on its `@fits:` line when it is offered. Edit the
-  wording, or add a message of your own: it takes effect on the next message. (The owner, 17 Oct
+  wording in the Playbook's Templates tab, or in the file, where you can also add a message of your
+  own: it takes effect on the next message, except that wording saved in the Playbook for a message
+  stays in use over a hand edit of that message in the file. (The owner, 17 Oct
   2026: "I want that in every section ... the others should have their relevant dropdown options.
   I still should be able to prompt and the dropdown should be edited according to that.")
 - **Prompt**, before a suggestion exists. When nothing has been written yet, the box shows two
@@ -1319,7 +1346,8 @@ figures), the fitting is reused with no new request. `AUCTION_FIT=0` in the `.en
   picks no car. It points the customer to the cars coming up instead.
 
 The parts of `voice/auction-messages.md` marked FIRST DRAFT were written without a real
-example. Correct them in the file; a change takes effect on the next message.
+example. Correct them in the Playbook's Templates tab, or in the file; a change takes effect on
+the next message (wording saved in the Playbook stays in use over a hand edit of the same message).
 
 ### When the customer writes back
 
@@ -1347,7 +1375,7 @@ that knows their order. This is the one place the section asks an AI, on the bet
 - Never kept: street address, licence, date of birth, the deposit link, the salesperson, who
   wrote a note, photos, how a payment was made, and every cost of ours on the car.
 - The live auction is looked at for each order that is still searching, at most once an hour.
-- Nothing is learned from this section. The wording is corrected in its file.
+- Nothing is learned from this section. The wording is corrected in the Playbook's Templates tab, or in its file.
 
 ## The Import Query section
 
@@ -1533,8 +1561,8 @@ Wheelman only states facts it has been given.
 | The website: policy pages, guides, blog, import pages | `knowledge/website/` | `npm run fetch-website -- --all` |
 | Cars in the coming Japan auctions, what similar cars sold for, and what one would cost landed | The website's live auction | Read at the moment an offer is written, and hourly for orders still searching |
 | Auction orders: the stage, what was asked for, the car, what is charged and paid | The dashboard | Read every few minutes |
-| The wording of messages to auction customers | `voice/auction-messages.md`, `voice/auction-offer.md` | You edit them |
-| The messages under **Which message?** in the other sections, and when each fits | `voice/dashboard-messages.md`, `voice/marketplace-messages.md`, `voice/importquery-messages.md` | You edit them |
+| The wording of messages to auction customers | `voice/auction-messages.md`, `voice/auction-offer.md` | In the Playbook (the file is the first version, and is never written). Or edit the file |
+| The messages under **Which message?** in the other sections, and when each fits | `voice/dashboard-messages.md`, `voice/marketplace-messages.md`, `voice/importquery-messages.md` | In the Playbook (the file is the first version, and is never written). Or edit the files |
 | Texts that reached the business phone but not the dashboard | The phone add-on, reading Google Messages for web in your browser | Every 30 seconds while the browser is open |
 | Import enquiries that came by email | The Send to Wheelman button in Gmail, pressed by you on an open email | When you press it |
 | Which models can be imported, and what they land for | The website's own list of import-eligible models, kept in `data\eligible-models.json` | Once a day, and when an email is researched |
@@ -1644,8 +1672,11 @@ what the team really sends. **How to say it** comes from the two voices.
 
 A reply is not learned from if it still contains a blank, contains bank details, or is
 standard wording the team sends to everyone. The standard address block and the sign-off are
-never part of a lesson. To change the tone directly, edit `voice/house-voice.md`; to change
-how it sells and what it hands to a person, edit `voice/sales-playbook.md`.
+never part of a lesson. To change the tone directly, use the Playbook's Voice tab (the voice
+rules, saved with no preview); to change how it sells and what it hands to a person, use its
+Selling section there. They are laid over `voice/house-voice.md` and `voice/sales-playbook.md`,
+which are still read and can still be edited by hand, but wording saved in the Playbook stays in
+use over a hand edit of the same part.
 
 `npm run replay` takes real customer messages that one of the two answered, hides their
 answer, lets Wheelman write its own, and puts the two side by side in `eval/out/replay.html`.
@@ -1810,7 +1841,7 @@ npm.cmd run review -- --a-voice voice\previous --b-voice voice --n 40 --confirm
 
 Side A is the current voice on the dashboard's model unless `--a-voice` or `--a-model` says
 otherwise; side B must differ in its voice files (a folder holding `house-voice.md` and
-`sales-playbook.md`), its model (`provider/model`, as the cog panel lists them), or both. The
+`sales-playbook.md`; it is read as written, with no Playbook wording laid over it), its model (`provider/model`, as the cog panel lists them), or both. The
 script takes the last past exchanges that one of our people answered (`--n`, 20 unless set;
 `--first`, `--buyers`, `--since 60` and `--situation price_negotiation` narrow them), writes each
 one both ways as if the real answer had not been sent, and saves the run under `data\review\`.
@@ -1940,7 +1971,7 @@ computer. Git never sees any of it.
 | An import customer gets the asking reply although they told us what they want | What they want was said on the phone, not in writing | Press **Rewrite** and type it, for example "2015 or newer, under 100,000 km, budget 12k", or paste a live-auction link |
 | An auction message says "The wording for ... is missing" | A part was deleted or renamed in `voice/auction-messages.md` | Put the line `===== name =====` back as it was |
 | A word in curly brackets, such as `{due}`, is marked red in an auction message | A slip in the wording file: Wheelman does not know that word | Check the spelling against the list at the top of the file |
-| **Which message?** does not offer a message you expected | Its `@fits:` line does not name what this conversation shows, or its `@not:` line rules it out | Edit those lines in the section's `voice/*-messages.md` file; the list at the top of the file says what each word means |
+| **Which message?** does not offer a message you expected | Its `@fits:` line does not name what this conversation shows, or its `@not:` line rules it out | Edit those lines in the Playbook's Templates tab, or in the section's `voice/*-messages.md` file; the list at the top of the file says what each word means |
 | An order shows no message although one should be due | The step happened more than a week ago, or the message was copied or dismissed | Pick it under **Which message?**, or press **Put back in To do** |
 | A note says "No ... is in the website's coming auctions right now" and the car is blanks | The website lists none of that model in the next few auction days | Fill the blanks in, or type the car into **Add what you know**. The auction is looked at again within the hour |
 | An order cannot be found in the Auction section | It is on another list: one with nothing due is under **In progress** | Type the name, car or order number into the search box. It looks through all three lists |
@@ -2067,9 +2098,10 @@ wheelman/
 ├── docs/
 │   └── selling-by-text.md             what the replies are taught about selling, and the evidence behind it
 ├── voice/
-│   ├── house-voice.md                 the Carbarn voice: the register every reply is written in
-│   ├── sales-playbook.md              how it sells: the ladder, the moves, the price reply, a question only when needed
+│   ├── house-voice.md                 the Carbarn voice: the register every reply is written in (first version; the Playbook's Voice tab is laid over it)
+│   ├── sales-playbook.md              how it sells: the ladder, the moves, the price reply, a question only when needed (the same)
 │   ├── previous/                      the voice and the playbook before 12 Oct 2026, for a side-by-side review
+│   │                                  (the message files below are read as the first version of the Playbook's Templates, and never written)
 │   ├── first-reply.md                 the standard block under a first reply; edit freely
 │   ├── import-ask.md                  the first reply to an import or auction enquiry; edit freely
 │   ├── auction-offer.md               the layout of an auction offer; edit freely
@@ -2109,7 +2141,8 @@ wheelman/
 │   ├── examples.js · learn.js         which examples fit; what was copied, sent and changed
 │   ├── factbook.js · factcite.js      the Playbook's saved answers laid over the facts file; which facts a reply used
 │   ├── editrules.js                   edits made again and again, proposed as lessons
-│   ├── playbookapi.js                 the Playbook's addresses: facts, lessons and proposals
+│   ├── playbookapi.js                 the Playbook's addresses: facts, lessons, proposals, templates and voice rules
+│   ├── wording.js · wordingedit.js    the Playbook's wording laid over the voice files (never written); listing, saving and previewing it
 │   ├── practice.js                    what the team really sent for similar messages
 │   ├── prompt.js                      the request: facts, rules for the channel, inspection plan
 │   ├── selling.js                     where the customer is on the way to a sale, the one move and the one question
@@ -2297,6 +2330,12 @@ trust line names the business facts a suggestion used, and a fact still waiting 
 named above the box. A suggestion that teaches nothing hides Good reply and Could be better on
 the old page too. Checked on the automated tests and in a browser on invented data. Not yet used
 over a working day.
+
+30 October 2026, later: the Playbook gained Templates and Voice. A message's wording is edited
+there, shown on three conversations before it is saved, and every version is kept and can be put
+back; the voice rules are saved the same way with no preview. The voice files are still read
+and never written, and what is saved in the Playbook is laid over them in every suggestion.
+Checked on the automated tests and in a browser on invented data. Not yet used over a working day.
 
 ### Open questions for Carbarn
 
