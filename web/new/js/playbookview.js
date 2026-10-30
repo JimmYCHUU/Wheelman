@@ -108,7 +108,7 @@ export function menuHint(status) {
     review ? plural(review, 'lesson') + ' to review' : '',
     needs ? plural(needs, 'fact') + ' ' + needsAnswerWords(needs) : '',
   ].filter(Boolean);
-  return parts.length ? parts.join(' · ') : 'Lessons and business facts';
+  return parts.length ? parts.join(' · ') : 'Lessons, facts, templates and voice';
 }
 
 /**

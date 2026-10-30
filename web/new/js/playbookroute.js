@@ -1,7 +1,7 @@
 // The Playbook's address: #/playbook/<tab>, and #/playbook/<tab>/<id> for one entry on it (a fact by
 // its title). The id is encoded in the hash. It imports nothing, so anything may build the address.
 
-export const PLAYBOOK_TABS = ['lessons', 'facts'];
+export const PLAYBOOK_TABS = ['lessons', 'facts', 'templates', 'voice'];
 
 const decode = (s) => { try { return decodeURIComponent(s); } catch { return s; } };
 

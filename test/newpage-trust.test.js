@@ -114,7 +114,7 @@ test("Write it again writes the reply again with the Prompt it was written with,
 });
 
 test("the Playbook's address", () => {
-  assert.deepEqual(PLAYBOOK_TABS, ['lessons', 'facts']);
+  assert.deepEqual(PLAYBOOK_TABS, ['lessons', 'facts', 'templates', 'voice']);
   assert.equal(playbookHash('facts', 'Tinted windows'), '#/playbook/facts/Tinted%20windows');
   assert.equal(playbookHash('lessons'), '#/playbook/lessons');
   assert.deepEqual(playbookRoute('#/playbook/lessons'), { tab: 'lessons', id: null });

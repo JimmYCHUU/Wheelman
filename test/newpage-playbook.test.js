@@ -294,8 +294,8 @@ test("an earlier answer says its day, or that it is in your file, or what your f
 });
 
 test("the Menu's Playbook hint counts what waits for Jim, and says nothing when nothing waits", () => {
-  assert.equal(menuHint(null), 'Lessons and business facts');
-  assert.equal(menuHint({ playbook: { toReview: 0 }, facts: { needsAnswer: 0 } }), 'Lessons and business facts');
+  assert.equal(menuHint(null), 'Lessons, facts, templates and voice');
+  assert.equal(menuHint({ playbook: { toReview: 0 }, facts: { needsAnswer: 0 } }), 'Lessons, facts, templates and voice');
   assert.equal(menuHint({ playbook: { toReview: 2 }, facts: { needsAnswer: 1 } }), '2 lessons to review · 1 fact needs an answer');
   assert.equal(menuHint({ playbook: { toReview: 1 }, facts: { needsAnswer: 0 } }), '1 lesson to review');
   assert.equal(menuHint({ playbook: { toReview: 0 }, facts: { needsAnswer: 2 } }), '2 facts need an answer');

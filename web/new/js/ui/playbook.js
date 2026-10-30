@@ -1,6 +1,6 @@
 // The Playbook: everything Wheelman knows and follows, in one place. It stands in place of the work
 // grid while its address (#/playbook/<tab>) is on screen; the conversation stays open in the main
-// store behind it, with what was typed, and "Back to <section>" returns to it as it was. Its two
+// store behind it, with what was typed, and "Back to <section>" returns to it as it was. Its four
 // tabs are links, so Back and forward move between them; the Playbook's own store reads each one
 // (web/new/js/playbookstore.js, made in main.js).
 import { html } from './html.js';
@@ -9,6 +9,8 @@ import { backHref, tabNotes } from '../playbookview.js';
 import { playbookHash } from '../playbookroute.js';
 import { LessonsTab } from './lessonstab.js';
 import { FactsTab } from './factstab.js';
+import { TemplatesTab } from './templatestab.js';
+import { VoiceTab } from './voicetab.js';
 
 const LEAD = 'Everything Wheelman knows and follows, in one place. Change it here and new suggestions use it.';
 
@@ -19,9 +21,10 @@ function Body({ pstate, actions, now }) {
     </div>`;
   }
   if (pstate.state !== 'ready') return html`<p class="pb-wait" role="status">Reading the Playbook…</p>`;
-  return pstate.tab === 'facts'
-    ? html`<${FactsTab} pstate=${pstate} actions=${actions} now=${now} />`
-    : html`<${LessonsTab} pstate=${pstate} actions=${actions} now=${now} />`;
+  if (pstate.tab === 'facts') return html`<${FactsTab} pstate=${pstate} actions=${actions} now=${now} />`;
+  if (pstate.tab === 'templates') return html`<${TemplatesTab} pstate=${pstate} actions=${actions} now=${now} />`;
+  if (pstate.tab === 'voice') return html`<${VoiceTab} pstate=${pstate} actions=${actions} now=${now} />`;
+  return html`<${LessonsTab} pstate=${pstate} actions=${actions} now=${now} />`;
 }
 
 /**
@@ -30,7 +33,7 @@ function Body({ pstate, actions, now }) {
  */
 export function PlaybookPage({ state, pstate, playbook, left = null, now }) {
   const notes = tabNotes(pstate, state.status);
-  const tabs = [{ id: 'lessons', label: 'Lessons' }, { id: 'facts', label: 'Business facts' }];
+  const tabs = [{ id: 'lessons', label: 'Lessons' }, { id: 'facts', label: 'Business facts' }, { id: 'templates', label: 'Templates' }, { id: 'voice', label: 'Voice' }];
   return html`<main class="tile playbook" aria-labelledby="pb-title">
     <div class="pb-inner">
       <a class="pb-back" href=${backHref(state, left)}>‹ Back to ${sectionName(state.section)}</a>

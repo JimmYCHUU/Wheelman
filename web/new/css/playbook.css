@@ -76,6 +76,18 @@
   .pb-day { font-weight: var(--fw-semi); color: var(--ink-2); }
   .pb-said { flex: 1 1 var(--tell-w); min-width: 0; overflow-wrap: anywhere; }
 
+  /* a template or voice rule: its wording in the quiet tone, its editor, and the three conversations it is shown on */
+  .pb-card-top .pb-meta { flex: none; }
+  .pb-wording-text { margin: 0; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-13); color: var(--ink-2); }
+  .pb-editor .pb-meta { margin: 0; }
+  .pb-versions li { display: grid; justify-items: start; gap: var(--s-1); }
+  .pb-save { align-items: center; }
+  .pb-previews { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-2); }
+  .pb-preview { display: grid; align-content: start; gap: var(--s-2); min-width: 0; padding: var(--s-3); border: 1px solid var(--line); border-radius: var(--r-bubble); background: var(--surface-quiet); }
+  .pb-preview-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-2); font-size: var(--fs-12); font-weight: var(--fw-semi); color: var(--ink-2); }
+  .pb-preview-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-13); }
+  .pb-preview-note { margin: 0; font-size: var(--fs-12); color: var(--ink-2); }
+
   @media (max-width: 899px) {
     /* one column: the tile sits on the page's 16 px edges, and every control is a 44 px target */
     .pb-inner { padding: var(--s-3) var(--s-4) var(--s-8); gap: var(--s-4); }
@@ -84,5 +96,7 @@
     .pb-tab, .pb-switch, .pb-more summary { min-height: var(--touch); }
     .pb-card-top { flex-wrap: wrap; }
     .pb-card-top .pb-words { flex-basis: 60%; }
+    /* the three conversations, one under another */
+    .pb-previews { grid-template-columns: minmax(0, 1fr); }
   }
 }
