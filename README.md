@@ -784,7 +784,8 @@ In the message box, the parts Wheelman's code builds are shown in the reply with
 **Remove** button: **Price reply**, **Invitation to see the car**, **First-reply details**,
 **Links you asked for**, **Sign-off** and **Auction offer**. A removed block can be brought back
 with **Put back**, and what you typed beside a block is copied as shown. Under the reply, the
-**trust line** says how many facts were checked. It is green only when nothing is wrong; if a
+**trust line** says how many facts were checked, and names the business facts a suggestion used,
+up to three, when the customer asked about them. It is green only when nothing is wrong; if a
 figure or link cannot be traced to our records, it says so in red and names how many facts are
 not in your records. Once the text differs from what Wheelman wrote, whether you typed in it or
 removed a block, it reads **Changed since it was checked.** Open it to see each fact and where it
@@ -799,7 +800,22 @@ remembered** and offers no Undo, so the lesson you had stays on. Remember is not
 follow-up, in the Auction section or on a lead from the dashboard's Imports list while it is in
 Imports, because those teach nothing, and it is refused for a message from the auction's wording
 file. **Just this once** keeps nothing. **What Wheelman used** now also lists the lessons it
-followed and the rules that applied. A list of all lessons comes in a later update.
+followed and the rules that applied, with **See every lesson in the Playbook**.
+
+The **Playbook** is in the **Menu**, and has its own address (`#/playbook/lessons` or
+`#/playbook/facts`). **Back** returns to the conversation as you left it, with what you had
+typed in the box. It has two tabs. **Lessons** lists every lesson with where it came from (your
+instruction, your note under Could be better, or your repeated edits), its history, how often it
+has been used and a switch to turn it off or on again. A lesson's words cannot be edited: switch
+it off instead. Edits you keep making wait there as proposals (see
+[How Wheelman learns](#how-wheelman-learns)). **Business facts** lists the facts in three
+groups: Confirmed, Working and Needs answer. Write an answer and press **Save as Confirmed**; the
+fact is Confirmed with the day, the next suggestion uses it, and its trust line names it. Earlier
+answers are listed under each fact, and **Use this answer** puts one back in the box to save
+again. A fact still without an answer is a blank in the reply; the box says so above the reply
+with **Answer it**, which opens the fact in the Playbook. Once it is answered, the box says so
+and offers **Write it again**. Nothing is written again by itself. Both pages use the answers
+saved there.
 
 On **Needs reply**, the top of the list says how many are waiting, with **Start replying**. The
 **reply run** takes the ten newest waiting, the ones already written ahead, and opens the oldest
@@ -843,6 +859,8 @@ every section. A result opens in its own section on the new page.
   the AI requests used today and the month's budget, the lead alerts, the phone add-on, which AI
   models write and in what order (with **Change**), what Wheelman reads of the team's replies and
   has learned, the last backup, and the team link when the page is shared.
+- The **Menu** opens the **Playbook**, and says how many lessons wait for review and how many
+  facts need an answer.
 - The cog chooses which AI writes. The round arrow checks for new messages now.
 
 ### The list on the left
@@ -1510,7 +1528,7 @@ Wheelman only states facts it has been given.
 |---|---|---|
 | Stock: price, kilometres, availability, inclusions, the written-off, water-damage and major-repairs record, the listing description | The dashboard | Read every few minutes |
 | What the dashboard knows about a customer: engagement score, a finance decision, how they found us, how many other cars they asked about on Carsales | The dashboard, with the lead | Read with the lead. Shapes the reply; never stated in it |
-| Business facts: deposit, warranty, delivery, payment | `knowledge/business-facts.md` (private; `business-facts.example.md` is what is published) | You edit it |
+| Business facts: deposit, warranty, delivery, payment | `knowledge/business-facts.md` (private; `business-facts.example.md` is what is published), and what you answered in the Playbook | You answer in the Playbook, or edit the file |
 | How Carbarn works: the steps of a sale, common questions | `knowledge/how-carbarn-works.md` (private; an example file is published) | You edit it |
 | The website: policy pages, guides, blog, import pages | `knowledge/website/` | `npm run fetch-website -- --all` |
 | Cars in the coming Japan auctions, what similar cars sold for, and what one would cost landed | The website's live auction | Read at the moment an offer is written, and hourly for orders still searching |
@@ -1522,11 +1540,16 @@ Wheelman only states facts it has been given.
 | Which models can be imported, and what they land for | The website's own list of import-eligible models, kept in `data\eligible-models.json` | Once a day, and when an email is researched |
 
 In `knowledge/business-facts.md` each topic is marked `CONFIRMED` (stated freely), `WORKING`
-(in use, please check) or `NEEDS ANSWER` (Wheelman says nothing and leaves a blank). Write the
-answer after `Answer:`, set the status and save. The next suggestion uses it; no restart
-needed. The evidence behind each answer is kept in `knowledge/business-facts-evidence.md`, a
-local file Wheelman never reads. Topics still without an answer are listed in the black window
-at start-up.
+(in use, please check) or `NEEDS ANSWER` (Wheelman says nothing and leaves a blank). That file
+is the first version of every fact. You answer in the new page's Playbook (Menu, Business
+facts). Wheelman never writes the file. Each answer you save is a new row in `datapp.db`, and
+every version is kept, so an earlier one can be used again. A saved answer replaces that topic
+of the file in every request, on both pages; a topic you never answered is read from the file as
+before. If you edit the file by hand after saving an answer, the saved answer stays in use, and
+the Playbook says the file now differs and offers the file's answer as a new version. The
+next suggestion uses an answer with no restart. The evidence behind each answer is kept in
+`knowledge/business-facts-evidence.md`, a local file Wheelman never reads. Topics without an
+answer are listed in the Playbook, and in the black window at start-up.
 
 The facts were researched on 1 October 2026 from the dashboard's customer messages, sales
 records, delivery zones and stock, and from the website. `how-carbarn-works.md` was written
@@ -1543,8 +1566,9 @@ Never from Marketplace, never from the phone, and not from the Auction section: 
 come from a wording file, and what a customer wrote on WhatsApp is pasted in, not read from
 the dashboard. Nor from a lead on the dashboard's Imports list while it is in Imports: those
 are answered from the same wording and teach nothing. Nor from a message of the auction's
-wording file, wherever it is used (a conversation you moved into Imports included): copied,
-marked **Good reply** or **Could be better**, it teaches nothing, and Remember is refused for it.
+wording file, wherever it is used (a conversation you moved into Imports included): copied, it
+teaches nothing: the old page hides **Good reply** and **Could be better** for it, the new page
+hides Remember, and Remember is refused.
 Never from a follow-up either: its wording is yours in `voice/dashboard-messages.md`, and copying
 one teaches nothing.
 
@@ -1589,6 +1613,14 @@ what the team really sends. **How to say it** comes from the two voices.
   orders, follow-ups, the Auction section and the leads from the dashboard's Imports list teach
   nothing, so Remember is not offered there; for a message from the auction's wording file it is
   refused.
+- **Repeated edits.** When you make the same small edit on three different suggestions
+  (leaving out a word, changing one word for another, or adding the same sentence), Wheelman
+  proposes it as a lesson, with the examples. It is found by comparing what Wheelman wrote with
+  what you copied, and only for replies copied from Wheelman. An edit holding a figure, a link,
+  a blank or a name is never proposed. A proposal waits in the Playbook's Lessons tab (the Menu
+  shows how many wait): **Keep as a lesson** puts it to use like a Remember lesson, and **Not a
+  rule** ends it. Both have **Undo**. Nothing pops up while you work, and a Marketplace request
+  never gets one of these lessons.
 - **Only what you changed.** A suggestion used word for word is Wheelman's own text, so it
   is not kept as an example of how the team writes. Copying it unchanged counts as approval
   instead (see **Copying as written** above).
@@ -1661,7 +1693,7 @@ often you asked for a rewrite. Counts only; no customer text.
 | Sending | Marketplace only, by the **Send reply** button. Dashboard and auction replies are copied and pasted |
 | Learning | Dashboard only |
 
-The business facts themselves are in `knowledge/business-facts.md`.
+The business facts themselves are in `knowledge/business-facts.md` and the Playbook's answers.
 
 ## AI models and budget
 
@@ -1877,9 +1909,9 @@ computer. Git never sees any of it.
 | `.env` | Dashboard addresses and login, the Marketplace inbox address, our other phone numbers, and the AI keys |
 | `voice\people.json` | The real names and logins of the two voices, and other staff names |
 | `PLAN.md`, `knowledge\business-facts-evidence.md` | Internal planning notes, and the evidence behind each business fact |
-| `data\app.db` | Leads, conversations, messages, stock, the stage of each sale, the auction orders and what you pasted into them, Marketplace chats, the texts the phone add-on saw, every suggestion with its checks and what you typed over it, what was learned, what was dismissed and read |
+| `data\app.db` | Leads, conversations, messages, stock, the stage of each sale, the auction orders and what you pasted into them, Marketplace chats, the texts the phone add-on saw, every suggestion with its checks and what you typed over it, what was learned, what was dismissed and read, and what you answered and changed in the Playbook, every version |
 | `Auction.txt` | Real messages the team sent to auction customers, kept as the source for the wording |
-| `knowledge\business-facts.md`, `knowledge\how-carbarn-works.md` | The real business facts and operations guide: fees, terms, partners, practice. Example files with invented figures are published in their place |
+| `knowledge\business-facts.md`, `knowledge\how-carbarn-works.md` | The real business facts (the first version of each) and operations guide: fees, terms, partners, practice. Wheelman never writes them. Example files with invented figures are published in their place |
 | `data\wheelman.log` | What went wrong and when: technical messages only, no customer details |
 | `data\raw\` | The history first copied from the dashboard |
 | `data\analysis\` | The cleaned samples behind the voice and the business facts |
@@ -2029,7 +2061,7 @@ wheelman/
 │                                      manifest · background · reader · parse · popup (the phone)
 │                                      · mail · mailparse · shape (the Send to Wheelman button in Gmail)
 ├── knowledge/
-│   ├── business-facts.md              what Wheelman may state, topic by topic
+│   ├── business-facts.md              what Wheelman may state, topic by topic (never written; the Playbook's answers are laid over it)
 │   ├── how-carbarn-works.md           the steps of a sale and the usual answers
 │   └── website/                       saved website pages (downloaded, local only)
 ├── docs/
@@ -2254,6 +2286,14 @@ Import Query, not Auction, on both pages, and Import Query is always there, list
 while the email intake is on. Send on Facebook refuses the same words twice, from any page, and a
 Facebook chat answered on Facebook says so. Checked on the automated tests and in a browser on
 invented data. Not yet used over a working day.
+
+30 October 2026: the new page gained the Playbook, in the Menu: Lessons (where each came from,
+their history, a switch, and edits repeated on three suggestions proposed to keep or refuse) and
+Business facts (answered there, each answer kept as a new version, the file never written). The
+trust line names the business facts a suggestion used, and a fact still waiting for an answer is
+named above the box. A suggestion that teaches nothing hides Good reply and Could be better on
+the old page too. Checked on the automated tests and in a browser on invented data. Not yet used
+over a working day.
 
 ### Open questions for Carbarn
 

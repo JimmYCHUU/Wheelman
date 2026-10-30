@@ -32,6 +32,8 @@ one stays at `/`.
 
 PR 5 was split in two on 28 October 2026 (my call): one PR of nine tasks was too much for one final review.
 
+PR 6 was split in two on 29 October 2026 (my call): ten tasks was too much for one final review. PR 6 holds the lessons (their history, and edits proposed as lessons), the business facts (every version kept in the database, the file never written), the trust line naming the facts, and the Playbook page in the Menu. PR 6b holds the templates with their preview on 3 real conversations, the voice rules, and their versions in the same table.
+
 Each PR has its own plan in this folder, written when the one before it is merged, so it starts
 from the code as it then is.
 
@@ -42,6 +44,7 @@ the order they appear today.
 
 - **Top bar:**
   - section tabs with new counts;
+  - the Menu's Playbook, with its tabs;
   - the browser tab title count;
   - Find a car (merged into search in PR 2);
   - status in words, with the details panel and its Change link;
